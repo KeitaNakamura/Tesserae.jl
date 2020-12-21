@@ -17,6 +17,7 @@ makedocs(;
         "Jams.Grids" => "Grids.md",
         "Jams.Interpolations" => "Interpolations.md",
         "Jams.DofHelpers" => "DofHelpers.md",
+        "Jams.Arrays" => "Arrays.md",
     ],
     doctest = true, # :fix
 )
