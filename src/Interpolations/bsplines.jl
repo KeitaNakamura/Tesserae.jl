@@ -33,6 +33,7 @@ support_length(::BSpline{4}) = 2.5
 
 function value(::BSpline{1, 0}, ξ::Real)::typeof(ξ)
     ξ = abs(ξ)
+    iszero(ξ) && return one(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
 end
 
@@ -166,7 +167,7 @@ function Base.show(io::IO, pos::BSplinePosition)
 end
 
 
-struct BSplineInterpolation{order, dim, T} <: Interpolation{dim}
+struct BSplineInterpolation{order, dim, T} <: Interpolation{dim, T}
     F::BSpline{order, dim}
     N::Vector{T}
     dN::Vector{Vec{dim, T}}
@@ -180,7 +181,7 @@ end
 
 function reinit!(it::BSplineInterpolation{<: Any, dim}, grid::AbstractGrid{dim}, indices::AbstractArray, x::Vec{dim}) where {dim}
     @boundscheck checkbounds(grid, indices)
-    F = getshapefunction(it)
+    F = it.F
     resize!(it.N, length(indices))
     resize!(it.dN, length(indices))
     j = 1

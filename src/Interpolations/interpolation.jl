@@ -1,4 +1,4 @@
-abstract type Interpolation{dim} end
+abstract type Interpolation{dim, T} <: AbstractVector{ScalarVector{T, dim}} end
 
 """
     construct(::ShapeFunction)
@@ -12,10 +12,10 @@ julia> it = construct(QuadraticBSpline(dim = 2));
 
 julia> reinit!(it, Grid(0:3, 0:3), Vec(1, 1));
 
-julia> sum(i -> shape_value(it, i), 1:nvalues(it))
+julia> sum(it)
 1.0
 
-julia> sum(i -> shape_gradient(it, i), 1:nvalues(it))
+julia> sum(∇, it)
 2-element Tensor{1,2,Float64,2}:
  5.551115123125783e-17
  5.551115123125783e-17
@@ -35,12 +35,12 @@ julia> it = construct(QuadraticBSpline(dim = 2));
 
 julia> reinit!(it, Grid(0:3, 0:3), Vec(1, 1));
 
-julia> sum(i -> shape_value(it, i), 1:nvalues(it))
+julia> sum(it)
 1.0
 
 julia> reinit!(it, Grid(0:3, 0:3), CartesianIndices((1:2, 1:2)), Vec(1, 1));
 
-julia> sum(i -> shape_value(it, i), 1:nvalues(it))
+julia> sum(it)
 0.765625
 ```
 """
@@ -50,28 +50,31 @@ function reinit!(it::Interpolation, grid::AbstractGrid, x::Vec)
     reinit!(it, grid, eachindex(grid), x)
 end
 
-getshapefunction(it::Interpolation{dim}) where {dim} = it.F::ShapeFunction{dim}
+Base.size(it::Interpolation) = (length(it.N),)
 
-nvalues(it::Interpolation) = length(it.N)
-nvalues(::Type{Vec}, it::Interpolation{dim}) where {dim} = nvalues(it) * dim
-
-shape_value(it::Interpolation, i::Int) = (@_propagate_inbounds_meta; it.N[i])
-
-function shape_value(::Type{Vec}, it::Interpolation{dim}, j::Int) where {dim}
-    @boundscheck 0 < j ≤ nvalues(Vec, it) || throw(ArgumentError("index $j is out of range, nvalues(Vec, ::Interpolation) = $(nvalues(Vec, it))"))
-    i, d = divrem(j - 1, dim) .+ 1
-    @inbounds eᵢ(Vec{dim, Int}, d) * shape_value(it, i)
-end
-
-shape_gradient(it::Interpolation, i::Int) = (@_propagate_inbounds_meta; it.dN[i])
-
-function shape_gradient(::Type{Vec}, it::Interpolation{dim}, j::Int) where {dim}
-    @boundscheck 0 < j ≤ nvalues(Vec, it) || throw(ArgumentError("index $j is out of range, nvalues(Vec, ::Interpolation) = $(nvalues(Vec, it))"))
-    i, d = divrem(j - 1, dim) .+ 1
-    @inbounds eᵢ(Vec{dim, Int}, d) ⊗ shape_gradient(it, i)
-end
-
-function shape_symmetricgradient(::Type{Vec}, it::Interpolation, j::Int)
+function Base.getindex(it::Interpolation, i::Int)
     @_propagate_inbounds_meta
-    symmetric(shape_gradient(Vec, it, j))
+    ScalarVector(it.N[i], it.dN[i])
+end
+
+
+struct VectorInterpolation{dim, T, IT <: Interpolation{dim, T}, M} <: AbstractVector{VectorTensor{dim, T, M}}
+    Ni::IT
+end
+
+function VectorInterpolation(Ni::Interpolation{dim, T}) where {dim, T}
+    VectorInterpolation{dim, T, typeof(Ni), dim^2}(Ni)
+end
+
+Base.parent(it::VectorInterpolation) = it.Ni
+Base.size(it::VectorInterpolation{dim}) where {dim} = (dim * length(it.Ni),)
+
+function Base.getindex(it::VectorInterpolation{dim}, j::Int) where {dim}
+    @boundscheck checkbounds(it, j)
+    i, d = divrem(j - 1, dim) .+ 1
+    @inbounds begin
+        ei = eᵢ(Vec{dim, Int}, d)
+        N = it.Ni[i]
+    end
+    VectorTensor(ei * N, ei ⊗ ∇(N))
 end

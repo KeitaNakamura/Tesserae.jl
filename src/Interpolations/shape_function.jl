@@ -31,6 +31,7 @@ struct GradientShapeFunction{dim, F <: ShapeFunction{dim}} <: ShapeFunction{dim}
 end
 
 Base.adjoint(f::ShapeFunction) = GradientShapeFunction(f)
+TensorValues.∇(f::ShapeFunction) = GradientShapeFunction(f)
 
 value(∇f::GradientShapeFunction{0}, ξ::Real, args...) = derivative(∇f.f, ξ, args...)
 value(∇f::GradientShapeFunction{dim}, ξ::Vec{dim}, args...) where {dim} = gradient(∇f.f, ξ, args...)

@@ -2,6 +2,8 @@ module Interpolations
 
 using Reexport
 @reexport using Tensors, Jams.Grids
+
+using Jams.TensorValues
 import Tensors: gradient
 
 using Base: @pure, @_propagate_inbounds_meta
@@ -16,12 +18,9 @@ export
     BSplinePosition,
 # Interpolation
     Interpolation,
+    VectorInterpolation,
     BSplineInterpolation,
     construct,
-    nvalues,
-    shape_value,
-    shape_gradient,
-    shape_symmetricgradient,
     reinit!
 
 
