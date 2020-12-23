@@ -58,18 +58,18 @@ function Base.getindex(it::Interpolation, i::Int)
 end
 
 
-struct VectorInterpolation{dim, T, IT <: Interpolation{dim, T}, M} <: AbstractVector{VectorTensor{dim, T, M}}
+struct VectorValue{dim, T, IT <: Interpolation{dim, T}, M} <: AbstractVector{VectorTensor{dim, T, M}}
     Ni::IT
 end
 
-function VectorInterpolation(Ni::Interpolation{dim, T}) where {dim, T}
-    VectorInterpolation{dim, T, typeof(Ni), dim^2}(Ni)
+function VectorValue(Ni::Interpolation{dim, T}) where {dim, T}
+    VectorValue{dim, T, typeof(Ni), dim^2}(Ni)
 end
 
-Base.parent(it::VectorInterpolation) = it.Ni
-Base.size(it::VectorInterpolation{dim}) where {dim} = (dim * length(it.Ni),)
+Base.parent(it::VectorValue) = it.Ni
+Base.length(it::VectorValue{dim}) where {dim} = dim * length(it.Ni)
 
-function Base.getindex(it::VectorInterpolation{dim}, j::Int) where {dim}
+function Base.getindex(it::VectorValue{dim}, j::Int) where {dim}
     @boundscheck checkbounds(it, j)
     i, d = divrem(j - 1, dim) .+ 1
     @inbounds begin

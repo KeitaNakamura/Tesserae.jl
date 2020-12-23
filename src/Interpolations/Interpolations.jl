@@ -18,7 +18,7 @@ export
     BSplinePosition,
 # Interpolation
     Interpolation,
-    VectorInterpolation,
+    VectorValue,
     BSplineInterpolation,
     construct,
     reinit!
