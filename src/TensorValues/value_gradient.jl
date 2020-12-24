@@ -16,6 +16,8 @@ for op in (:+, :-, :/, :*)
     @eval Base.$op(a::ScalarVector, b::ScalarVector) = $op(a.x, b.x)
 end
 
+Base.show(io::IO, a::ScalarVector) = show(io, a.x)
+
 
 struct VectorTensor{dim, T, M} <: AbstractVector{T}
     x::Vec{dim, T}
