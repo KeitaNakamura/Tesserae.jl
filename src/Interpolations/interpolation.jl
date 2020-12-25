@@ -8,14 +8,14 @@ Construct interpolation object for `ShapeFunction`.
 
 # Examples
 ```jldoctest
-julia> it = construct(QuadraticBSpline(dim = 2));
+julia> N = construct(QuadraticBSpline(dim = 2));
 
-julia> reinit!(it, Grid(0:3, 0:3), Vec(1, 1));
+julia> reinit!(N, Grid(0:3, 0:3), Vec(1, 1));
 
-julia> sum(it)
+julia> sum(N)
 1.0
 
-julia> sum(∇, it)
+julia> sum(∇, N)
 2-element Tensor{1,2,Float64,2}:
  5.551115123125783e-17
  5.551115123125783e-17
@@ -31,16 +31,16 @@ Reinitialize interpolation object at `x` with each `grid` node.
 
 # Examples
 ```jldoctest
-julia> it = construct(QuadraticBSpline(dim = 2));
+julia> N = construct(QuadraticBSpline(dim = 2));
 
-julia> reinit!(it, Grid(0:3, 0:3), Vec(1, 1));
+julia> reinit!(N, Grid(0:3, 0:3), Vec(1, 1));
 
-julia> sum(it)
+julia> sum(N)
 1.0
 
-julia> reinit!(it, Grid(0:3, 0:3), CartesianIndices((1:2, 1:2)), Vec(1, 1));
+julia> reinit!(N, Grid(0:3, 0:3), CartesianIndices((1:2, 1:2)), Vec(1, 1));
 
-julia> sum(it)
+julia> sum(N)
 0.765625
 ```
 """
