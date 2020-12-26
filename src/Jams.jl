@@ -8,7 +8,7 @@ include("DofHelpers/DofHelpers.jl")
 
 # Exports
 using Reexport
-using Jams.TensorValues: ∇; export ∇
+using Jams.TensorValues: ∇, ∇ₛ; export ∇, ∇ₛ
 @reexport using Jams.Grids
 @reexport using Jams.Interpolations
 @reexport using Jams.DofHelpers
