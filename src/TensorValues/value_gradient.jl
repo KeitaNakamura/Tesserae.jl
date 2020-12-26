@@ -11,6 +11,9 @@ Base.promote(x, a::ScalarVector) = promote(x, a.x)
 Base.promote_type(::Type{ScalarVector{T, dim}}, ::Type{U}) where {T, dim, U} = promote_type(T, U)
 Base.promote_type(::Type{U}, ::Type{ScalarVector{T, dim}}) where {T, dim, U} = promote_type(U, T)
 
+Base.convert(::Type{T}, a::ScalarVector) where {T <: Real} = convert(T, a.x)
+Base.convert(::Type{ScalarVector{T, dim}}, a::ScalarVector) where {T, dim} = ScalarVector{T, dim}(a.x, a.∇x)
+
 # scalar vs scalar
 for op in (:+, :-, :/, :*)
     @eval Base.$op(a::ScalarVector, b::ScalarVector) = $op(a.x, b.x)
