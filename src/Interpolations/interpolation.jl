@@ -1,4 +1,4 @@
-abstract type Interpolation{dim, T} <: AbstractCollection{0, ScalarVector{T, dim}} end
+abstract type Interpolation{dim, T} <: AbstractCollection{1, ScalarVector{T, dim}} end
 
 """
     construct(::ShapeFunction)
@@ -58,7 +58,7 @@ Base.length(it::Interpolation) = length(it.N)
 end
 
 
-struct VectorValue{dim, T, IT <: Interpolation{dim, T}, M} <: AbstractCollection{0, VectorTensor{dim, T, M}}
+struct VectorValue{dim, T, IT <: Interpolation{dim, T}, M} <: AbstractCollection{1, VectorTensor{dim, T, M}}
     Ni::IT
 end
 

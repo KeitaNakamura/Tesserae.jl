@@ -55,7 +55,7 @@ function Base.show(io::IO, c::AbstractCollection{rank}) where {rank}
     join(io, [isassigned(c, i) ? sprint(show, c[i]; context=io) : "#undef" for i in eachindex(c)], ", ")
     print(io, "]")
     if !get(io, :compact, false)
-        print(io, "with rank=$rank")
+        print(io, " with rank=$rank")
     end
 end
 
@@ -105,6 +105,8 @@ Base.broadcasted(::typeof(identity), c::LazyCollection) = c.bc
 Base.sum(c::LazyCollection) = sum(c.bc)
 Base.collect(c::LazyCollection) = collect(c.bc)
 Base.Array(c::LazyCollection) = copy(c.bc)
+
+changerank(c::AbstractCollection, ::Val{rank}) where {rank} = LazyCollection{rank}(broadcasted(identity, c))
 
 function Base.show(io::IO, c::LazyCollection{rank}) where {rank}
     io = IOContext(io, :typeinfo => eltype(c))

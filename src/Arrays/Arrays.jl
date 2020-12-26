@@ -19,7 +19,7 @@ export sparse
 # Collections
 
 export AbstractCollection, Collection, LazyCollection
-export collection
+export collection, changerank
 
 include("sparse_coo.jl")
 include("collection.jl")
