@@ -109,26 +109,65 @@ Base.IndexStyle(::Type{<: Adjoint{<: Any, <: UnionCollection}}) = IndexLinear()
 Base.size(c::Adjoint{<: Any, <: UnionCollection}) = (1, length(parent(c)))
 @inline Base.getindex(c::Adjoint{<: Any, <: UnionCollection}, i::Integer) = (@_propagate_inbounds_meta; parent(c)[i])
 
-for op in (:*, :/, :⋅, :⊗ , :×)
-    @eval begin
-        function Tensors.$op(c::UnionCollection{rank}, x) where {rank}
+
+macro define_unary_operation(op)
+    quote
+        function $op(c::UnionCollection{rank}) where {rank}
+            LazyCollection{rank}(broadcasted($op, c))
+        end
+    end |> esc
+end
+
+macro define_binary_operation(op)
+    quote
+        function $op(c::UnionCollection{rank}, x) where {rank}
             LazyCollection{rank}(broadcasted($op, c, Ref(x)))
         end
-        function Tensors.$op(x, c::UnionCollection{rank}) where {rank}
+        function $op(x, c::UnionCollection{rank}) where {rank}
             LazyCollection{rank}(broadcasted($op, Ref(x), c))
         end
-        function Tensors.$op(x::UnionCollection{0}, y::UnionCollection{0})
-            LazyCollection{0}(broadcasted($op, x, Adjoint(y)))
+        function $op(x::UnionCollection{0}, y::UnionCollection{0})
+            LazyCollection{-1}(broadcasted($op, x, Adjoint(y)))
         end
-        function Tensors.$op(x::UnionCollection{rank}, y::UnionCollection{rank}) where {rank}
+        function $op(x::UnionCollection{0}, y::UnionCollection{-1})
+            throw(ArgumentError("rank=0 collection used three times"))
+        end
+        function $op(x::UnionCollection{-1}, y::UnionCollection{0})
+            throw(ArgumentError("rank=0 collection used three times"))
+        end
+        function $op(x::UnionCollection{-1}, y::UnionCollection{-1})
+            throw(ArgumentError("rank=0 collection used three times"))
+        end
+        function $op(x::UnionCollection{rank}, y::UnionCollection{rank}) where {rank}
             LazyCollection{rank}(broadcasted($op, x, y))
         end
-        function Tensors.$op(x::UnionCollection{L1}, y::UnionCollection{L2}) where {L1, L2}
+        function $op(x::UnionCollection{L1}, y::UnionCollection{L2}) where {L1, L2}
             if L1 > L2
                 LazyCollection{L1}(broadcasted($op, x, Ref(y)))
             else
                 LazyCollection{L2}(broadcasted($op, Ref(x), y))
             end
         end
-    end
+    end |> esc
+end
+
+const unary_operations = [
+    :∇,
+    :(LinearAlgebra.norm),
+]
+
+const binary_operations = [
+    :(Base.:*),
+    :(Base.:/),
+    :(Tensors.:⋅),
+    :(Tensors.:⊗),
+    :(Tensors.:×),
+]
+
+for op in unary_operations
+    @eval @define_unary_operation $op
+end
+
+for op in binary_operations
+    @eval @define_binary_operation $op
 end
