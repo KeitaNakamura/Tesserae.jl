@@ -64,7 +64,3 @@ end
 for op in (:norm, )
     @eval Tensors.$op(v::VectorTensor) = $op(v.x)
 end
-
-
-ValueGradient(x::Real, ∇x::Vec) = ScalarVector(x, ∇x)
-ValueGradient(x::Vec, ∇x::Tensor{2}) = VectorTensor(x, ∇x)
