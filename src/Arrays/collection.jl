@@ -108,7 +108,7 @@ Base.Array(c::LazyCollection) = copy(c.bc)
 
 function Base.show(io::IO, c::LazyCollection{rank}) where {rank}
     io = IOContext(io, :typeinfo => eltype(c))
-    print(io, "<", length(c), " × ", Broadcast._broadcast_getindex_eltype(c.bc), ">[")
+    print(io, "<", length(c), " × ", _typetostring(Broadcast._broadcast_getindex_eltype(c.bc)), ">[")
     join(io, [sprint(show, c[i]; context = IOContext(io, :compact => true)) for i in eachindex(c)], ", ")
     print(io, "]")
     if !get(io, :compact, false)
@@ -121,9 +121,9 @@ function Base.show(io::IO, c::LazyCollection{-1})
     print(io, " Array(collection) = ", Array(c))
 end
 
-function Base.show(io::IO, ::Type{<: LazyCollection{rank}}) where {rank}
-    print(io, "LazyCollection{$rank}")
-end
+_typetostring(::Type{<: LazyCollection{rank}}) where {rank} = "LazyCollection{$rank}"
+_typetostring(T::Type) = "$T"
+_typetostring(::Type{Union{}}) = "Any"
 
 
 const UnionCollection{rank} = Union{AbstractCollection{rank}, LazyCollection{rank}}
@@ -177,6 +177,8 @@ end
 const unary_operations = [
     :∇,
     :(LinearAlgebra.norm),
+    :(Tensors.symmetric),
+    :(Tensors.divergence),
 ]
 
 const binary_operations = [
@@ -185,6 +187,7 @@ const binary_operations = [
     :(Tensors.:⋅),
     :(Tensors.:⊗),
     :(Tensors.:×),
+    :(Tensors.:⊡),
 ]
 
 for op in unary_operations

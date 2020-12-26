@@ -18,7 +18,7 @@ export sparse
 
 # Collections
 
-export AbstractCollection, Collection
+export AbstractCollection, Collection, LazyCollection
 export collection
 
 include("sparse_coo.jl")
