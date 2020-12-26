@@ -1,10 +1,10 @@
 module Jams
 
 include("TensorValues/TensorValues.jl")
+include("Arrays/Arrays.jl")
 include("Grids/Grids.jl")
 include("Interpolations/Interpolations.jl")
 include("DofHelpers/DofHelpers.jl")
-include("Arrays/Arrays.jl")
 
 # Exports
 using Reexport

@@ -3,6 +3,7 @@ module Interpolations
 using Reexport
 @reexport using Tensors, Jams.Grids
 
+using Jams.Arrays: AbstractCollection
 using Jams.TensorValues
 import Tensors: gradient
 

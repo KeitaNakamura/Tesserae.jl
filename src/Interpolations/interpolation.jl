@@ -1,4 +1,4 @@
-abstract type Interpolation{dim, T} <: AbstractVector{ScalarVector{T, dim}} end
+abstract type Interpolation{dim, T} <: AbstractCollection{0, ScalarVector{T, dim}} end
 
 """
     construct(::ShapeFunction)
@@ -50,15 +50,15 @@ function reinit!(it::Interpolation, grid::AbstractGrid, x::Vec)
     reinit!(it, grid, eachindex(grid), x)
 end
 
-Base.size(it::Interpolation) = (length(it.N),)
+Base.length(it::Interpolation) = length(it.N)
 
-function Base.getindex(it::Interpolation, i::Int)
+@inline function Base.getindex(it::Interpolation, i::Int)
     @_propagate_inbounds_meta
     ScalarVector(it.N[i], it.dN[i])
 end
 
 
-struct VectorValue{dim, T, IT <: Interpolation{dim, T}, M} <: AbstractVector{VectorTensor{dim, T, M}}
+struct VectorValue{dim, T, IT <: Interpolation{dim, T}, M} <: AbstractCollection{0, VectorTensor{dim, T, M}}
     Ni::IT
 end
 
@@ -69,7 +69,7 @@ end
 Base.parent(it::VectorValue) = it.Ni
 Base.length(it::VectorValue{dim}) where {dim} = dim * length(it.Ni)
 
-function Base.getindex(it::VectorValue{dim}, j::Int) where {dim}
+@inline function Base.getindex(it::VectorValue{dim}, j::Int) where {dim}
     @boundscheck checkbounds(it, j)
     i, d = divrem(j - 1, dim) .+ 1
     @inbounds begin
