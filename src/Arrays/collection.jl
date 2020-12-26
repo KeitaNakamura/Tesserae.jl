@@ -53,7 +53,10 @@ function Base.show(io::IO, c::AbstractCollection{rank}) where {rank}
     io = IOContext(io, :typeinfo => eltype(c))
     print(io, "<", length(c), " × ", eltype(c), ">[")
     join(io, [isassigned(c, i) ? sprint(show, c[i]; context=io) : "#undef" for i in eachindex(c)], ", ")
-    print(io, "] with rank=$rank")
+    print(io, "]")
+    if !get(io, :compact, false)
+        print(io, "with rank=$rank")
+    end
 end
 
 
@@ -91,9 +94,10 @@ function LazyCollection{rank}(bc::Bc) where {rank, Bc}
     LazyCollection{rank, Bc}(bc)
 end
 
-Base.size(c::LazyCollection) = (length(c),)
+Base.size(c::LazyCollection) = size(c.bc)
 Base.length(c::LazyCollection) = length(c.bc)
 Base.getindex(c::LazyCollection, i) = (@_propagate_inbounds_meta; c.bc[i])
+Base.eachindex(c::LazyCollection) = Base.OneTo(length(c))
 
 Broadcast.broadcastable(c::LazyCollection) = c.bc
 Base.broadcasted(::typeof(identity), c::LazyCollection) = c.bc
@@ -101,6 +105,25 @@ Base.broadcasted(::typeof(identity), c::LazyCollection) = c.bc
 Base.sum(c::LazyCollection) = sum(c.bc)
 Base.collect(c::LazyCollection) = collect(c.bc)
 Base.Array(c::LazyCollection) = copy(c.bc)
+
+function Base.show(io::IO, c::LazyCollection{rank}) where {rank}
+    io = IOContext(io, :typeinfo => eltype(c))
+    print(io, "<", length(c), " × ", Broadcast._broadcast_getindex_eltype(c.bc), ">[")
+    join(io, [sprint(show, c[i]; context = IOContext(io, :compact => true)) for i in eachindex(c)], ", ")
+    print(io, "]")
+    if !get(io, :compact, false)
+        print(io, " with rank=$rank")
+    end
+end
+
+function Base.show(io::IO, c::LazyCollection{-1})
+    join(io, size(c), "×")
+    print(io, " Array(collection) = ", Array(c))
+end
+
+function Base.show(io::IO, ::Type{<: LazyCollection{rank}}) where {rank}
+    print(io, "LazyCollection{$rank}")
+end
 
 
 const UnionCollection{rank} = Union{AbstractCollection{rank}, LazyCollection{rank}}
