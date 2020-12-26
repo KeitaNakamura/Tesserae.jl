@@ -62,7 +62,7 @@ struct VectorValue{dim, T, IT <: Interpolation{dim, T}, M} <: AbstractCollection
     Ni::IT
 end
 
-function VectorValue(Ni::Interpolation{dim, T}) where {dim, T}
+function Base.vec(Ni::Interpolation{dim, T}) where {dim, T}
     VectorValue{dim, T, typeof(Ni), dim^2}(Ni)
 end
 
