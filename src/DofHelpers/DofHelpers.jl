@@ -8,6 +8,8 @@ export
     DofMap,
     numbering!,
     ndofs,
+    DofMapIndices,
+    indices,
 # PointToGridIndex
     PointToGridIndex,
     dofindices,

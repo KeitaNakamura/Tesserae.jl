@@ -10,30 +10,30 @@ To finalize activations and perform numbering dofs, use [`numbering!`](@ref).
 - [`DofHelpers.map(::DofMap, inds; dim::Int = 1)`](@ref)
 - [`DofHelpers.filter(::DofMap, inds)`](@ref)
 """
-struct DofMap{spacedim} <: AbstractArray{Bool, spacedim}
-    inds::Array{Int, spacedim}
+struct DofMap{dim} <: AbstractArray{Bool, dim}
+    indices::Array{Int, dim}
 end
 
 DofMap(gridsize::Tuple{Vararg{Int}}) = DofMap(fill(-1, gridsize))
 DofMap(gridsize::Int...) = DofMap(gridsize)
 
-Base.size(dofmap::DofMap) = size(dofmap.inds)
+Base.size(dofmap::DofMap) = size(dofmap.indices)
 Base.IndexStyle(::Type{<: DofMap}) = IndexLinear()
 
-Base.getindex(dofmap::DofMap, i::Int) = (@_propagate_inbounds_meta; dofmap.inds[i] !== -1)
-Base.setindex!(dofmap::DofMap, v::Bool, i::Int) = (@_propagate_inbounds_meta; dofmap.inds[i] = (v ? 0 : -1))
+Base.getindex(dofmap::DofMap, i::Int) = (@_propagate_inbounds_meta; dofmap.indices[i] !== -1)
+Base.setindex!(dofmap::DofMap, v::Bool, i::Int) = (@_propagate_inbounds_meta; dofmap.indices[i] = (v ? 0 : -1))
 
-Base.fill!(dofmap::DofMap, v::Bool) = (fill!(dofmap.inds, (v ? 0 : -1)); dofmap)
+Base.fill!(dofmap::DofMap, v::Bool) = (fill!(dofmap.indices, (v ? 0 : -1)); dofmap)
 
 """
     ndofs(::DofMap; dim::Int = 1)
 
 Return total number of dofs.
 """
-function ndofs(dofmap::DofMap, dim::Int = 1)
-    i = findlast(>(0), dofmap.inds)
+function ndofs(dofmap::DofMap; dim::Int = 1)
+    i = findlast(>(0), dofmap.indices)
     i === nothing && return 0
-    dofmap.inds[i] * dim
+    dofmap.indices[i] * dim
 end
 
 """
@@ -67,7 +67,7 @@ julia> numbering!(dofmap)
 function numbering!(dofmap::DofMap)
     count = 0
     for i in eachindex(dofmap)
-        @inbounds dofmap.inds[i] = (dofmap[i] ? count += 1 : -1)
+        @inbounds dofmap.indices[i] = (dofmap[i] ? count += 1 : -1)
     end
     count
 end
@@ -113,7 +113,7 @@ julia> dofmap(2, 2, dim = 2)
 ```
 """
 function (dofmap::DofMap)(I...; dim = nothing)
-    j = dofmap.inds[I...]::Int
+    j = dofmap.indices[I...]::Int
     j == -1 && return nothing
     dim === nothing && return j
     start = dim*(j-1)
@@ -168,7 +168,7 @@ function map(dofmap::DofMap, inds::AbstractArray; dim::Int = 1)
 end
 
 function map!(dofmap::DofMap, dofs::Vector{Int}, inds::AbstractArray; dim::Int = 1)
-    linear = view(dofmap.inds, inds) # checkbounds as well
+    linear = view(dofmap.indices, inds) # checkbounds as well
     resize!(dofs, length(inds) * dim)
     count = 0
     @inbounds for i in eachindex(linear)
@@ -224,8 +224,20 @@ function filter!(dofmap::DofMap, output::Vector, inds::AbstractArray)
     count = 0
     @inbounds for i in eachindex(inds)
         j = inds[i]
-        dofmap.inds[j] !== -1 && (output[count += 1] = j)
+        dofmap.indices[j] !== -1 && (output[count += 1] = j)
     end
     resize!(output, count)
     output
 end
+
+
+struct DofMapIndices{dim} <: AbstractArray{Union{Nothing, Int}, dim}
+    indices::Array{Int, dim}
+end
+
+indices(dofmap::DofMap) = DofMapIndices(dofmap.indices)
+
+Base.parent(I::DofMapIndices) = DofMap(I.indices)
+Base.IndexStyle(::Type{<: DofMapIndices}) = IndexLinear()
+Base.size(I::DofMapIndices) = size(I.indices)
+Base.getindex(I::DofMapIndices, i::Int) = (@_propagate_inbounds_meta; j = I.indices[i]; j == -1 ? nothing : j)
