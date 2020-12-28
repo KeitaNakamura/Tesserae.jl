@@ -90,7 +90,7 @@ function numbering!(pg::PointToGridIndex{dim}, coordinates::AbstractArray{<: Vec
     end
 
     ## renumering dofs
-    numbering!(dofmap)
+    count!(dofmap)
 
     # Reinitialize interpolations by updated mask
     @inbounds for (i, x) in enumerate(coordinates)

@@ -6,12 +6,12 @@ using Base: @_propagate_inbounds_meta
 export
 # DofMap
     DofMap,
-    numbering!,
-    ndofs,
     DofMapIndices,
+    ndofs,
     indices,
 # PointToGridIndex
     PointToGridIndex,
+    numbering!,
     dofindices,
     gridindices
 

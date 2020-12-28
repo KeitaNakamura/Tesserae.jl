@@ -1,11 +1,11 @@
 """
-    DofMap(gridsize...)
+    DofMap(dims...)
 
 Create function-like object for dof mapping.
-`DofMap` also behave like a bool array to activate/deactivate grid nodes.
-To finalize activations and perform numbering dofs, use [`numbering!`](@ref).
+`DofMap` also behave like a bool array to activate/deactivate indices.
+To finalize activations and perform numbering dofs, use [`count!(::DofMap)`](@ref).
 
-- [`numbering!(::DofMap)`](@ref)
+- [`count!(::DofMap)`](@ref)
 - [`(DofMap)(index...; dim = nothing)`](@ref)
 - [`DofHelpers.map(::DofMap, inds; dim::Int = 1)`](@ref)
 - [`DofHelpers.filter(::DofMap, inds)`](@ref)
@@ -37,10 +37,10 @@ function ndofs(dofmap::DofMap; dim::Int = 1)
 end
 
 """
-    numbering!(::DofMap)
+    count!(::DofMap)
 
-Numbering `dofmap` based on activated grid nodes.
-Returned integer is the number of active nodes.
+Count active indices and numbering dofs.
+Returned integer is the number of active indices.
 
 # Examples
 ```jldoctest
@@ -60,11 +60,11 @@ julia> dofmap[1:2, 2:3] .= true; dofmap
  0  0  0  0  0
  0  0  0  0  0
 
-julia> numbering!(dofmap)
+julia> count!(dofmap)
 4
 ```
 """
-function numbering!(dofmap::DofMap)
+function Base.count!(dofmap::DofMap)
     count = 0
     for i in eachindex(dofmap)
         @inbounds dofmap.indices[i] = (dofmap[i] ? count += 1 : -1)
@@ -96,7 +96,7 @@ julia> dofmap[1:2, 2:3] .= true; dofmap
  0  0  0  0  0
  0  0  0  0  0
 
-julia> numbering!(dofmap)
+julia> count!(dofmap)
 4
 
 julia> dofmap(1, 1) === nothing
@@ -113,7 +113,7 @@ julia> dofmap(2, 2, dim = 2)
 ```
 """
 function (dofmap::DofMap)(I...; dim = nothing)
-    j = dofmap.indices[I...]::Int
+    j = dofmap.indices[I...]
     j == -1 && return nothing
     dim === nothing && return j
     start = dim*(j-1)
@@ -145,7 +145,7 @@ julia> dofmap[1:2, 2:3] .= true; dofmap
  0  0  0  0  0
  0  0  0  0  0
 
-julia> numbering!(dofmap)
+julia> count!(dofmap)
 4
 
 julia> DofHelpers.map(dofmap, CartesianIndices((1:2, 1:2)); dim = 2)
@@ -206,7 +206,7 @@ julia> dofmap[1:2, 2:3] .= true; dofmap
  0  0  0  0  0
  0  0  0  0  0
 
-julia> numbering!(dofmap)
+julia> count!(dofmap)
 4
 
 julia> DofHelpers.filter(dofmap, CartesianIndices((1:2, 1:2)))
