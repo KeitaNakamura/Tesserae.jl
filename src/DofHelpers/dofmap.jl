@@ -21,9 +21,9 @@ Base.size(dofmap::DofMap) = size(dofmap.indices)
 Base.IndexStyle(::Type{<: DofMap}) = IndexLinear()
 
 Base.getindex(dofmap::DofMap, i::Int) = (@_propagate_inbounds_meta; dofmap.indices[i] !== -1)
-Base.setindex!(dofmap::DofMap, v::Bool, i::Int) = (@_propagate_inbounds_meta; dofmap.indices[i] = (v ? 0 : -1))
+Base.setindex!(dofmap::DofMap, v::Bool, i::Int) = (@_propagate_inbounds_meta; dofmap.indices[i] = ifelse(v, 0, -1))
 
-Base.fill!(dofmap::DofMap, v::Bool) = (fill!(dofmap.indices, (v ? 0 : -1)); dofmap)
+Base.fill!(dofmap::DofMap, v::Bool) = (fill!(dofmap.indices, ifelse(v, 0, -1)); dofmap)
 
 """
     ndofs(::DofMap; dim::Int = 1)
@@ -240,4 +240,4 @@ indices(dofmap::DofMap) = DofMapIndices(dofmap.indices)
 Base.parent(I::DofMapIndices) = DofMap(I.indices)
 Base.IndexStyle(::Type{<: DofMapIndices}) = IndexLinear()
 Base.size(I::DofMapIndices) = size(I.indices)
-Base.getindex(I::DofMapIndices, i::Int) = (@_propagate_inbounds_meta; j = I.indices[i]; j == -1 ? nothing : j)
+Base.getindex(I::DofMapIndices, i::Int) = (@_propagate_inbounds_meta; j = I.indices[i]; ifelse(j == -1, nothing, j))
