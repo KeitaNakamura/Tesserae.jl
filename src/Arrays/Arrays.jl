@@ -2,26 +2,29 @@ module Arrays
 
 using Reexport
 
-using LinearAlgebra, SparseArrays
+using LinearAlgebra
+@reexport using Jams.DofHelpers
 @reexport using Tensors
 
+import SparseArrays: sparse, nonzeros, nnz
 import Jams.TensorValues: ∇
+import Jams.DofHelpers: indices
 
 using Base: @_propagate_inbounds_meta
 using Base.Broadcast: broadcasted
 using LinearAlgebra: Adjoint
 
-# SparseMatrixCOO
+# sparse arrays
 
-export SparseMatrixCOO
-export sparse
+export SparseArray, SparseMatrixCOO
+export sparse, nonzeros, zeros!
 
 # Collections
 
 export AbstractCollection, Collection, LazyCollection
 export collection, changerank
 
-include("sparse_coo.jl")
+include("sparse.jl")
 include("collection.jl")
 
 end
