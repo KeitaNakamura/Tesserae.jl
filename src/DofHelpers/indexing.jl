@@ -96,7 +96,7 @@ function numbering!(pg::PointToGridIndex{dim}, coordinates::AbstractArray{<: Vec
     @inbounds for (i, x) in enumerate(coordinates)
         allinds = neighboring_nodes(grid, x, point_radius)
         map!(dofmap, dofindices[i], allinds)
-        map!(dofmap, dofindices_dim[i], allinds; dim)
+        map!(dofmap, dofindices_dim[i], allinds; dof = dim)
         filter!(dofmap, gridindices[i], allinds)
     end
 
@@ -128,8 +128,8 @@ Use [`numbering!(::PointToGridIndex, ::AbstractArray{<: Vec})`](@ref) in advance
 gridindices(pg::PointToGridIndex, p::Int) = (@_propagate_inbounds_meta; pg.gridindices[p])
 
 """
-    ndofs(::PointToGridIndex)
+    ndofs(::PointToGridIndex; dim::Int = 1)
 
 Return total number of dofs.
 """
-ndofs(pg::PointToGridIndex) = ndofs(pg.dofmap)
+ndofs(pg::PointToGridIndex; dim::Int = 1) = ndofs(pg.dofmap; dof = dim)

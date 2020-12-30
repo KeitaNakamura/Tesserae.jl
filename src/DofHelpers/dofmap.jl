@@ -6,16 +6,16 @@ Create function-like object for dof mapping.
 To finalize activations and perform numbering dofs, use [`count!(::DofMap)`](@ref).
 
 - [`count!(::DofMap)`](@ref)
-- [`(DofMap)(index...; dim = nothing)`](@ref)
-- [`DofHelpers.map(::DofMap, inds; dim::Int = 1)`](@ref)
+- [`(DofMap)(index...; [dof])`](@ref)
+- [`DofHelpers.map(::DofMap, inds; [dof])`](@ref)
 - [`DofHelpers.filter(::DofMap, inds)`](@ref)
 """
 struct DofMap{dim} <: AbstractArray{Bool, dim}
     indices::Array{Int, dim}
 end
 
-DofMap(gridsize::Tuple{Vararg{Int}}) = DofMap(fill(-1, gridsize))
-DofMap(gridsize::Int...) = DofMap(gridsize)
+DofMap(dims::Tuple{Vararg{Int}}) = DofMap(fill(-1, dims))
+DofMap(dims::Int...) = DofMap(dims)
 
 Base.size(dofmap::DofMap) = size(dofmap.indices)
 Base.IndexStyle(::Type{<: DofMap}) = IndexLinear()
@@ -26,14 +26,14 @@ Base.setindex!(dofmap::DofMap, v::Bool, i::Int) = (@_propagate_inbounds_meta; do
 Base.fill!(dofmap::DofMap, v::Bool) = (fill!(dofmap.indices, ifelse(v, 0, -1)); dofmap)
 
 """
-    ndofs(::DofMap; dim::Int = 1)
+    ndofs(::DofMap; [dof])
 
 Return total number of dofs.
 """
-function ndofs(dofmap::DofMap; dim::Int = 1)
+function ndofs(dofmap::DofMap; dof::Int = 1)
     i = findlast(>(0), dofmap.indices)
     i === nothing && return 0
-    dofmap.indices[i] * dim
+    dofmap.indices[i] * dof
 end
 
 """
@@ -73,7 +73,7 @@ function Base.count!(dofmap::DofMap)
 end
 
 """
-    (::DofMap)(index...; dim = nothing)
+    (::DofMap)(index...; [dof])
 
 Return dof from given nodal `index`.
 Use [`DofHelpers.map(::DofMap, indices::AbstractArray)`](@ref) for multiple indices.
@@ -105,24 +105,24 @@ true
 julia> dofmap(2, 2)
 2
 
-julia> dofmap(2, 2, dim = 1)
+julia> dofmap(2, 2, dof = 1)
 2:2
 
-julia> dofmap(2, 2, dim = 2)
+julia> dofmap(2, 2, dof = 2)
 3:4
 ```
 """
-function (dofmap::DofMap)(I...; dim = nothing)
+function (dofmap::DofMap)(I...; dof = nothing)
     j = dofmap.indices[I...]
     j == -1 && return nothing
-    dim === nothing && return j
-    start = dim*(j-1)
-    (start+1):(start+dim)
+    dof === nothing && return j
+    start = dof*(j-1)
+    (start+1):(start+dof)
 end
 
 """
-    DofHelpers.map(::DofMap, indices::AbstractArray; dim::Int = 1)
-    DofHelpers.map!(::DofMap, dofs::Vector{Int}, indices::AbstractArray; dim::Int = 1)
+    DofHelpers.map(::DofMap, indices::AbstractArray; [dof])
+    DofHelpers.map!(::DofMap, dofs::Vector{Int}, indices::AbstractArray; [dof])
 
 Map nodal `indices` to dof indices.
 This is almost the same behavior as performing `dofmap(index)` at each elemnt of `indices` but `nothing` is skipped.
@@ -148,14 +148,14 @@ julia> dofmap[1:2, 2:3] .= true; dofmap
 julia> count!(dofmap)
 4
 
-julia> DofHelpers.map(dofmap, CartesianIndices((1:2, 1:2)); dim = 2)
+julia> DofHelpers.map(dofmap, CartesianIndices((1:2, 1:2)); dof = 2)
 4-element Array{Int64,1}:
  1
  2
  3
  4
 
-julia> DofHelpers.map(dofmap, [CartesianIndex(1, 2), CartesianIndex(2, 3)]; dim = 2)
+julia> DofHelpers.map(dofmap, [CartesianIndex(1, 2), CartesianIndex(2, 3)]; dof = 2)
 4-element Array{Int64,1}:
  1
  2
@@ -163,19 +163,19 @@ julia> DofHelpers.map(dofmap, [CartesianIndex(1, 2), CartesianIndex(2, 3)]; dim 
  8
 ```
 """
-function map(dofmap::DofMap, inds::AbstractArray; dim::Int = 1)
-    map!(dofmap, Int[], inds; dim)
+function map(dofmap::DofMap, inds::AbstractArray; dof::Int = 1)
+    map!(dofmap, Int[], inds; dof)
 end
 
-function map!(dofmap::DofMap, dofs::Vector{Int}, inds::AbstractArray; dim::Int = 1)
+function map!(dofmap::DofMap, dofs::Vector{Int}, inds::AbstractArray; dof::Int = 1)
     linear = view(dofmap.indices, inds) # checkbounds as well
-    resize!(dofs, length(inds) * dim)
+    resize!(dofs, length(inds) * dof)
     count = 0
     @inbounds for i in eachindex(linear)
         j = linear[i]
         j == -1 && continue
-        for d in 1:dim
-            dofs[count += 1] = dim*(j-1) + d
+        for d in 1:dof
+            dofs[count += 1] = dof*(j-1) + d
         end
     end
     resize!(dofs, count)
