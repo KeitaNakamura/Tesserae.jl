@@ -106,11 +106,13 @@ Base.sum(c::LazyCollection) = sum(c.bc)
 Base.collect(c::LazyCollection) = collect(c.bc)
 Base.Array(c::LazyCollection) = copy(c.bc)
 
+Base.eltype(c::LazyCollection) = Broadcast._broadcast_getindex_eltype(c.bc)
+
 changerank(c::AbstractCollection, ::Val{rank}) where {rank} = LazyCollection{rank}(broadcasted(identity, c))
 
 function Base.show(io::IO, c::LazyCollection{rank}) where {rank}
     io = IOContext(io, :typeinfo => eltype(c))
-    print(io, "<", length(c), " × ", _typetostring(Broadcast._broadcast_getindex_eltype(c.bc)), ">[")
+    print(io, "<", length(c), " × ", _typetostring(eltype(c)), ">[")
     join(io, [sprint(show, c[i]; context = IOContext(io, :compact => true)) for i in eachindex(c)], ", ")
     print(io, "]")
     if !get(io, :compact, false)
