@@ -14,6 +14,9 @@ Base.promote_type(::Type{U}, ::Type{ScalarVector{T, dim}}) where {T, dim, U} = p
 Base.convert(::Type{T}, a::ScalarVector) where {T <: Real} = convert(T, a.x)
 Base.convert(::Type{ScalarVector{T, dim}}, a::ScalarVector) where {T, dim} = ScalarVector{T, dim}(a.x, a.∇x)
 
+Base.zero(::Type{<: ScalarVector{T}}) where {T} = zero(T)
+Base.zero(x::ScalarVector) = zero(typeof(x))
+
 # scalar vs scalar
 for op in (:+, :-, :/, :*)
     @eval Base.$op(a::ScalarVector, b::ScalarVector) = $op(a.x, b.x)
@@ -31,6 +34,9 @@ end
 
 Base.size(v::VectorTensor) = size(v.x)
 Base.getindex(v::VectorTensor, i::Int) = (@_propagate_inbounds_meta; v.x[i])
+
+Base.zero(::Type{<: VectorTensor{dim, T}}) where {dim, T} = zero(Vec{dim, T})
+Base.zero(x::VectorTensor) = zero(typeof(x))
 
 # vector vs vector
 # +, -, ⋅, ⊗, ×
