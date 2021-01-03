@@ -167,7 +167,7 @@ function Base.show(io::IO, pos::BSplinePosition)
 end
 
 
-struct BSplineInterpolation{order, dim, T} <: Interpolation{dim, T}
+struct BSplineValue{order, dim, T} <: ShapeValue{dim, T}
     F::BSpline{order, dim}
     N::Vector{T}
     dN::Vector{Vec{dim, T}}
@@ -176,10 +176,10 @@ end
 function construct(::Type{T}, F::BSpline{order, dim}) where {order, dim, T}
     N = Vector{T}(undef, 0)
     dN = Vector{Vec{dim, T}}(undef, 0)
-    BSplineInterpolation(F, N, dN)
+    BSplineValue(F, N, dN)
 end
 
-function reinit!(it::BSplineInterpolation{<: Any, dim}, grid::AbstractGrid{dim}, indices::AbstractArray, x::Vec{dim}) where {dim}
+function reinit!(it::BSplineValue{<: Any, dim}, grid::AbstractGrid{dim}, indices::AbstractArray, x::Vec{dim}) where {dim}
     @boundscheck checkbounds(grid, indices)
     F = it.F
     resize!(it.N, length(indices))

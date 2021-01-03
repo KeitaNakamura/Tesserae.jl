@@ -1,9 +1,9 @@
-module Interpolations
+module ShapeFunctions
 
 using Reexport
 @reexport using Tensors, Jams.Grids
 
-using Jams.Arrays: AbstractCollection
+using Jams.Arrays: AbstractCollection, LazyCollection, changerank
 using Jams.TensorValues
 import Tensors: gradient
 
@@ -17,15 +17,17 @@ export
     QuadraticBSpline,
     CubicBSpline,
     BSplinePosition,
-# Interpolation
-    Interpolation,
-    BSplineInterpolation,
+# ShapeValue
+    ShapeValue,
+    BSplineValue,
     construct,
-    reinit!
+    reinit!,
+    ∑ₚ,
+    ∑ᵢ
 
 
 include("shape_function.jl")
-include("interpolation.jl")
+include("shape_value.jl")
 include("bsplines.jl")
 
 end # module

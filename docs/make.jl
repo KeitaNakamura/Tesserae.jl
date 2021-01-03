@@ -15,7 +15,7 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Jams.Grids" => "Grids.md",
-        "Jams.Interpolations" => "Interpolations.md",
+        "Jams.ShapeFunctions" => "ShapeFunctions.md",
         "Jams.DofHelpers" => "DofHelpers.md",
         "Jams.Arrays" => "Arrays.md",
     ],
