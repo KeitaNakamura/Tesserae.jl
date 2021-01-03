@@ -14,10 +14,11 @@ makedocs(;
     sitename = "Jams.jl",
     pages=[
         "Home" => "index.md",
-        "Jams.Grids" => "Grids.md",
-        "Jams.ShapeFunctions" => "ShapeFunctions.md",
         "Jams.DofHelpers" => "DofHelpers.md",
         "Jams.Arrays" => "Arrays.md",
+        "Jams.Grids" => "Grids.md",
+        "Jams.ShapeFunctions" => "ShapeFunctions.md",
+        "Jams.MPSpaces" => "MPSpaces.md",
     ],
     doctest = true, # :fix
 )
