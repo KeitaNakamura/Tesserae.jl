@@ -1,6 +1,16 @@
 module MPSpaces
 
-using Jams.Arrays: SparseArray, nonzeros, zeros!
+using Jams.Arrays:
+# SparseArray
+    SparseArray,
+    nonzeros,
+    zeros!,
+# Collection
+    AbstractCollection,
+    Collection,
+    LazyCollection,
+    changerank
+using Jams.TensorValues
 using Jams.DofHelpers
 using Jams.ShapeFunctions
 using Jams.PointStates
@@ -10,8 +20,9 @@ import Jams.ShapeFunctions: reinit!
 
 using Base: @_propagate_inbounds_meta
 
-export MPSpace
+export MPSpace, ∑ᵢ, ∑ₚ
 
+include("sum.jl")
 include("mpspace.jl")
 
 end

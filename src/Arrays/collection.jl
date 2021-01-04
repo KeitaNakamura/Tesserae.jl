@@ -11,6 +11,12 @@ Base.eltype(::AbstractCollection{rank, ElType}) where {rank, ElType} = ElType
 Base.size(c::AbstractCollection) = (length(c),)
 Base.eachindex(c::AbstractCollection) = Base.OneTo(length(c))
 
+function Base.fill!(c::AbstractCollection, v)
+    for i in eachindex(c)
+        @inbounds c[i] = v
+    end
+end
+
 @inline function Base.checkbounds(::Type{Bool}, c::AbstractCollection, i::Integer)
     checkindex(Bool, Base.OneTo(length(c)), i)
 end
@@ -98,6 +104,7 @@ Base.size(c::LazyCollection) = size(c.bc)
 Base.length(c::LazyCollection) = length(c.bc)
 Base.getindex(c::LazyCollection, i) = (@_propagate_inbounds_meta; c.bc[i])
 Base.eachindex(c::LazyCollection) = Base.OneTo(length(c))
+@inline Base.iterate(c::LazyCollection, state...) = iterate(c.bc, state...)
 
 Broadcast.broadcastable(c::LazyCollection) = c.bc
 Base.broadcasted(::typeof(identity), c::LazyCollection) = c.bc
@@ -106,7 +113,7 @@ Base.sum(c::LazyCollection) = sum(c.bc)
 Base.collect(c::LazyCollection) = collect(c.bc)
 Base.Array(c::LazyCollection) = copy(c.bc)
 
-Base.eltype(c::LazyCollection) = Broadcast._broadcast_getindex_eltype(c.bc)
+Base.eltype(c::LazyCollection) = Broadcast._broadcast_getindex_eltype(c.bc) # this is a bit dangerous
 
 changerank(c::AbstractCollection, ::Val{rank}) where {rank} = LazyCollection{rank}(broadcasted(identity, c))
 
@@ -186,6 +193,8 @@ const unary_operations = [
 ]
 
 const binary_operations = [
+    :ValueGradient,
+    :_otimes_,
     :(Base.:*),
     :(Base.:/),
     :(Tensors.:⋅),

@@ -41,9 +41,13 @@ struct SparseArray{dim, T} <: AbstractArray{T, dim}
     indices::DofMapIndices{dim}
 end
 
+function SparseArray(nzval::Vector, dofmap::DofMap)
+    SparseArray(nzval, indices(dofmap))
+end
+
 function SparseArray(::Type{T}, dofmap::DofMap) where {T}
     nzval = zeros(T, ndofs(dofmap))
-    SparseArray(nzval, indices(dofmap))
+    SparseArray(nzval, dofmap)
 end
 
 SparseArray(dofmap::DofMap) = SparseArray(Float64, dofmap)
@@ -72,6 +76,7 @@ nonzeros(S::SparseArray) = S.nzval
 nnz(S::SparseArray) = ndofs(indices(S))
 
 zeros!(v::AbstractVector{T}, n) where {T} = (resize!(v, n); fill!(v, zero(T)); v)
+zeros!(v) = (fill!(v, zero(eltype(v))); v)
 zeros!(S::SparseArray) = (zeros!(nonzeros(S), nnz(S)); S)
 
 

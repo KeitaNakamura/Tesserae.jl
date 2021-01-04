@@ -77,28 +77,3 @@ Base.length(it::VectorValue{dim}) where {dim} = dim * length(it.Ni)
     end
     VectorTensor(ei * N, ei ⊗ ∇(N))
 end
-
-
-struct SumToGrid{rank, C}
-    c::C
-end
-
-SumToGrid{rank}(c::C) where {rank, C} = SumToGrid{rank, C}(c)
-
-function ∑ₚ(c::AbstractCollection{rank}) where {rank}
-    SumToGrid{rank}(changerank(c, Val(rank))) # just to use identity for broadcast
-end
-
-function ∑ₚ(c::LazyCollection{rank}) where {rank}
-    SumToGrid{rank}(c)
-end
-
-Broadcast.broadcasted(::typeof(identity), s::SumToGrid) = Broadcast.broadcasted(identity, s.c)
-Base.Array(s::SumToGrid) = Array(s.c)
-
-(s::SumToGrid{2})(i) = (@_propagate_inbounds_meta; s.c[i])
-
-Base.show(io::IO, s::SumToGrid) = print(io, "SumToGrid(", s.c, ")")
-
-
-∑ᵢ(c::Union{AbstractCollection, LazyCollection}) = sum(c)

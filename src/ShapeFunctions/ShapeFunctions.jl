@@ -3,7 +3,7 @@ module ShapeFunctions
 using Reexport
 @reexport using Tensors, Jams.Grids
 
-using Jams.Arrays: AbstractCollection, LazyCollection, changerank
+using Jams.Arrays: AbstractCollection
 using Jams.TensorValues
 import Tensors: gradient
 
@@ -21,9 +21,7 @@ export
     ShapeValue,
     BSplineValue,
     construct,
-    reinit!,
-    ∑ₚ,
-    ∑ᵢ
+    reinit!
 
 
 include("shape_function.jl")

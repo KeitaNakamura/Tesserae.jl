@@ -7,7 +7,7 @@ using LinearAlgebra
 @reexport using Tensors
 
 import SparseArrays: sparse, nonzeros, nnz
-import Jams.TensorValues: ∇
+import Jams.TensorValues: ∇, _otimes_, ValueGradient
 import Jams.DofHelpers: indices
 
 using Base: @_propagate_inbounds_meta
