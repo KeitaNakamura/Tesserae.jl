@@ -14,6 +14,7 @@ using Jams.TensorValues: ∇, ∇ₛ; export ∇, ∇ₛ
 @reexport using Jams.DofHelpers
 @reexport using Jams.Arrays
 @reexport using Jams.Grids
+@reexport using Jams.PointStates
 @reexport using Jams.ShapeFunctions
 @reexport using Jams.MPSpaces
 
