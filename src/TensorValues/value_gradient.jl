@@ -30,10 +30,16 @@ struct VectorTensor{dim, T, M} <: AbstractVector{T}
     ∇x::Tensor{2, dim, T, M}
 end
 
+VectorTensor{dim, T}(x::Vec{dim, <: Any}, ∇x::Tensor{2, dim, <: Any, M}) where {dim, T, M} =
+    VectorTensor{dim, T, M}(x, ∇x)
+
 ∇(v::VectorTensor) = v.∇x
 
 Base.size(v::VectorTensor) = size(v.x)
 Base.getindex(v::VectorTensor, i::Int) = (@_propagate_inbounds_meta; v.x[i])
+
+Base.convert(::Type{T}, a::VectorTensor) where {T <: Vec} = convert(T, a.x)
+Base.convert(::Type{VectorTensor{dim, T}}, a::VectorTensor) where {dim, T} = VectorTensor{dim, T}(a.x, a.∇x)
 
 Base.zero(::Type{VectorTensor{dim, T}}) where {dim, T} = VectorTensor(zero(Vec{dim, T}), zero(Tensor{2, dim, T}))
 Base.zero(::Type{VectorTensor{dim, T, M}}) where {dim, T, M} = zero(VectorTensor{dim, T})
