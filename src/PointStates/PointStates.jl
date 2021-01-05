@@ -31,4 +31,10 @@ Base.fill!(p::PointState, v) = fill!(p.data, v)
 Base.similar(p::PointState, ::Type{T}) where {T} = PointState(T, length(p))
 Base.similar(p::PointState{T}) where {T} = similar(p, T)
 
+
+# left arrow
+
+set!(p::PointState, c::UnionCollection{2}) = (p.data .= c; p)
+const ← = set!
+
 end
