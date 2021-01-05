@@ -132,7 +132,7 @@ end
 
 function _point_to_grid(space::MPSpace, ∑ₚwu::SumToGrid)
     ElType = eltype(∑ₚwu[1])
-    S = SparseArray(typeofzero(ElType), space.dofmap) # typeofzero is to handle ScalarVector or VectorTensor values
+    S = SparseArray(parenttype(ElType), space.dofmap) # parenttype is to handle ScalarVector and VectorTensor values
     _point_to_grid!(S, space, ∑ₚwu)
 end
 
@@ -174,7 +174,7 @@ end
 
 function _grid_to_point(space::MPSpace, ∑ᵢwu::SumToPoint)
     ElType = typeof(∑ᵢwu[1])
-    dest = PointState(ElType, npoints(space)) # typeofzero is to handle ScalarVector or VectorTensor values
+    dest = PointState(ElType, npoints(space)) # parenttype is to handle ScalarVector and VectorTensor values
     _grid_to_point!(dest, space, ∑ᵢwu)
 end
 
@@ -264,4 +264,6 @@ function function_reconstruction(space::MPSpace, u::PointState, w = identity) # 
 end
 
 
-typeofzero(x) = typeof(zero(x))
+parenttype(::Type{T}) where {T} = T
+parenttype(::Type{ScalarVector{T, dim}}) where {T, dim} = T
+parenttype(::Type{VectorTensor{dim, T, M}}) where {dim, T, M} = Vec{dim, T}
