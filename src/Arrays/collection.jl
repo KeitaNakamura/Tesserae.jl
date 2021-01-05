@@ -112,6 +112,7 @@ Base.broadcasted(::typeof(identity), c::LazyCollection) = c.bc
 Base.sum(c::LazyCollection) = sum(c.bc)
 Base.collect(c::LazyCollection) = collect(c.bc)
 Base.Array(c::LazyCollection) = copy(c.bc)
+Collection{rank}(v::LazyCollection) where {rank} = Collection{rank}(Array(v))
 
 Base.eltype(c::LazyCollection) = Broadcast._broadcast_getindex_eltype(c.bc) # this is a bit dangerous
 
