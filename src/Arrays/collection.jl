@@ -181,26 +181,23 @@ function lazy(op, x::UnionCollection{L1}, y::UnionCollection{L2}) where {L1, L2}
 end
 
 # TODO: more general version to support any rank collections
-@generated function lazy(op, x, y, z, others...)
-    args = (x, y, z, others...)
-    exps = []
-    for i in 1:length(args)
-        if args[i] <: UnionCollection{2}
-            push!(exps, :(args[$i]))
-        elseif args[i] <: UnionCollection
-            return :(throw(ArgumentError("support only rank=2 collection")))
-        else
-            push!(exps, :(Ref(args[$i])))
-        end
-    end
-    quote
-        args = (x, y, z, others...)
-        LazyCollection{2}(broadcasted(op, $(exps...)))
-    end
-end
-
-(::Colon)(op, x::UnionCollection) = lazy(op, x)
-(::Colon)(op, xs::Tuple) = any(x -> isa(x, UnionCollection), xs) ? lazy(op, xs...) : op(xs...)
+# @generated function lazy(op, x, y, z, others...)
+    # args = (x, y, z, others...)
+    # exps = []
+    # for i in 1:length(args)
+        # if args[i] <: UnionCollection{2}
+            # push!(exps, :(args[$i]))
+        # elseif args[i] <: UnionCollection
+            # return :(throw(ArgumentError("support only rank=2 collection")))
+        # else
+            # push!(exps, :(Ref(args[$i])))
+        # end
+    # end
+    # quote
+        # args = (x, y, z, others...)
+        # LazyCollection{2}(broadcasted(op, $(exps...)))
+    # end
+# end
 
 macro define_unary_operation(op)
     quote
