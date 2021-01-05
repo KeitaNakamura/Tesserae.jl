@@ -23,6 +23,6 @@ using Base: @_propagate_inbounds_meta
 export MPSpace, ∑ᵢ, ∑ₚ
 
 include("sum.jl")
-include("mpspace.jl")
+include("space.jl")
 
 end
