@@ -1,4 +1,4 @@
-struct MPSpace{dim, T, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: ShapeValue{dim}}
+struct MPSpace{dim, T, Tw, Tp, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: ShapeValue{dim}}
     F::FT
     grid::GT
     dofmap::DofMap{dim}
@@ -7,7 +7,8 @@ struct MPSpace{dim, T, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: 
     gridindices::Vector{Vector{CartesianIndex{dim}}}
     Nᵢ::PointState{VT}
     uᵢ::SparseArray{dim, T}
-    uₚ::PointState{T}
+    wᵢ::SparseArray{dim, Tw}
+    uₚ::PointState{Tp}
 end
 
 function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoints::Int) where {dim, T <: Union{Real, Vec}}
@@ -17,9 +18,13 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     gridindices = [CartesianIndex{dim}[] for _ in 1:npoints]
     Nᵢ = PointState([construct(eltype(T), F) for _ in 1:npoints])
     uᵢ = SparseArray(T, dofmap)
-    uₚ = zeros!(PointState(T, npoints))
-    MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ, uᵢ, uₚ)
+    wᵢ = SparseArray(eltype(T), dofmap)
+    uₚ = zeros!(PointState(value_gradient_type(T, Val(dim)), npoints))
+    MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ, uᵢ, wᵢ, uₚ)
 end
+
+value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalarVector{T, dim}
+value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VectorTensor{dim, T, dim^2}
 
 function reinit_dofmap!(space::MPSpace{dim}, coordinates::AbstractArray{<: Vec{dim}}; exclude = nothing, point_radius::Real) where {dim}
     dofindices = space.dofindices
@@ -82,6 +87,7 @@ function reinit!(space::MPSpace, coordinates::AbstractArray{<: Vec}; exclude = n
     reinit_dofmap!(space, coordinates; point_radius, exclude)
     reinit_shapevalue!(space, coordinates)
     zeros!(space.uᵢ)
+    zeros!(space.wᵢ)
     space
 end
 
@@ -119,6 +125,10 @@ npoints(space::MPSpace) = length(space.dofindices)
 #################
 # point_to_grid #
 #################
+
+parenttype(::Type{T}) where {T} = T
+parenttype(::Type{ScalarVector{T, dim}}) where {T, dim} = T
+parenttype(::Type{VectorTensor{dim, T, M}}) where {dim, T, M} = Vec{dim, T}
 
 function _point_to_grid!(S::SparseArray, space::MPSpace, ∑ₚwu::SumToGrid)
     @assert indices(S) === indices(space.dofmap)
@@ -174,7 +184,7 @@ end
 
 function _grid_to_point(space::MPSpace, ∑ᵢwu::SumToPoint)
     ElType = typeof(∑ᵢwu[1])
-    dest = PointState(ElType, npoints(space)) # parenttype is to handle ScalarVector and VectorTensor values
+    dest = PointState(ElType, npoints(space))
     _grid_to_point!(dest, space, ∑ᵢwu)
 end
 
@@ -212,6 +222,12 @@ function grid_to_point(space::MPSpace, src::SparseArray)
     uᵢ = p2gmap(space, src)
     uₚ = value_gradient(Nᵢ, uᵢ)
     _grid_to_point(space, uₚ)
+end
+
+# without src
+
+function grid_to_point!(space::MPSpace)
+    grid_to_point!(space.uₚ, space, space.uᵢ)
 end
 
 ################
@@ -263,7 +279,6 @@ function function_reconstruction(space::MPSpace, u::PointState, w = identity) # 
     wu_i
 end
 
-
-parenttype(::Type{T}) where {T} = T
-parenttype(::Type{ScalarVector{T, dim}}) where {T, dim} = T
-parenttype(::Type{VectorTensor{dim, T, M}}) where {dim, T, M} = Vec{dim, T}
+function function_reconstruction!(space::MPSpace, w = identity) # identity means w(N) = N
+    function_reconstruction!(space.uᵢ, space.wᵢ, space, space.uₚ, w)
+end
