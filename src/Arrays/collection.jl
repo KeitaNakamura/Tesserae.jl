@@ -223,7 +223,7 @@ const unary_operations = [
 ]
 
 const binary_operations = [
-    :ValueGradient,
+    :valgrad,
     :_otimes_,
     :(Base.:+),
     :(Base.:-),

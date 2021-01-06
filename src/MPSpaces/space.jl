@@ -171,7 +171,7 @@ Base.length(v::PointToGridMap) = length(v.dofindices) # == npoints
 Base.getindex(v::PointToGridMap, i::Int) = (@_propagate_inbounds_meta; Collection{1}(view(v.data, v.dofindices[i])))
 
 function value_gradient(Nᵢ, uᵢ)
-    ∑ᵢ(ValueGradient(uᵢ * Nᵢ, _otimes_(uᵢ, ∇(Nᵢ))))
+    ∑ᵢ(valgrad(uᵢ * Nᵢ, _otimes_(uᵢ, ∇(Nᵢ))))
 end
 
 function _grid_to_point!(dest::PointState, space::MPSpace, ∑ᵢwu::SumToPoint)

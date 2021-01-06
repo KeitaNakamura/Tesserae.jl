@@ -82,5 +82,5 @@ for op in (:norm, )
 end
 
 
-ValueGradient(x::Real, ∇x::Vec) = ScalarVector(x, ∇x)
-ValueGradient(x::Vec, ∇x::Tensor{2}) = VectorTensor(x, ∇x)
+valgrad(x::Real, ∇x::Vec) = ScalarVector(x, ∇x)
+valgrad(x::Vec, ∇x::Tensor{2}) = VectorTensor(x, ∇x)
