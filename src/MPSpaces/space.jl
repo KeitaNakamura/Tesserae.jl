@@ -170,8 +170,8 @@ p2gmap(space::MPSpace, S::SparseArray) = PointToGridMap(nonzeros(S), space.dofin
 Base.length(v::PointToGridMap) = length(v.dofindices) # == npoints
 Base.getindex(v::PointToGridMap, i::Int) = (@_propagate_inbounds_meta; Collection{1}(view(v.data, v.dofindices[i])))
 
-function value_gradient(Nᵢ, uᵢ)
-    ∑ᵢ(valgrad(uᵢ * Nᵢ, _otimes_(uᵢ, ∇(Nᵢ))))
+function valgrad(Nᵢ::PointState{<: ShapeValue}, uᵢ::UnionCollection{2})
+    valgrad(uᵢ * Nᵢ, _otimes_(uᵢ, ∇(Nᵢ)))
 end
 
 function _grid_to_point!(dest::PointState, space::MPSpace, ∑ᵢwu::SumToPoint)
@@ -212,7 +212,7 @@ function grid_to_point!(dest::PointState, space::MPSpace, src::SparseArray)
     @assert indices(src) === indices(space.dofmap)
     Nᵢ = space.Nᵢ
     uᵢ = p2gmap(space, src)
-    uₚ = value_gradient(Nᵢ, uᵢ)
+    uₚ = ∑ᵢ(valgrad(Nᵢ, uᵢ))
     _grid_to_point!(dest, space, uₚ)
 end
 
@@ -220,7 +220,7 @@ function grid_to_point(space::MPSpace, src::SparseArray)
     @assert indices(src) === indices(space.dofmap)
     Nᵢ = space.Nᵢ
     uᵢ = p2gmap(space, src)
-    uₚ = value_gradient(Nᵢ, uᵢ)
+    uₚ = ∑ᵢ(valgrad(Nᵢ, uᵢ))
     _grid_to_point(space, uₚ)
 end
 
@@ -238,7 +238,7 @@ function grid_to_grid!(dest::SparseArray, space::MPSpace, src::SparseArray, f)
     @assert indices(src) === indices(space.dofmap)
     Nᵢ = space.Nᵢ
     uᵢ = p2gmap(space, src)
-    uₚ = value_gradient(Nᵢ, uᵢ)
+    uₚ = ∑ᵢ(valgrad(Nᵢ, uᵢ))
     point_to_grid!(dest, space, N -> f(N, uₚ))
 end
 
@@ -246,7 +246,7 @@ function grid_to_grid(space::MPSpace, src::SparseArray, f)
     @assert indices(src) === indices(space.dofmap)
     Nᵢ = space.Nᵢ
     uᵢ = p2gmap(space, src)
-    uₚ = value_gradient(Nᵢ, uᵢ)
+    uₚ = ∑ᵢ(valgrad(Nᵢ, uᵢ))
     point_to_grid(space, N -> f(N, uₚ))
 end
 

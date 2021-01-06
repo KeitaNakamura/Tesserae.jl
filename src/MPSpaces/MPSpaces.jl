@@ -10,7 +10,10 @@ using Jams.Arrays:
     Collection,
     LazyCollection,
     changerank
+
 using Jams.TensorValues
+import Jams.TensorValues: valgrad
+
 using Jams.DofHelpers
 using Jams.ShapeFunctions
 using Jams.PointStates
