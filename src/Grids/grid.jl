@@ -189,10 +189,12 @@ function Grid{dim, T, V}(axisarray::AxisArray{dim, T, V}) where {dim, T, V}
     Grid{dim, T, V}(axisarray, Dict())
 end
 
-function Grid(axs::Vararg{V, dim}) where {dim, T, V <: AbstractVector{T}}
+function Grid(axs::NTuple{dim, V}) where {dim, T, V <: AbstractVector{T}}
     grid = Grid{dim, T, V}(AxisArray(axs))
     generate_default_boundsets!(grid)
     grid
 end
+
+Grid(axs::Vararg{AbstractVector}) = Grid(axs)
 
 getaxisarray(grid::Grid) = grid.axisarray
