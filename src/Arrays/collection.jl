@@ -215,6 +215,8 @@ end
 
 const unary_operations = [
     :∇,
+    :(Base.:+),
+    :(Base.:-),
     :(LinearAlgebra.norm),
     :(Tensors.symmetric),
     :(Tensors.divergence),
