@@ -26,7 +26,7 @@ end
 value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalarVector{T, dim}
 value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VectorTensor{dim, T, dim^2}
 
-function reinit_dofmap!(space::MPSpace{dim}, coordinates::AbstractArray{<: Vec{dim}}; exclude = nothing, point_radius::Real) where {dim}
+function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, point_radius::Real) where {dim}
     dofindices = space.dofindices
     dofindices_dim = space.dofindices_dim
     gridindices = space.gridindices
@@ -74,7 +74,7 @@ function reinit_dofmap!(space::MPSpace{dim}, coordinates::AbstractArray{<: Vec{d
     space
 end
 
-function reinit_shapevalue!(space::MPSpace, coordinates::AbstractArray{<: Vec})
+function reinit_shapevalue!(space::MPSpace, coordinates)
     for (j, (x, N)) in enumerate(zip(coordinates, space.Nᵢ))
         inds = gridindices(space, j)
         reinit!(N, space.grid, inds, x)
@@ -82,7 +82,7 @@ function reinit_shapevalue!(space::MPSpace, coordinates::AbstractArray{<: Vec})
     space
 end
 
-function reinit!(space::MPSpace, coordinates::AbstractArray{<: Vec}; exclude = nothing)
+function reinit!(space::MPSpace, coordinates; exclude = nothing)
     point_radius = ShapeFunctions.support_length(space.F)
     reinit_dofmap!(space, coordinates; point_radius, exclude)
     reinit_shapevalue!(space, coordinates)
