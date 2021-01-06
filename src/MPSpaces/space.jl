@@ -1,4 +1,4 @@
-struct MPSpace{dim, T, Tw, Tp, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: ShapeValue{dim}}
+struct MPSpace{dim, T, Tscalar, Tp, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: ShapeValue{dim}}
     F::FT
     grid::GT
     dofmap::DofMap{dim}
@@ -7,7 +7,7 @@ struct MPSpace{dim, T, Tw, Tp, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}
     gridindices::Vector{Vector{CartesianIndex{dim}}}
     Nᵢ::PointState{VT}
     uᵢ::SparseArray{dim, T}
-    wᵢ::SparseArray{dim, Tw}
+    wᵢ::SparseArray{dim, Tscalar}
     uₚ::PointState{Tp}
 end
 
@@ -19,7 +19,7 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     Nᵢ = PointState([construct(eltype(T), F) for _ in 1:npoints])
     uᵢ = SparseArray(T, dofmap)
     wᵢ = SparseArray(eltype(T), dofmap)
-    uₚ = zeros!(PointState(value_gradient_type(T, Val(dim)), npoints))
+    uₚ = PointState(value_gradient_type(T, Val(dim)), npoints)
     MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ, uᵢ, wᵢ, uₚ)
 end
 
