@@ -8,6 +8,7 @@ using Base.Broadcast: broadcasted
 export
 # PointState
     PointState,
+    pointstate,
     ←,
 # generation
     generate_pointstates

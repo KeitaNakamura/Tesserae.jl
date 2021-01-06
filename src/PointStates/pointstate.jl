@@ -2,8 +2,9 @@ struct PointState{T} <: AbstractCollection{2, T}
     data::Vector{T}
 end
 
-PointState(::Type{T}, length) where {T} = PointState(zeros(T, length))
-PointState(c::UnionCollection{2}) = (p = PointState(eltype(c), length(c)); p ← c)
+pointstate(data::Vector) = PointState(data)
+pointstate(::Type{T}, length) where {T} = pointstate(zeros(T, length))
+pointstate(c::UnionCollection{2}) = (p = pointstate(eltype(c), length(c)); p ← c)
 
 Base.length(p::PointState) = length(p.data)
 
@@ -19,7 +20,7 @@ end
 
 Base.fill!(p::PointState, v) = fill!(p.data, v)
 
-Base.similar(p::PointState, ::Type{T}) where {T} = PointState(T, length(p))
+Base.similar(p::PointState, ::Type{T}) where {T} = pointstate(T, length(p))
 Base.similar(p::PointState{T}) where {T} = similar(p, T)
 
 # left arrow

@@ -16,10 +16,10 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     dofindices = [Int[] for _ in 1:npoints]
     dofindices_dim = [Int[] for _ in 1:npoints]
     gridindices = [CartesianIndex{dim}[] for _ in 1:npoints]
-    Nᵢ = PointState([construct(eltype(T), F) for _ in 1:npoints])
+    Nᵢ = pointstate([construct(eltype(T), F) for _ in 1:npoints])
     uᵢ = SparseArray(T, dofmap)
     wᵢ = SparseArray(eltype(T), dofmap)
-    uₚ = PointState(value_gradient_type(T, Val(dim)), npoints)
+    uₚ = pointstate(value_gradient_type(T, Val(dim)), npoints)
     MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ, uᵢ, wᵢ, uₚ)
 end
 
@@ -184,7 +184,7 @@ end
 
 function _grid_to_point(space::MPSpace, ∑ᵢwu::SumToPoint)
     ElType = typeof(∑ᵢwu[1])
-    dest = PointState(ElType, npoints(space))
+    dest = pointstate(ElType, npoints(space))
     _grid_to_point!(dest, space, ∑ᵢwu)
 end
 

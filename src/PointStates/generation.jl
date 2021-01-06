@@ -2,9 +2,9 @@ function generate_pointstates(indomain, grid::AbstractGrid{dim, T}, coordinate_s
     h = gridsteps(grid) ./ n # length per particle
     allpoints = Grid(StepRangeLen.(first.(gridaxes(grid)) .+ h./2, h, n .* (size(grid) .- 1) .- 1))
     npoints = count(x -> indomain(x...), allpoints)
-    xₚ = PointState(Vec{dim, T}, npoints)
-    Vₚ = PointState(T, npoints)
-    hₚ = PointState(Vec{dim, T}, npoints)
+    xₚ = pointstate(Vec{dim, T}, npoints)
+    Vₚ = pointstate(T, npoints)
+    hₚ = pointstate(Vec{dim, T}, npoints)
     i = 0
     for x in allpoints
         if indomain(x...)
