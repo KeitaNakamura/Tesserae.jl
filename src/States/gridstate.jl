@@ -10,7 +10,10 @@ function gridstate(::Type{T}, dofmap::DofMap, dofindices::Vector{Vector{Int}}) w
 end
 
 Base.size(A::GridState) = size(indices(A))
+nonzeros(S::GridState) = S.nzval
 indices(A::GridState) = A.indices
+dofindices(S::GridState) = S.dofindices
+nnz(S::GridState) = ndofs(indices(S))
 
 @inline function Base.getindex(A::GridState{dim, T}, I::Vararg{Int, dim}) where {dim, T}
     @boundscheck checkbounds(A, I...)
@@ -29,9 +32,62 @@ end
     A
 end
 
-nonzeros(S::GridState) = S.nzval
-nnz(S::GridState) = ndofs(indices(S))
-
 zeros!(v::AbstractVector{T}, n) where {T} = (resize!(v, n); fill!(v, zero(T)); v)
 zeros!(v) = (fill!(v, zero(eltype(v))); v)
 zeros!(S::GridState) = (zeros!(nonzeros(S), nnz(S)); S)
+
+
+struct GridStateOperation{dim, C <: UnionCollection}
+    indices::DofMapIndices{dim}
+    dofindices::Vector{Vector{Int}}
+    nzval::C
+end
+
+indices(x::GridStateOperation) = x.indices
+dofindices(x::GridStateOperation) = x.dofindices
+nonzeros(x::GridStateOperation) = x.nzval
+
+_collection(x::Vector) = Collection(x)
+_collection(x::UnionCollection{1}) = x
+
+const UnionGridState = Union{GridState, GridStateOperation}
+
+for op in (:+, :-, :/, :*)
+    @eval begin
+        function Base.$op(x::UnionGridState, y::UnionGridState)
+            GridStateOperation(indices(x, y), dofindices(x, y), $op(_collection(nonzeros(x)), _collection(nonzeros(y))))
+        end
+        function Base.$op(x::UnionGridState, y::Number)
+            GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x)), y))
+        end
+        function Base.$op(x::Number, y::UnionGridState)
+            GridStateOperation(indices(y), dofindices(y), $op(x, _collection(nonzeros(y))))
+        end
+    end
+end
+
+# checkspace
+checkspace(::Type{Bool}, x::UnionGridState, y::UnionGridState) = (indices(x) === indices(y)) && (dofindices(x) === dofindices(y))
+checkspace(::Type{Bool}, x::UnionGridState, y::UnionGridState, zs::UnionGridState...) =
+    checkspace(Bool, x, y) ? checkspace(Bool, x, zs...) : false
+
+function checkspace(x::UnionGridState, y::UnionGridState, zs::UnionGridState...)
+    checkspace(Bool, x, y, zs...) && return nothing
+    throw(ArgumentError("grid states are not in the same space"))
+end
+
+indices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (checkspace(x, y, zs...); indices(x))
+dofindices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (checkspace(x, y, zs...); dofindices(x))
+
+set!(x::GridState, y::UnionGridState) = (checkspace(x, y); zeros!(x); nonzeros(x) .= nonzeros(y); x)
+
+
+struct GridCollection{T} <: AbstractCollection{2, T}
+    data::Vector{T}
+    dofindices::Vector{Vector{Int}}
+end
+
+GridCollection(x::GridState) = GridCollection(nonzeros(x), dofindices(x))
+
+Base.length(x::GridCollection) = length(x.dofindices) # == npoints
+Base.getindex(x::GridCollection, i::Int) = (@_propagate_inbounds_meta; Collection{1}(view(x.data, x.dofindices[i])))
