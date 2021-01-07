@@ -123,6 +123,12 @@ function pointstate(space::MPSpace, T)
     pointstate(T, npoints(space))
 end
 
+function function_space(space::MPSpace, name::Symbol)
+    name == :shape_function        && return space.Nᵢ
+    name == :shape_function_vector && return lazy(vec, space.Nᵢ)
+    throw(ArgumentError("not supported function space"))
+end
+
 #=
 
 #################

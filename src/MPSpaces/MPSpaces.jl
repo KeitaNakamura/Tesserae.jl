@@ -6,7 +6,8 @@ using Jams.Arrays:
     nonzeros,
     zeros!,
 # Collection
-    UnionCollection
+    UnionCollection,
+    lazy
 
 using Jams.TensorValues
 using Jams.DofHelpers
@@ -20,7 +21,7 @@ import Jams.PointStates: pointstate, set!
 
 using Base: @_propagate_inbounds_meta
 
-export MPSpace, ∑ᵢ, ∑ₚ, gridstate, pointstate, npoints
+export MPSpace, ∑ᵢ, ∑ₚ, gridstate, pointstate, function_space, npoints
 
 include("space.jl")
 include("operations.jl")
