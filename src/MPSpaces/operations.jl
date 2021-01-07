@@ -31,3 +31,23 @@ function set!(S::SparseArray, x::PointToGridOperation)
     end
     S
 end
+
+
+struct GridToPointOperation{C <: UnionCollection{2}}
+    u_p::C
+end
+
+function ∑ᵢ(c::UnionCollection{2})
+    GridToPointOperation(c)
+end
+
+function set!(ps::PointState, x::GridToPointOperation)
+    @inbounds for p in 1:length(ps)
+        ps[p] = reduce(add, x.u_p[p])
+    end
+    ps
+end
+
+add(a, b) = a + b
+add(a::ScalVec, b::ScalVec) = ScalVec(a.x + b.x, a.∇x + b.∇x)
+add(a::VecTensor, b::VecTensor) = VecTensor(a.x + b.x, a.∇x + b.∇x)
