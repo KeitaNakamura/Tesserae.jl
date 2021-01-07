@@ -1,4 +1,4 @@
-struct MPSpace{dim, T, Tscalar, Tp, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: ShapeValue{dim}}
+struct MPSpace{dim, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: ShapeValue{dim}}
     F::FT
     grid::GT
     dofmap::DofMap{dim}
@@ -6,9 +6,6 @@ struct MPSpace{dim, T, Tscalar, Tp, FT <: ShapeFunction{dim}, GT <: AbstractGrid
     dofindices_dim::Vector{Vector{Int}}
     gridindices::Vector{Vector{CartesianIndex{dim}}}
     Nᵢ::PointState{VT}
-    uᵢ::SparseArray{dim, T}
-    wᵢ::SparseArray{dim, Tscalar}
-    uₚ::PointState{Tp}
 end
 
 function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoints::Int) where {dim, T <: Union{Real, Vec}}
@@ -17,10 +14,7 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     dofindices_dim = [Int[] for _ in 1:npoints]
     gridindices = [CartesianIndex{dim}[] for _ in 1:npoints]
     Nᵢ = pointstate([construct(eltype(T), F) for _ in 1:npoints])
-    uᵢ = SparseArray(T, dofmap)
-    wᵢ = SparseArray(eltype(T), dofmap)
-    uₚ = pointstate(value_gradient_type(T, Val(dim)), npoints)
-    MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ, uᵢ, wᵢ, uₚ)
+    MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ)
 end
 
 value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalVec{dim, T}
@@ -86,8 +80,6 @@ function reinit!(space::MPSpace, coordinates; exclude = nothing)
     point_radius = ShapeFunctions.support_length(space.F)
     reinit_dofmap!(space, coordinates; point_radius, exclude)
     reinit_shapevalue!(space, coordinates)
-    zeros!(space.uᵢ)
-    zeros!(space.wᵢ)
     space
 end
 
@@ -121,6 +113,7 @@ ndofs(space::MPSpace; dof::Int = 1) = ndofs(space.dofmap; dof)
 
 npoints(space::MPSpace) = length(space.dofindices)
 
+#=
 
 #################
 # point_to_grid #
@@ -282,3 +275,23 @@ end
 function function_reconstruction!(space::MPSpace, w = identity) # identity means w(N) = N
     function_reconstruction!(space.uᵢ, space.wᵢ, space, space.uₚ, w)
 end
+
+#############
+# Integrate #
+#############
+
+volume(space::MPSpace) = space.Vₚ
+mass(space::MPSpace) = space.mₚ
+
+struct Integrate{T <: UnionCollection{2}}
+    x::T
+end
+
+integrate(x) = Integrate(x)
+const ∫ = integrate
+
+function Base.:*(∫::Integrate, dΩₚ::PointState)
+    ∑ₚ(∫.x*dΩₚ)
+end
+
+=#
