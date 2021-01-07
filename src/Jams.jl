@@ -10,7 +10,7 @@ include("MPSpaces/MPSpaces.jl")
 
 # Exports
 using Reexport
-using Jams.TensorValues: ∇, ∇ₛ; export ∇, ∇ₛ
+@reexport using Jams.TensorValues
 @reexport using Jams.DofHelpers
 @reexport using Jams.Arrays
 @reexport using Jams.Grids

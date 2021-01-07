@@ -23,8 +23,8 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ, uᵢ, wᵢ, uₚ)
 end
 
-value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalarVector{T, dim}
-value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VectorTensor{dim, T, dim^2}
+value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalVec{dim, T}
+value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VecTensor{dim, T, dim^2}
 
 function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, point_radius::Real) where {dim}
     dofindices = space.dofindices
@@ -127,8 +127,8 @@ npoints(space::MPSpace) = length(space.dofindices)
 #################
 
 parenttype(::Type{T}) where {T} = T
-parenttype(::Type{ScalarVector{T, dim}}) where {T, dim} = T
-parenttype(::Type{VectorTensor{dim, T, M}}) where {dim, T, M} = Vec{dim, T}
+parenttype(::Type{ScalVec{dim, T}}) where {dim, T} = T
+parenttype(::Type{VecTensor{dim, T, M}}) where {dim, T, M} = Vec{dim, T}
 
 function _point_to_grid!(S::SparseArray, space::MPSpace, ∑ₚwu::SumToGrid)
     @assert indices(S) === indices(space.dofmap)
@@ -142,7 +142,7 @@ end
 
 function _point_to_grid(space::MPSpace, ∑ₚwu::SumToGrid)
     ElType = eltype(∑ₚwu[1])
-    S = SparseArray(parenttype(ElType), space.dofmap) # parenttype is to handle ScalarVector and VectorTensor values
+    S = SparseArray(parenttype(ElType), space.dofmap) # parenttype is to handle ScalVec and VecTensor values
     _point_to_grid!(S, space, ∑ₚwu)
 end
 

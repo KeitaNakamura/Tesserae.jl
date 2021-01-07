@@ -1,66 +1,70 @@
-struct ScalarVector{T <: Real, dim} <: Real
+struct ScalVec{dim, T} <: Real
     x::T
     ∇x::Vec{dim, T}
 end
 
-∇(a::ScalarVector) = a.∇x
+scalvec(x::Real, ∇x::Vec) = ScalVec(x, ∇x)
 
-Base.promote(a::ScalarVector, x) = promote(a.x, x)
-Base.promote(x, a::ScalarVector) = promote(x, a.x)
+∇(a::ScalVec) = a.∇x
 
-Base.promote_type(::Type{ScalarVector{T, dim}}, ::Type{U}) where {T, dim, U} = promote_type(T, U)
-Base.promote_type(::Type{U}, ::Type{ScalarVector{T, dim}}) where {T, dim, U} = promote_type(U, T)
+Base.promote(a::ScalVec, x) = promote(a.x, x)
+Base.promote(x, a::ScalVec) = promote(x, a.x)
 
-Base.convert(::Type{T}, a::ScalarVector) where {T <: Real} = convert(T, a.x)
-Base.convert(::Type{ScalarVector{T, dim}}, a::ScalarVector) where {T, dim} = ScalarVector{T, dim}(a.x, a.∇x)
+Base.promote_type(::Type{ScalVec{dim, T}}, ::Type{U}) where {dim, T, U} = promote_type(T, U)
+Base.promote_type(::Type{U}, ::Type{ScalVec{dim, T}}) where {dim, T, U} = promote_type(U, T)
 
-Base.zero(::Type{ScalarVector{T, dim}}) where {T, dim} = ScalarVector(zero(T), zero(Vec{dim, T}))
-Base.zero(::ScalarVector{T, dim}) where {T, dim} = zero(ScalarVector{T, dim})
+Base.convert(::Type{T}, a::ScalVec) where {T <: Real} = convert(T, a.x)
+Base.convert(::Type{ScalVec{dim, T}}, a::ScalVec) where {dim, T} = ScalVec{dim, T}(a.x, a.∇x)
+
+Base.zero(::Type{ScalVec{dim, T}}) where {dim, T} = ScalVec(zero(T), zero(Vec{dim, T}))
+Base.zero(::ScalVec{dim, T}) where {dim, T} = zero(ScalVec{dim, T})
 
 # scalar vs scalar
 for op in (:+, :-, :/, :*)
-    @eval Base.$op(a::ScalarVector, b::ScalarVector) = $op(a.x, b.x)
+    @eval Base.$op(a::ScalVec, b::ScalVec) = $op(a.x, b.x)
 end
 
-Base.show(io::IO, a::ScalarVector) = show(io, a.x)
+Base.show(io::IO, a::ScalVec) = show(io, a.x)
 
 
-struct VectorTensor{dim, T, M} <: AbstractVector{T}
+struct VecTensor{dim, T, M} <: AbstractVector{T}
     x::Vec{dim, T}
     ∇x::Tensor{2, dim, T, M}
 end
 
-VectorTensor{dim, T}(x::Vec{dim, <: Any}, ∇x::Tensor{2, dim, <: Any, M}) where {dim, T, M} =
-    VectorTensor{dim, T, M}(x, ∇x)
+VecTensor{dim, T}(x::Vec{dim, <: Any}, ∇x::Tensor{2, dim, <: Any, M}) where {dim, T, M} =
+    VecTensor{dim, T, M}(x, ∇x)
 
-∇(v::VectorTensor) = v.∇x
+vectensor(x::Vec, ∇x::Tensor{2}) = VecTensor(x, ∇x)
 
-Base.size(v::VectorTensor) = size(v.x)
-Base.getindex(v::VectorTensor, i::Int) = (@_propagate_inbounds_meta; v.x[i])
+∇(v::VecTensor) = v.∇x
 
-Base.convert(::Type{T}, a::VectorTensor) where {T <: Vec} = convert(T, a.x)
-Base.convert(::Type{VectorTensor{dim, T}}, a::VectorTensor) where {dim, T} = VectorTensor{dim, T}(a.x, a.∇x)
+Base.size(v::VecTensor) = size(v.x)
+Base.getindex(v::VecTensor, i::Int) = (@_propagate_inbounds_meta; v.x[i])
 
-Base.zero(::Type{VectorTensor{dim, T}}) where {dim, T} = VectorTensor(zero(Vec{dim, T}), zero(Tensor{2, dim, T}))
-Base.zero(::Type{VectorTensor{dim, T, M}}) where {dim, T, M} = zero(VectorTensor{dim, T})
-Base.zero(::VectorTensor{dim, T}) where {dim, T} = zero(VectorTensor{dim, T})
+Base.convert(::Type{T}, a::VecTensor) where {T <: Vec} = convert(T, a.x)
+Base.convert(::Type{VecTensor{dim, T}}, a::VecTensor) where {dim, T} = VecTensor{dim, T}(a.x, a.∇x)
+
+Base.zero(::Type{VecTensor{dim, T}}) where {dim, T} = VecTensor(zero(Vec{dim, T}), zero(Tensor{2, dim, T}))
+Base.zero(::Type{VecTensor{dim, T, M}}) where {dim, T, M} = zero(VecTensor{dim, T})
+Base.zero(::VecTensor{dim, T}) where {dim, T} = zero(VecTensor{dim, T})
 
 # vector vs vector
 # +, -, ⋅, ⊗, ×
 for op in (:+, :-, :⋅, :⊗, :×)
     @eval begin
-        Tensors.$op(a::VectorTensor, b::AbstractVector) = $op(a.x, b)
-        Tensors.$op(a::AbstractVector, b::VectorTensor) = $op(a, b.x)
-        Tensors.$op(a::VectorTensor, b::VectorTensor) = $op(a.x, b.x)
+        Tensors.$op(a::VecTensor, b::AbstractVector) = $op(a.x, b)
+        Tensors.$op(a::AbstractVector, b::VecTensor) = $op(a, b.x)
+        Tensors.$op(a::VecTensor, b::VecTensor) = $op(a.x, b.x)
     end
 end
 
 # vector vs number
 # *, /
 for op in (:*, :/)
-    @eval Tensors.$op(a::VectorTensor, b::Number) = $op(a.x, b)
+    @eval Tensors.$op(a::VecTensor, b::Number) = $op(a.x, b)
     if op != :/
-        @eval Tensors.$op(a::Number, b::VectorTensor) = $op(a, b.x)
+        @eval Tensors.$op(a::Number, b::VecTensor) = $op(a, b.x)
     end
 end
 
@@ -68,19 +72,19 @@ end
 # *, ⋅
 for op in (:*, :⋅)
     @eval begin
-        Tensors.$op(a::AbstractMatrix, b::VectorTensor) = $op(a, b.x)
-        Tensors.$op(a::VectorTensor, b::AbstractMatrix) = $op(a.x, b)
+        Tensors.$op(a::AbstractMatrix, b::VecTensor) = $op(a, b.x)
+        Tensors.$op(a::VecTensor, b::AbstractMatrix) = $op(a.x, b)
     end
 end
 
 for op in (:gradient, :hessian, :divergence, :curl, :laplace)
-    @eval Tensors.$op(f, v::VectorTensor, args...) = Tensors.$op(f, v.x, args...)
+    @eval Tensors.$op(f, v::VecTensor, args...) = Tensors.$op(f, v.x, args...)
 end
 
 for op in (:norm, )
-    @eval Tensors.$op(v::VectorTensor) = $op(v.x)
+    @eval Tensors.$op(v::VecTensor) = $op(v.x)
 end
 
 
-valgrad(x::Real, ∇x::Vec) = ScalarVector(x, ∇x)
-valgrad(x::Vec, ∇x::Tensor{2}) = VectorTensor(x, ∇x)
+valgrad(x::Real, ∇x::Vec) = ScalVec(x, ∇x)
+valgrad(x::Vec, ∇x::Tensor{2}) = VecTensor(x, ∇x)

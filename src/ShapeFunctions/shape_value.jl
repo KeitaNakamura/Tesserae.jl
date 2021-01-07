@@ -1,4 +1,4 @@
-abstract type ShapeValue{dim, T} <: AbstractCollection{1, ScalarVector{T, dim}} end
+abstract type ShapeValue{dim, T} <: AbstractCollection{1, ScalVec{dim, T}} end
 
 """
     construct(::ShapeFunction)
@@ -54,11 +54,11 @@ Base.length(it::ShapeValue) = length(it.N)
 
 @inline function Base.getindex(it::ShapeValue, i::Int)
     @_propagate_inbounds_meta
-    ScalarVector(it.N[i], it.dN[i])
+    ScalVec(it.N[i], it.dN[i])
 end
 
 
-struct VectorValue{dim, T, IT <: ShapeValue{dim, T}, M} <: AbstractCollection{1, VectorTensor{dim, T, M}}
+struct VectorValue{dim, T, IT <: ShapeValue{dim, T}, M} <: AbstractCollection{1, VecTensor{dim, T, M}}
     Ni::IT
 end
 
@@ -75,5 +75,5 @@ Base.length(it::VectorValue{dim}) where {dim} = dim * length(it.Ni)
         ei = eᵢ(Vec{dim, Int}, d)
         N = it.Ni[i]
     end
-    VectorTensor(ei * N, ei ⊗ ∇(N))
+    VecTensor(ei * N, ei ⊗ ∇(N))
 end
