@@ -8,14 +8,16 @@ struct MPSpace{dim, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: Sha
     Nᵢ::PointState{VT}
 end
 
-function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoints::Int) where {dim, T <: Union{Real, Vec}}
+function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoints::Int) where {dim, T <: Real}
     dofmap = DofMap(size(grid))
     dofindices = [Int[] for _ in 1:npoints]
     dofindices_dim = [Int[] for _ in 1:npoints]
     gridindices = [CartesianIndex{dim}[] for _ in 1:npoints]
-    Nᵢ = pointstate([construct(eltype(T), F) for _ in 1:npoints])
+    Nᵢ = pointstate([construct(T, F) for _ in 1:npoints])
     MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ)
 end
+
+MPSpace(F::ShapeFunction, grid::AbstractGrid, npoints::Int) = MPSpace(Float64, F, grid, npoints)
 
 value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalVec{dim, T}
 value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VecTensor{dim, T, dim^2}
