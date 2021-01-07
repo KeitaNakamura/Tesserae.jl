@@ -12,12 +12,12 @@ using Jams.Arrays:
 using Jams.TensorValues
 using Jams.DofHelpers
 using Jams.ShapeFunctions
-using Jams.PointStates
+using Jams.States
 
 import Jams.TensorValues: valgrad
 import Jams.DofHelpers: ndofs
 import Jams.ShapeFunctions: reinit!
-import Jams.PointStates: pointstate, set!
+import Jams.States: pointstate, set!
 
 using Base: @_propagate_inbounds_meta
 

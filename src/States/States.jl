@@ -1,4 +1,4 @@
-module PointStates
+module States
 
 using Jams.Arrays: AbstractCollection, UnionCollection, LazyCollection, lazy
 using Jams.Grids
@@ -10,10 +10,8 @@ export
     PointState,
     pointstate,
     ←,
-# generation
     generate_pointstates
 
 include("pointstate.jl")
-include("generation.jl")
 
 end

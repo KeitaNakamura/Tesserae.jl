@@ -4,7 +4,7 @@ include("TensorValues/TensorValues.jl")
 include("DofHelpers/DofHelpers.jl")
 include("Arrays/Arrays.jl")
 include("Grids/Grids.jl")
-include("PointStates/PointStates.jl")
+include("States/States.jl")
 include("ShapeFunctions/ShapeFunctions.jl")
 include("MPSpaces/MPSpaces.jl")
 
@@ -14,7 +14,7 @@ using Reexport
 @reexport using Jams.DofHelpers
 @reexport using Jams.Arrays
 @reexport using Jams.Grids
-@reexport using Jams.PointStates
+@reexport using Jams.States
 @reexport using Jams.ShapeFunctions
 @reexport using Jams.MPSpaces
 
