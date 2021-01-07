@@ -22,7 +22,7 @@ for op in (:+, :-)
     end
 end
 
-function set!(S::SparseArray, x::PointToGridOperation)
+function set!(S::GridState, x::PointToGridOperation)
     nzval = nonzeros(zeros!(S))
     dofinds = S.dofindices
     @inbounds for p in eachindex(dofinds)

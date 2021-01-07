@@ -1,10 +1,6 @@
 module MPSpaces
 
 using Jams.Arrays:
-# SparseArray
-    SparseArray,
-    nonzeros,
-    zeros!,
 # Collection
     UnionCollection,
     lazy
@@ -17,7 +13,7 @@ using Jams.States
 import Jams.TensorValues: valgrad
 import Jams.DofHelpers: ndofs
 import Jams.ShapeFunctions: reinit!
-import Jams.States: pointstate, set!
+import Jams.States: pointstate, gridstate, set!
 
 using Base: @_propagate_inbounds_meta
 

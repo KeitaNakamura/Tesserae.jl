@@ -116,7 +116,7 @@ ndofs(space::MPSpace; dof::Int = 1) = ndofs(space.dofmap; dof)
 npoints(space::MPSpace) = length(space.dofindices)
 
 function gridstate(space::MPSpace, T)
-    SparseArray(T, space.dofmap, space.dofindices)
+    gridstate(T, space.dofmap, space.dofindices)
 end
 
 function pointstate(space::MPSpace, T)
