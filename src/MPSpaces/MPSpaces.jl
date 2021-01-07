@@ -12,18 +12,18 @@ using Jams.Arrays:
     changerank
 
 using Jams.TensorValues
-import Jams.TensorValues: valgrad
-
 using Jams.DofHelpers
 using Jams.ShapeFunctions
 using Jams.PointStates
 
+import Jams.TensorValues: valgrad
 import Jams.DofHelpers: ndofs
 import Jams.ShapeFunctions: reinit!
+import Jams.PointStates: pointstate
 
 using Base: @_propagate_inbounds_meta
 
-export MPSpace, ∑ᵢ, ∑ₚ
+export MPSpace, ∑ᵢ, ∑ₚ, gridstate, pointstate, npoints
 
 include("sum.jl")
 include("space.jl")
