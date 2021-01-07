@@ -39,18 +39,13 @@ ERROR: ArgumentError: SparseArray: setindex! at invalid index
 struct SparseArray{dim, T} <: AbstractArray{T, dim}
     nzval::Vector{T}
     indices::DofMapIndices{dim}
+    dofindices::Vector{Vector{Int}}
 end
 
-function SparseArray(nzval::Vector, dofmap::DofMap)
-    SparseArray(nzval, indices(dofmap))
-end
-
-function SparseArray(::Type{T}, dofmap::DofMap) where {T}
+function SparseArray(::Type{T}, dofmap::DofMap, dofindices::Vector{Vector{Int}}) where {T}
     nzval = zeros(T, ndofs(dofmap))
-    SparseArray(nzval, dofmap)
+    SparseArray(nzval, indices(dofmap), dofindices)
 end
-
-SparseArray(dofmap::DofMap) = SparseArray(Float64, dofmap)
 
 Base.size(A::SparseArray) = size(indices(A))
 indices(A::SparseArray) = A.indices
