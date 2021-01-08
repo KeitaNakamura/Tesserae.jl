@@ -32,18 +32,27 @@ function set!(S::GridState, x::PointToGridOperation)
     S
 end
 
+for op in (:*, :/)
+    @eval function Base.$op(x::PointToGridOperation, y::GridState)
+        PointToGridOperation($op(x.u_i, GridCollection(y)))
+    end
+end
 
-struct GridToPointOperation{C <: UnionCollection{2}}
+
+struct GridToPointOperation{C <: UnionCollection{2}} <: AbstractCollection{2, Any}
     u_p::C
 end
 
 function ∑ᵢ(c::UnionCollection{2})
-    GridToPointOperation(c)
+    GridToPointOperation(lazy(reduce, add, c))
 end
+
+Base.length(x::GridToPointOperation) = length(x.u_p)
+Base.getindex(x::GridToPointOperation, i::Int) = (@_propagate_inbounds_meta; x.u_p[i])
 
 function set!(ps::PointState, x::GridToPointOperation)
     @inbounds for p in 1:length(ps)
-        ps[p] = reduce(add, x.u_p[p])
+        ps[p] = x.u_p[p]
     end
     ps
 end

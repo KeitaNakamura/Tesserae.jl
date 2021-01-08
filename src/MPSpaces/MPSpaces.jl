@@ -2,6 +2,7 @@ module MPSpaces
 
 using Jams.Arrays:
 # Collection
+    AbstractCollection,
     UnionCollection,
     lazy
 
