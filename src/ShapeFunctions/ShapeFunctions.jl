@@ -1,11 +1,10 @@
 module ShapeFunctions
 
 using Reexport
-@reexport using Tensors, Jams.Grids
+@reexport using Jams.TensorValues, Jams.Grids
 
 using Jams.Arrays: AbstractCollection
-using Jams.TensorValues
-import Tensors: gradient
+import Jams.TensorValues: gradient
 
 using Base: @pure, @_propagate_inbounds_meta
 

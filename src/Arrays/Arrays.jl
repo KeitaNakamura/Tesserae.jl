@@ -3,10 +3,9 @@ module Arrays
 using Reexport
 
 using LinearAlgebra
-@reexport using Tensors
+@reexport using Jams.TensorValues
 
 import SparseArrays: sparse
-import Jams.TensorValues: ∇, _otimes_, valgrad
 
 using Base: @_propagate_inbounds_meta
 using Base.Broadcast: broadcasted

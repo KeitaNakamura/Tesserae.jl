@@ -2,7 +2,7 @@ module Grids
 
 using Reexport
 using AxisArrays
-@reexport using Tensors
+@reexport using Jams.TensorValues
 
 using Base: @_inline_meta, @_propagate_inbounds_meta
 using Base.Cartesian: @ntuple, @nall

@@ -214,25 +214,31 @@ macro define_binary_operation(op)
 end
 
 const unary_operations = [
-    :∇,
+    :(TensorValues.∇),
+    :(TensorValues.symmetric),
+    :(TensorValues.divergence),
+    :(TensorValues.tr),
+    :(TensorValues.vol),
+    :(TensorValues.mean),
+    :(TensorValues.det),
+    :(TensorValues.tensor2x2),
+    :(TensorValues.tensor3x3),
     :(Base.:+),
     :(Base.:-),
     :(LinearAlgebra.norm),
-    :(Tensors.symmetric),
-    :(Tensors.divergence),
 ]
 
 const binary_operations = [
-    :valgrad,
-    :_otimes_,
     :(Base.:+),
     :(Base.:-),
     :(Base.:*),
     :(Base.:/),
-    :(Tensors.:⋅),
-    :(Tensors.:⊗),
-    :(Tensors.:×),
-    :(Tensors.:⊡),
+    :(TensorValues.:⋅),
+    :(TensorValues.:⊗),
+    :(TensorValues.:×),
+    :(TensorValues.:⊡),
+    :(TensorValues.valgrad),
+    :(TensorValues._otimes_),
 ]
 
 for op in unary_operations
