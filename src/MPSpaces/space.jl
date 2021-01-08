@@ -129,6 +129,20 @@ function function_space(space::MPSpace, name::Symbol)
     throw(ArgumentError("not supported function space"))
 end
 
+function dirichlet!(vᵢ::GridState{dim, Vec{dim, T}}, space::MPSpace{dim}) where {dim, T}
+    grid = space.grid
+    dofmap = space.dofmap
+    V = reinterpret(T, nonzeros(vᵢ))
+    for boundset in values(getboundsets(grid))
+        @inbounds for bound in boundset
+            I = dofmap(bound.index; dof = dim)
+            I === nothing && continue
+            V[I[bound.component]] = zero(T)
+        end
+    end
+    vᵢ
+end
+
 #=
 
 #################

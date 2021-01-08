@@ -17,7 +17,15 @@ import Jams.States: pointstate, gridstate, set!
 
 using Base: @_propagate_inbounds_meta
 
-export MPSpace, ∑ᵢ, ∑ₚ, gridstate, pointstate, function_space, npoints
+export
+    MPSpace,
+    gridstate,
+    pointstate,
+    function_space,
+    npoints,
+    dirichlet!,
+    ∑ᵢ,
+    ∑ₚ
 
 include("space.jl")
 include("operations.jl")
