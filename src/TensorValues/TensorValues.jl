@@ -5,7 +5,19 @@ using Reexport
 
 using Base: @_propagate_inbounds_meta
 
-export ScalVec, VecTensor, scalvec, vectensor, valgrad, ∇, ∇ₛ, _otimes_
+export
+# value and gradient
+    ScalVec,
+    VecTensor,
+    scalvec,
+    vectensor,
+    valgrad,
+    ∇,
+# utils
+    ∇ₛ,
+    _otimes_,
+    tensor2x2,
+    tensor3x3
 
 include("value_gradient.jl")
 include("utils.jl")
