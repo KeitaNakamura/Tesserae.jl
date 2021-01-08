@@ -142,7 +142,7 @@ function value(spline::BSpline{2, 0}, ξ::Real, pos::BSplinePosition)::typeof(ξ
     end
 end
 
-function value(::BSpline{3, 0}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
+function value(spline::BSpline{3, 0}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
     if nthfrombound(pos) == 0
         ξ = abs(ξ)
         ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 4 :
