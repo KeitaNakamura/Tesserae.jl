@@ -5,11 +5,7 @@ Supertype for collections.
 """
 abstract type AbstractCollection{rank, T} end
 
-Base.IndexStyle(::Type{<: AbstractCollection}) = IndexLinear()
 Base.eltype(::AbstractCollection{rank, ElType}) where {rank, ElType} = ElType
-
-Base.size(c::AbstractCollection) = (length(c),)
-Base.eachindex(c::AbstractCollection) = Base.OneTo(length(c))
 
 function Base.fill!(c::AbstractCollection, v)
     for i in eachindex(c)
@@ -17,21 +13,22 @@ function Base.fill!(c::AbstractCollection, v)
     end
 end
 
-@inline function Base.checkbounds(::Type{Bool}, c::AbstractCollection, i::Integer)
+# checkbounds
+@inline Base.checkbounds(::Type{Bool}, c::AbstractCollection, i::Integer) =
     checkindex(Bool, Base.OneTo(length(c)), i)
-end
-
-@inline function Base.checkbounds(::Type{Bool}, c::AbstractCollection, i::CartesianIndex)
+@inline Base.checkbounds(::Type{Bool}, c::AbstractCollection, i::CartesianIndex) =
     Base.checkbounds_indices(Bool, axes(c), (i,))
-end
+@inline Base.checkbounds(c::AbstractCollection, i) =
+    checkbounds(Bool, c, i) ? nothing : throw(BoundsError(c, i))
 
-@inline function Base.checkbounds(c::AbstractCollection, i)
-    checkbounds(Bool, c, i) || throw(BoundsError(c, i))
-    nothing
-end
-
+# getindex
+Base.IndexStyle(::Type{<: AbstractCollection}) = IndexLinear()
+Base.size(c::AbstractCollection) = (length(c),)
+Base.eachindex(c::AbstractCollection) = Base.OneTo(lastindex(c))
+Base.lastindex(c::AbstractCollection) = length(c)
 @inline Base.getindex(c::AbstractCollection, i::CartesianIndex{1}) = (@_propagate_inbounds_meta; c[i[1]])
 
+# iterate
 @inline Base.iterate(c::AbstractCollection, i = 1) = (i % UInt) - 1 < length(c) ? (@inbounds c[i], i + 1) : nothing
 
 function Base.isassigned(c::AbstractCollection, i)
@@ -47,11 +44,10 @@ function Base.isassigned(c::AbstractCollection, i)
     end
 end
 
-# used for broadcast
+# broadcast
 function Broadcast.extrude(c::AbstractCollection)
     Broadcast.Extruded(c, Broadcast.newindexer(c)...)
 end
-
 Broadcast.broadcastable(c::AbstractCollection) = c
 Broadcast.BroadcastStyle(::Type{<: AbstractCollection}) = Broadcast.DefaultArrayStyle{1}()
 
@@ -73,9 +69,9 @@ struct Collection{rank, T, V <: AbstractVector{T}} <: AbstractCollection{rank, T
     parent::V
 end
 
+# constructors
 Collection{rank}(v::V) where {rank, T, V <: AbstractVector{T}} = Collection{rank, T, V}(v)
 Collection(v) = Collection{1}(v)
-
 """
     collection(x, [Val(rank)])
 
@@ -84,9 +80,18 @@ Create collection with `x`.
 collection(v, ::Val{rank} = Val(1)) where {rank} = Collection{rank}(v)
 
 Base.parent(c::Collection) = c.parent
+
+# needs to be implemented for AbstractCollection
 Base.length(c::Collection) = length(parent(c))
-@inline Base.getindex(c::Collection, i::Integer) = (@_propagate_inbounds_meta; parent(c)[i])
-@inline Base.setindex!(c::Collection, v, i::Integer) = (@_propagate_inbounds_meta; parent(c)[i] = v)
+@inline function Base.getindex(c::Collection, i::Integer)
+    @boundscheck checkbounds(c, i)
+    @inbounds parent(c)[i]
+end
+@inline function Base.setindex!(c::Collection, v, i::Integer)
+    @boundscheck checkbounds(c, i)
+    @inbounds parent(c)[i] = v
+    c
+end
 
 
 """
@@ -96,9 +101,9 @@ struct LazyCollection{rank, Bc}
     bc::Bc
 end
 
-function LazyCollection{rank}(bc::Bc) where {rank, Bc}
+# constructors
+LazyCollection{rank}(bc::Bc) where {rank, Bc} =
     LazyCollection{rank, Bc}(bc)
-end
 
 Base.size(c::LazyCollection) = size(c.bc)
 Base.length(c::LazyCollection) = length(c.bc)
