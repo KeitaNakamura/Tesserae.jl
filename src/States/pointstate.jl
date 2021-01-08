@@ -7,6 +7,7 @@ pointstate(::Type{T}, length) where {T} = pointstate(zeros(T, length))
 pointstate(c::UnionCollection{2}) = (p = pointstate(eltype(c), length(c)); p ← c)
 
 Base.length(p::PointState) = length(p.data)
+Base.Array(p::PointState) = p.data
 
 @inline function Base.getindex(p::PointState, i::Int)
     @boundscheck checkbounds(p, i)
