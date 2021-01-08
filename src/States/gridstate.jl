@@ -35,6 +35,14 @@ end
 zeros!(v::AbstractVector{T}, n) where {T} = (resize!(v, n); fill!(v, zero(T)); v)
 zeros!(v) = (fill!(v, zero(eltype(v))); v)
 zeros!(S::GridState) = (zeros!(nonzeros(S), nnz(S)); S)
+Base.resize!(S::GridState) = (resize!(nonzeros(S), nnz(S)); S)
+
+for op in (:(Base.:*), :(Tensors.:⊗))
+    @eval begin
+        $op(x::GridState, y::UnionCollection{2}) = $op(GridCollection(x), y)
+        $op(x::UnionCollection{2}, y::GridState) = $op(x, GridCollection(y))
+    end
+end
 
 
 struct GridStateOperation{dim, C <: UnionCollection}
@@ -79,7 +87,12 @@ end
 indices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (checkspace(x, y, zs...); indices(x))
 dofindices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (checkspace(x, y, zs...); dofindices(x))
 
-set!(x::GridState, y::UnionGridState) = (checkspace(x, y); zeros!(x); nonzeros(x) .= nonzeros(y); x)
+function set!(x::GridState, y::UnionGridState)
+    checkspace(x, y)
+    resize!(x) # should not use zeros! for incremental calculation
+    nonzeros(x) .= nonzeros(y)
+    x
+end
 
 
 struct GridCollection{T} <: AbstractCollection{2, T}
