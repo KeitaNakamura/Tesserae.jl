@@ -113,6 +113,7 @@ julia> dofmap(2, 2, dof = 2)
 ```
 """
 function (dofmap::DofMap)(I...; dof = nothing)
+    @_propagate_inbounds_meta
     j = dofmap.indices[I...]
     j == -1 && return nothing
     dof === nothing && return j
