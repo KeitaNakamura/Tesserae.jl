@@ -14,6 +14,7 @@ export
     valgrad,
     ∇,
 # utils
+    symmetric,
     ∇ₛ,
     _otimes_,
     tensor2x2,

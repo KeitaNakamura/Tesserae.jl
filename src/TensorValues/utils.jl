@@ -1,3 +1,11 @@
+# override Tensors.symmetric because it's slow
+function symmetric(A::Tensor{2, 2})
+    @inbounds SymmetricTensor{2, 2}((A[1,1], (A[2,1]+A[1,2])/2, A[2,2]))
+end
+function symmetric(A::Tensor{2, 3})
+    @inbounds SymmetricTensor{2, 3}((A[1,1], (A[2,1]+A[1,2])/2, (A[3,1]+A[1,3])/2, A[2,2], (A[3,2]+A[2,3])/2, A[3,3]))
+end
+
 const ∇ₛ = symmetric ∘ ∇
 
 Tensors.:⋅(::typeof(∇), v::VecTensor) = tr(∇(v))
