@@ -187,9 +187,18 @@ function reinit!(it::BSplineValue{<: Any, dim}, grid::AbstractGrid{dim}, indices
     j = 1
     @inbounds for I in view(CartesianIndices(grid), indices)
         xᵢ = grid[I]
-        ξ = Vec{dim}(i -> @inbounds((x[i] - xᵢ[i]) / gridsteps(grid, i)))
-        it.N[j], it.dN[j] = value_gradient(F, ξ, BSplinePosition(grid, I))
+        it.N[j], it.dN[j] = _value_gradient(F, x, xᵢ, gridsteps(grid), BSplinePosition(grid, I))
         j += 1
     end
     it
+end
+
+function _value(F::ShapeFunction, x::Vec{dim}, xᵢ::Vec{dim}, h::NTuple{dim}, pos) where {dim}
+    ξ = Vec{dim}(i -> @inbounds((x[i] - xᵢ[i]) / h[i]))
+    value(F, ξ, pos)
+end
+
+function _value_gradient(F::ShapeFunction, x::Vec, xᵢ::Vec, h::Tuple, pos)
+    dv, v = gradient(x -> _value(F, x, xᵢ, h, pos), x, :all)
+    v, dv
 end
