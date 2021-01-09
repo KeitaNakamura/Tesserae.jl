@@ -2,6 +2,7 @@ module Jams
 
 include("TensorValues/TensorValues.jl")
 include("DofHelpers/DofHelpers.jl")
+include("MaterialModels/MaterialModels.jl")
 include("Arrays/Arrays.jl")
 include("Grids/Grids.jl")
 include("States/States.jl")
@@ -13,6 +14,7 @@ include("VTKOutputs/VTKOutputs.jl")
 using Reexport
 @reexport using Jams.TensorValues
 @reexport using Jams.DofHelpers
+@reexport using Jams.MaterialModels
 @reexport using Jams.Arrays
 @reexport using Jams.Grids
 @reexport using Jams.States
