@@ -7,6 +7,7 @@ include("Grids/Grids.jl")
 include("States/States.jl")
 include("ShapeFunctions/ShapeFunctions.jl")
 include("MPSpaces/MPSpaces.jl")
+include("VTKOutputs/VTKOutputs.jl")
 
 # Exports
 using Reexport
@@ -17,5 +18,6 @@ using Reexport
 @reexport using Jams.States
 @reexport using Jams.ShapeFunctions
 @reexport using Jams.MPSpaces
+@reexport using Jams.VTKOutputs
 
 end # module
