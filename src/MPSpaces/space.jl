@@ -71,7 +71,7 @@ function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, poi
 end
 
 function reinit_shapevalue!(space::MPSpace, coordinates)
-    for (j, (x, N)) in enumerate(zip(coordinates, space.Nᵢ))
+    @inbounds for (j, (x, N)) in enumerate(zip(coordinates, space.Nᵢ))
         inds = gridindices(space, j)
         reinit!(N, space.grid, inds, x)
     end

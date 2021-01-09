@@ -1,10 +1,10 @@
-struct PointState{T} <: AbstractCollection{2, T}
+struct PointState{T} <: AbstractCollection{2}
     data::Vector{T}
 end
 
 pointstate(data::Vector) = PointState(data)
 pointstate(::Type{T}, length) where {T} = pointstate(zeros(T, length))
-pointstate(c::UnionCollection{2}) = (p = pointstate(eltype(c), length(c)); p ← c)
+pointstate(c::AbstractCollection{2}) = (p = pointstate(eltype(c), length(c)); p ← c)
 
 Base.length(p::PointState) = length(p.data)
 Base.Array(p::PointState) = p.data
@@ -26,19 +26,19 @@ Base.similar(p::PointState{T}) where {T} = similar(p, T)
 
 # left arrow
 
-set!(p::PointState, c::UnionCollection{2}) = (p.data .= c; p)
+set!(p::PointState, c::AbstractCollection{2}) = (p.data .= c; p)
 set!(p::PointState, v::AbstractVector) = (p.data .= v; p)
 const ← = set!
 
 # colon computation
 
-isrank2(x::Type{<: UnionCollection}) = x <: UnionCollection{2} || throw(ArgumentError("support only rank=2 collections"))
+isrank2(x::Type{<: AbstractCollection}) = x <: AbstractCollection{2} || throw(ArgumentError("support only rank=2 collections"))
 isrank2(x) = false
 
-addref(x::UnionCollection{2}) = x
+addref(x::AbstractCollection{2}) = x
 addref(x) = Ref(x)
 
-(::Colon)(op, x::UnionCollection{2}) = lazy(op, x)
+(::Colon)(op, x::AbstractCollection{2}) = lazy(op, x)
 
 @generated function (::Colon)(op, xs::Tuple)
     any(isrank2, xs.parameters) ?

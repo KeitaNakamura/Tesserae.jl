@@ -1,4 +1,4 @@
-abstract type ShapeValue{dim, T} <: AbstractCollection{1, ScalVec{dim, T}} end
+abstract type ShapeValue{dim, T} <: AbstractCollection{1} end
 
 """
     construct(::ShapeFunction)
@@ -58,7 +58,7 @@ Base.length(it::ShapeValue) = length(it.N)
 end
 
 
-struct VectorValue{dim, T, IT <: ShapeValue{dim, T}, M} <: AbstractCollection{1, VecTensor{dim, T, M}}
+struct VectorValue{dim, T, IT <: ShapeValue{dim, T}, M} <: AbstractCollection{1}
     Ni::IT
 end
 

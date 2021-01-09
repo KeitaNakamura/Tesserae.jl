@@ -1,16 +1,16 @@
-struct PointToGridOperation{C <: UnionCollection{2}}
+struct PointToGridOperation{C <: AbstractCollection{2}}
     u_i::C
 end
 
-struct PointToGridMatrixOperation{C <: UnionCollection{2}}
+struct PointToGridMatrixOperation{C <: AbstractCollection{2}}
     K_ij::C
 end
 
-function ∑ₚ(c::UnionCollection{2})
+function ∑ₚ(c::AbstractCollection{2})
     ElType = eltype(c)
-    if ElType <: UnionCollection{1}
+    if ElType <: AbstractCollection{1}
         return PointToGridOperation(c)
-    elseif ElType <: UnionCollection{-1}
+    elseif ElType <: AbstractCollection{-1}
         return PointToGridMatrixOperation(c)
     end
     throw(ArgumentError("wrong collection in ∑ₚ"))
@@ -39,11 +39,11 @@ for op in (:*, :/)
 end
 
 
-struct GridToPointOperation{C <: UnionCollection{2}} <: AbstractCollection{2, Any}
+struct GridToPointOperation{C <: AbstractCollection{2}} <: AbstractCollection{2}
     u_p::C
 end
 
-function ∑ᵢ(c::UnionCollection{2})
+function ∑ᵢ(c::AbstractCollection{2})
     GridToPointOperation(lazy(reduce, add, c))
 end
 

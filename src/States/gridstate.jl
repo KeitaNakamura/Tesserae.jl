@@ -37,15 +37,8 @@ zeros!(v) = (fill!(v, zero(eltype(v))); v)
 zeros!(S::GridState) = (zeros!(nonzeros(S), nnz(S)); S)
 Base.resize!(S::GridState) = (resize!(nonzeros(S), nnz(S)); S)
 
-for op in (:(Base.:*), :(Tensors.:⊗))
-    @eval begin
-        $op(x::GridState, y::UnionCollection{2}) = $op(GridCollection(x), y)
-        $op(x::UnionCollection{2}, y::GridState) = $op(x, GridCollection(y))
-    end
-end
 
-
-struct GridStateOperation{dim, C <: UnionCollection}
+struct GridStateOperation{dim, C <: AbstractCollection}
     indices::DofMapIndices{dim}
     dofindices::Vector{Vector{Int}}
     nzval::C
@@ -56,20 +49,32 @@ dofindices(x::GridStateOperation) = x.dofindices
 nonzeros(x::GridStateOperation) = x.nzval
 
 _collection(x::Vector) = Collection(x)
-_collection(x::UnionCollection{1}) = x
+_collection(x::AbstractCollection{1}) = x
 
 const UnionGridState = Union{GridState, GridStateOperation}
+
+# for ∑ᵢ(vᵢ * N) and ∑ᵢ(vᵢ ⊗ ∇(N))
+for op in (:(Base.:*), :(Tensors.:⊗))
+    @eval begin
+        $op(x::UnionGridState, y::AbstractCollection{2}) = $op(GridCollection(x), y)
+        $op(x::AbstractCollection{2}, y::UnionGridState) = $op(x, GridCollection(y))
+    end
+end
 
 for op in (:+, :-, :/, :*)
     @eval begin
         function Base.$op(x::UnionGridState, y::UnionGridState)
             GridStateOperation(indices(x, y), dofindices(x, y), $op(_collection(nonzeros(x)), _collection(nonzeros(y))))
         end
-        function Base.$op(x::UnionGridState, y::Number)
-            GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x)), y))
-        end
-        function Base.$op(x::Number, y::UnionGridState)
-            GridStateOperation(indices(y), dofindices(y), $op(x, _collection(nonzeros(y))))
+    end
+    if op == :* || op == :/
+        @eval begin
+            function Base.$op(x::UnionGridState, y::Number)
+                GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x)), y))
+            end
+            function Base.$op(x::Number, y::UnionGridState)
+                GridStateOperation(indices(y), dofindices(y), $op(x, _collection(nonzeros(y))))
+            end
         end
     end
 end
@@ -95,12 +100,12 @@ function set!(x::GridState, y::UnionGridState)
 end
 
 
-struct GridCollection{T} <: AbstractCollection{2, T}
-    data::Vector{T}
+struct GridCollection{T} <: AbstractCollection{2}
+    data::T
     dofindices::Vector{Vector{Int}}
 end
 
-GridCollection(x::GridState) = GridCollection(nonzeros(x), dofindices(x))
+GridCollection(x::UnionGridState) = GridCollection(nonzeros(x), dofindices(x))
 
 Base.length(x::GridCollection) = length(x.dofindices) # == npoints
 Base.getindex(x::GridCollection, i::Int) = (@_propagate_inbounds_meta; Collection{1}(view(x.data, x.dofindices[i])))

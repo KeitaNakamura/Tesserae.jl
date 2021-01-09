@@ -1,6 +1,6 @@
 module States
 
-using Jams.Arrays: AbstractCollection, UnionCollection, LazyCollection, Collection, lazy
+using Jams.Arrays: AbstractCollection, LazyCollection, Collection, lazy
 using Jams.DofHelpers
 using Jams.Grids
 using Base: @_propagate_inbounds_meta
