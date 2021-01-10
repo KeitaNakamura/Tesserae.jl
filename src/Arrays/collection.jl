@@ -25,6 +25,7 @@ end
 Base.IndexStyle(::Type{<: AbstractCollection}) = IndexLinear()
 Base.size(c::AbstractCollection) = (length(c),)
 Base.eachindex(c::AbstractCollection) = Base.OneTo(lastindex(c))
+Base.firstindex(c::AbstractCollection) = 1
 Base.lastindex(c::AbstractCollection) = length(c)
 @inline Base.getindex(c::AbstractCollection, i::CartesianIndex{1}) = (@_propagate_inbounds_meta; c[i[1]])
 
@@ -48,9 +49,6 @@ function Base.isassigned(c::AbstractCollection, i)
 end
 
 # broadcast
-function Broadcast.extrude(c::AbstractCollection)
-    Broadcast.Extruded(c, Broadcast.newindexer(c)...)
-end
 Broadcast.broadcastable(c::AbstractCollection) = c
 Broadcast.BroadcastStyle(::Type{<: AbstractCollection}) = Broadcast.DefaultArrayStyle{1}()
 
@@ -110,7 +108,6 @@ LazyCollection{rank}(bc::Bc) where {rank, Bc} =
 
 Base.length(c::LazyCollection) = length(c.bc)
 Base.getindex(c::LazyCollection, i::Int) = (@_propagate_inbounds_meta; c.bc[i])
-# @inline Base.iterate(c::LazyCollection, state...) = iterate(c.bc, state...)
 
 Broadcast.broadcastable(c::LazyCollection) = c.bc
 
@@ -190,6 +187,8 @@ const unary_operations = [
     :(TensorValues.tensor3x3),
     :(Base.:+),
     :(Base.:-),
+    :(Base.:log),
+    :(Base.:log10),
     :(LinearAlgebra.norm),
 ]
 
@@ -198,6 +197,7 @@ const binary_operations = [
     :(Base.:-),
     :(Base.:*),
     :(Base.:/),
+    :(Base.:^),
     :(TensorValues.:⋅),
     :(TensorValues.:⊗),
     :(TensorValues.:×),
