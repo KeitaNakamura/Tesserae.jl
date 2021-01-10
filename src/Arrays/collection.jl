@@ -14,8 +14,8 @@ function Base.fill!(c::AbstractCollection, v)
 end
 
 # checkbounds
-@inline Base.checkbounds(::Type{Bool}, c::AbstractCollection, i::Integer) =
-    checkindex(Bool, Base.OneTo(length(c)), i)
+@inline Base.checkbounds(::Type{Bool}, c::AbstractCollection, i) =
+    checkindex(Bool, eachindex(c), i)
 @inline Base.checkbounds(::Type{Bool}, c::AbstractCollection, i::CartesianIndex) =
     Base.checkbounds_indices(Bool, axes(c), (i,))
 @inline Base.checkbounds(c::AbstractCollection, i) =
