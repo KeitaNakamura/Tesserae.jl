@@ -68,12 +68,12 @@ end
 """
     Collection(x, [Val(rank)])
 """
-struct Collection{rank, T, V <: AbstractVector{T}} <: AbstractCollection{rank}
+struct Collection{rank, V <: Union{AbstractVector, AbstractCollection}} <: AbstractCollection{rank}
     parent::V
 end
 
 # constructors
-Collection{rank}(v::V) where {rank, T, V <: AbstractVector{T}} = Collection{rank, T, V}(v)
+Collection{rank}(v::V) where {rank, V} = Collection{rank, V}(v)
 Collection(v) = Collection{1}(v)
 """
     collection(x, [Val(rank)])
