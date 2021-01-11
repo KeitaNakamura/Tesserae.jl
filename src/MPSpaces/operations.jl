@@ -8,7 +8,7 @@ end
 
 function ∑ₚ(c::AbstractCollection{2})
     ElType = eltype(c)
-    if ElType <: AbstractCollection{1}
+    if ElType <: AbstractCollection{0}
         return PointToGridOperation(c)
     elseif ElType <: AbstractCollection{-1}
         return PointToGridMatrixOperation(c)
