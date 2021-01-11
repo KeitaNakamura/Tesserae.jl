@@ -139,6 +139,13 @@ Base.IndexStyle(::Type{<: Adjoint{<: Any, <: AbstractCollection}}) = IndexLinear
 Base.size(c::Adjoint{<: Any, <: AbstractCollection}) = (1, length(parent(c)))
 @inline Base.getindex(c::Adjoint{<: Any, <: AbstractCollection}, i::Integer) = (@_propagate_inbounds_meta; parent(c)[i])
 
+##############
+# Operations #
+##############
+# rank= 1: nodal value
+# rank= 2: point value
+# rank= 0: nodal value, but used only for shape function
+# rank=-1: computation with scalar type is allowed
 
 # unary
 function lazy(op, c::AbstractCollection{rank}) where {rank}
@@ -154,12 +161,25 @@ function lazy(op, x::AbstractCollection{L1}, y::AbstractCollection{L2}) where {L
     L1 > L2 ? LazyCollection{L1}(broadcasted(op, x, Ref(y))) :
               LazyCollection{L2}(broadcasted(op, Ref(x), y))
 end
-## matrix version
-lazy(op, x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, Adjoint(y)))
-## error
-lazy(op, x::AbstractCollection{0}, y::AbstractCollection{-1}) = throw(ArgumentError("rank=0 collection used three times"))
-lazy(op, x::AbstractCollection{-1}, y::AbstractCollection{0}) = throw(ArgumentError("rank=0 collection used three times"))
-lazy(op, x::AbstractCollection{-1}, y::AbstractCollection{-1}) = throw(ArgumentError("rank=0 collection used three times"))
+# special cases and errors
+operation_error(op, rank1, rank2) = throw(ArgumentError("wrong collection operation with $op(rank=$rank1, rank=$rank2)"))
+## Nᵢ[p] * vᵢ[p]
+lazy(op, x::AbstractCollection{0}, y::AbstractCollection{1}) = LazyCollection{-1}(broadcasted(op, x, y))
+lazy(op, x::AbstractCollection{1}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, y))
+## Nᵢ[p] * Nᵢ[p]
+lazy(op::typeof(*), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, Adjoint(y)))
+## errors (with point value)
+lazy(op, x::AbstractCollection{2}, y::AbstractCollection{1}) = operation_error(op, 2, 1)
+lazy(op, x::AbstractCollection{2}, y::AbstractCollection{0}) = operation_error(op, 2, 0)
+lazy(op, x::AbstractCollection{1}, y::AbstractCollection{2}) = operation_error(op, 1, 2)
+lazy(op, x::AbstractCollection{0}, y::AbstractCollection{2}) = operation_error(op, 0, 2)
+## errors (with rank=-1 collection)
+lazy(op, x::AbstractCollection{-1}, y::AbstractCollection{0}) = operation_error(op, -1, 0)
+lazy(op, x::AbstractCollection{-1}, y::AbstractCollection{1}) = operation_error(op, -1, 1)
+lazy(op, x::AbstractCollection{-1}, y::AbstractCollection{2}) = operation_error(op, -1, 2)
+lazy(op, x::AbstractCollection{0}, y::AbstractCollection{-1}) = operation_error(op, 0, -1)
+lazy(op, x::AbstractCollection{1}, y::AbstractCollection{-1}) = operation_error(op, 1, -1)
+lazy(op, x::AbstractCollection{2}, y::AbstractCollection{-1}) = operation_error(op, 2, -1)
 
 macro define_unary_operation(op)
     quote
