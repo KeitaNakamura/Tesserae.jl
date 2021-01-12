@@ -34,15 +34,16 @@ struct SparseMatrixCOO{T}
     V::Vector{T}
 end
 
-function SparseMatrixCOO(N::Int = 0)
+function SparseMatrixCOO{T}(N::Int = 0) where {T}
     I = Int[]
     J = Int[]
-    V = Float64[]
+    V = T[]
     sizehint!(I, N)
     sizehint!(J, N)
     sizehint!(V, N)
     SparseMatrixCOO(I, J, V)
 end
+SparseMatrixCOO(N::Int = 0) = SparseMatrixCOO{Float64}(N)
 
 function Base.push!(S::SparseMatrixCOO, s::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int})
     m = length(I)
