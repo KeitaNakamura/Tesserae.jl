@@ -45,7 +45,8 @@ function SparseMatrixCOO{T}(N::Int = 0) where {T}
 end
 SparseMatrixCOO(N::Int = 0) = SparseMatrixCOO{Float64}(N)
 
-function Base.push!(S::SparseMatrixCOO, s::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int})
+function Base.push!(S::SparseMatrixCOO, s, I::AbstractVector{Int}, J::AbstractVector{Int})
+    @assert size(s) == (length(I), size(J))
     m = length(I)
     n = length(J)
     append!(S.V, s)
@@ -58,7 +59,7 @@ function Base.push!(S::SparseMatrixCOO, s::AbstractMatrix, I::AbstractVector{Int
     S
 end
 
-function Base.push!(S::SparseMatrixCOO, s::AbstractMatrix, dofs::AbstractVector{Int})
+function Base.push!(S::SparseMatrixCOO, s, dofs::AbstractVector{Int})
     push!(S, s, dofs, dofs)
 end
 
