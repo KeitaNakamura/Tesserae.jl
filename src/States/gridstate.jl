@@ -113,13 +113,14 @@ Base.getindex(x::GridCollection, i::Int) = (@_propagate_inbounds_meta; Collectio
 
 struct GridStateMatrix{T, ElType}
     A::SparseMatrixCOO{ElType}
-    dofindices_dim::Vector{Vector{Int}}
+    dofindices::Vector{Vector{Int}}
 end
 
-function gridstate_matrix(::Type{T}, dofindices_dim::Vector{Vector{Int}}) where {T}
-    ElType = eltype(T)
-    GridStateMatrix{T, ElType}(SparseMatrixCOO{ElType}(), dofindices_dim)
+function gridstate_matrix(::Type{Vec{dim, T}}, dofindices::Vector{Vector{Int}}) where {dim, T}
+    GridStateMatrix{Vec{dim, T}, T}(SparseMatrixCOO{T}(), dofindices)
 end
 
 Base.empty!(x::GridStateMatrix) = empty!(x.A)
 Base.push!(x::GridStateMatrix, args...) = push!(x.A, args...)
+
+sparse(x::GridStateMatrix) = sparse(x.A)

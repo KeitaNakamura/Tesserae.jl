@@ -32,6 +32,27 @@ function set!(S::GridState, x::PointToGridOperation)
     S
 end
 
+function set!(S::GridStateMatrix{Vec{dim, T}}, x::PointToGridMatrixOperation) where {dim, T}
+    empty!(S)
+    dofinds = S.dofindices
+    compute_range = function(dofs, i)
+        @_propagate_inbounds_meta
+        start = dim*(dofs[i]-1) + 1
+        start:start+dim-1
+    end
+    @inbounds for p in eachindex(dofinds)
+        mat = x.K_ij[p]
+        dofs = dofinds[p]
+        for index in CartesianIndices(size(mat))
+            i, j = Tuple(index)
+            I = compute_range(dofs, i)
+            J = compute_range(dofs, j)
+            push!(S, mat.bc[index], I, J)
+        end
+    end
+    S
+end
+
 for op in (:*, :/)
     @eval function Base.$op(x::PointToGridOperation, y::GridState)
         PointToGridOperation($op(x.u_i, GridCollection(y)))

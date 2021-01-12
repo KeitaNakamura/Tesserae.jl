@@ -3,7 +3,11 @@ module MPSpaces
 using Jams.Arrays:
 # Collection
     AbstractCollection,
-    lazy
+    lazy,
+# FillArray
+    FillArray,
+    Ones,
+    Zeros
 
 using Jams.TensorValues
 using Jams.DofHelpers

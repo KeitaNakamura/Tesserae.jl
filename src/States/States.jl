@@ -6,7 +6,7 @@ using Jams.Grids
 using Base: @_propagate_inbounds_meta
 using Base.Broadcast: broadcasted
 
-import SparseArrays: nonzeros, nnz
+import SparseArrays: nonzeros, nnz, sparse
 import Jams.DofHelpers: indices
 
 export
@@ -23,7 +23,8 @@ export
     gridstate_matrix,
     zeros!,
     nonzeros,
-    nnz
+    nnz,
+    sparse
 
 include("pointstate.jl")
 include("gridstate.jl")

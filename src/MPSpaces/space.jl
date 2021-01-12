@@ -120,7 +120,7 @@ function gridstate(space::MPSpace, T)
 end
 
 function gridstate_matrix(space::MPSpace, T)
-    gridstate_matrix(T, space.dofindices_dim)
+    gridstate_matrix(T, space.dofindices)
 end
 
 function pointstate(space::MPSpace, T)
