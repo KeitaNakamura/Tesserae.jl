@@ -1,14 +1,6 @@
 module MPSpaces
 
-using Jams.Arrays:
-# Collection
-    AbstractCollection,
-    lazy,
-# FillArray
-    FillArray,
-    Ones,
-    Zeros
-
+using Jams.Arrays
 using Jams.TensorValues
 using Jams.DofHelpers
 using Jams.ShapeFunctions

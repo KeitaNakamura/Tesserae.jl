@@ -40,6 +40,11 @@ function set!(S::GridStateMatrix{Vec{dim, T}}, x::PointToGridMatrixOperation) wh
         start = dim*(dofs[i]-1) + 1
         start:start+dim-1
     end
+    get_element = if eltype(first(x.K_ij)) <: Real
+        (mat, index) -> ScalarMatrix(mat.bc[index], dim, dim)
+    else
+        (mat, index) -> mat.bc[index]
+    end
     @inbounds for p in eachindex(dofinds)
         mat = x.K_ij[p]
         dofs = dofinds[p]
@@ -47,7 +52,7 @@ function set!(S::GridStateMatrix{Vec{dim, T}}, x::PointToGridMatrixOperation) wh
             i, j = Tuple(index)
             I = compute_range(dofs, i)
             J = compute_range(dofs, j)
-            push!(S, mat.bc[index], I, J)
+            push!(S, get_element(mat, index), I, J)
         end
     end
     S
