@@ -46,7 +46,7 @@ end
 SparseMatrixCOO(N::Int = 0) = SparseMatrixCOO{Float64}(N)
 
 function Base.push!(S::SparseMatrixCOO, s, I::AbstractVector{Int}, J::AbstractVector{Int})
-    @assert size(s) == (length(I), size(J))
+    @assert size(s) == (length(I), length(J))
     m = length(I)
     n = length(J)
     append!(S.V, s)
