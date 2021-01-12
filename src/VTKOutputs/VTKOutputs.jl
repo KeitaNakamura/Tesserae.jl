@@ -10,21 +10,18 @@ export
     vtk_points
 
 """
-    vtk_points(filename::AbstractString, points::AbstractVector{<: Vec})
-    vtk_points(filename::AbstractString, points::StructVector)
+    vtk_points(filename::AbstractString, points::PointState{<: Vec})
 
 Create VTK file to visualize `points`.
 This should be used instead of calling `vtk_grid` in `WriteVTK` package.
 
 # Examples
 ```jldoctest
-julia> using MPM.VTKOutputs
+julia> grid = CartesianGrid(1.0, (11, 11));
 
-julia> grid = Grid(1.0, (11, 11));
+julia> xₚ, = generate_pointstates((x, y) -> (x-5)^2 + (y-5)^2 < 3^2, grid, n = 4);
 
-julia> xₚ, = generate_pointstates((x, y) -> (x-5)^2 + (y-5)^2 < 3^2, grid, npoints = 4);
-
-julia> vtkfile = vtk_points("vtkfile", points)
+julia> vtkfile = vtk_points("vtkfile", xₚ)
 VTK file 'vtkfile.vtu' (UnstructuredGrid file, open)
 
 julia> vtk_save(vtkfile)
@@ -51,9 +48,7 @@ Create a structured VTK grid from a `Grid`.
 
 # Examples
 ```jldoctest
-julia> using MPM.VTKOutputs
-
-julia> grid = Grid(1.0, (11, 11));
+julia> grid = CartesianGrid(1.0, (11, 11));
 
 julia> vtkfile = vtk_grid("vtkfile", grid)
 VTK file 'vtkfile.vtr' (RectilinearGrid file, open)
@@ -63,7 +58,7 @@ julia> vtk_save(vtkfile)
  "vtkfile.vtr"
 ```
 """
-function WriteVTK.vtk_grid(vtk::AbstractString, grid::Grid)
+function WriteVTK.vtk_grid(vtk::AbstractString, grid::AbstractGrid)
     vtk_grid(vtk, gridaxes(grid)...)
 end
 
