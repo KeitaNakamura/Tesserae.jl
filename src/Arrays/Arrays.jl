@@ -19,10 +19,10 @@ export sparse
 # Collections
 
 export AbstractCollection, Collection, LazyCollection
-export collection, changerank
+export collection, lazy
 
 # FillArray
-export FillArray, Ones, Zeros
+export FillArray, Ones, Zeros, ScalarMatrix
 
 include("sparse.jl")
 include("collection.jl")
