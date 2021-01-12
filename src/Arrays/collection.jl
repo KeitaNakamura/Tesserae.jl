@@ -5,7 +5,7 @@ Supertype for collections.
 """
 abstract type AbstractCollection{rank} end
 
-Base.eltype(c::AbstractCollection) = isempty(c) ? Union{} : typeof(c[1]) # try to getindex
+Base.eltype(c::AbstractCollection) = isempty(c) ? Union{} : typeof(first(c)) # try to getindex
 
 function Base.fill!(c::AbstractCollection, v)
     for i in eachindex(c)
@@ -108,7 +108,11 @@ LazyCollection{rank}(bc::Bc) where {rank, Bc} =
 
 Base.length(c::LazyCollection) = length(c.bc)
 Base.size(c::LazyCollection) = size(c.bc) # needs to be override
+Base.ndims(c::LazyCollection) = length(axes(c.bc))
 Base.getindex(c::LazyCollection, i::Int) = (@_propagate_inbounds_meta; c.bc[i])
+function Base.first(c::LazyCollection)
+    ndims(c) == 1 ? c.bc[1] : c.bc[1,1]
+end
 
 Broadcast.broadcastable(c::LazyCollection) = c.bc
 
