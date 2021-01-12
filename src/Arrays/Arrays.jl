@@ -21,7 +21,11 @@ export sparse
 export AbstractCollection, Collection, LazyCollection
 export collection, changerank
 
+# FillArray
+export FillArray, Ones, Zeros
+
 include("sparse.jl")
 include("collection.jl")
+include("fillarrays.jl")
 
 end
