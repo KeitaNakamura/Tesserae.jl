@@ -107,6 +107,7 @@ LazyCollection{rank}(bc::Bc) where {rank, Bc} =
     LazyCollection{rank, Bc}(bc)
 
 Base.length(c::LazyCollection) = length(c.bc)
+Base.size(c::LazyCollection) = size(c.bc) # needs to be override
 Base.getindex(c::LazyCollection, i::Int) = (@_propagate_inbounds_meta; c.bc[i])
 
 Broadcast.broadcastable(c::LazyCollection) = c.bc
