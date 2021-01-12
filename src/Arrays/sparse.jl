@@ -66,3 +66,10 @@ end
 sparse(S::SparseMatrixCOO) = sparse(S.I, S.J, S.V)
 sparse(S::SparseMatrixCOO, m::Int, n::Int) = sparse(S.I, S.J, S.V, m, n)
 sparse(S::SparseMatrixCOO, m::Int, n::Int, combine) = sparse(S.I, S.J, S.V, m, n, combine)
+
+function Base.empty!(S::SparseMatrixCOO)
+    empty!(S.I)
+    empty!(S.J)
+    empty!(S.V)
+    S
+end
