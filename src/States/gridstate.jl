@@ -109,3 +109,17 @@ GridCollection(x::UnionGridState) = GridCollection(nonzeros(x), dofindices(x))
 
 Base.length(x::GridCollection) = length(x.dofindices) # == npoints
 Base.getindex(x::GridCollection, i::Int) = (@_propagate_inbounds_meta; Collection{1}(view(x.data, x.dofindices[i])))
+
+
+struct GridStateMatrix{T, ElType}
+    A::SparseMatrixCOO{ElType}
+    dofindices_dim::Vector{Vector{Int}}
+end
+
+function gridstate_matrix(::Type{T}, dofindices_dim::Vector{Vector{Int}}) where {T}
+    ElType = eltype(T)
+    GridStateMatrix{T, ElType}(SparseMatrixCOO{ElType}(), dofindices_dim)
+end
+
+Base.empty!(x::GridStateMatrix) = empty!(x.A)
+Base.push!(x::GridStateMatrix, args...) = push!(x.A, args...)

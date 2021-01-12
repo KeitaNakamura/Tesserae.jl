@@ -119,6 +119,10 @@ function gridstate(space::MPSpace, T)
     gridstate(T, space.dofmap, space.dofindices)
 end
 
+function gridstate_matrix(space::MPSpace, T)
+    gridstate_matrix(T, space.dofindices_dim)
+end
+
 function pointstate(space::MPSpace, T)
     pointstate(T, npoints(space))
 end
