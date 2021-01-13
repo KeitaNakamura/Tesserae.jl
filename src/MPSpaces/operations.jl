@@ -18,7 +18,8 @@ end
 
 for op in (:+, :-)
     @eval function Base.$op(x::PointToGridOperation, y::PointToGridOperation)
-        PointToGridOperation($op(x.gridvalues, y.gridvalues))
+        @assert ismatrix(x) == ismatrix(y)
+        PointToGridOperation($op(x.gridvalues, y.gridvalues), ismatrix(x))
     end
 end
 
@@ -55,9 +56,11 @@ function set!(S::GridStateMatrix{Vec{dim, T}}, x::PointToGridOperation) where {d
     S
 end
 
+# ∑ₚ(mₚ * vₚ * N) / mᵢ
 for op in (:*, :/)
     @eval function Base.$op(x::PointToGridOperation, y::GridState)
-        PointToGridOperation($op(x.gridvalues, GridCollection(y)))
+        @assert !ismatrix(x)
+        PointToGridOperation($op(x.gridvalues, GridCollection(y)), ismatrix(x))
     end
 end
 
