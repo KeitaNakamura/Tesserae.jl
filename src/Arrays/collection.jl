@@ -139,10 +139,22 @@ function Base.show(io::IO, c::LazyCollection{-1})
 end
 
 
-# adjoint for AbstractCollection
-Base.IndexStyle(::Type{<: Adjoint{<: Any, <: AbstractCollection}}) = IndexLinear()
-Base.size(c::Adjoint{<: Any, <: AbstractCollection}) = (1, length(parent(c)))
-@inline Base.getindex(c::Adjoint{<: Any, <: AbstractCollection}, i::Integer) = (@_propagate_inbounds_meta; parent(c)[i])
+struct AdjointCollection{rank, P <: AbstractCollection{rank}} <: AbstractCollection{rank}
+    parent::P
+end
+Base.parent(c::AdjointCollection) = c.parent
+LinearAlgebra.adjoint(c::AbstractCollection) = AdjointCollection(c)
+
+# getindex
+Base.IndexStyle(::Type{<: AdjointCollection}) = IndexLinear()
+Base.length(c::AdjointCollection) = length(parent(c))
+Base.size(c::AdjointCollection) = (1, length(c))
+@inline Base.getindex(c::AdjointCollection, i::Int) = (@_propagate_inbounds_meta; parent(c)[i])
+@inline Base.getindex(c::AdjointCollection, i::CartesianIndex{2}) = (@_propagate_inbounds_meta; @assert i[1] == 1; parent(c)[i[2]])
+
+# Broadcast
+Broadcast.broadcastable(c::AdjointCollection) = c
+Broadcast.BroadcastStyle(::Type{<: AdjointCollection}) = Broadcast.DefaultArrayStyle{2}()
 
 ##############
 # Operations #
@@ -172,8 +184,8 @@ operation_error(op, rank1, rank2) = throw(ArgumentError("wrong collection operat
 lazy(op, x::AbstractCollection{0}, y::AbstractCollection{1}) = LazyCollection{-1}(broadcasted(op, x, y))
 lazy(op, x::AbstractCollection{1}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, y))
 ## Nᵢ[p] * Nᵢ[p]
-lazy(op::typeof(*), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, Adjoint(y)))
-lazy(op::typeof(⊗), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, Adjoint(y)))
+lazy(op::typeof(*), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, y'))
+lazy(op::typeof(⊗), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, y'))
 ## errors (with point value)
 lazy(op, x::AbstractCollection{2}, y::AbstractCollection{1}) = operation_error(op, 2, 1)
 lazy(op, x::AbstractCollection{2}, y::AbstractCollection{0}) = operation_error(op, 2, 0)
@@ -189,7 +201,7 @@ lazy(op, x::AbstractCollection{2}, y::AbstractCollection{-1}) = operation_error(
 
 # ternary
 TensorValues.dotdot(u::AbstractCollection, x, v::AbstractCollection) = lazy(dotdot, u, x, v)
-lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{0}, x::SymmetricTensor{4}, v::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(dotdot, u, Ref(x), Adjoint(v)))
+lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{0}, x::SymmetricTensor{4}, v::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(dotdot, u, Ref(x), v'))
 lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::SymmetricTensor{4}, v::AbstractCollection{2}) = LazyCollection{2}(broadcasted(dotdot, u, Ref(x), v))
 lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::AbstractCollection{2}, v::AbstractCollection{2}) = LazyCollection{2}(broadcasted(dotdot, u, x, v))
 
