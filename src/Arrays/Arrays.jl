@@ -1,31 +1,20 @@
 module Arrays
 
-using Reexport
-
-using LinearAlgebra
-@reexport using Jams.TensorValues
-
 import SparseArrays: sparse
 
-using Base: @_propagate_inbounds_meta
-using Base.Broadcast: broadcasted
-using LinearAlgebra: Adjoint
-
-# sparse arrays
-
-export SparseMatrixCOO
-export sparse
-
-# Collections
-
-export AbstractCollection, Collection, LazyCollection
-export collection, lazy
-
+export
 # FillArray
-export FillArray, Ones, Zeros, ScalarMatrix
+    FillArray,
+    Ones,
+    Zeros,
+# ScalarMatrix
+    ScalarMatrix,
+# SparseMatrixCOO
+    SparseMatrixCOO,
+    sparse
 
-include("sparse.jl")
-include("collection.jl")
-include("fillarrays.jl")
+include("FillArray.jl")
+include("ScalarMatrix.jl")
+include("SparseMatrixCOO.jl")
 
 end

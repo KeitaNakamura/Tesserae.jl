@@ -23,6 +23,14 @@ for op in (:+, :-)
     end
 end
 
+# ∑ₚ(mₚ * vₚ * N) / mᵢ
+for op in (:*, :/)
+    @eval function Base.$op(x::PointToGridOperation, y::GridState)
+        @assert !ismatrix(x)
+        PointToGridOperation($op(x.gridvalues, GridStateCollection(y)), ismatrix(x))
+    end
+end
+
 function set!(S::GridState, x::PointToGridOperation)
     @assert !ismatrix(x)
     nzval = nonzeros(zeros!(S))
@@ -55,34 +63,3 @@ function set!(S::GridStateMatrix{Vec{dim, T}}, x::PointToGridOperation) where {d
     end
     S
 end
-
-# ∑ₚ(mₚ * vₚ * N) / mᵢ
-for op in (:*, :/)
-    @eval function Base.$op(x::PointToGridOperation, y::GridState)
-        @assert !ismatrix(x)
-        PointToGridOperation($op(x.gridvalues, GridCollection(y)), ismatrix(x))
-    end
-end
-
-
-struct GridToPointOperation{C <: AbstractCollection{2}} <: AbstractCollection{2}
-    u_p::C
-end
-
-function ∑ᵢ(c::AbstractCollection{2})
-    GridToPointOperation(lazy(reduce, add, c))
-end
-
-Base.length(x::GridToPointOperation) = length(x.u_p)
-Base.getindex(x::GridToPointOperation, i::Int) = (@_propagate_inbounds_meta; x.u_p[i])
-
-function set!(ps::PointState, x::GridToPointOperation)
-    @inbounds for p in 1:length(ps)
-        ps[p] = x.u_p[p]
-    end
-    ps
-end
-
-add(a, b) = a + b
-add(a::ScalVec, b::ScalVec) = ScalVec(a.x + b.x, a.∇x + b.∇x)
-add(a::VecTensor, b::VecTensor) = VecTensor(a.x + b.x, a.∇x + b.∇x)

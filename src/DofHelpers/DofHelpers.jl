@@ -3,11 +3,14 @@ module DofHelpers
 using Base: @_propagate_inbounds_meta
 
 export
+# DofMap
     DofMap,
-    DofMapIndices,
     ndofs,
+# DofMapIndices
+    DofMapIndices,
     indices
 
-include("dofmap.jl")
+include("DofMap.jl")
+include("DofMapIndices.jl")
 
 end

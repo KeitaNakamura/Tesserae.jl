@@ -16,9 +16,11 @@ makedocs(;
         "Home" => "index.md",
         "Jams.DofHelpers" => "DofHelpers.md",
         "Jams.Arrays" => "Arrays.md",
+        "Jams.Collections" => "Collections.md",
         "Jams.Grids" => "Grids.md",
         "Jams.ShapeFunctions" => "ShapeFunctions.md",
         "Jams.MPSpaces" => "MPSpaces.md",
+        "Jams.VTKOutputs" => "VTKOutputs.md",
     ],
     doctest = true, # :fix
 )

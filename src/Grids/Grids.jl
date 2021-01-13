@@ -10,22 +10,27 @@ using Base.Cartesian: @ntuple, @nall
 export
 # GridBoundSet
     GridBoundSet,
-# Grids
+# AbstractGrid
     AbstractGrid,
-    CartesianGrid,
-    Grid,
     gridaxes,
     gridorigin,
     gridsteps,
     getboundsets,
     getboundset,
     setboundset!,
+# CartesianGrid
+    CartesianGrid,
+# Grid
+    Grid,
 # neighboring
     neighboring_nodes,
     neighboring_cells,
     whichcell
 
-include("grid.jl")
+include("GridBoundSet.jl")
+include("AbstractGrid.jl")
+include("CartesianGrid.jl")
+include("Grid.jl")
 include("neighboring.jl")
 
 end # module

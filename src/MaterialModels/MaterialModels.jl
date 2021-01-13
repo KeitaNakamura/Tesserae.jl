@@ -18,9 +18,9 @@ export
 abstract type MaterialModel end
 
 include("utils.jl")
-include("linearelastic.jl")
-include("vonmises.jl")
-include("druckerprager.jl")
-include("water.jl")
+include("LinearElastic.jl")
+include("VonMises.jl")
+include("DruckerPrager.jl")
+include("WaterModel.jl")
 
 end

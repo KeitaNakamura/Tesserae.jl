@@ -1,6 +1,7 @@
 module States
 
-using Jams.Arrays: AbstractCollection, LazyCollection, Collection, lazy, SparseMatrixCOO
+using Jams.Arrays
+using Jams.Collections
 using Jams.DofHelpers
 using Jams.Grids
 using Base: @_propagate_inbounds_meta
@@ -17,16 +18,25 @@ export
     generate_pointstates,
 # GridState
     GridState,
-    GridCollection,
-    GridStateMatrix,
     gridstate,
-    gridstate_matrix,
+    nonzeros, # from SparseArrays
+    nnz,      # from SparseArrays
     zeros!,
-    nonzeros,
-    nnz,
-    sparse
+# GridStateMatrix
+    GridStateMatrix,
+    gridstate_matrix,
+    sparse,
+# PointToGridOperation
+    ∑ₚ,
+# GridToPointOperation
+    ∑ᵢ
 
-include("pointstate.jl")
-include("gridstate.jl")
+include("PointState.jl")
+include("GridState.jl")
+include("GridStateMatrix.jl")
+include("GridStateOperation.jl")
+include("GridStateCollection.jl")
+include("PointToGridOperation.jl")
+include("GridToPointOperation.jl")
 
 end

@@ -6,21 +6,24 @@ using Reexport
 using Base: @_propagate_inbounds_meta
 
 export
-# value and gradient
+# ScalVec
     ScalVec,
-    VecTensor,
     scalvec,
+# VecTensor
+    VecTensor,
     vectensor,
+# common operations
     valgrad,
     ∇,
 # utils
-    symmetric,
     ∇ₛ,
+    symmetric,
     _otimes_,
     tensor2x2,
     tensor3x3
 
-include("value_gradient.jl")
+include("ScalVec.jl")
+include("VecTensor.jl")
 include("utils.jl")
 
 end

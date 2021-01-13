@@ -2,8 +2,8 @@ module ShapeFunctions
 
 using Reexport
 @reexport using Jams.TensorValues, Jams.Grids
+using Jams.Collections
 
-using Jams.Arrays: AbstractCollection
 import Jams.TensorValues: gradient
 
 using Base: @pure, @_propagate_inbounds_meta
@@ -11,6 +11,7 @@ using Base: @pure, @_propagate_inbounds_meta
 export
 # ShapeFunction
     ShapeFunction,
+# BSpline
     BSpline,
     LinearBSpline,
     QuadraticBSpline,
@@ -18,13 +19,15 @@ export
     BSplinePosition,
 # ShapeValue
     ShapeValue,
-    BSplineValue,
     construct,
-    reinit!
+    reinit!,
+# BSplineValue
+    BSplineValue
 
+include("ShapeFunction.jl")
+include("BSpline.jl")
 
-include("shape_function.jl")
-include("shape_value.jl")
-include("bsplines.jl")
+include("ShapeValue.jl")
+include("BSplineValue.jl")
 
 end # module

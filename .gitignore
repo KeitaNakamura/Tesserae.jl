@@ -1,3 +1,6 @@
+*.tmp
+*.vtr
+*.vtu
 /Manifest.toml
 /test/Manifest.toml
 /docs/build

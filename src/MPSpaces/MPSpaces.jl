@@ -14,16 +14,13 @@ using Base: @_propagate_inbounds_meta
 
 export
     MPSpace,
+    pointstate,
     gridstate,
     gridstate_matrix,
-    pointstate,
     function_space,
     npoints,
-    dirichlet!,
-    ∑ᵢ,
-    ∑ₚ
+    dirichlet!
 
-include("space.jl")
-include("operations.jl")
+include("MPSpace.jl")
 
 end
