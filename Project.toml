@@ -1,7 +1,7 @@
 name = "Jams"
 uuid = "573615e8-489b-4e48-952b-fc194aa7573b"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 AxisArrays = "f60ff68b-7a94-4832-89aa-d0cf2fb227a8"
