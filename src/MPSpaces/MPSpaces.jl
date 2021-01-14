@@ -21,6 +21,7 @@ export
     npoints,
     dirichlet!
 
+include("BoundNormal.jl")
 include("MPSpace.jl")
 
 end

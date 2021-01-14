@@ -18,6 +18,8 @@ _collection(x::AbstractCollection{1}) = x
 
 const UnionGridState = Union{GridState, GridStateOperation}
 
+Base.zero(x::UnionGridState) = zero(eltype(nonzeros(x)))
+
 # checkspace
 checkspace(::Type{Bool}, x::UnionGridState, y::UnionGridState) = (indices(x) === indices(y)) && (dofindices(x) === dofindices(y))
 checkspace(::Type{Bool}, x::UnionGridState, y::UnionGridState, zs::UnionGridState...) =
