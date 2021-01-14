@@ -160,6 +160,7 @@ Return total number of dofs.
 ndofs(space::MPSpace; dof::Int = 1) = ndofs(space.dofmap; dof)
 
 npoints(space::MPSpace) = length(space.dofindices)
+gridsize(space::MPSpace) = size(space.grid)
 
 function gridstate(space::MPSpace, T)
     gridstate(T, space.dofmap, space.dofindices)
