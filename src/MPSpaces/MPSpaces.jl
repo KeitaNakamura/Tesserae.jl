@@ -19,9 +19,11 @@ export
     gridstate_matrix,
     function_space,
     npoints,
-    dirichlet!
+    dirichlet!,
+    boundary
 
 include("BoundNormal.jl")
 include("MPSpace.jl")
+include("MPSpaceBound.jl")
 
 end

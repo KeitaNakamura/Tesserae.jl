@@ -28,15 +28,6 @@ MPSpace(F::ShapeFunction, grid::AbstractGrid, npoints::Int) = MPSpace(Float64, F
 value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalVec{dim, T}
 value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VecTensor{dim, T, dim^2}
 
-function onbound(dims::NTuple{dim, Int}, I::CartesianIndex{dim}) where {dim}
-    for i in 1:dim
-        @inbounds (I[i] == 1 || I[i] == dims[i]) && return true
-    end
-    false
-end
-onbound(A::AbstractArray, I::CartesianIndex) = onbound(size(A), I)
-onbound(len::Int, i::Int) = i == 1 || i == len
-
 function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, point_radius::Real) where {dim}
     dofindices = space.dofindices
     gridindices = space.gridindices
