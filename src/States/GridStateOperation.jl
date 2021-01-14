@@ -8,7 +8,7 @@ indices(x::GridStateOperation) = x.indices
 dofindices(x::GridStateOperation) = x.dofindices
 nonzeros(x::GridStateOperation) = x.nzval
 
-_collection(x::Vector) = Collection(x)
+_collection(x::AbstractVector) = Collection(x)
 _collection(x::AbstractCollection{1}) = x
 
 

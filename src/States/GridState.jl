@@ -1,12 +1,15 @@
-struct GridState{dim, T} <: AbstractArray{T, dim}
-    nzval::Vector{T}
+struct GridState{dim, T, V <: AbstractVector{T}} <: AbstractArray{T, dim}
+    nzval::V
     indices::DofMapIndices{dim}
     dofindices::Vector{Vector{Int}}
 end
 
+gridstate(nzval::AbstractVector, dofmap::DofMap, dofindices::Vector{Vector{Int}}) =
+    GridState(nzval, indices(dofmap), dofindices)
+
 function gridstate(::Type{T}, dofmap::DofMap, dofindices::Vector{Vector{Int}}) where {T}
     nzval = zeros(T, ndofs(dofmap))
-    GridState(nzval, indices(dofmap), dofindices)
+    gridstate(nzval, dofmap, dofindices)
 end
 
 Base.size(A::GridState) = size(indices(A))
