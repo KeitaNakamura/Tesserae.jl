@@ -161,19 +161,15 @@ end
 function construct(name::Symbol, space::MPSpace)
     name == :shape_function        && return space.Nᵢ
     name == :shape_function_vector && return lazy(vec, space.Nᵢ)
+    if name == :bound_normal_vector
+        boundnormal = BoundNormal(Float64, gridsize(space)...)
+        return gridstate(view(boundnormal, space.activeindices), space.dofmap, space.dofindices)
+    end
     throw(ArgumentError("not supported function space"))
 end
 
 function dirichlet!(vᵢ::GridState{dim, Vec{dim, T}}, space::MPSpace{dim}) where {dim, T}
-    grid = space.grid
-    dofmap = space.dofmap
     V = reinterpret(T, nonzeros(vᵢ))
-    for boundset in values(getboundsets(grid))
-        @inbounds for bound in boundset
-            I = dofmap(bound.index; dof = dim)
-            I === nothing && continue
-            V[I[bound.component]] = zero(T)
-        end
-    end
+    V[space.fixeddofs] .= zero(T)
     vᵢ
 end
