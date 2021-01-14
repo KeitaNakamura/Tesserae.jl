@@ -6,6 +6,7 @@ struct MPSpace{dim, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: Sha
     gridindices::Vector{Vector{CartesianIndex{dim}}}
     activeindices::Vector{CartesianIndex{dim}}
     fixeddofs::Vector{Int} # flat dofs
+    bounddofs::Vector{Int}
     isincontact::BitVector
     Nᵢ::PointState{VT}
 end
@@ -16,9 +17,10 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     gridindices = [CartesianIndex{dim}[] for _ in 1:npoints]
     activeindices = CartesianIndex{dim}[]
     fixeddofs = Int[]
+    bounddofs = Int[]
     isincontact = falses(npoints)
     Nᵢ = pointstate([construct(T, F) for _ in 1:npoints])
-    MPSpace(F, grid, dofmap, dofindices, gridindices, activeindices, fixeddofs, isincontact, Nᵢ)
+    MPSpace(F, grid, dofmap, dofindices, gridindices, activeindices, fixeddofs, bounddofs, isincontact, Nᵢ)
 end
 
 MPSpace(F::ShapeFunction, grid::AbstractGrid, npoints::Int) = MPSpace(Float64, F, grid, npoints)
@@ -98,6 +100,19 @@ function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, poi
         end
     end
     resize!(space.fixeddofs, count)
+
+    ## bounddofs (!!NOT!! flat)
+    count = 0
+    empty!(space.bounddofs)
+    @inbounds for i in CartesianIndices(dofmap)
+        I = dofmap(i)
+        I === nothing && continue
+        if onbound(dofmap, i)
+            push!(space.bounddofs, I)
+            count += 1
+        end
+    end
+    resize!(space.bounddofs, count)
 
     space
 end
