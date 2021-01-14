@@ -33,16 +33,21 @@ end
 indices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (checkspace(x, y, zs...); indices(x))
 dofindices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (checkspace(x, y, zs...); dofindices(x))
 
-for op in (:+, :-, :/, :*)
+for op in (:(Base.:+), :(Base.:-), :(Base.:/), :(Base.:*), :(TensorValues.:⋅), :(TensorValues.:×))
     @eval begin
-        Base.$op(x::UnionGridState, y::UnionGridState) =
+        $op(x::UnionGridState, y::UnionGridState) =
             GridStateOperation(indices(x, y), dofindices(x, y), $op(_collection(nonzeros(x)), _collection(nonzeros(y))))
-    end
-    if op == :* || op == :/
-        @eval begin
-            Base.$op(x::UnionGridState, y::Number) = GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x)), y))
-            Base.$op(x::Number, y::UnionGridState) = GridStateOperation(indices(y), dofindices(y), $op(x, _collection(nonzeros(y))))
+        if $op == (*) || $op == (/)
+            @eval begin
+                $op(x::UnionGridState, y::Number) = GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x)), y))
+                $op(x::Number, y::UnionGridState) = GridStateOperation(indices(y), dofindices(y), $op(x, _collection(nonzeros(y))))
+            end
         end
+    end
+end
+for op in (:+, :-)
+    @eval begin
+        Base.$op(x::UnionGridState) = GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x))))
     end
 end
 
@@ -50,5 +55,24 @@ function set!(x::GridState, y::UnionGridState)
     checkspace(x, y)
     resize!(x) # should not use zeros! for incremental calculation
     nonzeros(x) .= nonzeros(y)
+    x
+end
+
+function set!(x::GridState, y)
+    resize!(x) # should not use zeros! for incremental calculation
+    nonzeros(x) .= Ref(y)
+    x
+end
+
+function set!(x::GridState, y::UnionGridState, dofs::Vector{Int})
+    checkspace(x, y)
+    resize!(x) # should not use zeros! for incremental calculation
+    nonzeros(x)[dofs] .= view(nonzeros(y), dofs)
+    x
+end
+
+function set!(x::GridState, y, dofs::Vector{Int})
+    resize!(x) # should not use zeros! for incremental calculation
+    nonzeros(x)[dofs] .= Ref(y)
     x
 end
