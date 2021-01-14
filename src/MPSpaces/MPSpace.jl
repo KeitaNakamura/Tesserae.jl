@@ -4,6 +4,9 @@ struct MPSpace{dim, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: Sha
     dofmap::DofMap{dim}
     dofindices::Vector{Vector{Int}}
     gridindices::Vector{Vector{CartesianIndex{dim}}}
+    activeindices::Vector{CartesianIndex{dim}}
+    fixeddofs::Vector{Int} # flat dofs
+    isincontact::BitVector
     Nᵢ::PointState{VT}
 end
 
@@ -11,14 +14,26 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     dofmap = DofMap(size(grid))
     dofindices = [Int[] for _ in 1:npoints]
     gridindices = [CartesianIndex{dim}[] for _ in 1:npoints]
+    activeindices = CartesianIndex{dim}[]
+    fixeddofs = Int[]
+    isincontact = falses(npoints)
     Nᵢ = pointstate([construct(T, F) for _ in 1:npoints])
-    MPSpace(F, grid, dofmap, dofindices, gridindices, Nᵢ)
+    MPSpace(F, grid, dofmap, dofindices, gridindices, activeindices, fixeddofs, isincontact, Nᵢ)
 end
 
 MPSpace(F::ShapeFunction, grid::AbstractGrid, npoints::Int) = MPSpace(Float64, F, grid, npoints)
 
 value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalVec{dim, T}
 value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VecTensor{dim, T, dim^2}
+
+function onbound(dims::NTuple{dim, Int}, I::CartesianIndex{dim}) where {dim}
+    for i in 1:dim
+        @inbounds (I[i] == 1 || I[i] == dims[i]) && return true
+    end
+    false
+end
+onbound(A::AbstractArray, I::CartesianIndex) = onbound(size(A), I)
+onbound(len::Int, i::Int) = i == 1 || i == len
 
 function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, point_radius::Real) where {dim}
     dofindices = space.dofindices
@@ -60,8 +75,29 @@ function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, poi
     @inbounds for (i, x) in enumerate(coordinates)
         allinds = neighboring_nodes(grid, x, point_radius)
         DofHelpers.map!(dofmap, dofindices[i], allinds)
-        DofHelpers.filter!(dofmap, gridindices[i], allinds)
+        allactive = DofHelpers.filter!(dofmap, gridindices[i], allinds)
+        space.isincontact[i] = !allactive
     end
+
+    ## active grid indices
+    DofHelpers.filter!(dofmap, space.activeindices, CartesianIndices(dofmap))
+
+    ## fixeddofs (used in dirichlet boundary conditions)
+    count = 0
+    empty!(space.fixeddofs)
+    @inbounds for i in CartesianIndices(dofmap)
+        I = dofmap(i; dof = dim)
+        I === nothing && continue
+        if onbound(dofmap, i)
+            for d in 1:dim
+                if onbound(size(dofmap, d), i[d])
+                    push!(space.fixeddofs, I[d])
+                    count += 1
+                end
+            end
+        end
+    end
+    resize!(space.fixeddofs, count)
 
     space
 end
