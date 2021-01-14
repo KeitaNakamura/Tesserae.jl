@@ -3,7 +3,6 @@ struct MPSpace{dim, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: Sha
     grid::GT
     dofmap::DofMap{dim}
     dofindices::Vector{Vector{Int}}
-    dofindices_dim::Vector{Vector{Int}}
     gridindices::Vector{Vector{CartesianIndex{dim}}}
     Nᵢ::PointState{VT}
 end
@@ -11,10 +10,9 @@ end
 function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoints::Int) where {dim, T <: Real}
     dofmap = DofMap(size(grid))
     dofindices = [Int[] for _ in 1:npoints]
-    dofindices_dim = [Int[] for _ in 1:npoints]
     gridindices = [CartesianIndex{dim}[] for _ in 1:npoints]
     Nᵢ = pointstate([construct(T, F) for _ in 1:npoints])
-    MPSpace(F, grid, dofmap, dofindices, dofindices_dim, gridindices, Nᵢ)
+    MPSpace(F, grid, dofmap, dofindices, gridindices, Nᵢ)
 end
 
 MPSpace(F::ShapeFunction, grid::AbstractGrid, npoints::Int) = MPSpace(Float64, F, grid, npoints)
@@ -24,9 +22,8 @@ value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VecTensor{
 
 function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, point_radius::Real) where {dim}
     dofindices = space.dofindices
-    dofindices_dim = space.dofindices_dim
     gridindices = space.gridindices
-    @assert length(coordinates) == length(dofindices) == length(dofindices_dim) == length(gridindices)
+    @assert length(coordinates) == length(dofindices) == length(gridindices)
 
     grid = space.grid
     dofmap = space.dofmap
@@ -59,11 +56,10 @@ function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, poi
     ## renumering dofs
     count!(dofmap)
 
-    # Reinitialize interpolations by updated mask
+    # Initialize dof indices by updated DofMap
     @inbounds for (i, x) in enumerate(coordinates)
         allinds = neighboring_nodes(grid, x, point_radius)
         DofHelpers.map!(dofmap, dofindices[i], allinds)
-        DofHelpers.map!(dofmap, dofindices_dim[i], allinds; dof = dim)
         DofHelpers.filter!(dofmap, gridindices[i], allinds)
     end
 
@@ -94,7 +90,6 @@ Use [`reinit!(::MPSpace, ::AbstractArray{<: Vec})`](@ref) in advance.
 function dofindices(space::MPSpace{dim}, p::Int; dof::Int = 1) where {dim}
     @_propagate_inbounds_meta
     dof == 1   && return space.dofindices[p]
-    dof == dim && return space.dofindices_dim[p]
     DofHelpers.map(space.dofmap, space.gridindices[p])
 end
 
