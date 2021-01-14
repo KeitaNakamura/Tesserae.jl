@@ -165,22 +165,28 @@ julia> DofHelpers.map(dofmap, [CartesianIndex(1, 2), CartesianIndex(2, 3)]; dof 
 ```
 """
 function map(dofmap::DofMap, inds::AbstractArray; dof::Int = 1)
-    map!(dofmap, Int[], inds; dof)
+    out = Int[]
+    map!(dofmap, out, inds; dof)
+    out
 end
 
 function map!(dofmap::DofMap, dofs::Vector{Int}, inds::AbstractArray; dof::Int = 1)
     linear = view(dofmap.indices, inds) # checkbounds as well
     resize!(dofs, length(inds) * dof)
     count = 0
+    allactive = true
     @inbounds for i in eachindex(linear)
         j = linear[i]
-        j == -1 && continue
+        if j == -1
+            allactive = false
+            continue
+        end
         for d in 1:dof
             dofs[count += 1] = dof*(j-1) + d
         end
     end
     resize!(dofs, count)
-    dofs
+    allactive
 end
 
 """
@@ -217,16 +223,23 @@ julia> DofHelpers.filter(dofmap, CartesianIndices((1:2, 1:2)))
 ```
 """
 function filter(dofmap::DofMap, inds::AbstractArray)
-    filter!(dofmap, eltype(inds)[], inds)
+    out = eltype(inds)[]
+    filter!(dofmap, out, inds)
+    out
 end
 
 function filter!(dofmap::DofMap, output::Vector, inds::AbstractArray)
     resize!(output, length(inds))
     count = 0
+    allactive = true
     @inbounds for i in eachindex(inds)
         j = inds[i]
-        dofmap.indices[j] !== -1 && (output[count += 1] = j)
+        if dofmap.indices[j] == -1
+            allactive = false
+            continue
+        end
+        output[count += 1] = j
     end
     resize!(output, count)
-    output
+    allactive
 end

@@ -90,7 +90,7 @@ Use [`reinit!(::MPSpace, ::AbstractArray{<: Vec})`](@ref) in advance.
 function dofindices(space::MPSpace{dim}, p::Int; dof::Int = 1) where {dim}
     @_propagate_inbounds_meta
     dof == 1   && return space.dofindices[p]
-    DofHelpers.map(space.dofmap, space.gridindices[p])
+    DofHelpers.map(space.dofmap, space.gridindices[p]; dof)
 end
 
 """
