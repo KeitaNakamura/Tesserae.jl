@@ -172,6 +172,9 @@ function construct(name::Symbol, space::MPSpace)
         boundnormal = BoundNormal(Float64, gridsize(space)...)
         return gridstate(view(boundnormal, space.activeindices), space.dofmap, space.dofindices)
     end
+    if name == :grid_coordinates
+        return GridStateCollection(view(space.grid, space.activeindices), space.dofindices)
+    end
     throw(ArgumentError("not supported function space"))
 end
 

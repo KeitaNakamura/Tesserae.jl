@@ -26,6 +26,8 @@ export
     GridStateMatrix,
     gridstate_matrix,
     sparse,
+# GridStateCollection
+    GridStateCollection,
 # PointToGridOperation
     ∑ₚ,
 # GridToPointOperation
