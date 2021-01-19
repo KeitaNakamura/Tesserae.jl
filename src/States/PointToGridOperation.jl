@@ -1,45 +1,42 @@
 struct PointToGridOperation{C <: AbstractCollection{2}}
-    gridvalues::C
-    ismatrix::Bool
+    parent::C
 end
 
-gridvalues(c::PointToGridOperation, p::Int) = (@_propagate_inbounds_meta; c.gridvalues[p])
-ismatrix(c::PointToGridOperation) = c.ismatrix
+Base.parent(c::PointToGridOperation) = c.parent
+Base.length(c::PointToGridOperation) = length(parent(c))
+Base.getindex(c::PointToGridOperation, p::Int) = (@_propagate_inbounds_meta; parent(c)[p])
 
-function ∑ₚ(c::AbstractCollection{2})
-    ElType = eltype(c)
-    if ElType <: AbstractCollection{0} # with N
-        return PointToGridOperation(c, false)
-    elseif ElType <: AbstractCollection{1} # without N
-        return PointToGridOperation(c, false)
-    elseif ElType <: AbstractCollection{-1} # with N two times
-        return PointToGridOperation(c, true)
-    end
-    throw(ArgumentError("wrong collection in ∑ₚ"))
-end
+∑ₚ(c::AbstractCollection{2}) = PointToGridOperation(c)
+∑ₚ(c::AbstractCollection{rank}) where {rank} = throw(ArgumentError("cannot apply ∑ₚ(...) for rank=$rank collection."))
 
 for op in (:+, :-)
     @eval function Base.$op(x::PointToGridOperation, y::PointToGridOperation)
-        @assert ismatrix(x) == ismatrix(y)
-        PointToGridOperation($op(x.gridvalues, y.gridvalues), ismatrix(x))
+        PointToGridOperation($op(parent(x), parent(y)))
     end
 end
 
-# ∑ₚ(mₚ * vₚ * N) / mᵢ
 for op in (:*, :/)
-    @eval function Base.$op(x::PointToGridOperation, y::GridState)
-        @assert !ismatrix(x)
-        PointToGridOperation($op(x.gridvalues, GridStateCollection(y)), ismatrix(x))
+    @eval begin
+        if $op == /
+            # ∑ₚ(mₚ * vₚ * N) / mᵢ
+            function Base.$op(x::PointToGridOperation, y::GridState)
+                PointToGridOperation($op(parent(x), GridStateCollection(y)))
+            end
+        end
+        # wrong calculation
+        Base.$op(x::PointToGridOperation, y::AbstractCollection) =
+            throw(ArgumentError("∑ₚ(...) cannot be computed with other collections."))
+        Base.$op(x::AbstractCollection, y::PointToGridOperation) =
+            throw(ArgumentError("∑ₚ(...) cannot be computed with other collections."))
     end
 end
 
-function set!(S::GridState, x::PointToGridOperation)
-    @assert !ismatrix(x)
+function set!(S::GridState, ∑ₚN::PointToGridOperation)
     nzval = nonzeros(zeros!(S))
     dofinds = S.dofindices
     @inbounds for p in eachindex(dofinds)
         u = view(nzval, dofinds[p])
-        u .+= gridvalues(x, p)
+        u .+= ∑ₚN[p]
     end
     S
 end
@@ -49,12 +46,11 @@ _to_matrix(x::SecondOrderTensor, dim::Int) = x
 _get_element(mat, index, dim::Int) = (@_propagate_inbounds_meta; _to_matrix(mat.bc[index], dim))
 _compute_range(dofs::Vector{Int}, i::Int, dim::Int) =
     (@_propagate_inbounds_meta; start = dim*(dofs[i]-1) + 1; start:start+dim-1)
-function set!(S::GridStateMatrix{Vec{dim, T}}, x::PointToGridOperation) where {dim, T}
-    @assert ismatrix(x)
+function set!(S::GridStateMatrix{Vec{dim, T}}, ∑ₚ∇N∇N::PointToGridOperation) where {dim, T}
     empty!(S)
     dofinds = S.dofindices
     @inbounds for p in eachindex(dofinds)
-        mat = gridvalues(x, p)
+        mat = ∑ₚ∇N∇N[p]
         dofs = dofinds[p]
         for index in CartesianIndices(size(mat))
             i, j = Tuple(index)
