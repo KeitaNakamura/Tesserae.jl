@@ -2,9 +2,11 @@ using Revise, Jams, BenchmarkTools
 using Debugger
 
 function main()
+    it = LinearBSpline(dim=2)
+    # it = WLS{1}(QuadraticBSpline(dim=2))
     grid = CartesianGrid(0, 0.05, (20, 20))
     xₚ, V₀ₚ = generate_pointstates((x,y) -> 0.4<x<0.6 && y<0.3, grid)
-    space = MPSpace(LinearBSpline(dim=2), grid, length(xₚ))
+    space = MPSpace(it, grid, length(xₚ))
     @show npoints(space)
 
     model = DruckerPrager(:plane_strain, E = 1.6e5, ν = 0.3, c = 0, ϕ = 30, ψ = 1)
@@ -32,6 +34,15 @@ function main()
     nᵢ = construct(:bound_normal_vector, space)
     dΩ = boundary(space)
 
+    if it isa WLS
+        P = polynomial(it)
+        Cₚ = pointstate(space, Mat{2,3,Float64,6})
+        wᵢ = gridstate(space, Float64)
+        W = construct(:weight_value, space)
+        M⁻¹ = construct(:moment_matrix_inverse, space)
+        xᵢ = construct(:grid_coordinates, space)
+    end
+
     path = "results.tmp/out"
     mkpath(dirname(path))
     paraview_collection(vtk_save, path)
@@ -46,7 +57,12 @@ function main()
         Vₚ = V₀ₚ * det(Fₚ)
         fᵢ ← ∑ₚ(-Vₚ * tensor2x2(σₚ) ⋅ ∇(N)) + ∑ₚ(mₚ * b * N)
         mᵢ ← ∑ₚ(mₚ * N)
-        vₙᵢ ← ∑ₚ(mₚ * vₚ * N) / mᵢ
+        if it isa BSpline
+            vₙᵢ ← ∑ₚ(mₚ * vₚ * N) / mᵢ
+        else
+            wᵢ ← ∑ₚ(W)
+            vₙᵢ ← ∑ₚ(W * Cₚ ⋅ P(xᵢ - xₚ)) / wᵢ
+        end
 
         aᵢ = fᵢ / mᵢ
         vᵢ ← vₙᵢ + aᵢ * dt
@@ -56,14 +72,26 @@ function main()
         vᵢ ← vt in dΩ
         # dirichlet!(vᵢ, space)
 
-        dvᵢ = vᵢ - vₙᵢ
-        vₚ ← vₚ + ∑ᵢ(dvᵢ * N)
-        ∇vₚ ← ∑ᵢ(tensor3x3(vᵢ ⊗ ∇(N)))
+        if it isa BSpline
+            dvᵢ = vᵢ - vₙᵢ
+            vₚ ← vₚ + ∑ᵢ(dvᵢ * N)
+            ∇vₚ ← ∑ᵢ(tensor3x3(vᵢ ⊗ ∇(N)))
+        else
+            Cₚ ← ∑ᵢ(vᵢ ⊗ (W * M⁻¹ ⋅ P(xᵢ - xₚ)))
+            p₀ = P(zero(Vec{2}))
+            ∇p₀ = ∇(P)(zero(Vec{2}))
+            vₚ ← Cₚ ⋅ p₀
+            ∇vₚ ← tensor3x3(Cₚ ⋅ ∇p₀)
+        end
 
         Fₚ ← Fₚ + dt*(∇vₚ ⋅ Fₚ)
         σₚ ← stress:(model, σₚ, symmetric(∇vₚ) * dt)
 
-        xₚ ← xₚ + ∑ᵢ(vᵢ * N) * dt
+        if it isa BSpline
+            xₚ ← xₚ + ∑ᵢ(vᵢ * N) * dt
+        else
+            xₚ ← xₚ + vₚ * dt
+        end
 
         t += dt
 
