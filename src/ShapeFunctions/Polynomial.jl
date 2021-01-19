@@ -5,32 +5,32 @@ struct Polynomial{order}
 end
 
 # value
-value(poly::Polynomial{0}, x::Vec) = SVector(one(eltype(x)))
-value(poly::Polynomial{1}, x::Vec{1, T}) where {T} = @inbounds SVector(one(T), x[1])
-value(poly::Polynomial{1}, x::Vec{2, T}) where {T} = @inbounds SVector(one(T), x[1], x[2])
-value(poly::Polynomial{1}, x::Vec{3, T}) where {T} = @inbounds SVector(one(T), x[1], x[2], x[3])
+value(poly::Polynomial{0}, x::Vec) = Vec(one(eltype(x)))
+value(poly::Polynomial{1}, x::Vec{1, T}) where {T} = @inbounds Vec(one(T), x[1])
+value(poly::Polynomial{1}, x::Vec{2, T}) where {T} = @inbounds Vec(one(T), x[1], x[2])
+value(poly::Polynomial{1}, x::Vec{3, T}) where {T} = @inbounds Vec(one(T), x[1], x[2], x[3])
 value(p::Polynomial, x::AbstractCollection) = lazy(value, p, x)
 # gradient
 function gradient(poly::Polynomial{1}, x::Vec{1, T}) where {T}
     z = zero(T)
     o = one(T)
-    @SMatrix [z
-              o]
+    @Mat [z
+          o]
 end
 function gradient(poly::Polynomial{1}, x::Vec{2, T}) where {T}
     z = zero(T)
     o = one(T)
-    @SMatrix [z z
-              o z
-              z o]
+    @Mat [z z
+          o z
+          z o]
 end
 function gradient(poly::Polynomial{1}, x::Vec{3, T}) where {T}
     z = zero(T)
     o = one(T)
-    @SMatrix [z z z
-              o z z
-              z o z
-              z z o]
+    @Mat [z z z
+          o z z
+          z o z
+          z z o]
 end
 gradient(p::Polynomial, x::AbstractCollection) = lazy(gradient, p, x)
 

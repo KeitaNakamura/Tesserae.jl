@@ -25,4 +25,3 @@ end
 function tensor2x2(x::SymmetricSecondOrderTensor{3,T}) where {T}
     @inbounds SymmetricSecondOrderTensor{2,T}(x[1,1], x[2,1], x[2,2])
 end
-
