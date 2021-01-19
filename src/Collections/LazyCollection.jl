@@ -87,8 +87,8 @@ lazy(op, x::AbstractCollection{2}, y::AbstractCollection{-1}) = operation_error(
 
 # ternary
 TensorValues.dotdot(u::AbstractCollection, x, v::AbstractCollection) = lazy(dotdot, u, x, v)
-lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{0}, x::SymmetricTensor{4}, v::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(dotdot, u, Ref(x), v'))
-lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::SymmetricTensor{4}, v::AbstractCollection{2}) = LazyCollection{2}(broadcasted(dotdot, u, Ref(x), v))
+lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{0}, x::SymmetricFourthOrderTensor, v::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(dotdot, u, Ref(x), v'))
+lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::SymmetricFourthOrderTensor, v::AbstractCollection{2}) = LazyCollection{2}(broadcasted(dotdot, u, Ref(x), v))
 lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::AbstractCollection{2}, v::AbstractCollection{2}) = LazyCollection{2}(broadcasted(dotdot, u, x, v))
 
 macro define_unary_operation(op)
@@ -108,7 +108,6 @@ end
 const unary_operations = [
     :(TensorValues.∇),
     :(TensorValues.symmetric),
-    :(TensorValues.divergence),
     :(TensorValues.tr),
     :(TensorValues.vol),
     :(TensorValues.mean),

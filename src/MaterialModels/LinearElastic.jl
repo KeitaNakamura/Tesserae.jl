@@ -4,7 +4,7 @@ struct LinearElastic{T} <: MaterialModel
     G::T
     λ::T
     ν::T
-    D::SymmetricTensor{4, 3, T, 36}
+    D::SymmetricFourthOrderTensor{3, T, 36}
 end
 
 function LinearElastic{T}(; kwargs...) where {T}
@@ -73,15 +73,15 @@ function LinearElastic{T}(; kwargs...) where {T}
             λ = 2G*ν / (1-2ν)
         end
     end
-    δ = one(SymmetricTensor{2, 3, T})
-    I = one(SymmetricTensor{4, 3, T})
+    δ = one(SymmetricSecondOrderTensor{3, T})
+    I = one(SymmetricFourthOrderTensor{3, T})
     LinearElastic{T}(E, K, G, λ, ν, λ * δ ⊗ δ + 2G * I)
 end
 function LinearElastic(; kwargs...)
     LinearElastic{Float64}(; kwargs...)
 end
 
-function update_stress(model::LinearElastic, σ::SymmetricTensor{2, 3}, dϵ::SymmetricTensor{2, 3})::typeof(σ)
+function update_stress(model::LinearElastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(σ)
     @_inline_meta
     σ + model.D ⊡ dϵ
 end

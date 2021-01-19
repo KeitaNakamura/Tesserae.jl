@@ -43,7 +43,7 @@ function set!(S::GridState, x::PointToGridOperation)
 end
 
 _to_matrix(x::Real, dim::Int) = ScalarMatrix(x, dim, dim)
-_to_matrix(x::Tensor{2}, dim::Int) = x
+_to_matrix(x::SecondOrderTensor, dim::Int) = x
 _get_element(mat, index, dim::Int) = (@_propagate_inbounds_meta; _to_matrix(mat.bc[index], dim))
 _compute_range(dofs::Vector{Int}, i::Int, dim::Int) =
     (@_propagate_inbounds_meta; start = dim*(dofs[i]-1) + 1; start:start+dim-1)

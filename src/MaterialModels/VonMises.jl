@@ -20,7 +20,7 @@ end
 
 VonMises(args...; kwargs...) = VonMises{Float64}(args...; kwargs...)
 
-function update_stress(model::VonMises, σ::SymmetricTensor{2, 3}, dϵ::SymmetricTensor{2, 3})::typeof(σ)
+function update_stress(model::VonMises, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(σ)
     # compute the stress at the elastic trial state
     De = model.elastic.D
     σ_trial = σ + De ⊡ dϵ
@@ -38,13 +38,13 @@ function update_stress(model::VonMises, σ::SymmetricTensor{2, 3}, dϵ::Symmetri
     σ
 end
 
-function yield_function(model::VonMises, σ::SymmetricTensor{2, 3})::eltype(σ)
+function yield_function(model::VonMises, σ::SymmetricSecondOrderTensor{3})::eltype(σ)
     s = dev(σ)
     q = sqrt(3/2 * s ⊡ s)
     return q - model.q_y
 end
 
-function plastic_flow(model::VonMises, σ::SymmetricTensor{2, 3})::typeof(σ)
+function plastic_flow(model::VonMises, σ::SymmetricSecondOrderTensor{3})::typeof(σ)
     s = dev(σ)
     _s_ = sqrt(s ⊡ s)
     if _s_ < √eps(eltype(σ))

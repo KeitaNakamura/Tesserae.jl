@@ -16,7 +16,7 @@ julia> sum(N)
 1.0
 
 julia> sum(∇, N)
-2-element Tensor{1,2,Float64,2}:
+2-element Tensor{Tuple{2},Float64,1,2}:
  5.551115123125783e-17
  5.551115123125783e-17
 ```
@@ -72,7 +72,7 @@ Base.length(it::VectorValue{dim}) where {dim} = dim * length(it.Ni)
     @boundscheck checkbounds(it, j)
     i, d = divrem(j - 1, dim) .+ 1
     @inbounds begin
-        ei = eᵢ(Vec{dim, Int}, d)
+        ei = Vec{dim, Int}(j -> ifelse(j == d, 1, 0))
         N = it.Ni[i]
     end
     VecTensor(ei * N, ei ⊗ ∇(N))

@@ -21,9 +21,9 @@
     @test sparse(A) == sparse(B)
 
     # Test 2
-    cₚ = pointstate(space, SymmetricTensor{4,2})
+    cₚ = pointstate(space, SymmetricFourthOrderTensor{2})
     for i in 1:length(cₚ)
-        cₚ[i] = rand(SymmetricTensor{4,2})
+        cₚ[i] = rand(SymmetricFourthOrderTensor{2})
     end
     A = gridstate_matrix(space, Vec{2, Float64})
     A ← ∑ₚ(dotdot(∇(N), cₚ, ∇(N)))

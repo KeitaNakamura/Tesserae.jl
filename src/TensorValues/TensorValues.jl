@@ -1,7 +1,7 @@
 module TensorValues
 
 using Reexport
-@reexport using Tensors
+@reexport using Tensorial
 
 using Base: @_propagate_inbounds_meta
 
