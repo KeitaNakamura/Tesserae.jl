@@ -5,6 +5,7 @@ using Jams.TensorValues
 using Jams.DofHelpers
 using Jams.ShapeFunctions
 using Jams.States
+using Jams.Collections: lazy
 
 import Jams.DofHelpers: ndofs
 import Jams.ShapeFunctions: reinit!, construct

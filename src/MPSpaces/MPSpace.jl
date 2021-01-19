@@ -175,6 +175,14 @@ function construct(name::Symbol, space::MPSpace)
     if name == :grid_coordinates
         return GridStateCollection(view(space.grid, space.activeindices), space.dofindices)
     end
+    if eltype(space.Nᵢ) <: WLSValue
+        if name == :weight_value
+            return lazy(ShapeFunctions.weight_value, space.Nᵢ)
+        end
+        if name == :moment_matrix_inverse
+            return lazy(ShapeFunctions.moment_matrix_inverse, space.Nᵢ)
+        end
+    end
     throw(ArgumentError("$name in $(space.F) is not supported"))
 end
 

@@ -12,25 +12,32 @@ using Base: @pure, @_propagate_inbounds_meta
 export
 # ShapeFunction
     ShapeFunction,
+# ShapeValue
+    ShapeValue,
+    construct,
+    reinit!,
 # BSpline
     BSpline,
     LinearBSpline,
     QuadraticBSpline,
     CubicBSpline,
     BSplinePosition,
-# ShapeValue
-    ShapeValue,
-    construct,
-    reinit!,
 # BSplineValue
     BSplineValue,
 # Polynomial
-    Polynomial
+    Polynomial,
+    polynomial,
+# WLS
+    WLS,
+# WLSValue
+    WLSValue
 
 include("ShapeFunction.jl")
-include("BSpline.jl")
 include("ShapeValue.jl")
+include("BSpline.jl")
 include("BSplineValue.jl")
 include("Polynomial.jl")
+include("WLS.jl")
+include("WLSValue.jl")
 
 end # module

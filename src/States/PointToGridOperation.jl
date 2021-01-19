@@ -8,9 +8,11 @@ ismatrix(c::PointToGridOperation) = c.ismatrix
 
 function ∑ₚ(c::AbstractCollection{2})
     ElType = eltype(c)
-    if ElType <: AbstractCollection{0}
+    if ElType <: AbstractCollection{0} # with N
         return PointToGridOperation(c, false)
-    elseif ElType <: AbstractCollection{-1}
+    elseif ElType <: AbstractCollection{1} # without N
+        return PointToGridOperation(c, false)
+    elseif ElType <: AbstractCollection{-1} # with N two times
         return PointToGridOperation(c, true)
     end
     throw(ArgumentError("wrong collection in ∑ₚ"))
