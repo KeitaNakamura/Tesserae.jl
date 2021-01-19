@@ -56,8 +56,9 @@ function set!(S::GridStateMatrix{Vec{dim, T}}, x::PointToGridOperation) where {d
         dofs = dofinds[p]
         for index in CartesianIndices(size(mat))
             i, j = Tuple(index)
-            I = _compute_range(dofs, i, dim)
-            J = _compute_range(dofs, j, dim)
+            I = _compute_range(dofs, i, dim) # dof range
+            J = _compute_range(dofs, j, dim) # dof range
+            # if eltype of mat is scalar, create ScalarMatrix
             push!(S, _get_element(mat, index, dim), I, J)
         end
     end

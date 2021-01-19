@@ -15,11 +15,9 @@ function reinit!(it::BSplineValue{<: Any, dim}, grid::AbstractGrid{dim}, indices
     F = it.F
     resize!(it.N, length(indices))
     resize!(it.dN, length(indices))
-    j = 1
-    @inbounds for I in view(CartesianIndices(grid), indices)
+    @inbounds for (j, I) in enumerate(view(CartesianIndices(grid), indices))
         xᵢ = grid[I]
         it.N[j], it.dN[j] = _value_gradient(F, x, xᵢ, gridsteps(grid), BSplinePosition(grid, I))
-        j += 1
     end
     it
 end
