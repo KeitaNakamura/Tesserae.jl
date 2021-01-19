@@ -26,8 +26,8 @@ function main()
 
     b = Vec(0.0, -9.81)
 
-    # N = function_space(space, :shape_function)
-    N = construct(:shape_function, space)
+    # N = function_space(space, :shape_value)
+    N = construct(:shape_value, space)
 
     nᵢ = construct(:bound_normal_vector, space)
     dΩ = boundary(space)

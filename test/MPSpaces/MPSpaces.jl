@@ -5,7 +5,7 @@
     for i in 1:length(xₚ)
         xₚ[i] = rand(Vec{2})
     end
-    N = construct(:shape_function, space)
+    N = construct(:shape_value, space)
     reinit!(space, xₚ)
     dof = 2
 

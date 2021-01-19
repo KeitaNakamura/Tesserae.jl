@@ -166,8 +166,8 @@ function pointstate(space::MPSpace, T)
 end
 
 function construct(name::Symbol, space::MPSpace)
-    name == :shape_function        && return space.Nᵢ
-    name == :shape_function_vector && return lazy(vec, space.Nᵢ)
+    name == :shape_value        && return space.Nᵢ
+    name == :shape_vector_value && return lazy(vec, space.Nᵢ)
     if name == :bound_normal_vector
         boundnormal = BoundNormal(Float64, gridsize(space)...)
         return gridstate(view(boundnormal, space.activeindices), space.dofmap, space.dofindices)
@@ -175,7 +175,7 @@ function construct(name::Symbol, space::MPSpace)
     if name == :grid_coordinates
         return GridStateCollection(view(space.grid, space.activeindices), space.dofindices)
     end
-    throw(ArgumentError("not supported function space"))
+    throw(ArgumentError("$name in $(space.F) is not supported"))
 end
 
 function dirichlet!(vᵢ::GridState{dim, Vec{dim, T}}, space::MPSpace{dim}) where {dim, T}
