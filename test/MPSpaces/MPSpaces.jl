@@ -16,7 +16,7 @@
     for p in 1:npoints(space)
         ∇Nᵢ = vcat(∇(N)[p]...)
         inds = MPSpaces.dofindices(space, p; dof)
-        push!(B, ∇Nᵢ*∇Nᵢ', inds)
+        push!(B, ∇Nᵢ*∇Nᵢ', inds, inds)
     end
     @test sparse(A) == sparse(B)
 
@@ -40,7 +40,7 @@
                 K[i,j] = ∇u ⊡ c ⊡ ∇v
             end
         end
-        push!(B, K, inds)
+        push!(B, K, inds, inds)
     end
     @test sparse(A) ≈ sparse(B)
 end

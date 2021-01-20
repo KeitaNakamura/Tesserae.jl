@@ -7,23 +7,22 @@ Construct sparse matrix using COOrdinate format.
 ```jldoctest
 julia> S = SparseMatrixCOO();
 
-julia> push!(S, [1.0 2.0; 3.0 4.0], [1, 2]);
-
-julia> sparse(S)
-2×2 SparseArrays.SparseMatrixCSC{Float64,Int64} with 4 stored entries:
-  [1, 1]  =  1.0
-  [2, 1]  =  3.0
-  [1, 2]  =  2.0
-  [2, 2]  =  4.0
-
 julia> push!(S, [1.0 1.0; 1.0 1.0], [1, 2], [2, 3]);
 
 julia> sparse(S, 4, 4)
-4×4 SparseArrays.SparseMatrixCSC{Float64,Int64} with 6 stored entries:
+4×4 SparseArrays.SparseMatrixCSC{Float64,Int64} with 4 stored entries:
+  [1, 2]  =  1.0
+  [2, 2]  =  1.0
+  [1, 3]  =  1.0
+  [2, 3]  =  1.0
+
+julia> push!(S, [1.0, 2.0], [1, 2]); # Add diagonal entries
+
+julia> sparse(S)
+2×3 SparseArrays.SparseMatrixCSC{Float64,Int64} with 5 stored entries:
   [1, 1]  =  1.0
-  [2, 1]  =  3.0
-  [1, 2]  =  3.0
-  [2, 2]  =  5.0
+  [1, 2]  =  1.0
+  [2, 2]  =  3.0
   [1, 3]  =  1.0
   [2, 3]  =  1.0
 ```
@@ -59,8 +58,13 @@ function Base.push!(S::SparseMatrixCOO, s, I::AbstractVector{Int}, J::AbstractVe
     S
 end
 
+# diagonal version
 function Base.push!(S::SparseMatrixCOO, s, dofs::AbstractVector{Int})
-    push!(S, s, dofs, dofs)
+    @assert length(s) == length(dofs)
+    append!(S.V, s)
+    append!(S.I, dofs)
+    append!(S.J, dofs)
+    S
 end
 
 sparse(S::SparseMatrixCOO) = sparse(S.I, S.J, S.V)
