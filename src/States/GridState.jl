@@ -18,6 +18,8 @@ indices(A::GridState) = A.indices
 dofindices(S::GridState) = S.dofindices
 nnz(S::GridState) = ndofs(indices(S))
 
+copyzero(S::GridState) = GridState(zeros(eltype(nonzeros(S)), length(nonzeros(S))), indices(S), dofindices(S))
+
 @inline function Base.getindex(A::GridState{dim, T}, I::Vararg{Int, dim}) where {dim, T}
     @boundscheck checkbounds(A, I...)
     @inbounds begin

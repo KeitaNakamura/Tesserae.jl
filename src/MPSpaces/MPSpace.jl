@@ -155,7 +155,7 @@ function gridstate(space::MPSpace, T)
 end
 
 function gridstate_matrix(space::MPSpace, T)
-    gridstate_matrix(T, space.dofindices)
+    gridstate_matrix(T, space.dofindices, space.freedofs)
 end
 
 function pointstate(space::MPSpace, T)
