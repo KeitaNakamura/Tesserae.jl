@@ -64,7 +64,8 @@ _to_matrix(x::Real, dim::Int) = ScalarMatrix(x, dim, dim)
 _to_matrix(x::SecondOrderTensor, dim::Int) = x
 _get_element(mat, index, dim::Int) = (@_propagate_inbounds_meta; _to_matrix(mat.bc[index], dim))
 _compute_range(dof::Int, dim::Int) = (start = dim*(dof-1) + 1; start:start+dim-1)
-function add!(S::GridStateMatrix{Vec{dim, T}}, ∑ₚ∇N∇N::PointToGridMatrixOperation) where {dim, T}
+# vector field
+function add!(S::GridStateMatrix{Tensor{Tuple{dim, dim}}}, ∑ₚ∇N∇N::PointToGridMatrixOperation) where {dim}
     dofinds = S.dofindices
     @inbounds for p in eachindex(dofinds)
         mat = ∑ₚ∇N∇N[p]
@@ -79,8 +80,18 @@ function add!(S::GridStateMatrix{Vec{dim, T}}, ∑ₚ∇N∇N::PointToGridMatrix
     end
     S
 end
+# scalar field
+function add!(S::GridStateMatrix{<: Real}, ∑ₚ∇N∇N::PointToGridMatrixOperation)
+    dofinds = S.dofindices
+    @inbounds for p in eachindex(dofinds)
+        mat = ∑ₚ∇N∇N[p]
+        dofs = dofinds[p]
+        push!(S, mat, dofs, dofs)
+    end
+    S
+end
 
-function set!(S::GridStateMatrix{Vec{dim, T}}, list::List{PointToGridMatrixOperation}) where {dim, T}
+function set!(S::GridStateMatrix, list::List{PointToGridMatrixOperation})
     empty!(S)
     for item in list
         add!(S, item)
@@ -96,7 +107,8 @@ struct GridDiagonal{T} <: ListGroup{PointToGridMatrixOperation}
 end
 Base.parent(x::GridDiagonal) = x.parent
 
-function add!(S::GridStateMatrix{Vec{dim, T}}, mᵢᵢ::GridDiagonal{<: GridState}) where {dim, T}
+# vector field
+function add!(S::GridStateMatrix{Tensor{Tuple{dim, dim}}}, mᵢᵢ::GridDiagonal{<: GridState}) where {dim}
     # TODO: check if they have the same dofindices
     nzval = nonzeros(parent(mᵢᵢ))
     @inbounds for (dof, val) in enumerate(nzval)
@@ -105,8 +117,7 @@ function add!(S::GridStateMatrix{Vec{dim, T}}, mᵢᵢ::GridDiagonal{<: GridStat
     end
     S
 end
-
-function add!(S::GridStateMatrix{Vec{dim, T}}, mᵢᵢ::GridDiagonal{<: PointToGridOperation}) where {dim, T}
+function add!(S::GridStateMatrix{Tensor{Tuple{dim, dim}}}, mᵢᵢ::GridDiagonal{<: PointToGridOperation}) where {dim, T}
     ∑ₚN = parent(mᵢᵢ)
     dofinds = S.dofindices
     @inbounds for p in eachindex(dofinds)
@@ -116,6 +127,24 @@ function add!(S::GridStateMatrix{Vec{dim, T}}, mᵢᵢ::GridDiagonal{<: PointToG
             I = _compute_range(dofs[i], dim)
             push!(S, FillArray(N[i], dim), I)
         end
+    end
+    S
+end
+
+# scalar field
+function add!(S::GridStateMatrix{<: Real}, mᵢᵢ::GridDiagonal{<: GridState})
+    # TODO: check if they have the same dofindices
+    nzval = nonzeros(parent(mᵢᵢ))
+    push!(S, nzval, eachindex(nzval))
+    S
+end
+function add!(S::GridStateMatrix{<: Real}, mᵢᵢ::GridDiagonal{<: PointToGridOperation})
+    ∑ₚN = parent(mᵢᵢ)
+    dofinds = S.dofindices
+    @inbounds for p in eachindex(dofinds)
+        N = ∑ₚN[p]
+        dofs = dofinds[p]
+        push!(S, N, dofs)
     end
     S
 end

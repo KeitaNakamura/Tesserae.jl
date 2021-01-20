@@ -3,9 +3,14 @@ struct GridStateMatrix{T, ElType}
     dofindices::Vector{Vector{Int}}
 end
 
-# stiffness matrix
-function gridstate_matrix(::Type{Vec{dim, T}}, dofindices::Vector{Vector{Int}}) where {dim, T}
-    GridStateMatrix{Vec{dim, T}, T}(SparseMatrixCOO{T}(), dofindices)
+# for vector field
+function gridstate_matrix(::Type{<: Tensor{Tuple{dim, dim}, T}}, dofindices::Vector{Vector{Int}}) where {dim, T}
+    GridStateMatrix{Tensor{Tuple{dim,dim}}, T}(SparseMatrixCOO{T}(), dofindices)
+end
+
+# for scalar field
+function gridstate_matrix(::Type{T}, dofindices::Vector{Vector{Int}}) where {T <: Real}
+    GridStateMatrix{T, T}(SparseMatrixCOO{T}(), dofindices)
 end
 
 Base.empty!(x::GridStateMatrix) = empty!(x.A)

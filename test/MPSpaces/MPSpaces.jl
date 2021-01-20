@@ -10,7 +10,7 @@
     dof = 2
 
     # Test 1
-    A = gridstate_matrix(space, Vec{2, Float64})
+    A = gridstate_matrix(space, Mat{2,2,Float64})
     A ← ∑ₚ(∇(N) ⊗ ∇(N))
     B = SparseMatrixCOO()
     for p in 1:npoints(space)
@@ -25,7 +25,7 @@
     for i in 1:length(cₚ)
         cₚ[i] = rand(SymmetricFourthOrderTensor{2})
     end
-    A = gridstate_matrix(space, Vec{2, Float64})
+    A = gridstate_matrix(space, Mat{2,2,Float64})
     A ← ∑ₚ(dotdot(∇(N), cₚ, ∇(N)))
     B = SparseMatrixCOO()
     for p in 1:npoints(space)
@@ -45,14 +45,14 @@
     @test sparse(A) ≈ sparse(B)
 
     # Test 3 (mass matrix)
-    A = gridstate_matrix(space, Vec{2, Float64})
-    B = gridstate_matrix(space, Vec{2, Float64})
-    tmp = gridstate(space, Float64)
+    A = gridstate_matrix(space, Mat{2,2,Float64})
+    B = gridstate_matrix(space, Mat{2,2,Float64})
+    mᵢ = gridstate(space, Float64)
     # consisten mass matrixt
     A ← ∑ₚ(N*N)
-    # lumped mass matrix (using temporary array)
-    tmp ← ∑ₚ(N)
-    B ← GridDiagonal(tmp)
+    # lumped mass matrix (using gridstate)
+    mᵢ ← ∑ₚ(N)
+    B ← GridDiagonal(mᵢ)
     @test Diagonal(vec(sum(sparse(A), dims = 2))) ≈ sparse(B)
     # lumped mass matrix (without temporary array)
     B ← GridDiagonal(∑ₚ(N))

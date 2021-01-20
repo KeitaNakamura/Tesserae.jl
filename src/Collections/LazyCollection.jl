@@ -72,6 +72,8 @@ lazy(op, x::AbstractCollection{1}, y::AbstractCollection{0}) = LazyCollection{-1
 ## Nᵢ[p] * Nᵢ[p]
 lazy(op::typeof(*), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, y'))
 lazy(op::typeof(⊗), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, y'))
+lazy(op::typeof(⋅), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(op, x, y'))
+lazy(op, x::AbstractCollection{0}, y::AbstractCollection{0}) = operation_error(op, 0, 0)
 ## errors (point value can be calculated with only point value)
 lazy(op, x::AbstractCollection{2}, y::AbstractCollection{1}) = operation_error(op, 2, 1)
 lazy(op, x::AbstractCollection{2}, y::AbstractCollection{0}) = operation_error(op, 2, 0)
