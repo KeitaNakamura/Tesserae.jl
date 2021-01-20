@@ -5,7 +5,12 @@ Supertype for collections.
 """
 abstract type AbstractCollection{rank} end
 
-Base.eltype(c::AbstractCollection) = isempty(c) ? Union{} : typeof(first(c)) # try to getindex
+Base.eltype(c::AbstractCollection) = typeof(first(c)) # try to getindex
+# Above eltype throws error if collection is empty.
+# `safe_eltype` returns `Union{}` for that case.
+function safe_eltype(c::AbstractCollection)
+    isempty(c) ? Union{} : eltype(c)
+end
 
 function Base.fill!(c::AbstractCollection, v)
     for i in eachindex(c)
@@ -53,8 +58,8 @@ Broadcast.broadcastable(c::AbstractCollection) = c
 Broadcast.BroadcastStyle(::Type{<: AbstractCollection}) = Broadcast.DefaultArrayStyle{1}()
 
 function Base.show(io::IO, c::AbstractCollection{rank}) where {rank}
-    io = IOContext(io, :typeinfo => eltype(c))
-    print(io, "<", length(c), " × ", eltype(c), ">[")
+    io = IOContext(io, :typeinfo => safe_eltype(c))
+    print(io, "<", length(c), " × ", safe_eltype(c), ">[")
     join(io, [isassigned(c, i) ? sprint(show, c[i]; context=io) : "#undef" for i in eachindex(c)], ", ")
     print(io, "]")
     if !get(io, :compact, false)
