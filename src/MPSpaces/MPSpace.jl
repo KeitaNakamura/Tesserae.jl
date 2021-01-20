@@ -5,7 +5,7 @@ struct MPSpace{dim, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: Sha
     dofindices::Vector{Vector{Int}}
     gridindices::Vector{Vector{CartesianIndex{dim}}}
     activeindices::Vector{CartesianIndex{dim}}
-    fixeddofs::Vector{Int} # flat dofs
+    freedofs::Vector{Int} # flat dofs
     bounddofs::Vector{Int}
     isincontact::BitVector
     Nᵢ::PointState{VT}
@@ -16,11 +16,11 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     dofindices = [Int[] for _ in 1:npoints]
     gridindices = [CartesianIndex{dim}[] for _ in 1:npoints]
     activeindices = CartesianIndex{dim}[]
-    fixeddofs = Int[]
+    freedofs = Int[]
     bounddofs = Int[]
     isincontact = falses(npoints)
     Nᵢ = pointstate([construct(T, F) for _ in 1:npoints])
-    MPSpace(F, grid, dofmap, dofindices, gridindices, activeindices, fixeddofs, bounddofs, isincontact, Nᵢ)
+    MPSpace(F, grid, dofmap, dofindices, gridindices, activeindices, freedofs, bounddofs, isincontact, Nᵢ)
 end
 
 MPSpace(F::ShapeFunction, grid::AbstractGrid, npoints::Int) = MPSpace(Float64, F, grid, npoints)
@@ -75,35 +75,32 @@ function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, poi
     ## active grid indices
     DofHelpers.filter!(dofmap, space.activeindices, CartesianIndices(dofmap))
 
-    ## fixeddofs (used in dirichlet boundary conditions)
-    count = 0
-    empty!(space.fixeddofs)
+    ## freedofs (used in dirichlet boundary conditions)
+    # TODO: modify for scalar field: need to create freedofs for scalar field?
+    empty!(space.freedofs)
     @inbounds for i in CartesianIndices(dofmap)
         I = dofmap(i; dof = dim)
         I === nothing && continue
         if onbound(dofmap, i)
             for d in 1:dim
-                if onbound(size(dofmap, d), i[d])
-                    push!(space.fixeddofs, I[d])
-                    count += 1
+                if !onbound(size(dofmap, d), i[d])
+                    push!(space.freedofs, I[d])
                 end
             end
+        else
+            append!(space.freedofs, I)
         end
     end
-    resize!(space.fixeddofs, count)
 
     ## bounddofs (!!NOT!! flat)
-    count = 0
     empty!(space.bounddofs)
     @inbounds for i in CartesianIndices(dofmap)
         I = dofmap(i)
         I === nothing && continue
         if onbound(dofmap, i)
             push!(space.bounddofs, I)
-            count += 1
         end
     end
-    resize!(space.bounddofs, count)
 
     space
 end
@@ -188,6 +185,7 @@ end
 
 function dirichlet!(vᵢ::GridState{dim, Vec{dim, T}}, space::MPSpace{dim}) where {dim, T}
     V = reinterpret(T, nonzeros(vᵢ))
-    V[space.fixeddofs] .= zero(T)
+    fixeddofs = setdiff(1:ndofs(space, dof = dim), space.freedofs)
+    V[fixeddofs] .= zero(T)
     vᵢ
 end
