@@ -1,5 +1,5 @@
 using Jams
-using Test
+using Test, LinearAlgebra
 
 include("MPSpaces/MPSpaces.jl")
 

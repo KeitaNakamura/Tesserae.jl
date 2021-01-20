@@ -43,4 +43,18 @@
         push!(B, K, inds, inds)
     end
     @test sparse(A) ≈ sparse(B)
+
+    # Test 3 (mass matrix)
+    A = gridstate_matrix(space, Vec{2, Float64})
+    B = gridstate_matrix(space, Vec{2, Float64})
+    tmp = gridstate(space, Float64)
+    # consisten mass matrixt
+    A ← ∑ₚ(N*N)
+    # lumped mass matrix (using temporary array)
+    tmp ← ∑ₚ(N)
+    B ← GridDiagonal(tmp)
+    @test Diagonal(vec(sum(sparse(A), dims = 2))) ≈ sparse(B)
+    # lumped mass matrix (without temporary array)
+    B ← GridDiagonal(∑ₚ(N))
+    @test Diagonal(vec(sum(sparse(A), dims = 2))) ≈ sparse(B)
 end

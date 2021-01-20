@@ -88,3 +88,34 @@ function set!(S::GridStateMatrix{Vec{dim, T}}, list::List{PointToGridMatrixOpera
 end
 
 set!(S::GridStateMatrix, x::ListGroup{PointToGridMatrixOperation}) = set!(S, List(x))
+
+
+# for mass matrix
+struct GridDiagonal{T} <: ListGroup{PointToGridMatrixOperation}
+    parent::T
+end
+Base.parent(x::GridDiagonal) = x.parent
+
+function add!(S::GridStateMatrix{Vec{dim, T}}, mᵢᵢ::GridDiagonal{<: GridState}) where {dim, T}
+    # TODO: check if they have the same dofindices
+    nzval = nonzeros(parent(mᵢᵢ))
+    @inbounds for (dof, val) in enumerate(nzval)
+        I = _compute_range(dof, dim)
+        push!(S, FillArray(val, dim), I)
+    end
+    S
+end
+
+function add!(S::GridStateMatrix{Vec{dim, T}}, mᵢᵢ::GridDiagonal{<: PointToGridOperation}) where {dim, T}
+    ∑ₚN = parent(mᵢᵢ)
+    dofinds = S.dofindices
+    @inbounds for p in eachindex(dofinds)
+        N = ∑ₚN[p]
+        dofs = dofinds[p]
+        for i in eachindex(dofs)
+            I = _compute_range(dofs[i], dim)
+            push!(S, FillArray(N[i], dim), I)
+        end
+    end
+    S
+end

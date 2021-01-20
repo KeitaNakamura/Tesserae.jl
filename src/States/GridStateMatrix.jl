@@ -3,6 +3,7 @@ struct GridStateMatrix{T, ElType}
     dofindices::Vector{Vector{Int}}
 end
 
+# stiffness matrix
 function gridstate_matrix(::Type{Vec{dim, T}}, dofindices::Vector{Vector{Int}}) where {dim, T}
     GridStateMatrix{Vec{dim, T}, T}(SparseMatrixCOO{T}(), dofindices)
 end
