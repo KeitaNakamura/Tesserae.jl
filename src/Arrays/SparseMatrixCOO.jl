@@ -31,6 +31,13 @@ struct SparseMatrixCOO{T}
     I::Vector{Int}
     J::Vector{Int}
     V::Vector{T}
+    csrrowptr::Vector{Int}
+    csrcolval::Vector{Int}
+    csrnzval::Vector{T}
+    klasttouch::Vector{Int}
+    csccolptr::Vector{Int}
+    cscrowval::Vector{Int}
+    cscnzval::Vector{T}
 end
 
 function SparseMatrixCOO{T}(N::Int = 0) where {T}
@@ -40,7 +47,7 @@ function SparseMatrixCOO{T}(N::Int = 0) where {T}
     sizehint!(I, N)
     sizehint!(J, N)
     sizehint!(V, N)
-    SparseMatrixCOO(I, J, V)
+    SparseMatrixCOO(I, J, V, Int[], Int[], T[], Int[], Int[], Int[], T[])
 end
 SparseMatrixCOO(N::Int = 0) = SparseMatrixCOO{Float64}(N)
 
@@ -67,9 +74,17 @@ function Base.push!(S::SparseMatrixCOO, s, dofs::AbstractVector{Int})
     S
 end
 
-sparse(S::SparseMatrixCOO) = sparse(S.I, S.J, S.V)
-sparse(S::SparseMatrixCOO, m::Int, n::Int) = sparse(S.I, S.J, S.V, m, n)
-sparse(S::SparseMatrixCOO, m::Int, n::Int, combine) = sparse(S.I, S.J, S.V, m, n, combine)
+function sparse!(S::SparseMatrixCOO, m::Int, n::Int, combine)
+    coolen = length(S.I)
+    resize!(S.klasttouch, n)
+    resize!(S.csrrowptr, m+1)
+    resize!(S.csrcolval, coolen)
+    resize!(S.csrnzval, coolen)
+    resize!(S.csccolptr, n+1)
+    sparse!(S.I, S.J, S.V, m, n, combine, S.klasttouch, S.csrrowptr, S.csrcolval, S.csrnzval, S.csccolptr, S.cscrowval, S.cscnzval)
+end
+sparse!(S::SparseMatrixCOO, m::Int, n::Int) = sparse!(S, m, n, +)
+sparse!(S::SparseMatrixCOO) = sparse!(S, SparseArrays.dimlub(S.I), SparseArrays.dimlub(S.J))
 
 function Base.empty!(S::SparseMatrixCOO)
     empty!(S.I)

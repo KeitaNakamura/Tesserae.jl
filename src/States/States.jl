@@ -7,7 +7,7 @@ using Jams.Grids
 using Base: @_propagate_inbounds_meta
 using Base.Broadcast: broadcasted
 
-import SparseArrays: nonzeros, nnz, sparse
+import SparseArrays: nonzeros, nnz, sparse!
 import Jams.DofHelpers: indices
 
 export
@@ -25,7 +25,7 @@ export
 # GridStateMatrix
     GridStateMatrix,
     gridstate_matrix,
-    sparse,
+    sparse!,
 # GridDiagonal
     GridDiagonal,
 # GridStateCollection

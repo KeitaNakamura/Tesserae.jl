@@ -1,6 +1,6 @@
 module Arrays
 
-import SparseArrays: sparse
+import SparseArrays: sparse!
 
 using Base: @_propagate_inbounds_meta
 

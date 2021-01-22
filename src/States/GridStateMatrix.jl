@@ -17,16 +17,15 @@ end
 Base.empty!(x::GridStateMatrix) = empty!(x.A)
 Base.push!(x::GridStateMatrix, args...) = push!(x.A, args...)
 
-sparse(x::GridStateMatrix) = sparse(x.A)
+sparse!(x::GridStateMatrix) = sparse!(x.A)
 freedofs(x::GridStateMatrix) = x.freedofs
-
 
 function Base.:\(A::GridStateMatrix, b::GridState)
     # TODO: This doesn't work well because freedofs is created for Vector field
     @assert A.dofindices === b.dofindices
     dofs = freedofs(A)
     x = copyzero(b)
-    AA = sparse(A)
+    AA = sparse!(A)
     bb = flatview(nonzeros(b))
     xx = flatview(nonzeros(x))
     xx[dofs] = AA[dofs, dofs] \ bb[dofs]
