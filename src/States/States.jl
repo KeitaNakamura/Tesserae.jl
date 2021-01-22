@@ -26,6 +26,7 @@ export
     GridStateMatrix,
     gridstate_matrix,
     sparse!,
+    solve!,
 # GridDiagonal
     GridDiagonal,
 # GridStateCollection

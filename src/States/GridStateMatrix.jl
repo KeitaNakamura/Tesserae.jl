@@ -20,7 +20,7 @@ Base.push!(x::GridStateMatrix, args...) = push!(x.A, args...)
 sparse!(x::GridStateMatrix) = sparse!(x.A)
 freedofs(x::GridStateMatrix) = x.freedofs
 
-function Base.:\(A::GridStateMatrix, b::GridState)
+function solve!(A::GridStateMatrix, b::GridState)
     # TODO: This doesn't work well because freedofs is created for Vector field
     @assert A.dofindices === b.dofindices
     dofs = freedofs(A)
@@ -29,5 +29,8 @@ function Base.:\(A::GridStateMatrix, b::GridState)
     bb = flatview(nonzeros(b))
     xx = flatview(nonzeros(x))
     xx[dofs] = AA[dofs, dofs] \ bb[dofs]
+    # fill bb with zero for dirichlet boundary conditions
+    # fixeddofs = setdiff(eachindex(bb), dofs)
+    # bb[fixeddofs] .= zero(eltype(bb))
     x
 end
