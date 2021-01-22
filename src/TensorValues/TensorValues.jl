@@ -20,7 +20,8 @@ export
     symmetric,
     _otimes_,
     Tensor2D,
-    Tensor3D
+    Tensor3D,
+    flatview
 
 include("ScalVec.jl")
 include("VecTensor.jl")

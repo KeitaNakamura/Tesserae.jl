@@ -21,9 +21,6 @@ sparse(x::GridStateMatrix) = sparse(x.A)
 freedofs(x::GridStateMatrix) = x.freedofs
 
 
-flatview(x::Vector{Float64}) = x
-flatview(x::Vector{Vec{dim, T}}) where {dim, T} = reinterpret(T, x)
-
 function Base.:\(A::GridStateMatrix, b::GridState)
     # TODO: This doesn't work well because freedofs is created for Vector field
     @assert A.dofindices === b.dofindices
