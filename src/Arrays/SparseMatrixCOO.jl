@@ -38,6 +38,7 @@ struct SparseMatrixCOO{T}
     csccolptr::Vector{Int}
     cscrowval::Vector{Int}
     cscnzval::Vector{T}
+    dims::Vector{Int}
 end
 
 function SparseMatrixCOO{T}(N::Int = 0) where {T}
@@ -47,7 +48,7 @@ function SparseMatrixCOO{T}(N::Int = 0) where {T}
     sizehint!(I, N)
     sizehint!(J, N)
     sizehint!(V, N)
-    SparseMatrixCOO(I, J, V, Int[], Int[], T[], Int[], Int[], Int[], T[])
+    SparseMatrixCOO(I, J, V, Int[], Int[], T[], Int[], Int[], Int[], T[], [0,0])
 end
 SparseMatrixCOO(N::Int = 0) = SparseMatrixCOO{Float64}(N)
 
@@ -81,10 +82,15 @@ function sparse!(S::SparseMatrixCOO, m::Int, n::Int, combine)
     resize!(S.csrcolval, coolen)
     resize!(S.csrnzval, coolen)
     resize!(S.csccolptr, n+1)
+    S.dims[1] = m
+    S.dims[2] = n
     sparse!(S.I, S.J, S.V, m, n, combine, S.klasttouch, S.csrrowptr, S.csrcolval, S.csrnzval, S.csccolptr, S.cscrowval, S.cscnzval)
 end
 sparse!(S::SparseMatrixCOO, m::Int, n::Int) = sparse!(S, m, n, +)
 sparse!(S::SparseMatrixCOO) = sparse!(S, SparseArrays.dimlub(S.I), SparseArrays.dimlub(S.J))
+
+sparse(S::SparseMatrixCOO{T}, m::Int, n::Int) where {T} = SparseMatrixCSC{T,Int}(m, n, S.csccolptr, S.cscrowval, S.cscnzval)
+sparse(S::SparseMatrixCOO) = sparse(S, S.dims[1], S.dims[2])
 
 function Base.empty!(S::SparseMatrixCOO)
     empty!(S.I)
