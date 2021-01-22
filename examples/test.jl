@@ -55,7 +55,7 @@ function main()
         dt = 1e-3
 
         Vₚ = V₀ₚ * det(Fₚ)
-        fᵢ ← ∑ₚ(-Vₚ * tensor2x2(σₚ) ⋅ ∇(N)) + ∑ₚ(mₚ * b * N)
+        fᵢ ← ∑ₚ(-Vₚ * Tensor2D(σₚ) ⋅ ∇(N)) + ∑ₚ(mₚ * b * N)
         mᵢ ← ∑ₚ(mₚ * N)
         if it isa BSpline
             vₙᵢ ← ∑ₚ(mₚ * vₚ * N) / mᵢ
@@ -75,13 +75,13 @@ function main()
         if it isa BSpline
             dvᵢ = vᵢ - vₙᵢ
             vₚ ← vₚ + ∑ᵢ(dvᵢ * N)
-            ∇vₚ ← ∑ᵢ(tensor3x3(vᵢ ⊗ ∇(N)))
+            ∇vₚ ← ∑ᵢ(Tensor3D(vᵢ ⊗ ∇(N)))
         else
             Cₚ ← ∑ᵢ(vᵢ ⊗ (W * M⁻¹ ⋅ P(xᵢ - xₚ)))
             p₀ = P(zero(Vec{2}))
             ∇p₀ = ∇(P)(zero(Vec{2}))
             vₚ ← Cₚ ⋅ p₀
-            ∇vₚ ← tensor3x3(Cₚ ⋅ ∇p₀)
+            ∇vₚ ← Tensor3D(Cₚ ⋅ ∇p₀)
         end
 
         Fₚ ← Fₚ + dt*(∇vₚ ⋅ Fₚ)

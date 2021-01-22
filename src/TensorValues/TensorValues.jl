@@ -19,8 +19,8 @@ export
     ∇ₛ,
     symmetric,
     _otimes_,
-    tensor2x2,
-    tensor3x3
+    Tensor2D,
+    Tensor3D
 
 include("ScalVec.jl")
 include("VecTensor.jl")
