@@ -3,7 +3,7 @@ struct PointState{T} <: AbstractCollection{2}
 end
 
 pointstate(data::Vector) = PointState(data)
-pointstate(::Type{T}, length) where {T} = pointstate(zeros(T, length))
+pointstate(::Type{T}, length) where {T} = pointstate([zero(T) for i in 1:length])
 pointstate(c::AbstractCollection{2}) = (p = pointstate(eltype(c), length(c)); p ← c)
 
 Base.length(p::PointState) = length(p.data)
