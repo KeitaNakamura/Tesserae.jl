@@ -26,5 +26,13 @@ function Tensor2D(x::SymmetricSecondOrderTensor{3,T}) where {T}
     @inbounds SymmetricSecondOrderTensor{2,T}(x[1,1], x[2,1], x[2,2])
 end
 
+function Tensor2D(x::FourthOrderTensor{3,T}) where {T}
+    @inbounds FourthOrderTensor{2,T}((i,j,k,l) -> @inbounds(x[i,j,k,l]))
+end
+
+function Tensor2D(x::SymmetricFourthOrderTensor{3,T}) where {T}
+    @inbounds SymmetricFourthOrderTensor{2,T}((i,j,k,l) -> @inbounds(x[i,j,k,l]))
+end
+
 flatview(x::Vector{Float64}) = x
 flatview(x::Vector{Vec{dim, T}}) where {dim, T} = reinterpret(T, x)
