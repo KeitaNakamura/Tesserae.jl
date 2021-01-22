@@ -17,6 +17,7 @@ nonzeros(S::GridState) = S.nzval
 indices(A::GridState) = A.indices
 dofindices(S::GridState) = S.dofindices
 nnz(S::GridState) = ndofs(indices(S))
+TensorValues.norm(S::GridState) = norm(flatview(nonzeros(S)))
 
 copyzero(S::GridState) = GridState(zeros(eltype(nonzeros(S)), length(nonzeros(S))), indices(S), dofindices(S))
 

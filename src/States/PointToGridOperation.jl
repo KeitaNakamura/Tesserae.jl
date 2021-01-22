@@ -96,6 +96,7 @@ function set!(S::GridStateMatrix, list::List{PointToGridMatrixOperation})
     for item in list
         add!(S, item)
     end
+    S
 end
 
 set!(S::GridStateMatrix, x::ListGroup{PointToGridMatrixOperation}) = set!(S, List(x))
@@ -108,7 +109,7 @@ end
 Base.parent(x::GridDiagonal) = x.parent
 
 # vector field
-function add!(S::GridStateMatrix{Tensor{Tuple{dim, dim}}}, mᵢᵢ::GridDiagonal{<: GridState}) where {dim}
+function add!(S::GridStateMatrix{Tensor{Tuple{dim, dim}}}, mᵢᵢ::GridDiagonal{<: UnionGridState}) where {dim}
     # TODO: check if they have the same dofindices
     nzval = nonzeros(parent(mᵢᵢ))
     @inbounds for (dof, val) in enumerate(nzval)
