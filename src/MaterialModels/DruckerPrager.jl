@@ -34,22 +34,18 @@ end
 
 DruckerPrager(args...; kwargs...) = DruckerPrager{Float64}(args...; kwargs...)
 
-function update_stress(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(σ)
+function update_stress(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
     # compute the stress at the elastic trial state
     De = model.elastic.D
     σ_trial = σ + De ⊡ dϵ
     # compute the yield function at the elastic trial state
     dfdσ, f_trial = gradient(σ_trial -> yield_function(model, σ_trial), σ_trial, :all)
-    if f_trial ≤ 0.0
-        σ = σ_trial
-    else
-        # compute the increment of the plastic multiplier
-        dgdσ = plastic_flow(model, σ_trial)
-        Δγ = f_trial / (dgdσ ⊡ De ⊡ dfdσ)
-        # compute the stress
-        σ = σ_trial - Δγ * (De ⊡ dgdσ)
-    end
-    return σ
+    f_trial ≤ 0.0 && return σ_trial
+    # compute the increment of the plastic multiplier
+    dgdσ = plastic_flow(model, σ_trial)
+    Δγ = f_trial / (dgdσ ⊡ De ⊡ dfdσ)
+    # compute the stress
+    σ_trial - Δγ * (De ⊡ dgdσ)
 end
 
 function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::eltype(σ)
@@ -58,7 +54,7 @@ function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
     I₁ = tr(σ)
     s = dev(σ)
     J₂ = (s ⊡ s) / 2
-    return √J₂ - (κ - α*I₁)
+    √J₂ - (κ - α*I₁)
 end
 
 function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::typeof(σ)
@@ -70,5 +66,5 @@ function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::
     else
         dgdσ = s / (2*√J₂) + β * one(σ)
     end
-    return dgdσ
+    dgdσ
 end

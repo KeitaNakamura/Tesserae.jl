@@ -81,7 +81,7 @@ function LinearElastic(; kwargs...)
     LinearElastic{Float64}(; kwargs...)
 end
 
-function update_stress(model::LinearElastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(σ)
+function update_stress(model::LinearElastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
     @_inline_meta
     σ + model.D ⊡ dϵ
 end
