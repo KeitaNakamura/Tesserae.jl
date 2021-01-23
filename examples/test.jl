@@ -13,6 +13,7 @@ function main()
 
     ρ₀ = 2.6e3
     mₚ = pointstate(ρ₀ * V₀ₚ)
+    Vₚ = pointstate(mₚ / ρ₀)
     vₚ = pointstate(space, Vec{2,Float64})
     σₚ = pointstate(space, SymmetricSecondOrderTensor{3,Float64})
     Fₚ = pointstate(space, SecondOrderTensor{3,Float64})
@@ -54,7 +55,6 @@ function main()
 
         dt = 1e-3
 
-        Vₚ = V₀ₚ * det(Fₚ)
         fᵢ ← ∑ₚ(-Vₚ * Tensor2D(σₚ) ⋅ ∇(N)) + ∑ₚ(mₚ * b * N)
         mᵢ ← ∑ₚ(mₚ * N)
         if it isa BSpline
@@ -70,7 +70,6 @@ function main()
         vn = (vᵢ ⋅ nᵢ) * nᵢ
         vt = vᵢ - vn
         vᵢ ← vt in dΩ
-        # dirichlet!(vᵢ, space)
 
         if it isa BSpline
             dvᵢ = vᵢ - vₙᵢ
@@ -85,6 +84,7 @@ function main()
         end
 
         Fₚ ← Fₚ + dt*(∇vₚ ⋅ Fₚ)
+        Vₚ ← V₀ₚ * det(Fₚ)
         σₚ ← stress:(model, σₚ, symmetric(∇vₚ) * dt)
 
         if it isa BSpline
@@ -95,7 +95,7 @@ function main()
 
         t += dt
 
-        if rem(step, 10) == 0
+        if rem(step, 5) == 0
             paraview_collection(path, append = true) do pvd
                 vtk_points(string(path, count+=1), xₚ) do vtkfile
                     pvd[t] = vtkfile
