@@ -17,5 +17,9 @@ function set!(ps::PointState, x::GridToPointOperation)
     ps
 end
 
-Base.add_sum(a::ScalVec, b::ScalVec)::ScalVec = ScalVec(a.x + b.x, a.∇x + b.∇x)
-Base.add_sum(a::VecTensor, b::VecTensor)::VecTensor = VecTensor(a.x + b.x, a.∇x + b.∇x)
+function Base.add_sum(a::ScalVec{dim, T}, b::ScalVec{dim, T})::ScalVec{dim, T} where {dim, T}
+    ScalVec(a.x + b.x, a.∇x + b.∇x)
+end
+function Base.add_sum(a::VecTensor{dim, T, M}, b::VecTensor{dim, T, M})::VecTensor{dim, T, M} where {dim, T, M}
+    VecTensor(a.x + b.x, a.∇x + b.∇x)
+end

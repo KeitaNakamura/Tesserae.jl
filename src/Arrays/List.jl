@@ -16,8 +16,8 @@ Base.Tuple(list::List) = list.data
 @inline Base.iterate(l::List, i = 1) = (i % UInt) - 1 < length(l) ? (@inbounds l[i], i + 1) : nothing
 
 Base.:+(x::ListGroup{Group}, y::ListGroup{Group}) where {Group} = List((x, y))
-Base.:+(x::ListGroup{Group}, list::List{Group}) where {Group} = List(x, Tuple(data)...)
-Base.:+(list::List{Group}, x::ListGroup{Group}) where {Group} = List(Tuple(data)..., x)
+Base.:+(x::ListGroup{Group}, list::List{Group}) where {Group} = List(x, Tuple(list)...)
+Base.:+(list::List{Group}, x::ListGroup{Group}) where {Group} = List(Tuple(list)..., x)
 Base.:+(x::List{Group}, y::List{Group}) where {Group} = List(Tuple(x)..., Tuple(y)...)
 
 # wrong methods

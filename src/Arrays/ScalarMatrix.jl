@@ -1,10 +1,9 @@
 struct ScalarMatrix{T} <: AbstractArray{T, 2}
     val::T
-    dims::NTuple{2, Int}
+    dim::Int
 end
-ScalarMatrix(v, i::Int, j::Int) = ScalarMatrix(v, (i,j))
 
-Base.size(x::ScalarMatrix) = x.dims
+Base.size(x::ScalarMatrix) = (x.dim, x.dim)
 value(x::ScalarMatrix) = x.val
 
 @inline function Base.getindex(x::ScalarMatrix, i::Int, j::Int)

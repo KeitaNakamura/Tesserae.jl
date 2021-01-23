@@ -1,3 +1,8 @@
+module AssemblingTest
+
+using Jams
+using Test, LinearAlgebra
+
 @testset "Assembling global matrix" begin
     grid = Grid(0:0.1:1.0, 0:0.1:1.0)
     space = MPSpace(LinearBSpline(dim=2), grid, 10)
@@ -10,7 +15,7 @@
     dof = 2
 
     # Test 1
-    A = gridstate_matrix(space, Mat{2,2,Float64})
+    A = gridstate_matrix(space, Mat{2,2,Float64}); reinit!(A)
     A ← ∑ₚ(∇(N) ⊗ ∇(N))
     B = SparseMatrixCOO()
     for p in 1:npoints(space)
@@ -18,14 +23,14 @@
         inds = MPSpaces.dofindices(space, p; dof)
         push!(B, ∇Nᵢ*∇Nᵢ', inds, inds)
     end
-    @test sparse(A) == sparse(B)
+    @test sparse(A) == sparse!(B)
 
     # Test 2
     cₚ = pointstate(space, SymmetricFourthOrderTensor{2})
     for i in 1:length(cₚ)
         cₚ[i] = rand(SymmetricFourthOrderTensor{2})
     end
-    A = gridstate_matrix(space, Mat{2,2,Float64})
+    A = gridstate_matrix(space, Mat{2,2,Float64}); reinit!(A)
     A ← ∑ₚ(dotdot(∇(N), cₚ, ∇(N)))
     B = SparseMatrixCOO()
     for p in 1:npoints(space)
@@ -42,11 +47,11 @@
         end
         push!(B, K, inds, inds)
     end
-    @test sparse(A) ≈ sparse(B)
+    @test sparse(A) ≈ sparse!(B)
 
     # Test 3 (mass matrix)
-    A = gridstate_matrix(space, Mat{2,2,Float64})
-    B = gridstate_matrix(space, Mat{2,2,Float64})
+    A = gridstate_matrix(space, Mat{2,2,Float64}); reinit!(A)
+    B = gridstate_matrix(space, Mat{2,2,Float64}); reinit!(B)
     mᵢ = gridstate(space, Float64)
     # consisten mass matrixt
     A ← ∑ₚ(N*N)
@@ -57,4 +62,6 @@
     # lumped mass matrix (without temporary array)
     B ← GridDiagonal(∑ₚ(N))
     @test Diagonal(vec(sum(sparse(A), dims = 2))) ≈ sparse(B)
+end
+
 end

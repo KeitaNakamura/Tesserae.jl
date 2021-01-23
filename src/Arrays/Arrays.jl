@@ -14,7 +14,9 @@ export
     ScalarMatrix,
 # SparseMatrixCOO
     SparseMatrixCOO,
+    SparseMatrixCSC,
     sparse,
+    sparse!,
 # List
     List,
     ListGroup

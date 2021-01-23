@@ -60,7 +60,7 @@ end
 
 set!(S::GridState, x::ListGroup{PointToGridOperation}) = set!(S, List(x))
 
-_to_matrix(x::Real, dim::Int) = ScalarMatrix(x, dim, dim)
+_to_matrix(x::Real, dim::Int) = ScalarMatrix(x, dim)
 _to_matrix(x::SecondOrderTensor, dim::Int) = x
 _get_element(mat, index, dim::Int) = (@_propagate_inbounds_meta; _to_matrix(mat.bc[index], dim))
 _compute_range(dof::Int, dim::Int) = (start = dim*(dof-1) + 1; start:start+dim-1)

@@ -1,6 +1,4 @@
-using Jams
-using Test, LinearAlgebra
-
-include("MPSpaces/MPSpaces.jl")
+include("Arrays/runtests.jl")
+include("assembling.jl")
 
 include("../docs/make.jl")
