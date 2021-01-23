@@ -1,9 +1,9 @@
 using Revise, Jams, BenchmarkTools
 using Debugger
 
-function main()
-    it = LinearBSpline(dim=2)
-    # it = WLS{1}(QuadraticBSpline(dim=2))
+function main(; implicit = false)
+    # it = LinearBSpline(dim=2)
+    it = WLS{1}(QuadraticBSpline(dim=2))
     grid = CartesianGrid(0, 0.05, (20, 20))
     xₚ, V₀ₚ = generate_pointstates((x,y) -> 0.4<x<0.6 && y<0.3, grid)
     space = MPSpace(it, grid, length(xₚ))
@@ -20,16 +20,21 @@ function main()
     ∇vₚ = pointstate(space, SecondOrderTensor{3,Float64})
     fill!(Fₚ, one(SecondOrderTensor{3,Float64}))
 
+    σₙₚ = pointstate(space, SymmetricSecondOrderTensor{3,Float64})
+    Dₚ = pointstate(space, SymmetricFourthOrderTensor{3,Float64})
+
     fᵢ = gridstate(space, Vec{2,Float64})
     mᵢ = gridstate(space, Float64)
     vᵢ = gridstate(space, Vec{2,Float64})
     vₙᵢ = gridstate(space, Vec{2,Float64})
 
-    # Kᵢⱼ = gridstate_matrix(space, Vec{2,Float64})
+    if implicit
+        Rᵢ = gridstate(space, Vec{2,Float64})
+        Kᵢⱼ = gridstate_matrix(space, Mat{2,2,Float64})
+    end
 
     b = Vec(0.0, -9.81)
 
-    # N = function_space(space, :shape_value)
     N = construct(:shape_value, space)
 
     nᵢ = construct(:bound_normal_vector, space)
@@ -50,12 +55,12 @@ function main()
 
     count = 0
     t = 0.0
-    for step in 1:1000
+    steps = implicit ? 50 : 500
+    for step in 1:steps
         reinit!(space, xₚ)
 
-        dt = 1e-3
+        dt = implicit ? 0.01 : 0.001
 
-        fᵢ ← ∑ₚ(-Vₚ * Tensor2D(σₚ) ⋅ ∇(N)) + ∑ₚ(mₚ * b * N)
         mᵢ ← ∑ₚ(mₚ * N)
         if it isa BSpline
             vₙᵢ ← ∑ₚ(mₚ * vₚ * N) / mᵢ
@@ -64,8 +69,28 @@ function main()
             vₙᵢ ← ∑ₚ(W * Cₚ ⋅ P(xᵢ - xₚ)) / wᵢ
         end
 
-        aᵢ = fᵢ / mᵢ
-        vᵢ ← vₙᵢ + aᵢ * dt
+        σₙₚ ← σₚ
+        if implicit
+            dirichlet!(vₙᵢ, space)
+            vᵢ ← vₙᵢ
+            reinit!(Kᵢⱼ)
+            newton!(Rᵢ, Kᵢⱼ, vᵢ; maxiter=10) do Rᵢ, Kᵢⱼ, vᵢ
+                ∇vₚ ← ∑ᵢ(Tensor3D(vᵢ ⊗ ∇(N)))
+                Vₚ ← V₀ₚ * det(Fₚ + dt*(∇vₚ ⋅ Fₚ))
+
+                (σₚ, Dₚ) ← stress_stiffness:(model, σₙₚ, symmetric(∇vₚ) * dt)
+
+                fᵢ ← ∑ₚ(-Vₚ * Tensor2D(σₚ) ⋅ ∇(N)) + ∑ₚ(mₚ * b * N)
+                Rᵢ ← (mᵢ / dt)  * (vᵢ - vₙᵢ) - fᵢ
+                Kᵢⱼ ← ∑ₚ(dotdot(∇(N), Tensor2D(Dₚ), ∇(N)) * Vₚ * dt) + GridDiagonal(mᵢ/dt)
+                dirichlet!(Rᵢ, space)
+                Rᵢ, Kᵢⱼ
+            end
+        else
+            fᵢ ← ∑ₚ(-Vₚ * Tensor2D(σₚ) ⋅ ∇(N)) + ∑ₚ(mₚ * b * N)
+            aᵢ = fᵢ / mᵢ
+            vᵢ ← vₙᵢ + aᵢ * dt
+        end
 
         vn = (vᵢ ⋅ nᵢ) * nᵢ
         vt = vᵢ - vn
@@ -85,7 +110,7 @@ function main()
 
         Fₚ ← Fₚ + dt*(∇vₚ ⋅ Fₚ)
         Vₚ ← V₀ₚ * det(Fₚ)
-        σₚ ← stress:(model, σₚ, symmetric(∇vₚ) * dt)
+        σₚ ← stress:(model, σₙₚ, symmetric(∇vₚ) * dt)
 
         if it isa BSpline
             xₚ ← xₚ + ∑ᵢ(vᵢ * N) * dt
@@ -108,6 +133,34 @@ end
 function stress(model, σₚ, dϵ)
     σ = MaterialModels.update_stress(model, σₚ, dϵ)
     mean(σ) > 0 ? zero(σ) : σ
+end
+
+function stress_stiffness(model, σₚ, dϵ)
+    D, σ = gradient(dϵ -> MaterialModels.update_stress(model, σₚ, dϵ), dϵ, :all)
+    σ = mean(σ) > 0 ? zero(σ) : σ
+    σ, D
+end
+
+function newton!(f!, Rᵢ, Kᵢⱼ::GridStateMatrix{<: Any, T}, xᵢ; maxiter::Int = 15, tol = sqrt(eps(T))) where {T}
+    converged = false
+    r = T(Inf)
+    for i in 1:maxiter
+        α = one(r)
+        r_prev = r
+        while true
+            f!(Rᵢ, Kᵢⱼ, xᵢ)
+            r = norm(Rᵢ)
+            if r < r_prev || α < 0.1
+                dx = solve!(Kᵢⱼ, Rᵢ)
+                xᵢ ← xᵢ - α * dx
+                break
+            else
+                α = α^2*r_prev / 2(r + α*r_prev - r_prev)
+            end
+        end
+        r ≤ tol && (converged = true; break)
+    end
+    converged
 end
 
 # main()
