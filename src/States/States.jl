@@ -5,6 +5,7 @@ using Jams.Collections
 using Jams.DofHelpers
 using Jams.Grids
 using Base: @_propagate_inbounds_meta
+using Base.Cartesian: @nall
 using Base.Broadcast: broadcasted
 using SparseArrays
 

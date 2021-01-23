@@ -28,18 +28,27 @@ Base.similar(p::PointState{T}) where {T} = similar(p, T)
 
 set!(p::PointState, c::AbstractCollection{2}) = (p.data .= c; p)
 set!(p::PointState, v::AbstractVector) = (p.data .= v; p)
+@generated function set!(ps::Tuple{Vararg{PointState, N}}, c::Union{AbstractCollection{2}, AbstractVector}) where {N}
+    exps = [:(ps[$i][p] = x[$i]) for i in 1:N]
+    quote
+        (@nall $N i -> length(ps[1]) == length(ps[i])) || error("length must match")
+        first(c) isa Tuple{Vararg{Any, N}} || throw(ArgumentError("types must match"))
+        @inbounds for p in 1:length(c)
+            x = c[p]
+            $(exps...)
+        end
+    end
+end
 const ← = set!
 
 # colon computation
-
+## helpers
 isrank2(x::Type{<: AbstractCollection}) = x <: AbstractCollection{2} || throw(ArgumentError("support only rank=2 collections"))
 isrank2(x) = false
-
 addref(x::AbstractCollection{2}) = x
 addref(x) = Ref(x)
-
+## colon computation
 (::Colon)(op, x::AbstractCollection{2}) = lazy(op, x)
-
 @generated function (::Colon)(op, xs::Tuple)
     any(isrank2, xs.parameters) ?
         :(LazyCollection{2}(broadcasted(op, map(addref, xs)...))) :
