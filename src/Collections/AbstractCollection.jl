@@ -16,6 +16,7 @@ function Base.fill!(c::AbstractCollection, v)
     for i in eachindex(c)
         @inbounds c[i] = v
     end
+    c
 end
 
 # checkbounds
