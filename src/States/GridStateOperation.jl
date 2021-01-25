@@ -33,23 +33,57 @@ end
 indices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (checkspace(x, y, zs...); indices(x))
 dofindices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (checkspace(x, y, zs...); dofindices(x))
 
-for op in (:(Base.:+), :(Base.:-), :(Base.:/), :(Base.:*), :(TensorValues.:⋅), :(TensorValues.:×))
+########
+# lazy #
+########
+lazy(op, x::UnionGridState) = GridStateOperation(indices(x), dofindices(x), op(_collection(nonzeros(x))))
+function lazy(op, x::UnionGridState, y::UnionGridState)
+    GridStateOperation(indices(x, y), dofindices(x, y), op(_collection(nonzeros(x)), _collection(nonzeros(y))))
+end
+
+# macros for lazy definitions
+macro define_unary_operation(op)
+    quote
+        @inline $op(c::UnionGridState) = lazy($op, c)
+    end |> esc
+end
+macro define_binary_operation(op)
+    quote
+        @inline $op(x::UnionGridState, y::UnionGridState) = lazy($op, x, y)
+    end |> esc
+end
+
+# methods for number
+for op in (:*, :/)
     @eval begin
-        $op(x::UnionGridState, y::UnionGridState) =
-            GridStateOperation(indices(x, y), dofindices(x, y), $op(_collection(nonzeros(x)), _collection(nonzeros(y))))
-        if $op == (*) || $op == (/)
-            @eval begin
-                $op(x::UnionGridState, y::Number) = GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x)), y))
-                $op(x::Number, y::UnionGridState) = GridStateOperation(indices(y), dofindices(y), $op(x, _collection(nonzeros(y))))
-            end
-        end
+        Base.$op(x::UnionGridState, y::Number) = GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x)), y))
+        Base.$op(x::Number, y::UnionGridState) = GridStateOperation(indices(y), dofindices(y), $op(x, _collection(nonzeros(y))))
     end
 end
-for op in (:+, :-)
-    @eval begin
-        Base.$op(x::UnionGridState) = GridStateOperation(indices(x), dofindices(x), $op(_collection(nonzeros(x))))
-    end
+
+const unary_operations = [
+    :(Base.:+),
+    :(Base.:-),
+]
+const binary_operations = [
+    :(Base.:+),
+    :(Base.:-),
+    :(Base.:/),
+    :(Base.:*),
+    :(TensorValues.:⋅),
+    :(TensorValues.:×),
+]
+
+for op in unary_operations
+    @eval @define_unary_operation $op
 end
+for op in binary_operations
+    @eval @define_binary_operation $op
+end
+
+########
+# set! #
+########
 
 function set!(x::GridState, y::UnionGridState)
     checkspace(x, y)
