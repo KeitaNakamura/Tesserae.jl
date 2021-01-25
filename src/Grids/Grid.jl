@@ -14,18 +14,11 @@ julia> grid = Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
 ```
 """
 struct Grid{dim, T, V} <: AbstractGrid{dim, T}
-    axisarray::AxisArray{dim, T, V}
-    boundsets::Dict{String, Set{GridBound{dim}}}
-end
-
-function Grid{dim, T, V}(axisarray::AxisArray{dim, T, V}) where {dim, T, V}
-    Grid{dim, T, V}(axisarray, Dict())
+    axisarray::Coordinate{dim, T, V}
 end
 
 function Grid(axs::NTuple{dim, V}) where {dim, T, V <: AbstractVector{T}}
-    grid = Grid{dim, T, V}(AxisArray(axs))
-    generate_default_boundsets!(grid)
-    grid
+    Grid{dim, T, V}(Coordinate(axs))
 end
 
 Grid(axs::Vararg{AbstractVector}) = Grid(axs)

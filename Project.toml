@@ -4,7 +4,7 @@ authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
 version = "0.1.1"
 
 [deps]
-AxisArrays = "f60ff68b-7a94-4832-89aa-d0cf2fb227a8"
+Coordinates = "15ac8fbd-cb39-4be8-bb90-8f74d06af8f8"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
