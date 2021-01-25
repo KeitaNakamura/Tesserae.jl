@@ -94,7 +94,8 @@ function main(; implicit = false)
 
         vn = (vᵢ ⋅ nᵢ) * nᵢ
         vt = vᵢ - vn
-        vᵢ ← vt in dΩ
+        # vᵢ ← vt in dΩ
+        vᵢ ← (vᵢ + Contact(:slip)(vᵢ, nᵢ)) in dΩ
 
         if it isa BSpline
             dvᵢ = vᵢ - vₙᵢ
