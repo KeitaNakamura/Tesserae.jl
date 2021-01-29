@@ -7,7 +7,7 @@ struct MPSpace{dim, FT <: ShapeFunction{dim}, GT <: AbstractGrid{dim}, VT <: Sha
     activeindices::Vector{CartesianIndex{dim}}
     freedofs::Vector{Int} # flat dofs
     bounddofs::Vector{Int}
-    isincontact::BitVector
+    nearsurface::BitVector
     Nᵢ::PointState{VT}
 end
 
@@ -18,9 +18,9 @@ function MPSpace(::Type{T}, F::ShapeFunction{dim}, grid::AbstractGrid{dim}, npoi
     activeindices = CartesianIndex{dim}[]
     freedofs = Int[]
     bounddofs = Int[]
-    isincontact = falses(npoints)
+    nearsurface = falses(npoints)
     Nᵢ = pointstate([construct(T, F) for _ in 1:npoints])
-    MPSpace(F, grid, dofmap, dofindices, gridindices, activeindices, freedofs, bounddofs, isincontact, Nᵢ)
+    MPSpace(F, grid, dofmap, dofindices, gridindices, activeindices, freedofs, bounddofs, nearsurface, Nᵢ)
 end
 
 MPSpace(F::ShapeFunction, grid::AbstractGrid, npoints::Int) = MPSpace(Float64, F, grid, npoints)
@@ -69,7 +69,7 @@ function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, poi
         allinds = neighboring_nodes(grid, x, point_radius)
         DofHelpers.map!(dofmap, dofindices[i], allinds)
         allactive = DofHelpers.filter!(dofmap, gridindices[i], allinds)
-        space.isincontact[i] = !allactive
+        space.nearsurface[i] = !allactive
     end
 
     ## active grid indices
