@@ -56,13 +56,13 @@ function lazy(op, c::AbstractCollection{rank}) where {rank}
 end
 
 # binary
-lazy(op, c::AbstractCollection{rank}, x) where {rank} = LazyCollection{rank}(broadcasted(op, c, Ref(x)))
-lazy(op, x, c::AbstractCollection{rank}) where {rank} = LazyCollection{rank}(broadcasted(op, Ref(x), c))
+lazy(op, c::AbstractCollection{rank}, x) where {rank} = LazyCollection{rank}(broadcasted(op, c, (x,)))
+lazy(op, x, c::AbstractCollection{rank}) where {rank} = LazyCollection{rank}(broadcasted(op, (x,), c))
 lazy(op, x::AbstractCollection{rank}, y::AbstractCollection{rank}) where {rank} =
     LazyCollection{rank}(broadcasted(op, x, y))
 function lazy(op, x::AbstractCollection{L1}, y::AbstractCollection{L2}) where {L1, L2}
-    L1 > L2 ? LazyCollection{L1}(broadcasted(op, x, Ref(y))) :
-              LazyCollection{L2}(broadcasted(op, Ref(x), y))
+    L1 > L2 ? LazyCollection{L1}(broadcasted(op, x, (y,))) :
+              LazyCollection{L2}(broadcasted(op, (x,), y))
 end
 # special cases and errors
 operation_error(op, rank1, rank2) = throw(ArgumentError("wrong collection operation with $op(rank=$rank1, rank=$rank2)"))
@@ -89,8 +89,8 @@ lazy(op, x::AbstractCollection{2}, y::AbstractCollection{-1}) = operation_error(
 
 # ternary
 TensorValues.dotdot(u::AbstractCollection, x, v::AbstractCollection) = lazy(dotdot, u, x, v)
-lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{0}, x::SymmetricFourthOrderTensor, v::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(dotdot, u, Ref(x), v'))
-lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::SymmetricFourthOrderTensor, v::AbstractCollection{2}) = LazyCollection{2}(broadcasted(dotdot, u, Ref(x), v))
+lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{0}, x::SymmetricFourthOrderTensor, v::AbstractCollection{0}) = LazyCollection{-1}(broadcasted(dotdot, u, (x,), v'))
+lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::SymmetricFourthOrderTensor, v::AbstractCollection{2}) = LazyCollection{2}(broadcasted(dotdot, u, (x,), v))
 lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::AbstractCollection{2}, v::AbstractCollection{2}) = LazyCollection{2}(broadcasted(dotdot, u, x, v))
 
 macro define_unary_operation(op)
