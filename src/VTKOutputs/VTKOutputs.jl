@@ -5,6 +5,7 @@ using Reexport
 using Jams.TensorValues
 using Jams.Grids
 using Jams.States
+using Jams.RigidBodies
 
 export
     vtk_points
@@ -62,6 +63,12 @@ function WriteVTK.vtk_grid(vtk::AbstractString, grid::AbstractGrid)
     vtk_grid(vtk, gridaxes(grid)...)
 end
 
+function WriteVTK.vtk_grid(vtk::AbstractString, poly::Polygon)
+    coords = vtk_format(poly)
+    cells = [MeshCell(VTKCellTypes.VTK_POLYGON, collect(1:length(poly)))]
+    vtk_grid(vtk, coords, cells)
+end
+
 """
     vtk_point_data(vtk, data::AbstractVector{ <:Vec}, name)
 
@@ -71,7 +78,7 @@ function WriteVTK.vtk_point_data(vtk::WriteVTK.DatasetFile, data::PointState{<: 
     vtk_point_data(vtk, vtk_format(data), name)
 end
 
-function vtk_format(x::PointState{<: Vec{dim, T}}) where {dim, T}
+function vtk_format(x::Union{PointState{Vec{dim, T}}, AbstractVector{Vec{dim, T}}}) where {dim, T}
     n = length(x)
     v = reinterpret(T, Array(x))
     out = zeros(T, (dim == 2 ? 3 : dim), n)
