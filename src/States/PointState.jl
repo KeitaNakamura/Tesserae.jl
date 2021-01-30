@@ -26,8 +26,16 @@ Base.similar(p::PointState{T}) where {T} = similar(p, T)
 
 # left arrow
 
-set!(p::PointState, c::AbstractCollection{2}) = (p.data .= c; p)
-set!(p::PointState, v::AbstractVector) = (p.data .= v; p)
+set!(p::PointState, c::Union{AbstractCollection{2}, AbstractVector}) = (p.data .= c; p)
+function set!(p::PointState, c::Union{AbstractCollection{2}, AbstractVector}, activepoints::BitVector)
+    @assert length(p) == length(c) == length(activepoints)
+    for i in 1:length(p)
+        if activepoints[i]
+            @inbounds p.data[i] = c[i]
+        end
+    end
+    p
+end
 @generated function set!(ps::Tuple{Vararg{PointState, N}}, c::Union{AbstractCollection{2}, AbstractVector}) where {N}
     exps = [:(ps[$i][p] = x[$i]) for i in 1:N]
     quote

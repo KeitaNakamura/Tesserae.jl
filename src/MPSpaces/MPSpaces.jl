@@ -21,10 +21,12 @@ export
     function_space,
     npoints,
     dirichlet!,
-    boundary
+    boundary,
+    nearsurface
 
 include("BoundNormal.jl")
 include("MPSpace.jl")
 include("MPSpaceBound.jl")
+include("MPSpaceNearSurface.jl")
 
 end

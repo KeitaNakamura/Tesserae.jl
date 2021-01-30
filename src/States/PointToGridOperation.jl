@@ -49,6 +49,17 @@ function add!(S::GridState, ∑ₚN::PointToGridOperation)
     end
     S
 end
+function add!(S::GridState, ∑ₚN::PointToGridOperation, activepoints::BitVector)
+    nzval = nonzeros(S)
+    dofinds = S.dofindices
+    @inbounds for p in eachindex(dofinds, activepoints)
+        if activepoints[p]
+            u = view(nzval, dofinds[p])
+            u .+= ∑ₚN[p]
+        end
+    end
+    S
+end
 
 function set!(S::GridState, list::List{PointToGridOperation})
     zeros!(S)
@@ -57,8 +68,16 @@ function set!(S::GridState, list::List{PointToGridOperation})
     end
     S
 end
+function set!(S::GridState, list::List{PointToGridOperation}, activepoints::BitVector)
+    zeros!(S)
+    for item in list
+        add!(S, item, activepoints)
+    end
+    S
+end
 
 set!(S::GridState, x::ListGroup{PointToGridOperation}) = set!(S, List(x))
+set!(S::GridState, x::ListGroup{PointToGridOperation}, activepoints::BitVector) = set!(S, List(x), activepoints)
 
 _to_matrix(x::Real, dim::Int) = ScalarMatrix(x, dim)
 _to_matrix(x::SecondOrderTensor, dim::Int) = x
