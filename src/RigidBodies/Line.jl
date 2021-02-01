@@ -58,16 +58,18 @@ end
 function distance(line::Line, x::Vec, r::Real)
     r² = r^2
     d, scale = _distance(line, x)
-    if 0 ≤ scale ≤ 1  # foot is on line
-        iscontacted = (d ⋅ d) ≤ r²
+    d ⋅ normalunit(line) > 0 && return nothing
+    if 0 ≤ scale ≤ 1 # perpendicular foot is on line
+        (d ⋅ d) ≤ r² && return d
     else
         @inbounds begin
-            a_to_x = x - line[1]
-            b_to_x = x - line[2]
+            x_to_a = line[1] - x
+            x_to_b = line[2] - x
         end
-        iscontacted = (a_to_x ⋅ a_to_x) ≤ r² || (b_to_x ⋅ b_to_x) ≤ r²
+        (x_to_a ⋅ x_to_a) ≤ r² && return x_to_a
+        (x_to_b ⋅ x_to_b) ≤ r² && return x_to_b
     end
-    iscontacted ? d : nothing
+    nothing
 end
 
 """

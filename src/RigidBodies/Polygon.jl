@@ -62,3 +62,20 @@ function isinside(poly::Polygon{2}, x::Vec{2}; include_bounds::Bool = true)
     end
     isodd(I)
 end
+
+function distance(poly::Polygon{2, T}, x::Vec{2, T}, r::Real) where {T}
+    dist = nothing
+    norm_dist = T(Inf)
+    isincontact = false
+    for (i, line) in enumerate(eachline(poly))
+        d = distance(line, x, r)
+        if d !== nothing
+            norm_d = norm(d)
+            if norm_d < norm_dist
+                dist = d
+                norm_dist = norm_d
+            end
+        end
+    end
+    dist
+end
