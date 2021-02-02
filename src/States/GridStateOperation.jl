@@ -40,6 +40,12 @@ lazy(op, x::UnionGridState) = GridStateOperation(indices(x), dofindices(x), lazy
 function lazy(op, x::UnionGridState, y::UnionGridState)
     GridStateOperation(indices(x, y), dofindices(x, y), lazy(op, _collection(nonzeros(x)), _collection(nonzeros(y))))
 end
+function lazy(op, x::UnionGridState, y)
+    GridStateOperation(indices(x), dofindices(x), lazy(op, _collection(nonzeros(x)), y))
+end
+function lazy(op, x, y::UnionGridState)
+    GridStateOperation(indices(y), dofindices(y), lazy(op, x, _collection(nonzeros(y))))
+end
 
 # macros for lazy definitions
 macro define_unary_operation(op)
@@ -50,6 +56,8 @@ end
 macro define_binary_operation(op)
     quote
         @inline $op(x::UnionGridState, y::UnionGridState) = lazy($op, x, y)
+        @inline $op(x::UnionGridState, y) = lazy($op, x, y)
+        @inline $op(x, y::UnionGridState) = lazy($op, x, y)
     end |> esc
 end
 
