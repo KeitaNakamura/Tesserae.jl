@@ -12,3 +12,8 @@ end
     @inbounds coordinates(x)[i] = v
     x
 end
+
+function translate!(x::RigidBody, u::Vec)
+    coordinates(x) .+= u
+    x
+end
