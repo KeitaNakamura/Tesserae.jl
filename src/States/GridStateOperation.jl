@@ -36,9 +36,9 @@ dofindices(x::UnionGridState, y::UnionGridState, zs::UnionGridState...) = (check
 ########
 # lazy #
 ########
-lazy(op, x::UnionGridState) = GridStateOperation(indices(x), dofindices(x), op(_collection(nonzeros(x))))
+lazy(op, x::UnionGridState) = GridStateOperation(indices(x), dofindices(x), lazy(op, _collection(nonzeros(x))))
 function lazy(op, x::UnionGridState, y::UnionGridState)
-    GridStateOperation(indices(x, y), dofindices(x, y), op(_collection(nonzeros(x)), _collection(nonzeros(y))))
+    GridStateOperation(indices(x, y), dofindices(x, y), lazy(op, _collection(nonzeros(x)), _collection(nonzeros(y))))
 end
 
 # macros for lazy definitions

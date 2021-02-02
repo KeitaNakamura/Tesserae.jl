@@ -49,20 +49,6 @@ end
 end
 const ← = set!
 
-# colon computation
-## helpers
-isrank2(x::Type{<: AbstractCollection}) = x <: AbstractCollection{2} || throw(ArgumentError("support only rank=2 collections"))
-isrank2(x) = false
-addref(x::AbstractCollection{2}) = x
-addref(x) = Ref(x)
-## colon computation
-(::Colon)(op, x::AbstractCollection{2}) = lazy(op, x)
-@generated function (::Colon)(op, xs::Tuple)
-    any(isrank2, xs.parameters) ?
-        :(LazyCollection{2}(broadcasted(op, map(addref, xs)...))) :
-        :(throw(ArgumentError("no rank=2 collections")))
-end
-
 # generate point states
 
 function generate_pointstates(indomain, grid::AbstractGrid{dim, T}, coordinate_system = :plane_strain_if_2D; n::Int = 2) where {dim, T}
