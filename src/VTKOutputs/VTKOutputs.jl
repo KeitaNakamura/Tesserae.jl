@@ -3,6 +3,7 @@ module VTKOutputs
 using Reexport
 @reexport using WriteVTK
 using Jams.TensorValues
+using Jams.Collections
 using Jams.Grids
 using Jams.States
 using Jams.RigidBodies
@@ -74,8 +75,11 @@ end
 
 Write the vector field data to the `vtk` file.
 """
-function WriteVTK.vtk_point_data(vtk::WriteVTK.DatasetFile, data::PointState{<: Vec}, name::AbstractString)
+function WriteVTK.vtk_point_data(vtk::WriteVTK.DatasetFile, data::Union{PointState{<: Vec}, AbstractVector{<: Vec}}, name::AbstractString)
     vtk_point_data(vtk, vtk_format(data), name)
+end
+function WriteVTK.vtk_point_data(vtk::WriteVTK.DatasetFile, data::AbstractCollection{2}, name::AbstractString)
+    vtk_point_data(vtk, collect(data), name)
 end
 
 function vtk_format(x::Union{PointState{Vec{dim, T}}, AbstractVector{Vec{dim, T}}}) where {dim, T}
