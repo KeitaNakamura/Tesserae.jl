@@ -1,6 +1,7 @@
 module Collections
 
 using Jams.TensorValues
+using Jams.MaterialModels
 
 using Base: @_propagate_inbounds_meta
 using Base.Broadcast: broadcasted

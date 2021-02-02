@@ -13,6 +13,10 @@ export
     WaterModel,
     update_stress,
     soundspeed,
+    volumetric_stress,
+    deviatoric_stress,
+    volumetric_strain,
+    deviatoric_strain,
     infinitesimal_strain
 
 abstract type MaterialModel end
