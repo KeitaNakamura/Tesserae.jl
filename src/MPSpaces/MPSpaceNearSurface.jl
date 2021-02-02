@@ -3,6 +3,7 @@ struct MPSpaceNearSurface
 end
 
 nearsurface(space::MPSpace) = MPSpaceNearSurface(space.nearsurface)
+Base.any(space::MPSpaceNearSurface) = any(space.nearsurface)
 
 struct NearSurfaceState{P}
     parent::P
