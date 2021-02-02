@@ -26,6 +26,7 @@ export
     nonzeros, # from SparseArrays
     nnz,      # from SparseArrays
     zeros!,
+    totalnorm,
 # GridStateMatrix
     GridStateMatrix,
     gridstate_matrix,

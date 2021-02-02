@@ -72,6 +72,7 @@ end
 const unary_operations = [
     :(Base.:+),
     :(Base.:-),
+    :(TensorValues.:norm),
 ]
 const binary_operations = [
     :(Base.:+),

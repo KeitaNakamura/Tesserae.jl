@@ -150,7 +150,7 @@ function newton!(f!, Rᵢ, Kᵢⱼ::GridStateMatrix{<: Any, T}, xᵢ; maxiter::I
         r_prev = r
         while true
             f!(Rᵢ, Kᵢⱼ, xᵢ)
-            r = norm(Rᵢ)
+            r = totalnorm(Rᵢ)
             if r < r_prev || α < 0.1
                 dx = solve!(Kᵢⱼ, Rᵢ)
                 xᵢ ← xᵢ - α * dx
