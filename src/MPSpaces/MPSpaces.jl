@@ -24,7 +24,7 @@ export
     boundary,
     nearsurface
 
-include("BoundNormal.jl")
+include("BoundNormalArray.jl")
 include("MPSpace.jl")
 include("MPSpaceBound.jl")
 include("MPSpaceNearSurface.jl")

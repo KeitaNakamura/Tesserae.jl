@@ -166,8 +166,8 @@ function construct(name::Symbol, space::MPSpace)
     name == :shape_value        && return space.Nᵢ
     name == :shape_vector_value && return lazy(vec, space.Nᵢ)
     if name == :bound_normal_vector
-        boundnormal = BoundNormal(Float64, gridsize(space)...)
-        return gridstate(view(boundnormal, space.activeindices), space.dofmap, space.dofindices)
+        A = BoundNormalArray(Float64, gridsize(space)...)
+        return gridstate(view(A, space.activeindices), space.dofmap, space.dofindices)
     end
     if name == :grid_coordinates
         return GridStateCollection(view(space.grid, space.activeindices), space.dofindices)

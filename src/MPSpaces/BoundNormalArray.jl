@@ -1,9 +1,9 @@
-struct BoundNormal{dim, T} <: AbstractArray{Vec{dim, T}, dim}
+struct BoundNormalArray{dim, T} <: AbstractArray{Vec{dim, T}, dim}
     dims::NTuple{dim, Int}
 end
-BoundNormal(::Type{T}, dims::Vararg{Int, dim}) where {dim, T} = BoundNormal{dim, T}(dims)
+BoundNormalArray(::Type{T}, dims::Vararg{Int, dim}) where {dim, T} = BoundNormalArray{dim, T}(dims)
 
-Base.size(x::BoundNormal) = x.dims
+Base.size(x::BoundNormalArray) = x.dims
 
 # helper function: check if index is on bound
 function onbound(dims::NTuple{dim, Int}, I::CartesianIndex{dim}) where {dim}
@@ -16,7 +16,7 @@ onbound(A::AbstractArray, I::CartesianIndex) = onbound(size(A), I)
 onbound(A::AbstractArray, I::Int...) = onbound(size(A), CartesianIndex(I))
 onbound(len::Int, i::Int) = i == 1 || i == len
 
-@inline function Base.getindex(x::BoundNormal{dim, T}, I::Vararg{Int, dim}) where {dim, T}
+@inline function Base.getindex(x::BoundNormalArray{dim, T}, I::Vararg{Int, dim}) where {dim, T}
     @boundscheck checkbounds(x, I...)
     onbound(x, I...) || return zero(Vec{dim, T})
     v = Vec{dim, T}() do i
