@@ -36,7 +36,9 @@ contact detection is performed using distance between `x` and vertices of line.
 
 ```jldoctest
 julia> line = Line(@Vec[0.0, 0.0] => @Vec[1.0, 1.0])
-Line{2,Float64}([0.0, 0.0], [1.0, 1.0])
+2-element Line{2,Float64}:
+ [0.0, 0.0]
+ [1.0, 1.0]
 
 julia> distance(line, @Vec[1.0, 0.0])
 2-element Tensor{Tuple{2},Float64,1,2}:
@@ -46,10 +48,8 @@ julia> distance(line, @Vec[1.0, 0.0])
 julia> distance(line, @Vec[1.0, 0.0], 0.5) === nothing
 true
 
-julia> distance(line, @Vec[1.0, 1.5], 1.0)
-2-element Tensor{Tuple{2},Float64,1,2}:
-  0.25
- -0.25
+julia> distance(line, @Vec[1.0, 1.5], 1.0) === nothing
+true
 ```
 """
 function distance(line::Line, x::Vec)
@@ -90,19 +90,21 @@ function normalunit(line::Line{2})
 end
 
 """
-    isonline(line::Line, x::Vec)
+    RigidBodies.isonline(line::Line, x::Vec)
 
 Return `true` if `x` is on `line`.
 
 # Examples
 ```jldoctest
 julia> line = Line(@Vec[0.0, 0.0], @Vec[2.0, 2.0])
-Line{2,Float64}([0.0, 0.0], [2.0, 2.0])
+2-element Line{2,Float64}:
+ [0.0, 0.0]
+ [2.0, 2.0]
 
-julia> isonline(line, @Vec[1.0, 1.0])
+julia> RigidBodies.isonline(line, @Vec[1.0, 1.0])
 true
 
-julia> isonline(line, @Vec[1.0, 0.0])
+julia> RigidBodies.isonline(line, @Vec[1.0, 0.0])
 false
 ```
 """

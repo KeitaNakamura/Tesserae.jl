@@ -23,6 +23,26 @@ Contact(:slip; sep = true)
 julia> Contact(:friction, 0.3, sep = true)
 Contact(:friction, 0.3; sep = true)
 ```
+
+---
+
+    (::Contact)(v::Vec, n::Vec)
+
+Compute velocity `v` caused by contact.
+The other quantities, which are equivalent to velocity such as momentum and force, are also available.
+`n` is the normal unit vector.
+
+# Examples
+```jldoctest
+julia> contact = Contact(:slip, sep = false);
+
+julia> v = Vec(1.0, -1.0); n = Vec(0.0, -1.0);
+
+julia> v + contact(v, n)
+2-element Tensor{Tuple{2},Float64,1,2}:
+ 1.0
+ 0.0
+```
 """
 struct Contact
     cond::Symbol
@@ -50,25 +70,6 @@ function Base.show(io::IO, contact::Contact)
     throw(ArgumentError("Contact condition `$(QuoteNode(contact.cond))` is not supported"))
 end
 
-"""
-    (::Contact)(v::Vec, n::Vec)
-
-Compute velocity `v` caused by contact.
-The other quantities, which are equivalent to velocity such as momentum and force, are also available.
-`n` is the normal unit vector.
-
-# Examples
-```jldoctest
-julia> contact = Contact(:slip, sep = false);
-
-julia> v = Vec(1.0, -1.0); n = Vec(0.0, -1.0);
-
-julia> v + contact(v, n)
-2-element Tensor{1,2,Float64,2}:
- 1.0
- 0.0
-```
-"""
 function (contact::Contact)(v::Vec{dim, T}, n::Vec)::Vec{dim, T} where {dim, T}
     v_sticky = -v # contact force for sticky contact
     iscondition(contact, :sticky) && return v_sticky
@@ -88,7 +89,4 @@ function (contact::Contact)(v::Vec{dim, T}, n::Vec)::Vec{dim, T} where {dim, T}
     end
 end
 
-# (contact::Contact)(v::AbstractCollection{2}, n::AbstractCollection{2}) = lazy(contact, v, n)
-# (contact::Contact)(v::AbstractCollection{1}, n::AbstractCollection{1}) = lazy(contact, v, n)
-# (contact::Contact)(v::UnionGridState, n::UnionGridState) = lazy(contact, v, n)
 (contact::Contact)(v, n) = lazy(contact, v, n)

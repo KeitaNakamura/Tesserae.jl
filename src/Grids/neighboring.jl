@@ -26,8 +26,8 @@ In 1D, for example, the searching range becomes `x ± h*dx`.
 
 # Examples
 ```jldoctest
-julia> grid = CartesianGrid(1.0, (5,))
-6-element CartesianGrid{1,Float64}:
+julia> grid = Grid(0.0:1.0:5.0)
+6-element Grid{1,Float64,StepRangeLen{Float64,Base.TwicePrecision{Float64},Base.TwicePrecision{Float64}}}:
  [0.0]
  [1.0]
  [2.0]
@@ -67,8 +67,8 @@ Return cell index where `x` locates.
 
 # Examples
 ```jldoctest
-julia> grid = CartesianGrid(1.0, (5, 5))
-6×6 CartesianGrid{2,Float64}:
+julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
+6×6 Grid{2,Float64,StepRangeLen{Float64,Base.TwicePrecision{Float64},Base.TwicePrecision{Float64}}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -103,8 +103,8 @@ In 1D, for example, the searching range becomes `x ± h*dx`.
 
 # Examples
 ```jldoctest
-julia> grid = CartesianGrid(1.0, (5, 5))
-6×6 CartesianGrid{2,Float64}:
+julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
+6×6 Grid{2,Float64,StepRangeLen{Float64,Base.TwicePrecision{Float64},Base.TwicePrecision{Float64}}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]

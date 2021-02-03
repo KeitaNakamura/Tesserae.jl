@@ -19,7 +19,7 @@ This should be used instead of calling `vtk_grid` in `WriteVTK` package.
 
 # Examples
 ```jldoctest
-julia> grid = CartesianGrid(1.0, (11, 11));
+julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0);
 
 julia> xₚ, = generate_pointstates((x, y) -> (x-5)^2 + (y-5)^2 < 3^2, grid, n = 4);
 
@@ -50,7 +50,7 @@ Create a structured VTK grid from a `Grid`.
 
 # Examples
 ```jldoctest
-julia> grid = CartesianGrid(1.0, (11, 11));
+julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0);
 
 julia> vtkfile = vtk_grid("vtkfile", grid)
 VTK file 'vtkfile.vtr' (RectilinearGrid file, open)
@@ -61,7 +61,7 @@ julia> vtk_save(vtkfile)
 ```
 """
 function WriteVTK.vtk_grid(vtk::AbstractString, grid::AbstractGrid)
-    vtk_grid(vtk, gridaxes(grid)...)
+    vtk_grid(vtk, map(collect, gridaxes(grid))...)
 end
 
 function WriteVTK.vtk_grid(vtk::AbstractString, poly::Polygon)
