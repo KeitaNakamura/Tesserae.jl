@@ -29,9 +29,9 @@ Base.similar(p::PointState{T}) where {T} = similar(p, T)
 set!(p::PointState, c::Union{AbstractCollection{2}, AbstractVector}) = (p.data .= c; p)
 function set!(p::PointState, c::Union{AbstractCollection{2}, AbstractVector}, activepoints::BitVector)
     @assert length(p) == length(c) == length(activepoints)
-    for i in 1:length(p)
+    @inbounds @simd for i in 1:length(p)
         if activepoints[i]
-            @inbounds p.data[i] = c[i]
+            p.data[i] = c[i]
         end
     end
     p
@@ -41,7 +41,7 @@ end
     quote
         (@nall $N i -> length(ps[1]) == length(ps[i])) || error("length must match")
         first(c) isa Tuple{Vararg{Any, N}} || throw(ArgumentError("types must match"))
-        @inbounds for p in 1:length(c)
+        @inbounds @simd for p in 1:length(c)
             x = c[p]
             $(exps...)
         end
