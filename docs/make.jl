@@ -20,6 +20,8 @@ makedocs(;
         "Jams.Grids" => "Grids.md",
         "Jams.ShapeFunctions" => "ShapeFunctions.md",
         "Jams.MPSpaces" => "MPSpaces.md",
+        "Jams.ContactMechanics" => "ContactMechanics.md",
+        "Jams.RigidBodies" => "RigidBodies.md",
         "Jams.VTKOutputs" => "VTKOutputs.md",
     ],
     doctest = true, # :fix
