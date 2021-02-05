@@ -26,7 +26,12 @@ Base.similar(p::PointState{T}) where {T} = similar(p, T)
 
 # left arrow
 
-set!(p::PointState, c::Union{AbstractCollection{2}, AbstractVector}) = (p.data .= c; p)
+function set!(p::PointState, c::Union{AbstractCollection{2}, AbstractVector})
+    @inbounds Threads.@threads for i in 1:length(p)
+        p.data[i] = c[i]
+    end
+    p
+end
 function set!(p::PointState, c::Union{AbstractCollection{2}, AbstractVector}, activepoints::BitVector)
     @assert length(p) == length(c) == length(activepoints)
     @inbounds for i in 1:length(p)
