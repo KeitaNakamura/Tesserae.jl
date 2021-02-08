@@ -56,8 +56,12 @@ function value(::BSpline{4, 0}, ξ::Real)::typeof(ξ)
     ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
 
-function value(::BSpline{order, dim}, ξ::Vec{dim}) where {order, dim}
-    prod(i -> value(BSpline{order}(dim = 0), @inbounds(ξ[i])), 1:dim)
+@generated function value(::BSpline{order, dim}, ξ::Vec{dim}) where {order, dim}
+    exps = [:(value(BSpline{order}(dim = 0), ξ[$i])) for i in 1:dim]
+    quote
+        @_inline_meta
+        @inbounds prod(tuple($(exps...)))
+    end
 end
 
 function Base.show(io::IO, x::BSpline{order, dim}) where {order, dim}

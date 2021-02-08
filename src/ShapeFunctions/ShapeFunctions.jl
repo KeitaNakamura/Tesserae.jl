@@ -7,7 +7,7 @@ using StaticArrays
 
 import Jams.TensorValues: gradient, ∇
 
-using Base: @pure, @_propagate_inbounds_meta
+using Base: @pure, @_propagate_inbounds_meta, @_inline_meta
 
 export
 # ShapeFunction
