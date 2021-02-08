@@ -6,7 +6,7 @@ end
 GridStateCollection(x::UnionGridState) = GridStateCollection(nonzeros(x), dofindices(x))
 
 Base.length(x::GridStateCollection) = length(x.dofindices) # == npoints
-Base.getindex(x::GridStateCollection, i::Int) = (@_propagate_inbounds_meta; Collection{1}(view(x.data, x.dofindices[i])))
+Base.getindex(x::GridStateCollection, i::Int) = (@_propagate_inbounds_meta; view(Collection{1}(x.data), x.dofindices[i]))
 
 # for ∑ᵢ(vᵢ * N) and ∑ᵢ(vᵢ ⊗ ∇(N))
 for op in (:(Base.:*), :(Tensorial.:⊗))
