@@ -1,7 +1,7 @@
 """
     LazyCollection
 """
-struct LazyCollection{rank, Bc} <: AbstractCollection{rank}
+struct LazyCollection{rank, Bc <: Broadcasted} <: AbstractCollection{rank}
     bc::Bc
 end
 
