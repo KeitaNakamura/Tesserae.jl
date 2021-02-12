@@ -8,12 +8,12 @@ end
 
 Base.length(x::GridToPointOperation) = length(x.u_p)
 Base.getindex(x::GridToPointOperation, i::Int) = (@_propagate_inbounds_meta; x.u_p[i])
-function Base.getindex(x::GridToPointOperation{<: LazyCollection{2}}, i::Int)
-    @_propagate_inbounds_meta
-    bc = x.u_p.bc
-    args = Base.Broadcast._getindex(bc.args, i)
-    Base.Broadcast._broadcast_getindex_evalf(bc.f, args...)
-end
+# function Base.getindex(x::GridToPointOperation{<: LazyCollection{2}}, i::Int)
+    # @_propagate_inbounds_meta
+    # c = x.u_p
+    # args = Collections._getindex((), c.args, i)
+    # c.f(args...)
+# end
 
 function _sum(c)
     x = first(c)
