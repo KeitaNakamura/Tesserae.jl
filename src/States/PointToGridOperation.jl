@@ -44,8 +44,12 @@ function add!(S::GridState, ∑ₚN::PointToGridOperation)
     nzval = nonzeros(S)
     dofinds = S.dofindices
     @inbounds for p in eachindex(dofinds)
-        u = view(nzval, dofinds[p])
-        u .+= ∑ₚN[p]
+        v = view(nzval, dofinds[p])
+        u = ∑ₚN[p]
+        @assert length(v) == length(u)
+        @simd for i in 1:length(v)
+            @inbounds v[i] += u[i]
+        end
     end
     S
 end
@@ -54,8 +58,12 @@ function add!(S::GridState, ∑ₚN::PointToGridOperation, activepoints::BitVect
     dofinds = S.dofindices
     @inbounds for p in eachindex(dofinds, activepoints)
         if activepoints[p]
-            u = view(nzval, dofinds[p])
-            u .+= ∑ₚN[p]
+            v = view(nzval, dofinds[p])
+            u = ∑ₚN[p]
+            @assert length(v) == length(u)
+            @simd for i in 1:length(v)
+                @inbounds v[i] += u[i]
+            end
         end
     end
     S

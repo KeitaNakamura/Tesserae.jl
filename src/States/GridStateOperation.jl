@@ -97,7 +97,12 @@ end
 function set!(x::GridState, y::UnionGridState)
     checkspace(x, y)
     resize!(x) # should not use zeros! for incremental calculation
-    nonzeros(x) .= nonzeros(y)
+    nzval_x = nonzeros(x)
+    nzval_y = nonzeros(y)
+    @assert length(nzval_x) == length(nzval_y)
+    @simd for i in 1:length(nzval_x)
+        @inbounds nzval_x[i] = nzval_y[i]
+    end
     x
 end
 
