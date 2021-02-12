@@ -30,8 +30,8 @@ end
     check_point_to_grid((@inferred ∑ₚ(∇(N)⋅∇(N))), 2)
     check_point_to_grid((@inferred ∑ₚ(∇(N)*mₚ⋅∇(N))), 2)
 
-    vₚ = pointstate(space, Vec{2, Float64})
-    check_grid_to_point((@inferred ∑ᵢ(N*vₚ)), Vec{2,Float64})
+    vᵢ = pointstate(space, Vec{2, Float64})
+    check_grid_to_point((@inferred ∑ᵢ(N*vᵢ)), Vec{2,Float64})
 end
 
 @testset "Assembling global matrix" begin
