@@ -89,7 +89,7 @@ set!(S::GridState, x::ListGroup{PointToGridOperation}, activepoints::BitVector) 
 
 _to_matrix(x::Real, dim::Int) = ScalarMatrix(x, dim)
 _to_matrix(x::SecondOrderTensor, dim::Int) = x
-_get_element(mat, index, dim::Int) = (@_propagate_inbounds_meta; _to_matrix(mat.bc[index], dim))
+_get_element(mat, index, dim::Int) = (@_propagate_inbounds_meta; _to_matrix(mat[Tuple(index)...], dim))
 _compute_range(dof::Int, dim::Int) = (start = dim*(dof-1) + 1; start:start+dim-1)
 # vector field
 function add!(S::GridStateMatrix{Tensor{Tuple{dim, dim}}}, ∑ₚ∇N∇N::PointToGridMatrixOperation) where {dim}
