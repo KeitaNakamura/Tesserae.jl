@@ -207,4 +207,10 @@ for op in binary_operations
     @eval @define_lazy_binary_operation $op
 end
 
+TensorValues.dotdot(x, y, z) = lazy(dotdot, x, y, z)
+
 LazyOperationType(::typeof(TensorValues.dotdot)) = LazyMulLikeOperator()
+LazyOperationType(::typeof(TensorValues.otimes)) = LazyMulLikeOperator()
+LazyOperationType(::typeof(TensorValues.dot)) = LazyMulLikeOperator()
+LazyOperationType(::typeof(TensorValues.:×)) = LazyMulLikeOperator()
+LazyOperationType(::typeof(TensorValues.:⊡)) = LazyMulLikeOperator()
