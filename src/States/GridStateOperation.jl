@@ -115,12 +115,12 @@ end
 function set!(x::GridState, y::UnionGridState, dofs::Vector{Int})
     checkspace(x, y)
     resize!(x) # should not use zeros! for incremental calculation
-    nonzeros(x)[dofs] .= view(nonzeros(y), dofs)
+    view(nonzeros(x), dofs) ← view(nonzeros(y), dofs)
     x
 end
 
 function set!(x::GridState, y, dofs::Vector{Int})
     resize!(x) # should not use zeros! for incremental calculation
-    nonzeros(x)[dofs] .= Ref(y)
+    fill!(view(nonzeros(x), dofs), y)
     x
 end

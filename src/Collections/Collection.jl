@@ -1,19 +1,13 @@
 """
     Collection(x, [Val(rank)])
 """
-struct Collection{rank, V <: Union{AbstractVector, AbstractCollection}} <: AbstractCollection{rank}
+struct Collection{rank, V} <: AbstractCollection{rank}
     parent::V
 end
 
 # constructors
 Collection{rank}(v::V) where {rank, V} = Collection{rank, V}(v)
 Collection(v) = Collection{1}(v)
-"""
-    collection(x, [Val(rank)])
-
-Create collection with `x`.
-"""
-collection(v, ::Val{rank} = Val(1)) where {rank} = Collection{rank}(v)
 
 Base.parent(c::Collection) = c.parent
 

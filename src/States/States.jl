@@ -10,7 +10,7 @@ using Base.Broadcast: broadcasted
 using SparseArrays
 
 import SparseArrays: nonzeros, nnz, sparse!, sparse
-import Jams.Collections: lazy
+import Jams.Collections: lazy, set!
 import Jams.DofHelpers: indices
 import Jams.ShapeFunctions: reinit!
 

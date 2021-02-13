@@ -1,67 +1,99 @@
 """
-    LazyCollection
+    LazyCollections.LazyOperationType(f)
+
+This needs to be overrided for custom operator.
+Return `LazyAddLikeOperator()` or `LazyMulLikeOperator()`.
 """
-struct LazyCollection{rank, mulprec, F, Args <: Tuple, N} <: AbstractCollection{rank}
-    f::F
-    args::Args
-    dims::NTuple{N, Int}
-    function LazyCollection{rank, mulprec, F, Args, N}(f::F, args::Args, dims::NTuple{N, Int}) where {rank, mulprec, F, Args, N}
-        new{rank::Int, mulprec::Bool, F, Args, N}(f, args, dims)
+abstract type LazyOperationType end
+struct LazyAddLikeOperator <: LazyOperationType end
+struct LazyMulLikeOperator <: LazyOperationType end
+LazyOperationType(::Any) = LazyAddLikeOperator()
+@pure function LazyOperationType(f::Function)
+    Base.operator_precedence(Symbol(f)) ≥ Base.operator_precedence(:*) ?
+        LazyMulLikeOperator() : LazyAddLikeOperator()
+end
+
+# add `Ref`s
+lazyable(::LazyOperationType, c, ::Val) = Ref(c)
+lazyable(::LazyOperationType, c::Base.RefValue, ::Val) = c
+lazyable(::LazyAddLikeOperator, c::AbstractCollection{rank}, ::Val{rank}) where {rank} = c
+lazyable(::LazyAddLikeOperator, c::AbstractCollection, ::Val) = throw(ArgumentError("addition like operation with different collections is not allowded"))
+lazyable(::LazyMulLikeOperator, c::AbstractCollection{rank}, ::Val{rank}) where {rank} = c
+lazyable(::LazyMulLikeOperator, c::AbstractCollection{0}, ::Val{1}) = Collection{1}(c) # 0 becomes 1 with other 1
+@generated function lazyables(f, args...)
+    rank = maximum(whichrank, args)
+    if minimum(whichrank, args) == -1
+        if rank != -1
+            return :(throw(ArgumentError("rank=-1 collection cannot be computed with other rank collections.")))
+        end
     end
+    Expr(:tuple, [:(lazyable(LazyOperationType(f), args[$i], Val($rank))) for i in 1:length(args)]...)
 end
-
-@inline function LazyCollection{rank, mulprec}(f::F, args::Args, dims::NTuple{N, Int}) where {rank, mulprec, F, Args, N}
-    LazyCollection{rank, mulprec, F, Args, N}(f, args, dims)
-end
-
-getrank(::Type{<: AbstractCollection{rank}}) where {rank} = rank
-getrank(::Type) = -100 # just use low value
+lazyables(f, args′::Union{Base.RefValue, AbstractCollection{rank}}...) where {rank} = args′ # already "lazyabled"
 
 # extract arguments without `Ref`
 _extract_norefs(ret::Tuple) = ret
 _extract_norefs(ret::Tuple, x::Ref, y...) = _extract_norefs(ret, y...)
 _extract_norefs(ret::Tuple, x, y...) = _extract_norefs((ret..., x), y...)
 extract_norefs(x...) = _extract_norefs((), x...)
+extract_norefs(x::AbstractCollection...) = x
 
-# check if all `length`s are the same
-check_length(x::Int) = x
-check_length(x::Int, y::Int, z...) = (@assert x == y; check_length(y, z...))
-# guess common dims
-@generated function combine_dims(::Val{mulprec}, args′...) where {mulprec}
-    quote
-        @_inline_meta
-        norefs = extract_norefs(args′...)
-        $(mulprec ? :(map(length, norefs)) : :(tuple(check_length(map(length, norefs)...))))
+"""
+    return_rank(f, args...)
+
+Get returned rank.
+"""
+function return_rank(f, args...)
+    args′ = extract_norefs(lazyables(f, args...)...)
+    return_rank(LazyOperationType(f), args′...)
+end
+return_rank(::LazyAddLikeOperator, ::AbstractCollection{rank}...) where {rank} = rank
+return_rank(::LazyMulLikeOperator, ::AbstractCollection{rank}...) where {rank} = rank
+return_rank(::LazyMulLikeOperator, ::AbstractCollection{0}) = 0
+return_rank(::LazyMulLikeOperator, ::AbstractCollection{0}, ::AbstractCollection{0}) = -1
+return_rank(::LazyMulLikeOperator, ::AbstractCollection{0}, ::AbstractCollection{0}, x::AbstractCollection{0}...) =
+    throw(ArgumentError("rank=-1 collections are used $(2+length(x)) times in multiplication"))
+return_rank(::LazyMulLikeOperator, ::AbstractCollection{-1}) = -1
+return_rank(::LazyMulLikeOperator, ::AbstractCollection{-1}, x::AbstractCollection{-1}...) =
+    throw(ArgumentError("rank=-1 collections are used $(1+length(x)) times in multiplication"))
+
+"""
+    return_dims(f, args...)
+
+Get returned dimensions.
+"""
+function return_dims(f, args...)
+    args′ = extract_norefs(lazyables(f, args...)...)
+    return_dims(LazyOperationType(f), args′...)
+end
+check_dims(x::Dims) = x
+check_dims(x::Dims, y::Dims, z::Dims...) = (@assert x == y; check_dims(y, z...))
+return_dims(::LazyAddLikeOperator, args::AbstractCollection{rank}...) where {rank} = check_dims(map(size, args)...)
+return_dims(::LazyMulLikeOperator, args::AbstractCollection{rank}...) where {rank} = check_dims(map(size, args)...)
+return_dims(::LazyMulLikeOperator, x::AbstractCollection{0}, y::AbstractCollection{0}) = (length(x), length(y))
+return_dims(::LazyMulLikeOperator, x::AbstractCollection{-1}) = size(x)
+
+
+struct LazyCollection{rank, F, Args <: Tuple, N} <: AbstractCollection{rank}
+    f::F
+    args::Args
+    dims::NTuple{N, Int}
+    function LazyCollection{rank, F, Args, N}(f::F, args::Args, dims::NTuple{N, Int}) where {rank, F, Args, N}
+        new{rank::Int, F, Args, N}(f, args, dims)
     end
 end
 
-# add `Ref`s
-lazyable(c::AbstractCollection{rank}, ::Val{rank}) where {rank} = c
-lazyable(c::AbstractCollection{0}, ::Val{1}) = Collection{1}(c) # this is special case for `N * vᵢ`
-lazyable(c, ::Val) = Ref(c)
-
-# Constructor controlling `mulprec`
-@generated function LazyCollection(::Val{mulprec}, f, args...) where {mulprec}
-    rank = maximum(getrank, args)
-    quote
-        @_inline_meta
-        args′ = broadcast(lazyable, args, Val($rank))
-        dims = combine_dims(Val(mulprec), args′...)
-        LazyCollection{$rank, mulprec}(f, args′, dims)
-    end
+@inline function LazyCollection{rank}(f::F, args::Args, dims::NTuple{N, Int}) where {rank, F, Args, N}
+    LazyCollection{rank, F, Args, N}(f, args, dims)
 end
 
-# Constructor (`mulprec` is guess from `f`)
-multiply_precedence(x::Symbol) = Base.operator_precedence(x) ≥ Base.operator_precedence(:*)
 @generated function LazyCollection(f, args...)
-    mulprec = multiply_precedence(Symbol(f.instance))
-    rank = maximum(getrank, args)
-    if rank != 0
-        mulprec = false
-    end
     quote
-        @_inline_meta
-        LazyCollection(Val($mulprec), f, args...)
+        args′ = lazyables(f, args...)
+        norefs = extract_norefs(args′...)
+        rank = return_rank(f, norefs...)
+        dims = return_dims(f, norefs...)
+        LazyCollection{rank}(f, args′, dims)
     end
 end
 lazy(f, args...) = LazyCollection(f, args...)
@@ -70,29 +102,33 @@ Base.length(c::LazyCollection) = prod(c.dims)
 Base.size(c::LazyCollection) = c.dims
 Base.ndims(c::LazyCollection) = length(size(c))
 
-@generated function Base.getindex(c::LazyCollection{<: Any, mulprec, <: Any, Args, N}, I::Vararg{Int, N}) where {mulprec, Args, N}
-    count = 0
-    exps = map(enumerate(Args.parameters)) do (i, T)
-        T <: Base.RefValue && return :(c.args[$i][])
-        if T <: AbstractCollection{0} && mulprec
-            return :(c.args[$i][I[$(count += 1)]])
-        end
-        if T <: AbstractCollection
-            @assert N == 1
-            return :(c.args[$i][first(I)])
-        end
-        error()
-    end
+@inline _getindex(c::AbstractCollection, i::Int) = (@_propagate_inbounds_meta; c[i])
+@inline _getindex(c::Base.RefValue, i::Int) = c[]
+@generated function Base.getindex(c::LazyCollection{<: Any, <: Any, Args, 1}, i::Int) where {Args}
+    exps = [:(_getindex(c.args[$j], i)) for j in 1:length(Args.parameters)]
     quote
         @_inline_meta
-        $(N == 1 ? :(@boundscheck checkbounds(c, I...)) : :(@_propagate_inbounds_meta))
+        @boundscheck checkbounds(c, i)
         @inbounds c.f($(exps...))
     end
 end
-@inline Base.getindex(c::LazyCollection{<: Any, <: Any, <: Any, <: Any, N}, I::CartesianIndex{N}) where {N} = getindex(c, Tuple(I)...)
-@inline Base.getindex(c::LazyCollection{<: Any, <: Any, <: Any, <: Any, 1}, I::CartesianIndex{1}) = getindex(c, Tuple(I)...) # to fix ambiguity
-# linear indexing for matrix form
-@inline function Base.getindex(c::LazyCollection, i::Int)
+
+@generated function Base.getindex(c::LazyCollection{-1, <: Any, Args, 2}, ij::Vararg{Int, 2}) where {Args}
+    count = 0
+    exps = map(enumerate(Args.parameters)) do (k, T)
+        T <: Base.RefValue && return :(c.args[$k][])
+        T <: AbstractCollection{-1} && return :(c.args[$k][ij...])
+        T <: AbstractCollection && return :(c.args[$k][ij[$(count += 1)]])
+        error()
+    end
+    @assert count == 0 || count == 2
+    quote
+        @_inline_meta
+        @_propagate_inbounds_meta
+        @inbounds c.f($(exps...))
+    end
+end
+@inline function Base.getindex(c::LazyCollection{-1, <: Any, <: Any, 2}, i::Int)
     @boundscheck checkbounds(c, i)
     @inbounds begin
         I = CartesianIndices(size(c))[i...]
@@ -105,101 +141,30 @@ end
 function Base.Array(c::LazyCollection)
     v = first(c)
     A = Array{typeof(v)}(undef, size(c))
-    for I in CartesianIndices(A)
-        @inbounds A[I] = c[I]
+    for i in eachindex(A)
+        @inbounds A[i] = c[i]
     end
     A
 end
 
-# show
-_typetostring(::Type{<: LazyCollection{rank}}) where {rank} = "LazyCollection{$rank}"
-_typetostring(T::Type) = "$T"
-_typetostring(::Type{Union{}}) = "Any"
-function Base.show(io::IO, c::LazyCollection{rank}) where {rank}
-    io = IOContext(io, :typeinfo => eltype(c))
-    print(io, "<", length(c), " × ", _typetostring(eltype(c)), ">[")
-    join(io, [sprint(show, c[i]; context = IOContext(io, :compact => true)) for i in eachindex(c)], ", ")
-    print(io, "]")
-    if !get(io, :compact, false)
-        print(io, " with rank=$rank")
-    end
-end
-function Base.show(io::IO, c::LazyCollection{0})
-    join(io, size(c), "×")
-    print(io, " Array(collection) = ", Array(c))
-end
+show_type_name(c::LazyCollection) = "LazyCollection{$(whichrank(c))}"
 
 
-##############
-# Operations #
-##############
-# rank= 1: nodal value
-# rank= 2: point value
-# rank= 0: nodal value, but used only for shape function
-# rank=-1: computation with scalar type is allowed
-
-#=
-# unary
-function lazy(op, c::AbstractCollection{rank}) where {rank}
-    LazyCollection{rank}(op, c)
-end
-
-# binary
-lazy(op, c::AbstractCollection{rank}, x) where {rank} = LazyCollection{rank}(op, c, x)
-lazy(op, x, c::AbstractCollection{rank}) where {rank} = LazyCollection{rank}(op, x, c)
-lazy(op, x::AbstractCollection{rank}, y::AbstractCollection{rank}) where {rank} =
-    LazyCollection{rank}(op, x, y)
-function lazy(op, x::AbstractCollection{L1}, y::AbstractCollection{L2}) where {L1, L2}
-    L1 > L2 ? LazyCollection{L1}(op, x, y) :
-              LazyCollection{L2}(op, x, y)
-end
-# special cases and errors
-operation_error(op, rank1, rank2) = throw(ArgumentError("wrong collection operation with $op(rank=$rank1, rank=$rank2)"))
-## Nᵢ[p] * vᵢ[p]
-lazy(op, x::AbstractCollection{0}, y::AbstractCollection{1}) = LazyCollection{-1}(op, x, y)
-lazy(op, x::AbstractCollection{1}, y::AbstractCollection{0}) = LazyCollection{-1}(op, x, y)
-## Nᵢ[p] * Nᵢ[p]
-lazy(op::typeof(*), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(op, x, y)
-lazy(op::typeof(⊗), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(op, x, y)
-lazy(op::typeof(⋅), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{-1}(op, x, y)
-lazy(op::typeof(+), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{0}(op, x, y)
-lazy(op::typeof(-), x::AbstractCollection{0}, y::AbstractCollection{0}) = LazyCollection{0}(op, x, y)
-lazy(op, x::AbstractCollection{0}, y::AbstractCollection{0}) = operation_error(op, 0, 0)
-## errors (point value can be calculated with only point value)
-lazy(op, x::AbstractCollection{2}, y::AbstractCollection{1}) = operation_error(op, 2, 1)
-lazy(op, x::AbstractCollection{2}, y::AbstractCollection{0}) = operation_error(op, 2, 0)
-lazy(op, x::AbstractCollection{1}, y::AbstractCollection{2}) = operation_error(op, 1, 2)
-lazy(op, x::AbstractCollection{0}, y::AbstractCollection{2}) = operation_error(op, 0, 2)
-## errors (rank=-1 collection cannot be calculated with any collections)
-lazy(op, x::AbstractCollection{-1}, y::AbstractCollection{0}) = operation_error(op, -1, 0)
-lazy(op, x::AbstractCollection{-1}, y::AbstractCollection{1}) = operation_error(op, -1, 1)
-lazy(op, x::AbstractCollection{-1}, y::AbstractCollection{2}) = operation_error(op, -1, 2)
-lazy(op, x::AbstractCollection{0}, y::AbstractCollection{-1}) = operation_error(op, 0, -1)
-lazy(op, x::AbstractCollection{1}, y::AbstractCollection{-1}) = operation_error(op, 1, -1)
-lazy(op, x::AbstractCollection{2}, y::AbstractCollection{-1}) = operation_error(op, 2, -1)
-
-# ternary
-TensorValues.dotdot(u::AbstractCollection, x, v::AbstractCollection) = lazy(dotdot, u, x, v)
-lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{0}, x::SymmetricFourthOrderTensor, v::AbstractCollection{0}) = LazyCollection{-1}(dotdot, u, x, v')
-lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::SymmetricFourthOrderTensor, v::AbstractCollection{2}) = LazyCollection{2}(dotdot, u, x, v)
-lazy(::typeof(TensorValues.dotdot), u::AbstractCollection{2}, x::AbstractCollection{2}, v::AbstractCollection{2}) = LazyCollection{2}(dotdot, u, x, v)
-=#
-
-macro define_lazy_operation(op)
+macro define_lazy_unary_operation(op)
     quote
-        @inline $op(x::AbstractCollection, y::AbstractCollection...) = lazy($op, x, y...)
-        @inline $op(c::AbstractCollection, x) = lazy($op, c, x)
-        @inline $op(x, c::AbstractCollection) = lazy($op, x, c)
+        @inline $op(x::AbstractCollection) = lazy($op, x)
     end |> esc
 end
 
-const operations = [
-    :(TensorValues.:⋅),
-    :(TensorValues.:⊗),
-    :(TensorValues.:×),
-    :(TensorValues.:⊡),
-    :(TensorValues.valgrad),
-    :(TensorValues._otimes_),
+macro define_lazy_binary_operation(op)
+    quote
+        @inline $op(c::AbstractCollection, x) = lazy($op, c, x)
+        @inline $op(x, c::AbstractCollection) = lazy($op, x, c)
+        @inline $op(x::AbstractCollection, y::AbstractCollection) = lazy($op, x, y)
+    end |> esc
+end
+
+const unary_operations = [
     :(TensorValues.∇),
     :(TensorValues.symmetric),
     :(TensorValues.tr),
@@ -215,14 +180,31 @@ const operations = [
     :(MaterialModels.infinitesimal_strain),
     :(Base.:+),
     :(Base.:-),
-    :(Base.:*),
-    :(Base.:/),
-    :(Base.:^),
     :(Base.:log),
     :(Base.:log10),
     :(LinearAlgebra.norm),
 ]
 
-for op in operations
-    @eval @define_lazy_operation $op
+const binary_operations = [
+    :(Base.:+),
+    :(Base.:-),
+    :(Base.:*),
+    :(Base.:/),
+    :(Base.:^),
+    :(TensorValues.:⋅),
+    :(TensorValues.:⊗),
+    :(TensorValues.:×),
+    :(TensorValues.:⊡),
+    :(TensorValues.valgrad),
+    :(TensorValues._otimes_),
+]
+
+for op in unary_operations
+    @eval @define_lazy_unary_operation $op
 end
+
+for op in binary_operations
+    @eval @define_lazy_binary_operation $op
+end
+
+LazyOperationType(::typeof(TensorValues.dotdot)) = LazyMulLikeOperator()

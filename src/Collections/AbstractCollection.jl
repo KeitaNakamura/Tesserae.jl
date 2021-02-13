@@ -1,9 +1,13 @@
 """
-    AbstractCollection{rank, T}
+    AbstractCollection{rank}
 
 Supertype for collections.
 """
 abstract type AbstractCollection{rank} end
+
+whichrank(::AbstractCollection{rank}) where {rank} = rank
+whichrank(::Type{<: AbstractCollection{rank}}) where {rank} = rank
+whichrank(::Any) = -100 # just use low value
 
 Base.eltype(c::AbstractCollection) = typeof(first(c)) # try to getindex
 # Above eltype throws error if collection is empty.
@@ -13,7 +17,7 @@ function safe_eltype(c::AbstractCollection)
 end
 
 function Base.fill!(c::AbstractCollection, v)
-    for i in eachindex(c)
+    @simd for i in eachindex(c)
         @inbounds c[i] = v
     end
     c
@@ -33,7 +37,6 @@ Base.size(c::AbstractCollection) = (length(c),)
 Base.eachindex(c::AbstractCollection) = Base.OneTo(lastindex(c))
 Base.firstindex(c::AbstractCollection) = 1
 Base.lastindex(c::AbstractCollection) = length(c)
-@inline Base.getindex(c::AbstractCollection, i::CartesianIndex{1}) = (@_propagate_inbounds_meta; c[i[1]])
 
 # iterate
 @inline Base.iterate(c::AbstractCollection, i = 1) = (i % UInt) - 1 < length(c) ? (@inbounds c[i], i + 1) : nothing
@@ -55,15 +58,43 @@ function Base.isassigned(c::AbstractCollection, i)
 end
 
 # broadcast
-Broadcast.broadcastable(c::AbstractCollection) = c
-Broadcast.BroadcastStyle(::Type{<: AbstractCollection}) = Broadcast.DefaultArrayStyle{1}()
+Broadcast.broadcastable(c::AbstractCollection) = error("AbstractCollection: Broadcast is not supported")
 
-function Base.show(io::IO, c::AbstractCollection{rank}) where {rank}
-    io = IOContext(io, :typeinfo => safe_eltype(c))
-    print(io, "<", length(c), " × ", safe_eltype(c), ">[")
-    join(io, [isassigned(c, i) ? sprint(show, c[i]; context=io) : "#undef" for i in eachindex(c)], ", ")
-    print(io, "]")
-    if !get(io, :compact, false)
-        print(io, " with rank=$rank")
+function set!(dest::Union{AbstractVector, AbstractCollection{rank}}, src::AbstractCollection{rank}) where {rank}
+    @assert length(dest) == length(src)
+    @simd for i in 1:length(dest)
+        @inbounds dest[i] = src[i]
     end
+    dest
+end
+
+# copied from Base
+function Base.:(==)(A::Union{AbstractArray, AbstractCollection}, B::Union{AbstractArray, AbstractCollection})
+    if axes(A) != axes(B)
+        return false
+    end
+    anymissing = false
+    for (a, b) in zip(A, B)
+        eq = (a == b)
+        if ismissing(eq)
+            anymissing = true
+        elseif !eq
+            return false
+        end
+    end
+    return anymissing ? missing : true
+end
+
+show_type_name(c::AbstractCollection) = typeof(c)
+Base.summary(io::IO, c::AbstractCollection) =
+    print(io, Base.dims2string(size(c)), " ", show_type_name(c), " with rank=", whichrank(c), ":")
+
+function Base.show(io::IO, mime::MIME"text/plain", c::AbstractCollection)
+    summary(io, c)
+    println(io)
+    Base.print_array(io, Array(c))
+end
+
+function Base.show(io::IO, c::AbstractCollection)
+    print(io, collect(c))
 end
