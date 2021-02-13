@@ -52,7 +52,6 @@ end
         end
     end
 end
-const ← = set!
 
 # generate point states
 

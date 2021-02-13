@@ -11,8 +11,6 @@ Construct logger which handle with time event in the calculation.
 The workflow using `Logger` can be written as follows:
 
 ```jldoctest
-using MPM.Loggers
-
 function workflow()
     logpoints = 0:0.5:5
     logger = Logger(logpoints)

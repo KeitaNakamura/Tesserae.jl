@@ -18,7 +18,6 @@ export
 # PointState
     PointState,
     pointstate,
-    ←,
     generate_pointstates,
 # GridState
     GridState,

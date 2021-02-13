@@ -27,4 +27,6 @@ include("AdjointCollection.jl")
 include("LazyCollection.jl")
 include("CollectionView.jl")
 
+const ← = set!
+
 end
