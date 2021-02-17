@@ -4,7 +4,7 @@ using Debugger
 function main(; implicit = false)
     # it = LinearBSpline(dim=2)
     it = WLS{1}(QuadraticBSpline(dim=2))
-    grid = Grid(0:0.05:1, 0:0.05:1)
+    grid = Grid{2}(LinRange(0:0.05:1))
     xₚ, V₀ₚ = generate_pointstates((x,y) -> 0.4<x<0.6 && y<0.3, grid)
     space = MPSpace(it, grid, length(xₚ))
     @show npoints(space)

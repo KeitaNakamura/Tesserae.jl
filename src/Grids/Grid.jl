@@ -17,10 +17,12 @@ struct Grid{dim, T, V} <: AbstractGrid{dim, T}
     axisarray::Coordinate{dim, T, V}
 end
 
-function Grid(axs::NTuple{dim, V}) where {dim, T, V <: AbstractVector{T}}
-    Grid{dim, T, V}(Coordinate(axs))
+function Grid(axs::NTuple{dim, AbstractVector}) where {dim}
+    Grid(Coordinate(axs))
 end
 
 Grid(axs::Vararg{AbstractVector}) = Grid(axs)
+
+Grid{dim}(ax::AbstractVector) where {dim} = Grid(Coordinate{dim}(ax))
 
 getaxisarray(grid::Grid) = grid.axisarray
