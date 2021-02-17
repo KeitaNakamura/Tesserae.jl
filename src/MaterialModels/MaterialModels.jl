@@ -8,6 +8,7 @@ using Reexport
 export
     MaterialModel,
     LinearElastic,
+    SoilElastic,
     VonMises,
     DruckerPrager,
     WaterModel,
@@ -23,6 +24,7 @@ abstract type MaterialModel end
 
 include("utils.jl")
 include("LinearElastic.jl")
+include("SoilElastic.jl")
 include("VonMises.jl")
 include("DruckerPrager.jl")
 include("WaterModel.jl")
