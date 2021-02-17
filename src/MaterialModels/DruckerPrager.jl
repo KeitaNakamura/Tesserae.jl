@@ -5,13 +5,12 @@ struct DruckerPrager{T} <: MaterialModel
     b::T
 end
 
-function DruckerPrager{T}(; A::Real, B::Real, b::Real = B, kwargs...) where {T}
-    elastic = LinearElastic{T}(; kwargs...)
-    DruckerPrager{T}(elastic, A, B, b)
+function DruckerPrager(elastic::LinearElastic; A::Real, B::Real, b::Real = B)
+    DruckerPrager(elastic, A, B, b)
 end
 
 # for Mohr-Coulomb criterion
-function DruckerPrager{T}(mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = ϕ, kwargs...) where {T}
+function DruckerPrager(elastic::LinearElastic, mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = ϕ)
     ϕ = deg2rad(ϕ)
     ψ = deg2rad(ψ)
     if mc_type == :circumscribed
@@ -29,10 +28,8 @@ function DruckerPrager{T}(mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = ϕ, kwa
     else
         throw(ArgumentError("Choose Mohr-Coulomb type from :circumscribed, :inscribed and :plane_strain"))
     end
-    DruckerPrager{T}(; A, B, b, kwargs...)
+    DruckerPrager(elastic; A, B, b)
 end
-
-DruckerPrager(args...; kwargs...) = DruckerPrager{Float64}(args...; kwargs...)
 
 function update_stress(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
     # compute the stress at the elastic trial state

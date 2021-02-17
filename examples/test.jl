@@ -9,7 +9,7 @@ function main(; implicit = false)
     space = MPSpace(it, grid, length(xₚ))
     @show npoints(space)
 
-    model = DruckerPrager(:plane_strain, E = 1.6e5, ν = 0.3, c = 0, ϕ = 30, ψ = 1)
+    model = DruckerPrager(LinearElastic(E = 1.6e5, ν = 0.3), :plane_strain, c = 0, ϕ = 30, ψ = 1)
 
     ρ₀ = 2.6e3
     mₚ = pointstate(ρ₀ * V₀ₚ)

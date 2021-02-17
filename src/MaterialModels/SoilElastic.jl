@@ -5,10 +5,9 @@ struct SoilElastic{T} <: MaterialModel
     μ_ref::T
 end
 
-function SoilElastic{T}(; κ::Real, α::Real, p_ref::Real, μ_ref::Real) where {T}
-    SoilElastic{T}(κ, α, p_ref, μ_ref)
+function SoilElastic(; κ::Real, α::Real, p_ref::Real, μ_ref::Real)
+    SoilElastic(κ, α, p_ref, μ_ref)
 end
-SoilElastic(; kwargs...) = SoilElastic{Float64}(; kwargs...)
 
 function W(model::SoilElastic, ϵᵉ::SymmetricSecondOrderTensor{3})
     κ, α, p_ref, μ_ref = model.κ, model.α, model.p_ref, model.μ_ref

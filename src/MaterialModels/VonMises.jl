@@ -3,22 +3,18 @@ struct VonMises{T} <: MaterialModel
     q_y::T
 end
 
-function VonMises{T}(; q_y::Real, kwargs...) where {T}
-    elastic = LinearElastic{T}(; kwargs...)
-    VonMises{T}(elastic, q_y)
+function VonMises(elastic::LinearElastic; q_y::Real)
+    VonMises(elastic, q_y)
 end
 
-function VonMises{T}(mode_type::Symbol; c::Real, kwargs...) where {T}
+function VonMises(elastic::LinearElastic, mode_type::Symbol; c::Real)
     if mode_type == :plane_strain
         q_y = √3c
     else
         throw(ArgumentError("Supported model type is :plane_strain"))
     end
-    elastic = LinearElastic{T}(; kwargs...)
-    VonMises{T}(elastic, q_y)
+    VonMises(elastic, q_y)
 end
-
-VonMises(args...; kwargs...) = VonMises{Float64}(args...; kwargs...)
 
 function update_stress(model::VonMises, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
     # compute the stress at the elastic trial state
