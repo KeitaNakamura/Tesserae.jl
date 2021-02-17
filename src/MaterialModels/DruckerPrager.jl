@@ -1,13 +1,13 @@
 struct DruckerPrager{T} <: MaterialModel
     elastic::LinearElastic{T}
-    κ::T
-    α::T
-    β::T
+    A::T
+    B::T
+    b::T
 end
 
-function DruckerPrager{T}(; κ::Real, α::Real, β::Real = α, kwargs...) where {T}
+function DruckerPrager{T}(; A::Real, B::Real, b::Real = B, kwargs...) where {T}
     elastic = LinearElastic{T}(; kwargs...)
-    DruckerPrager{T}(elastic, κ, α, β)
+    DruckerPrager{T}(elastic, A, B, b)
 end
 
 # for Mohr-Coulomb criterion
@@ -15,21 +15,21 @@ function DruckerPrager{T}(mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = ϕ, kwa
     ϕ = deg2rad(ϕ)
     ψ = deg2rad(ψ)
     if mc_type == :circumscribed
-        κ = 6c*cos(ϕ) / (√3 * (3 - sin(ϕ)))
-        α = 2sin(ϕ) / (√3 * (3 - sin(ϕ)))
-        β = 2sin(ψ) / (√3 * (3 - sin(ψ)))
+        A = 6c*cos(ϕ) / (√3 * (3 - sin(ϕ)))
+        B = 2sin(ϕ) / (√3 * (3 - sin(ϕ)))
+        b = 2sin(ψ) / (√3 * (3 - sin(ψ)))
     elseif mc_type == :inscribed
-        κ = 6c*cos(ϕ) / (√3 * (3 + sin(ϕ)))
-        α = 2sin(ϕ) / (√3 * (3 + sin(ϕ)))
-        β = 2sin(ψ) / (√3 * (3 + sin(ψ)))
+        A = 6c*cos(ϕ) / (√3 * (3 + sin(ϕ)))
+        B = 2sin(ϕ) / (√3 * (3 + sin(ϕ)))
+        b = 2sin(ψ) / (√3 * (3 + sin(ψ)))
     elseif mc_type == :plane_strain
-        κ = 3c / sqrt(9 + 12tan(ϕ)^2)
-        α = tan(ϕ) / sqrt(9 + 12tan(ϕ)^2)
-        β = tan(ψ) / sqrt(9 + 12tan(ψ)^2)
+        A = 3c / sqrt(9 + 12tan(ϕ)^2)
+        B = tan(ϕ) / sqrt(9 + 12tan(ϕ)^2)
+        b = tan(ψ) / sqrt(9 + 12tan(ψ)^2)
     else
         throw(ArgumentError("Choose Mohr-Coulomb type from :circumscribed, :inscribed and :plane_strain"))
     end
-    DruckerPrager{T}(; κ, α, β, kwargs...)
+    DruckerPrager{T}(; A, B, b, kwargs...)
 end
 
 DruckerPrager(args...; kwargs...) = DruckerPrager{Float64}(args...; kwargs...)
@@ -49,22 +49,22 @@ function update_stress(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3}, 
 end
 
 function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::eltype(σ)
-    κ = model.κ
-    α = model.α
+    A = model.A
+    B = model.B
     I₁ = tr(σ)
     s = dev(σ)
     J₂ = (s ⊡ s) / 2
-    √J₂ - (κ - α*I₁)
+    √J₂ - (A - B*I₁)
 end
 
 function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::typeof(σ)
-    β = model.β
+    b = model.b
     s = dev(σ)
     J₂ = (s ⊡ s) / 2
     if J₂ < eps(typeof(J₂))
-        dgdσ = β * one(σ)
+        dgdσ = b * one(σ)
     else
-        dgdσ = s / (2*√J₂) + β * one(σ)
+        dgdσ = s / (2*√J₂) + b * one(σ)
     end
     dgdσ
 end
