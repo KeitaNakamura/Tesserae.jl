@@ -21,6 +21,9 @@ end
 
 Base.fill!(p::PointState, v) = fill!(p.data, v)
 
+Base.filter(f, p::PointState) = PointState(filter(f, p.data))
+Base.findall(f, p::PointState) = findall(f, p.data)
+
 Base.similar(p::PointState, ::Type{T}) where {T} = pointstate(T, length(p))
 Base.similar(p::PointState{T}) where {T} = similar(p, T)
 
