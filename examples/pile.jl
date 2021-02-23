@@ -36,7 +36,7 @@ function main()
     for p in 1:npoints(space)
         y = xₚ[p][2]
         σ_y = -ρ₀ * g * (h - y)
-        σ_x = σ_y
+        σ_x = σ_y * ν / (1 - ν)
         σₚ[p] = (@Mat [σ_x 0.0 0.0
                        0.0 σ_y 0.0
                        0.0 0.0 σ_x]) |> symmetric
@@ -66,10 +66,6 @@ function main()
     p0 = P(zero(Vec{2}))
     ∇p0 = ∇(P)(zero(Vec{2}))
 
-    path = "pile.tmp/out"
-    mkpath(dirname(path))
-    paraview_collection(vtk_save, path)
-
     thick = 2 * gridsteps(grid, 1)
     D_i = 0.15 # inner diameter at top
     d_i = 0.15 # inner diameter at tip
@@ -89,13 +85,29 @@ function main()
                     Vec(R_o, initial_tip_height + taper_length),
                     Vec(R_o, y_max)])
     v_pile = Vec(0.0, -0.1)
+
     pile_pos0 = center(pile)
+    find_ground_pos(xₚ) = maximum(x -> x[2], filter(x -> x[1] < gridsteps(grid, 1), xₚ))
+    ground_pos0 = find_ground_pos(xₚ)
     @show taper_angle
 
-    csvfile = "pile.csv"
-    open(csvfile, "w") do io
-        writedlm(io, ["d" "f"], ',')
+    # Output files
+    ## proj
+    proj_dir = joinpath(dirname(@__FILE__), "pile.tmp")
+    mkpath(proj_dir)
+
+    ## paraview
+    paraview_file = joinpath(proj_dir, "out")
+    paraview_collection(vtk_save, paraview_file)
+
+    ## history
+    csv_file = joinpath(proj_dir, "history.csv")
+    open(csv_file, "w") do io
+        writedlm(io, ["disp" "force" "disp_inside_pile" "tip_resistance" "inside_resistance" "outside_resistance"], ',')
     end
+
+    ## copy this file
+    cp(@__FILE__, joinpath(proj_dir, basename(@__FILE__)), force = true)
 
     count = 0
     t = 0.0
@@ -140,8 +152,8 @@ function main()
         step += 1
 
         if islogpoint(logger)
-            paraview_collection(path, append = true) do pvd
-                vtk_multiblock(string(path, logindex(logger))) do vtm
+            paraview_collection(paraview_file, append = true) do pvd
+                vtk_multiblock(string(paraview_file, logindex(logger))) do vtm
                     vtk_points(vtm, xₚ) do vtk
                         vtk_point_data(vtk, vₚ, "velocity")
                         vtk_point_data(vtk, -mean(σₚ), "mean stress")
@@ -153,13 +165,29 @@ function main()
                     pvd[t] = vtm
                 end
             end
-            open(csvfile, "a") do io
-                f = -sum(fcᵢ)[2] * 2π
-                d = norm(center(pile) - pile_pos0)
-                writedlm(io, [d f], ',')
+            open(csv_file, "a") do io
+                disp = norm(center(pile) - pile_pos0)
+                force = -sum(fcᵢ)[2] * 2π
+                disp_inside_pile = -(find_ground_pos(xₚ) - ground_pos0)
+                tip_resistance = compute_tip_resistance(fcᵢ, fcₙᵢ)
+                inside_resistance = compute_inside_resistance(fcᵢ, fcₙᵢ)
+                outside_resistance = compute_outside_resistance(fcᵢ, fcₙᵢ)
+                writedlm(io, [disp force disp_inside_pile tip_resistance inside_resistance outside_resistance], ',')
             end
         end
     end
+end
+
+function compute_tip_resistance(fcᵢ, fcₙᵢ)
+    2π * mapreduce(i -> -fcᵢ[i][2], +, findall(f -> !(f[2] ≈ 0), fcₙᵢ), init = 0.0)
+end
+
+function compute_inside_resistance(fcᵢ, fcₙᵢ)
+    2π * mapreduce(i -> -fcᵢ[i][2], +, findall(f -> f[2] ≈ 0 && f[1] > 0, fcₙᵢ), init = 0.0)
+end
+
+function compute_outside_resistance(fcᵢ, fcₙᵢ)
+    2π * mapreduce(i -> -fcᵢ[i][2], +, findall(f -> f[2] ≈ 0 && f[1] < 0, fcₙᵢ), init = 0.0)
 end
 
 function stress(model, σₚ, dϵ)
@@ -175,8 +203,16 @@ function contact_force_normal(poly::Polygon, x::Vec{dim, T}, m::Real, vᵣ::Vec,
     n = d / norm_d
     k = E * 10
     # -k * (norm_d - threshold) * n
-    ξ = 0.9
+    ξ = 0.5
     -(1 - ξ) * (2m / dt^2 * (norm_d - threshold)) * n
+    #=
+    ξ = 0.0
+    c = m / dt
+    vn = (vᵣ ⋅ n) * n # normal
+    vt = vᵣ - vn      # tangent
+    fn = (1 - ξ) * ((c/dt) * (threshold - norm_d) * n + c * vn) # contributions: (penetration distance) + (current normal velocity)
+    fn
+    =#
 end
 
 function contact_force(v_r::Vec, f_n::Vec, m::Real, dt::Real, μ::Real)
@@ -215,6 +251,8 @@ end
 
 #=
 using Plots, DelimitedFiles
-plot((arr = readdlm("pile.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,2])))
-plot((arr = readdlm("pile.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,2])), legend = false, xlims = (0,2), ylims = (0,60e3))
+plot((arr = readdlm("examples/pile.tmp/history.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,2])))
+plot((arr = readdlm("examples/pile.tmp/history.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,2])), legend = false, xlims = (0,2), ylims = (0,60e3))
+
+plot((arr = readdlm("examples/pile.tmp/history.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,[2,4,5,6]])), legend = false, xlims = (0,2), ylims = (0,60e3))
 =#
