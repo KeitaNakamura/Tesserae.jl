@@ -75,25 +75,27 @@ function main()
     r_i = d_i / 2 # radius
     R_o = R_i + thick
     r_o = r_i + thick
-    initial_tip_height = h + gridsteps(grid, 1)
+    tip_height_0 = h + gridsteps(grid, 1)
     taper_angle = atan((R_i-r_i) / taper_length) |> rad2deg
     y_max = grid[end, end][2]
     pile = Polygon([Vec(R_i, y_max),
-                    Vec(R_i, initial_tip_height + taper_length),
-                    Vec(r_i, initial_tip_height),
-                    Vec(r_o, initial_tip_height),
-                    Vec(R_o, initial_tip_height + taper_length),
+                    Vec(R_i, tip_height_0 + taper_length),
+                    Vec(r_i, tip_height_0),
+                    Vec(r_o, tip_height_0),
+                    Vec(R_o, tip_height_0 + taper_length),
                     Vec(R_o, y_max)])
     v_pile = Vec(0.0, -0.1)
 
-    pile_pos0 = center(pile)
+    pile_center_0 = center(pile)
+    tip_height(pile) = tip_height_0 + (center(pile) - pile_center_0)[2]
+
     find_ground_pos(xₚ) = maximum(x -> x[2], filter(x -> x[1] < gridsteps(grid, 1), xₚ))
     ground_pos0 = find_ground_pos(xₚ)
     @show taper_angle
 
     # Output files
     ## proj
-    proj_dir = joinpath(dirname(@__FILE__), "pile.tmp")
+    proj_dir = joinpath(dirname(@__FILE__), "$(now()) pile.tmp")
     mkpath(proj_dir)
 
     ## paraview
@@ -105,6 +107,11 @@ function main()
     open(csv_file, "w") do io
         writedlm(io, ["disp" "force" "disp_inside_pile" "tip_resistance" "inside_resistance" "outside_resistance"], ',')
     end
+
+    ## forces
+    mkpath(joinpath(proj_dir, "force_tip"))
+    mkpath(joinpath(proj_dir, "force_inside"))
+    mkpath(joinpath(proj_dir, "force_outside"))
 
     ## copy this file
     cp(@__FILE__, joinpath(proj_dir, basename(@__FILE__)), force = true)
@@ -165,29 +172,54 @@ function main()
                     pvd[t] = vtm
                 end
             end
+
+            tip_resistance = compute_tip_resistance(fcᵢ, fcₙᵢ, grid, tip_height(pile))
+            inside_resistance = compute_inside_resistance(fcᵢ, fcₙᵢ, grid, tip_height(pile))
+            outside_resistance = compute_outside_resistance(fcᵢ, fcₙᵢ, grid, tip_height(pile))
+            _sum(x) = isempty(x) ? 0.0 : sum(x[:,2])
+
             open(csv_file, "a") do io
-                disp = norm(center(pile) - pile_pos0)
+                disp = norm(center(pile) - pile_center_0)
                 force = -sum(fcᵢ)[2] * 2π
                 disp_inside_pile = -(find_ground_pos(xₚ) - ground_pos0)
-                tip_resistance = compute_tip_resistance(fcᵢ, fcₙᵢ)
-                inside_resistance = compute_inside_resistance(fcᵢ, fcₙᵢ)
-                outside_resistance = compute_outside_resistance(fcᵢ, fcₙᵢ)
-                writedlm(io, [disp force disp_inside_pile tip_resistance inside_resistance outside_resistance], ',')
+                writedlm(io, [disp force disp_inside_pile _sum(tip_resistance) _sum(inside_resistance) _sum(outside_resistance)], ',')
             end
+
+            open(io -> writedlm(io, tip_resistance, ','), joinpath(proj_dir, "force_tip", "force_tip_$(logindex(logger)).csv"), "w")
+            open(io -> writedlm(io, inside_resistance, ','), joinpath(proj_dir, "force_inside", "force_inside_$(logindex(logger)).csv"), "w")
+            open(io -> writedlm(io, outside_resistance, ','), joinpath(proj_dir, "force_outside", "force_outside_$(logindex(logger)).csv"), "w")
         end
     end
 end
 
-function compute_tip_resistance(fcᵢ, fcₙᵢ)
-    2π * mapreduce(i -> -fcᵢ[i][2], +, findall(f -> !(f[2] ≈ 0), fcₙᵢ), init = 0.0)
+function compute_tip_resistance(fcᵢ, fcₙᵢ, grid, y0)
+    inds = findall(f -> !(f[2] ≈ 0), fcₙᵢ)
+    out = Dict{Int, Float64}()
+    for (i,I) in enumerate(inds)
+        f_y = -2π * fcᵢ[I][2]
+        out[I[2]] = get!(out, I[2], 0.0) + f_y
+    end
+    vcat([[grid[1,v[1]][2]-y0 v[2]] for v in sort(out)]...)
 end
 
-function compute_inside_resistance(fcᵢ, fcₙᵢ)
-    2π * mapreduce(i -> -fcᵢ[i][2], +, findall(f -> f[2] ≈ 0 && f[1] > 0, fcₙᵢ), init = 0.0)
+function compute_inside_resistance(fcᵢ, fcₙᵢ, grid, y0)
+    inds = findall(f -> f[2] ≈ 0 && f[1] > 0, fcₙᵢ)
+    out = Dict{Int, Float64}()
+    for (i,I) in enumerate(inds)
+        f_y = -2π * fcᵢ[I][2]
+        out[I[2]] = get!(out, I[2], 0.0) + f_y
+    end
+    vcat([[grid[1,v[1]][2]-y0 v[2]] for v in sort(out)]...)
 end
 
-function compute_outside_resistance(fcᵢ, fcₙᵢ)
-    2π * mapreduce(i -> -fcᵢ[i][2], +, findall(f -> f[2] ≈ 0 && f[1] < 0, fcₙᵢ), init = 0.0)
+function compute_outside_resistance(fcᵢ, fcₙᵢ, grid, y0)
+    inds = findall(f -> f[2] ≈ 0 && f[1] < 0, fcₙᵢ)
+    out = Dict{Int, Float64}()
+    for (i,I) in enumerate(inds)
+        f_y = -2π * fcᵢ[I][2]
+        out[I[2]] = get!(out, I[2], 0.0) + f_y
+    end
+    vcat([[grid[1,v[1]][2]-y0 v[2]] for v in sort(out)]...)
 end
 
 function stress(model, σₚ, dϵ)
