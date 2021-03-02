@@ -90,6 +90,8 @@ function vtk_format(x::Union{PointState{Vec{dim, T}}, AbstractVector{Vec{dim, T}
     out
 end
 
-vtk_format(data::Union{PointState{<: Tensor}, AbstractVector{<: Tensor}}) = vtk_format([Vec(Tuple(x)) for x in data])
+function vtk_format(data::Union{PointState{<: SymmetricSecondOrderTensor{3}}, AbstractVector{<: SymmetricSecondOrderTensor{3}}})
+    vtk_format([@inbounds Vec(x[1,1], x[2,2], x[3,3], x[1,2], x[2,3], x[1,3]) for x in data])
+end
 
 end
