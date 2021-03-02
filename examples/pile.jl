@@ -150,7 +150,7 @@ function main()
 
         Fₚ ← Fₚ + dt*(∇vₚ ⋅ Fₚ)
         Vₚ ← V₀ₚ * det(Fₚ)
-        σₚ ← stress:(model, σₚ, symmetric(∇vₚ) * dt)
+        σₚ ← stress:(model, σₚ, ∇vₚ, dt)
 
         xₚ ← xₚ + vₚ * dt
 
@@ -222,8 +222,9 @@ function compute_outside_resistance(fcᵢ, fcₙᵢ, grid, y0)
     vcat([[grid[1,v[1]][2]-y0 v[2]] for v in sort(out)]...)
 end
 
-function stress(model, σₚ, dϵ)
-    σ = MaterialModels.update_stress(model, σₚ, dϵ)
+function stress(model, σₚ, ∇vₚ, dt)
+    σ = MaterialModels.update_stress(model, σₚ, symmetric(∇vₚ) * dt)
+    σ = MaterialModels.jaumann_stress(σ, σₚ, ∇vₚ, dt)
     mean(σ) > 0 ? zero(σ) : σ
 end
 
