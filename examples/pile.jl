@@ -162,11 +162,14 @@ function main()
             paraview_collection(paraview_file, append = true) do pvd
                 vtk_multiblock(string(paraview_file, logindex(logger))) do vtm
                     vtk_points(vtm, xₚ) do vtk
+                        ϵₚ = symmetric(Fₚ - I)
                         vtk_point_data(vtk, vₚ, "velocity")
                         vtk_point_data(vtk, -mean(σₚ), "mean stress")
                         vtk_point_data(vtk, deviatoric_stress(σₚ), "deviatoric stress")
-                        vtk_point_data(vtk, volumetric_strain(infinitesimal_strain(Fₚ)), "volumetric strain")
-                        vtk_point_data(vtk, deviatoric_strain(infinitesimal_strain(Fₚ)), "deviatoric strain")
+                        vtk_point_data(vtk, volumetric_strain(ϵₚ), "volumetric strain")
+                        vtk_point_data(vtk, deviatoric_strain(ϵₚ), "deviatoric strain")
+                        vtk_point_data(vtk, σₚ, "stress")
+                        vtk_point_data(vtk, ϵₚ, "strain")
                     end
                     vtk_grid(vtm, pile)
                     pvd[t] = vtm

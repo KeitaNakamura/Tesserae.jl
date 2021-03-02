@@ -75,7 +75,7 @@ end
 
 Write the vector field data to the `vtk` file.
 """
-function WriteVTK.vtk_point_data(vtk::WriteVTK.DatasetFile, data::Union{PointState{<: Vec}, AbstractVector{<: Vec}}, name::AbstractString)
+function WriteVTK.vtk_point_data(vtk::WriteVTK.DatasetFile, data::Union{PointState{<: Tensor}, AbstractVector{<: Tensor}}, name::AbstractString)
     vtk_point_data(vtk, vtk_format(data), name)
 end
 function WriteVTK.vtk_point_data(vtk::WriteVTK.DatasetFile, data::AbstractCollection{2}, name::AbstractString)
@@ -89,5 +89,7 @@ function vtk_format(x::Union{PointState{Vec{dim, T}}, AbstractVector{Vec{dim, T}
     out[1:dim, :] .= reshape(v, dim, n)
     out
 end
+
+vtk_format(data::Union{PointState{<: Tensor}, AbstractVector{<: Tensor}}) = vtk_format([Vec(Tuple(x)) for x in data])
 
 end
