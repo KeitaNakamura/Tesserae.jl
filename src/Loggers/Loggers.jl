@@ -109,7 +109,7 @@ end
 function getprogress(logger::Logger, t::Real)
     t0 = first(logger)
     t1 = last(logger)
-    floor(Int, 10000 * (t - t0) / (t1 - t0))
+    ceil(Int, 10000 * (t - t0) / (t1 - t0))
 end
 
 function printprogress(logger::Logger, t::Real)
