@@ -175,18 +175,20 @@ function contact_distance(poly::Polygon, x::Vec{dim, T}, m::Real, vᵣ::Vec, h::
     d === nothing && return zero(Vec{dim, T})
     norm_d = norm(d)
     n = d / norm_d
-    (norm_d - threshold) * n
+    (threshold - norm_d) * n
 end
 
 function contact_force(v_r::Vec, d::Vec, m::Real, dt::Real, μ::Real)
     ξ = 0.96
-    n = -d / norm(d)
+    n = d / norm(d)
     c = m / dt
     v_n = (v_r ⋅ n) * n
     v_t = v_r - v_n
-    f_n = -(1-ξ) * 2c * (d/dt)# + c * v_n
-    f_t = c * v_t
+    f_n = m * (1-ξ) / dt * (d/dt + v_n)
+    d_t = v_t * dt
+    f_t = m * (1-ξ) / dt * 2d_t/dt
     Contact(:friction, μ, sep = true)(f_n + f_t, n)
+    # Contact(:slip, sep = true)(f_n + f_t, n)
 
     # ξ = 0.98
     # iszero(d) && return zero(v_r)
