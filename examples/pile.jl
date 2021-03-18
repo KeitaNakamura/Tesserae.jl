@@ -6,13 +6,14 @@ function main()
     ρ₀ = 1.6e3
     g = 9.81
     h = 3
-    ϕ = 40
+    ϕ = 38
     ν = 0.333
-    E = 10e6
-    μ = 0.4
+    E = 1e6
+    μ = tan(deg2rad(28))
+    # μ = 0.3
     it = WLS{1}(CubicBSpline(dim=2))
-    dx = 0.015 / 2
-    grid = Grid(0:dx:0.4, 0:dx:5.0)
+    dx = 0.015 / 3
+    grid = Grid(LinRange(0:dx:0.4), LinRange(0:dx:5.0))
     xₚ, V₀ₚ, hₚ = generate_pointstates((x,y) -> y < h, grid, coord_system)
     space = MPSpace(it, grid, length(xₚ))
     @show npoints(space)
@@ -22,6 +23,7 @@ function main()
         model = DruckerPrager(elastic, :plane_strain, c = 0, ϕ = ϕ, ψ = 0)
     elseif coord_system == :axisymmetric
         model = DruckerPrager(elastic, :inscribed, c = 0, ϕ = ϕ, ψ = 0)
+        # model = DruckerPrager(SoilElastic(κ = 0.01, α = 40.0, p_ref = -1.0, μ_ref = 1e3), :inscribed, c = 0, ϕ = ϕ, ψ = 0)
     end
 
     mₚ = pointstate(ρ₀ * V₀ₚ)
@@ -32,6 +34,7 @@ function main()
     ∇vₚ = pointstate(space, SecondOrderTensor{3,Float64})
     Cₚ = pointstate(space, Mat{2,3,Float64,6})
     fill!(Fₚ, one(SecondOrderTensor{3,Float64}))
+    fcₙₚ = pointstate(space, Vec{2,Float64})
 
     for p in 1:npoints(space)
         y = xₚ[p][2]
@@ -48,6 +51,7 @@ function main()
     wᵢ = gridstate(space, Float64)
     mᵢ = gridstate(space, Float64)
     vᵢ = gridstate(space, Vec{2,Float64})
+    vᵢ_before_contact = gridstate(space, Vec{2,Float64})
     v_pileᵢ = gridstate(space, Vec{2,Float64})
     zeros!(fcᵢ)
 
@@ -87,7 +91,6 @@ function main()
     v_pile = Vec(0.0, -0.1)
 
     pile_center_0 = center(pile)
-    tip_height(pile) = tip_height_0 + (center(pile) - pile_center_0)[2]
 
     find_ground_pos(xₚ) = maximum(x -> x[2], filter(x -> x[1] < gridsteps(grid, 1), xₚ))
     ground_pos0 = find_ground_pos(xₚ)
@@ -119,13 +122,13 @@ function main()
     count = 0
     t = 0.0
     step = 0
-    logger = Logger(0.0:0.1:20.0; progress = true)
+    logger = Logger(0.0:0.05:20.0; progress = true)
     while !isfinised(logger, t)
         reinit!(space, xₚ, exclude = x -> isinside(pile, x))
 
         ρ_min = minimum(mₚ/Vₚ)
         vc = soundspeed(model.elastic.K, model.elastic.G, ρ_min)
-        dt = 0.5 * minimum(gridsteps(grid)) / vc
+        dt = 0.4 * minimum(gridsteps(grid)) / vc
 
         mᵢ ← ∑ₚ(mₚ * N)
         wᵢ ← ∑ₚ(W)
@@ -133,10 +136,11 @@ function main()
 
         fᵢ ← ∑ₚ(-Vₚ * (stress_to_force:(coord_system, N, xₚ, σₚ))) + ∑ₚ(mₚ * b * N)
         vᵢ ← vᵢ + (fᵢ / mᵢ) * dt
+        vᵢ_before_contact = vᵢ
 
         if any(Ωc)
-            fcₙ = contact_force_normal:(pile, xₚ, mₚ, vₚ, hₚ, dt, E)
-            fcₙᵢ ← ∑ₚ(N * fcₙ) in Ωc
+            fcₙₚ ← contact_force_normal:(pile, xₚ, mₚ, vₚ, hₚ, dt, E)
+            fcₙᵢ ← ∑ₚ(N * fcₙₚ) in Ωc
             v_pileᵢ ← (∑ₚ(W * v_pile) / wᵢ) in Ωc
             fcᵢ ← contact_force:(vᵢ - v_pileᵢ, fcₙᵢ, mᵢ, dt, μ)
             vᵢ ← vᵢ + (fcᵢ / mᵢ) * dt
@@ -170,59 +174,68 @@ function main()
                         vtk_point_data(vtk, deviatoric_strain(ϵₚ), "deviatoric strain")
                         vtk_point_data(vtk, σₚ, "stress")
                         vtk_point_data(vtk, ϵₚ, "strain")
+                        vtk_point_data(vtk, fcₙₚ, "normal contact force")
                     end
                     vtk_grid(vtm, pile)
+                    vtk_grid(vtm, grid) do vtk
+                        vtk_point_data(vtk, vec(vᵢ), "nodal velocity")
+                        vtk_point_data(vtk, vec(vᵢ_before_contact), "nodal velocity before contact")
+                        vtk_point_data(vtk, vec(v_pileᵢ), "nodal velocity of pile")
+                        vtk_point_data(vtk, -vec(fcₙᵢ), "nodal normal contact force")
+                        vtk_point_data(vtk, vec(fcᵢ), "nodal contact force")
+                    end
                     pvd[t] = vtm
                 end
             end
 
-            tip_resistance = compute_tip_resistance(fcᵢ, fcₙᵢ, grid, tip_height(pile))
-            inside_resistance = compute_inside_resistance(fcᵢ, fcₙᵢ, grid, tip_height(pile))
-            outside_resistance = compute_outside_resistance(fcᵢ, fcₙᵢ, grid, tip_height(pile))
-            _sum(x) = isempty(x) ? 0.0 : sum(x[:,2])
+            tip, inside, outside = extract_contact_forces(fcᵢ, fcₙᵢ, grid, pile)
 
             open(csv_file, "a") do io
                 disp = norm(center(pile) - pile_center_0)
                 force = -sum(fcᵢ)[2] * 2π
                 disp_inside_pile = -(find_ground_pos(xₚ) - ground_pos0)
-                writedlm(io, [disp force disp_inside_pile _sum(tip_resistance) _sum(inside_resistance) _sum(outside_resistance)], ',')
+                writedlm(io, [disp force disp_inside_pile sum(@view tip[:,3]) sum(@view inside[:,3]) sum(@view outside[:,3])], ',')
             end
 
-            open(io -> writedlm(io, tip_resistance, ','), joinpath(proj_dir, "force_tip", "force_tip_$(logindex(logger)).csv"), "w")
-            open(io -> writedlm(io, inside_resistance, ','), joinpath(proj_dir, "force_inside", "force_inside_$(logindex(logger)).csv"), "w")
-            open(io -> writedlm(io, outside_resistance, ','), joinpath(proj_dir, "force_outside", "force_outside_$(logindex(logger)).csv"), "w")
+            open(io -> writedlm(io, tip, ','), joinpath(proj_dir, "force_tip", "force_tip_$(logindex(logger)).csv"), "w")
+            open(io -> writedlm(io, inside, ','), joinpath(proj_dir, "force_inside", "force_inside_$(logindex(logger)).csv"), "w")
+            open(io -> writedlm(io, outside, ','), joinpath(proj_dir, "force_outside", "force_outside_$(logindex(logger)).csv"), "w")
         end
     end
 end
 
-function compute_tip_resistance(fcᵢ, fcₙᵢ, grid, y0)
-    inds = findall(f -> !(f[2] ≈ 0), fcₙᵢ)
-    out = Dict{Int, Float64}()
-    for (i,I) in enumerate(inds)
-        f_y = -2π * fcᵢ[I][2]
-        out[I[2]] = get!(out, I[2], 0.0) + f_y
+function extract_contact_forces(fcᵢ, fcₙᵢ, grid, pile)
+    inside = Float64[]
+    outside = Float64[]
+    tip = Float64[]
+    tip_height = pile[3][2]
+    for I in eachindex(fcᵢ) # walk from lower height
+        x = grid[I][1]
+        y = grid[I][2] - tip_height
+        fcy = -2π * fcᵢ[I][2]
+        iszero(fcy) && continue
+        if y < gridsteps(grid, 2)
+            push!(tip, x)
+            push!(tip, y)
+            push!(tip, fcy)
+        else
+            line1 = Line((RigidBodies.getline(pile, 1) + reverse(RigidBodies.getline(pile, 5))) / 2)
+            line2 = Line((RigidBodies.getline(pile, 2) + reverse(RigidBodies.getline(pile, 4))) / 2)
+            inner = RigidBodies.ray_casting_to_right(line1, grid[I]) ||
+                RigidBodies.ray_casting_to_right(line2, grid[I])
+            if inner
+                push!(inside, x)
+                push!(inside, y)
+                push!(inside, fcy)
+            else
+                push!(outside, x)
+                push!(outside, y)
+                push!(outside, fcy)
+            end
+        end
     end
-    vcat([[grid[1,v[1]][2]-y0 v[2]] for v in sort(out)]...)
-end
-
-function compute_inside_resistance(fcᵢ, fcₙᵢ, grid, y0)
-    inds = findall(f -> f[2] ≈ 0 && f[1] > 0, fcₙᵢ)
-    out = Dict{Int, Float64}()
-    for (i,I) in enumerate(inds)
-        f_y = -2π * fcᵢ[I][2]
-        out[I[2]] = get!(out, I[2], 0.0) + f_y
-    end
-    vcat([[grid[1,v[1]][2]-y0 v[2]] for v in sort(out)]...)
-end
-
-function compute_outside_resistance(fcᵢ, fcₙᵢ, grid, y0)
-    inds = findall(f -> f[2] ≈ 0 && f[1] < 0, fcₙᵢ)
-    out = Dict{Int, Float64}()
-    for (i,I) in enumerate(inds)
-        f_y = -2π * fcᵢ[I][2]
-        out[I[2]] = get!(out, I[2], 0.0) + f_y
-    end
-    vcat([[grid[1,v[1]][2]-y0 v[2]] for v in sort(out)]...)
+    reshape_data = V -> reshape(V, 3, length(V)÷3)'
+    map(reshape_data, (tip, inside, outside))
 end
 
 function stress(model, σₚ, ∇vₚ, dt)
@@ -239,7 +252,7 @@ function contact_force_normal(poly::Polygon, x::Vec{dim, T}, m::Real, vᵣ::Vec,
     n = d / norm_d
     k = E * 10
     # -k * (norm_d - threshold) * n
-    ξ = 0.5
+    ξ = 0.8
     -(1 - ξ) * (2m / dt^2 * (norm_d - threshold)) * n
     #=
     ξ = 0.0
