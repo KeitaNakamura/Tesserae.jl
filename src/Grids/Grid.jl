@@ -14,7 +14,7 @@ julia> grid = Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
 ```
 """
 struct Grid{dim, T, V} <: AbstractGrid{dim, T}
-    axisarray::Coordinate{dim, T, V}
+    axisarray::Coordinate{dim, NTuple{dim, T}, NTuple{dim, V}}
 end
 
 function Grid(axs::NTuple{dim, AbstractVector}) where {dim}
