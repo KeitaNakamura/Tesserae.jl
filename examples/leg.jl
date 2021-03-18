@@ -64,10 +64,6 @@ function main()
     p0 = P(zero(Vec{2}))
     ∇p0 = ∇(P)(zero(Vec{2}))
 
-    path = "leg.tmp/out"
-    mkpath(dirname(path))
-    paraview_collection(vtk_save, path)
-
     r = 1.12 * 1.3 # 1.12 * 1.3
     dy = gridsteps(grid, 2) / 4
     leg = Polygon([Vec(0.0, h+0.0), Vec(0.3, h+0.0), Vec(0.5, h+0.3),
@@ -75,10 +71,24 @@ function main()
                    Vec(0.3, grid[1,end-1][2]), Vec(0.0, grid[1,end-1][2])] .+ Vec(0.0, dy))
     v_leg = Vec(0.0, -0.2)
 
-    csvfile = "leg.csv"
-    open(csvfile, "w") do io
+    # Output files
+    ## proj
+    # proj_dir = joinpath(dirname(@__FILE__), "$(now()) leg.tmp")
+    proj_dir = joinpath(dirname(@__FILE__), "leg.tmp")
+    mkpath(proj_dir)
+
+    ## paraview
+    paraview_file = joinpath(proj_dir, "out")
+    paraview_collection(vtk_save, paraview_file)
+
+    ## history
+    csv_file = joinpath(proj_dir, "history.csv")
+    open(csv_file, "w") do io
         writedlm(io, ["d" "f"], ',')
     end
+
+    ## copy this file
+    cp(@__FILE__, joinpath(proj_dir, basename(@__FILE__)), force = true)
 
     count = 0
     t = 0.0
@@ -124,20 +134,21 @@ function main()
         step += 1
 
         if islogpoint(logger)
-            paraview_collection(path, append = true) do pvd
-                vtk_multiblock(string(path, logindex(logger))) do vtm
+            paraview_collection(paraview_file, append = true) do pvd
+                vtk_multiblock(string(paraview_file, logindex(logger))) do vtm
                     vtk_points(vtm, xₚ) do vtk
+                        ϵₚ = symmetric(Fₚ - I)
                         vtk_point_data(vtk, vₚ, "velocity")
                         vtk_point_data(vtk, -mean(σₚ), "mean stress")
                         vtk_point_data(vtk, deviatoric_stress(σₚ), "deviatoric stress")
-                        vtk_point_data(vtk, volumetric_strain(infinitesimal_strain(Fₚ)), "volumetric strain")
-                        vtk_point_data(vtk, deviatoric_strain(infinitesimal_strain(Fₚ)), "deviatoric strain")
+                        vtk_point_data(vtk, volumetric_strain(ϵₚ), "volumetric strain")
+                        vtk_point_data(vtk, deviatoric_strain(ϵₚ), "deviatoric strain")
                     end
                     vtk_grid(vtm, leg)
                     pvd[t] = vtm
                 end
             end
-            open(csvfile, "a") do io
+            open(csv_file, "a") do io
                 f = -sum(fcᵢ)[2] * 2π
                 d = -v_leg[2] * t
                 writedlm(io, [d f], ',')
@@ -197,5 +208,5 @@ end
 
 #=
 using Plots, DelimitedFiles
-plot((arr = readdlm("leg.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,2])), ylims = (0, 12e6), xlims = (0,2))
+plot((arr = readdlm("examples/leg.tmp/history.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,2])), ylims = (0, 12e6), xlims = (0,2))
 =#
