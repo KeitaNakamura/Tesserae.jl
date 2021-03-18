@@ -8,8 +8,7 @@ function check_point_to_grid(x, N)
 end
 
 function check_grid_to_point(x, T)
-    # TODO: fix type instability
-    # (@inferred x[1])::T
+    (@inferred x[1])::T
 end
 
 @testset "Point-to-grid assembling" begin
