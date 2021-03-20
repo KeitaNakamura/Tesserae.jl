@@ -5,13 +5,13 @@ function main()
     coord_system = :axisymmetric
     ρ₀ = 0.89e3
     g = 9.81
-    h = 6.9
+    h = 15.0
     ϕ = 45
     ν = 0.333
     E = 10e6
-    μ = 0.49
+    μ = 0.35
     it = WLS{1}(CubicBSpline(dim=2))
-    grid = Grid(LinRange(0:0.2:7), LinRange(0:0.2:10))
+    grid = Grid(LinRange(0:0.1:25), LinRange(0:0.1:30))
     xₚ, V₀ₚ, hₚ = generate_pointstates((x,y) -> y < h, grid, coord_system)
     space = MPSpace(it, grid, length(xₚ))
     @show npoints(space)
@@ -47,7 +47,7 @@ function main()
     wᵢ = gridstate(space, Float64)
     mᵢ = gridstate(space, Float64)
     vᵢ = gridstate(space, Vec{2,Float64})
-    v_legᵢ = gridstate(space, Vec{2,Float64})
+    vᵣᵢ = gridstate(space, Vec{2,Float64})
 
     b = Vec(0.0, -g)
 
@@ -64,11 +64,9 @@ function main()
     p0 = P(zero(Vec{2}))
     ∇p0 = ∇(P)(zero(Vec{2}))
 
-    r = 1.12 * 1.3 # 1.12 * 1.3
     dy = gridsteps(grid, 2) / 4
-    leg = Polygon([Vec(0.0, h+0.0), Vec(0.3, h+0.0), Vec(0.5, h+0.3),
-                   Vec(r,   h+0.4), Vec(r,   h+0.8), Vec(0.3, h+0.8),
-                   Vec(0.3, grid[1,end-1][2]), Vec(0.0, grid[1,end-1][2])] .+ Vec(0.0, dy))
+    leg = Polygon([Vec(0.0, h+0.0), Vec(0.3375, h+0.43), Vec(1.5, h+0.72), Vec(1.5, h+0.75),
+                   Vec(0.375, h+1.055), Vec(0.375, grid[1,end-1][2]), Vec(0.0, grid[1,end-1][2])] .+ Vec(0.0, dy))
     v_leg = Vec(0.0, -0.2)
 
     # Output files
@@ -93,14 +91,13 @@ function main()
     count = 0
     t = 0.0
     step = 0
-    logger = Logger(0.0:0.1:10.0; progress = true)
+    logger = Logger(0.0:0.1:45.0; progress = true)
     while !isfinised(logger, t)
         reinit!(space, xₚ, exclude = x -> isinside(leg, x))
 
         ρ_min = minimum(mₚ/Vₚ)
         vc = soundspeed(model.elastic.K, model.elastic.G, ρ_min)
-        dt = 0.5 * minimum(gridsteps(grid)) / vc
-        # dt = 5e-5
+        dt = 0.4 * minimum(gridsteps(grid)) / vc
 
         mᵢ ← ∑ₚ(mₚ * N)
         wᵢ ← ∑ₚ(W)
@@ -112,8 +109,8 @@ function main()
         if any(Ωc)
             fcₙ = contact_force_normal:(leg, xₚ, mₚ, vₚ, hₚ, dt, E)
             fcₙᵢ ← ∑ₚ(N * fcₙ) in Ωc
-            v_legᵢ ← (∑ₚ(W * v_leg) / wᵢ) in Ωc
-            fcᵢ ← contact_force:(vᵢ - v_legᵢ, fcₙᵢ, mᵢ, dt, μ)
+            vᵣᵢ ← (∑ₚ(W * (vₚ - v_leg)) / wᵢ) in Ωc
+            fcᵢ ← contact_force:(vᵣᵢ, fcₙᵢ, mᵢ, dt, μ)
             vᵢ ← vᵢ + (fcᵢ / mᵢ) * dt
         end
 
@@ -167,9 +164,10 @@ function contact_force_normal(poly::Polygon, x::Vec{dim, T}, m::Real, vᵣ::Vec,
     d = distance(poly, x, threshold)
     d === nothing && return zero(Vec{dim, T})
     norm_d = norm(d)
+    norm_d = norm(d)
     n = d / norm_d
-    k = E * 5
-    -k * (norm_d - threshold) * n
+    ξ = 0.8
+    -(1 - ξ) * (2m / dt^2 * (norm_d - threshold)) * n
 end
 
 function contact_force(v_r::Vec, f_n::Vec, m::Real, dt::Real, μ::Real)
