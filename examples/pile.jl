@@ -52,7 +52,7 @@ function main()
     mᵢ = gridstate(space, Float64)
     vᵢ = gridstate(space, Vec{2,Float64})
     vᵢ_before_contact = gridstate(space, Vec{2,Float64})
-    v_pileᵢ = gridstate(space, Vec{2,Float64})
+    vᵣᵢ = gridstate(space, Vec{2,Float64})
     zeros!(fcᵢ)
 
     b = Vec(0.0, -g)
@@ -141,8 +141,8 @@ function main()
         if any(Ωc)
             fcₙₚ ← contact_force_normal:(pile, xₚ, mₚ, vₚ, hₚ, dt, E)
             fcₙᵢ ← ∑ₚ(N * fcₙₚ) in Ωc
-            v_pileᵢ ← (∑ₚ(W * v_pile) / wᵢ) in Ωc
-            fcᵢ ← contact_force:(vᵢ - v_pileᵢ, fcₙᵢ, mᵢ, dt, μ)
+            vᵣᵢ ← (∑ₚ(W * (vₚ-v_pile)) / wᵢ) in Ωc
+            fcᵢ ← contact_force:(vᵣᵢ, fcₙᵢ, mᵢ, dt, μ)
             vᵢ ← vᵢ + (fcᵢ / mᵢ) * dt
         end
 
@@ -180,7 +180,7 @@ function main()
                     vtk_grid(vtm, grid) do vtk
                         vtk_point_data(vtk, vec(vᵢ), "nodal velocity")
                         vtk_point_data(vtk, vec(vᵢ_before_contact), "nodal velocity before contact")
-                        vtk_point_data(vtk, vec(v_pileᵢ), "nodal velocity of pile")
+                        vtk_point_data(vtk, vec(vᵣᵢ), "nodal relative velocity")
                         vtk_point_data(vtk, -vec(fcₙᵢ), "nodal normal contact force")
                         vtk_point_data(vtk, vec(fcᵢ), "nodal contact force")
                     end
