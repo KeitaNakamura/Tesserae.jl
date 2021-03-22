@@ -300,8 +300,5 @@ end
 
 #=
 using Plots, DelimitedFiles
-plot((arr = readdlm("examples/pile.tmp/history.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,2])))
-plot((arr = readdlm("examples/pile.tmp/history.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,2])), legend = false, xlims = (0,2), ylims = (0,60e3))
-
-plot((arr = readdlm("examples/pile.tmp/history.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,[2,4,5,6]])), legend = false, xlims = (0,2), ylims = (0,60e3))
+plot((arr = readdlm("examples/pile.tmp/history.csv", ',', skipstart=1); @show size(arr, 1); (arr[:,1], arr[:,[2,4,5,6]])), legend = true, xlims = (0,2), ylims = (0,60e3), label = ["total" "tip" "inner" "outer"], xlabel = "Penetration depth (m)", ylabel = "Force (kN)")
 =#
