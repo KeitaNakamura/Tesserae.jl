@@ -1,5 +1,6 @@
 using Revise, Jams, BenchmarkTools
 using Debugger, DelimitedFiles
+using GeometricObjects
 
 function main()
     coord_system = :axisymmetric
@@ -65,7 +66,7 @@ function main()
     ∇p0 = ∇(P)(zero(Vec{2}))
 
     dy = gridsteps(grid, 2) / 4
-    leg = Polygon([Vec(0.0, h+0.0), Vec(0.3375, h+0.43), Vec(1.5, h+0.72), Vec(1.5, h+0.75),
+    leg = Polygon([Vec(0.0, h+0.0), Vec(0.3375, h+0.43), Vec(1.5, h+0.72), Vec(1.5, h+0.795),
                    Vec(0.375, h+1.055), Vec(0.375, grid[1,end-1][2]), Vec(0.0, grid[1,end-1][2])] .+ Vec(0.0, dy))
     v_leg = Vec(0.0, -0.2)
 
@@ -93,11 +94,11 @@ function main()
     step = 0
     logger = Logger(0.0:0.1:45.0; progress = true)
     while !isfinised(logger, t)
-        reinit!(space, xₚ, exclude = x -> isinside(leg, x))
+        reinit!(space, xₚ, exclude = x -> in(x, leg))
 
         ρ_min = minimum(mₚ/Vₚ)
         vc = soundspeed(model.elastic.K, model.elastic.G, ρ_min)
-        dt = 0.4 * minimum(gridsteps(grid)) / vc
+        dt = 0.5 * minimum(gridsteps(grid)) / vc
 
         mᵢ ← ∑ₚ(mₚ * N)
         wᵢ ← ∑ₚ(W)

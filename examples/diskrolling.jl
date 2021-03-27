@@ -1,5 +1,6 @@
 using Revise, Jams, BenchmarkTools
 using Debugger, DelimitedFiles, Dates
+using GeometricObjects
 
 function main()
     ρ₀ = 1.0e3
@@ -89,7 +90,7 @@ function main()
     step = 0
     logger = Logger(0.0:0.02:0.6; progress = true)
     while !isfinised(logger, t)
-        reinit!(space, xₚ, exclude = x -> isinside(slope, x))
+        reinit!(space, xₚ, exclude = x -> in(x, slope))
 
         ρ_min = minimum(mₚ/Vₚ)
         vc = soundspeed(model.K, model.G, ρ_min)
