@@ -21,7 +21,6 @@ makedocs(;
         "Jams.ShapeFunctions" => "ShapeFunctions.md",
         "Jams.MPSpaces" => "MPSpaces.md",
         "Jams.ContactMechanics" => "ContactMechanics.md",
-        "Jams.RigidBodies" => "RigidBodies.md",
         "Jams.Loggers" => "Loggers.md",
         "Jams.VTKOutputs" => "VTKOutputs.md",
     ],

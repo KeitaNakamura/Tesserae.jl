@@ -10,7 +10,6 @@ include("ShapeFunctions/ShapeFunctions.jl")
 include("States/States.jl")
 include("MPSpaces/MPSpaces.jl")
 include("ContactMechanics/ContactMechanics.jl")
-include("RigidBodies/RigidBodies.jl")
 include("Loggers/Loggers.jl")
 include("VTKOutputs/VTKOutputs.jl")
 
@@ -26,7 +25,6 @@ using Reexport
 @reexport using Jams.States
 @reexport using Jams.MPSpaces
 @reexport using Jams.ContactMechanics
-@reexport using Jams.RigidBodies
 @reexport using Jams.Loggers
 @reexport using Jams.VTKOutputs
 

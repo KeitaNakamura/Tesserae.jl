@@ -6,7 +6,6 @@ using Jams.TensorValues
 using Jams.Collections
 using Jams.Grids
 using Jams.States
-using Jams.RigidBodies
 
 export
     vtk_points
@@ -62,12 +61,6 @@ julia> vtk_save(vtkfile)
 """
 function WriteVTK.vtk_grid(vtk::AbstractString, grid::AbstractGrid)
     vtk_grid(vtk, map(collect, gridaxes(grid))...)
-end
-
-function WriteVTK.vtk_grid(vtk::AbstractString, poly::Polygon)
-    coords = vtk_format(poly)
-    cells = [MeshCell(VTKCellTypes.VTK_POLYGON, collect(1:length(poly)))]
-    vtk_grid(vtk, coords, cells)
 end
 
 """
