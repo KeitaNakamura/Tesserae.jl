@@ -66,8 +66,8 @@ function main()
     ∇p0 = ∇(P)(zero(Vec{2}))
 
     dy = gridsteps(grid, 2) / 4
-    leg = Polygon([Vec(0.0, h+0.0), Vec(0.3375, h+0.43), Vec(1.5, h+0.72), Vec(1.5, h+0.795),
-                   Vec(0.375, h+1.055), Vec(0.375, grid[1,end-1][2]), Vec(0.0, grid[1,end-1][2])] .+ Vec(0.0, dy))
+    leg = Polygon([Vec(0.0, h+0.0), Vec(0.3375, h+0.43), Vec(1.5, h+0.72), Vec(1.5, h+0.87),
+                   Vec(0.375, h+1.13), Vec(0.375, grid[1,end-1][2]), Vec(0.0, grid[1,end-1][2])] .+ Vec(0.0, dy))
     v_leg = Vec(0.0, -0.2)
 
     # Output files
@@ -161,13 +161,13 @@ function stress(model, σₚ, dϵ)
 end
 
 function contact_force_normal(poly::Polygon, x::Vec{dim, T}, m::Real, vᵣ::Vec, h::Vec{dim, T}, dt::Real, E::Real) where {dim, T}
-    threshold = mean(h) / 2
+    threshold = mean(h) / 2 * 1.5
     d = distance(poly, x, threshold)
     d === nothing && return zero(Vec{dim, T})
     norm_d = norm(d)
     norm_d = norm(d)
     n = d / norm_d
-    ξ = 0.8
+    ξ = 0.85
     -(1 - ξ) * (2m / dt^2 * (norm_d - threshold)) * n
 end
 
