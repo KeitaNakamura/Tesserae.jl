@@ -150,14 +150,14 @@ julia> count!(dofmap)
 4
 
 julia> DofHelpers.map(dofmap, CartesianIndices((1:2, 1:2)); dof = 2)
-4-element Array{Int64,1}:
+4-element Vector{Int64}:
  1
  2
  3
  4
 
 julia> DofHelpers.map(dofmap, [CartesianIndex(1, 2), CartesianIndex(2, 3)]; dof = 2)
-4-element Array{Int64,1}:
+4-element Vector{Int64}:
  1
  2
  7
@@ -217,7 +217,7 @@ julia> count!(dofmap)
 4
 
 julia> DofHelpers.filter(dofmap, CartesianIndices((1:2, 1:2)))
-2-element Array{CartesianIndex{2},1}:
+2-element Vector{CartesianIndex{2}}:
  CartesianIndex(1, 2)
  CartesianIndex(2, 2)
 ```

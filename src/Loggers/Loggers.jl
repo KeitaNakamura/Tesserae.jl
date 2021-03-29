@@ -45,7 +45,7 @@ workflow()
 
 # output
 
-11-element Array{Float64,1}:
+11-element Vector{Float64}:
  0.2
  0.6000000000000001
  1.0

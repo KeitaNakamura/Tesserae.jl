@@ -27,7 +27,7 @@ In 1D, for example, the searching range becomes `x ± h*dx`.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0)
-6-element Grid{1,Float64,StepRangeLen{Float64,Base.TwicePrecision{Float64},Base.TwicePrecision{Float64}}}:
+6-element Grid{1, Float64, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}:
  [0.0]
  [1.0]
  [2.0]
@@ -36,12 +36,12 @@ julia> grid = Grid(0.0:1.0:5.0)
  [5.0]
 
 julia> neighboring_nodes(grid, Vec(1.5), 1)
-2-element CartesianIndices{1,Tuple{UnitRange{Int64}}}:
+2-element CartesianIndices{1, Tuple{UnitRange{Int64}}}:
  CartesianIndex(2,)
  CartesianIndex(3,)
 
 julia> neighboring_nodes(grid, Vec(1.5), 2)
-4-element CartesianIndices{1,Tuple{UnitRange{Int64}}}:
+4-element CartesianIndices{1, Tuple{UnitRange{Int64}}}:
  CartesianIndex(1,)
  CartesianIndex(2,)
  CartesianIndex(3,)
@@ -68,7 +68,7 @@ Return cell index where `x` locates.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
-6×6 Grid{2,Float64,StepRangeLen{Float64,Base.TwicePrecision{Float64},Base.TwicePrecision{Float64}}}:
+6×6 Grid{2, Float64, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -104,7 +104,7 @@ In 1D, for example, the searching range becomes `x ± h*dx`.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
-6×6 Grid{2,Float64,StepRangeLen{Float64,Base.TwicePrecision{Float64},Base.TwicePrecision{Float64}}}:
+6×6 Grid{2, Float64, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -115,7 +115,7 @@ julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
 julia> x = Vec(1.5, 1.5);
 
 julia> neighboring_cells(grid, x, 1)
-3×3 CartesianIndices{2,Tuple{UnitRange{Int64},UnitRange{Int64}}}:
+3×3 CartesianIndices{2, Tuple{UnitRange{Int64}, UnitRange{Int64}}}:
  CartesianIndex(1, 1)  CartesianIndex(1, 2)  CartesianIndex(1, 3)
  CartesianIndex(2, 1)  CartesianIndex(2, 2)  CartesianIndex(2, 3)
  CartesianIndex(3, 1)  CartesianIndex(3, 2)  CartesianIndex(3, 3)

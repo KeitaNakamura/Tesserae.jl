@@ -16,7 +16,7 @@ julia> sum(N)
 1.0
 
 julia> sum(∇, N)
-2-element Tensor{Tuple{2},Float64,1,2}:
+2-element Vec{2, Float64}:
  5.551115123125783e-17
  5.551115123125783e-17
 ```

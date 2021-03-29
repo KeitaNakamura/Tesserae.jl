@@ -26,7 +26,7 @@ julia> vtkfile = vtk_points("vtkfile", xₚ)
 VTK file 'vtkfile.vtu' (UnstructuredGrid file, open)
 
 julia> vtk_save(vtkfile)
-1-element Array{String,1}:
+1-element Vector{String}:
  "vtkfile.vtu"
 ```
 """
@@ -55,7 +55,7 @@ julia> vtkfile = vtk_grid("vtkfile", grid)
 VTK file 'vtkfile.vtr' (RectilinearGrid file, open)
 
 julia> vtk_save(vtkfile)
-1-element Array{String,1}:
+1-element Vector{String}:
  "vtkfile.vtr"
 ```
 """

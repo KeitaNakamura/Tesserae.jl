@@ -39,7 +39,7 @@ julia> contact = Contact(:slip, sep = false);
 julia> v = Vec(1.0, -1.0); n = Vec(0.0, -1.0);
 
 julia> v + contact(v, n)
-2-element Tensor{Tuple{2},Float64,1,2}:
+2-element Vec{2, Float64}:
  1.0
  0.0
 ```

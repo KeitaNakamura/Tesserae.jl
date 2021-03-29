@@ -10,21 +10,18 @@ julia> S = SparseMatrixCOO();
 julia> push!(S, [1.0 1.0; 1.0 1.0], [1, 2], [2, 3]);
 
 julia> sparse!(S, 4, 4)
-4×4 SparseMatrixCSC{Float64,Int64} with 4 stored entries:
-  [1, 2]  =  1.0
-  [2, 2]  =  1.0
-  [1, 3]  =  1.0
-  [2, 3]  =  1.0
+4×4 SparseMatrixCSC{Float64, Int64} with 4 stored entries:
+  ⋅   1.0  1.0   ⋅
+  ⋅   1.0  1.0   ⋅
+  ⋅    ⋅    ⋅    ⋅
+  ⋅    ⋅    ⋅    ⋅
 
 julia> push!(S, [1.0, 2.0], [1, 2]); # Add diagonal entries
 
 julia> sparse!(S)
-2×3 SparseMatrixCSC{Float64,Int64} with 5 stored entries:
-  [1, 1]  =  1.0
-  [1, 2]  =  1.0
-  [2, 2]  =  3.0
-  [1, 3]  =  1.0
-  [2, 3]  =  1.0
+2×3 SparseMatrixCSC{Float64, Int64} with 5 stored entries:
+ 1.0  1.0  1.0
+  ⋅   3.0  1.0
 ```
 """
 struct SparseMatrixCOO{T}
