@@ -16,3 +16,4 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 [compat]
 Coordinates = "0.2"
 Tensorial = "0.5"
+julia = "1.5"
