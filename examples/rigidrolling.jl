@@ -107,7 +107,7 @@ function main()
         vᵢ ← vᵢ + (fᵢ / mᵢ) * dt
 
         if any(Ωc)
-            d = contact_distance:(disk, xₚ, vₚ, hₚ)
+            d = contact_distance:(disk, xₚ, hₚ)
             dᵢ ← ∑ₚ(N * d) in Ωc
             vᵣᵢ ← (∑ₚ(W * (vₚ - (rigid_velocity:(xₚ)))) / wᵢ) in Ωc
             m = mᵢ*disk.m / (mᵢ+disk.m)
@@ -179,7 +179,7 @@ function stress(model, σₚ, ∇vₚ, dt)
     MaterialModels.jaumann_stress(σ, σₚ, ∇vₚ, dt)
 end
 
-function contact_distance(disk::Circle, x::Vec{dim, T}, vᵣ::Vec, h::Vec{dim, T}) where {dim, T}
+function contact_distance(disk::Circle, x::Vec{dim, T}, h::Vec{dim, T}) where {dim, T}
     threshold = mean(h) / 2
     d = distance(disk, x, threshold)
     d === nothing && return zero(Vec{dim, T})
