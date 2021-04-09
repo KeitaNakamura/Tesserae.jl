@@ -3,7 +3,10 @@ struct WaterModel{T} <: MaterialModel
     γ::T
 end
 
-function WaterModel(; K::Real, γ::Real)
+# https://www.researchgate.net/publication/220789258_Weakly_Compressible_SPH_for_Free_Surface_Flows
+# K = 1119 (kPa)
+# γ = 7
+function WaterModel(; K::Real = 1119e3, γ::Real = 7)
     WaterModel(K, γ)
 end
 
