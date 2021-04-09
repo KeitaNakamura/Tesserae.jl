@@ -7,7 +7,8 @@ end
 # B = 1119 (kPa)
 # γ = 7
 function WaterModel(; B::Real = 1119e3, γ::Real = 7)
-    WaterModel(B, γ)
+    T = promote_type(typeof(B), typeof(γ))
+    WaterModel{T}(B, γ)
 end
 
 function bulkmodulus(model::WaterModel, F::SecondOrderTensor{3})
