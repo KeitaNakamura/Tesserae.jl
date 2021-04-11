@@ -12,9 +12,10 @@ To finalize activations and perform numbering dofs, use [`count!(::DofMap)`](@re
 """
 struct DofMap{dim} <: AbstractArray{Bool, dim}
     indices::Array{Int, dim}
+    ndofs::Base.RefValue{Int}
 end
 
-DofMap(dims::Tuple{Vararg{Int}}) = DofMap(fill(-1, dims))
+DofMap(dims::Tuple{Vararg{Int}}) = DofMap(fill(-1, dims), Ref(0))
 DofMap(dims::Int...) = DofMap(dims)
 
 Base.size(dofmap::DofMap) = size(dofmap.indices)
@@ -30,11 +31,7 @@ Base.fill!(dofmap::DofMap, v::Bool) = (fill!(dofmap.indices, ifelse(v, 0, -1)); 
 
 Return total number of dofs.
 """
-function ndofs(dofmap::DofMap; dof::Int = 1)
-    i = findlast(>(0), dofmap.indices)
-    i === nothing && return 0
-    dofmap.indices[i] * dof
-end
+ndofs(dofmap::DofMap; dof::Int = 1) = dofmap.ndofs[] * dof
 
 """
     count!(::DofMap)
@@ -69,6 +66,7 @@ function Base.count!(dofmap::DofMap)
     for i in eachindex(dofmap)
         @inbounds dofmap.indices[i] = (dofmap[i] ? count += 1 : -1)
     end
+    dofmap.ndofs[] = count
     count
 end
 
