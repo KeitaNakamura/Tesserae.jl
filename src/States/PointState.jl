@@ -60,7 +60,7 @@ end
 
 function generate_pointstates(indomain, grid::AbstractGrid{dim, T}, coordinate_system = :plane_strain_if_2D; n::Int = 2) where {dim, T}
     h = gridsteps(grid) ./ n # length per particle
-    allpoints = Grid(StepRangeLen.(first.(gridaxes(grid)) .+ h./2, h, n .* (size(grid) .- 1) .- 1))
+    allpoints = Grid(LinRange.(first.(gridaxes(grid)) .+ h./2, last.(gridaxes(grid)) .- h./2, n .* (size(grid) .- 1)))
     npoints = count(x -> indomain(x...), allpoints)
     xₚ = pointstate(Vec{dim, T}, npoints)
     Vₚ = pointstate(T, npoints)
