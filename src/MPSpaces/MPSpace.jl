@@ -47,7 +47,7 @@ MPSpace(F::ShapeFunction, grid::AbstractGrid, npoints::Int) = MPSpace(Float64, F
 value_gradient_type(::Type{T}, ::Val{dim}) where {T <: Real, dim} = ScalVec{dim, T}
 value_gradient_type(::Type{Vec{dim, T}}, ::Val{dim}) where {T, dim} = VecTensor{dim, T, dim^2}
 
-function _reinit!(space, coordinates, exclude, point_radius)
+function reinit_threads!(space, coordinates, exclude, point_radius)
     grid = space.grid
     gridindices = space.gridindices
 
@@ -72,9 +72,11 @@ function _reinit!(space, coordinates, exclude, point_radius)
     ## exclude grid nodes if a function is given
     if exclude !== nothing
         # if exclude(xi) is true, then make it false
-        @inbounds for i in eachindex(grid)
-            xi = grid[i]
-            exclude(xi) && (dofmap[i] = false)
+        @inbounds for i in eachindex(grid, dofmap)
+            if dofmap[i] == true
+                xi = grid[i]
+                exclude(xi) && (dofmap[i] = false)
+            end
         end
         # surrounding nodes are activated
         for x in coords
@@ -86,7 +88,7 @@ function _reinit!(space, coordinates, exclude, point_radius)
     ## renumering dofs
     count!(dofmap)
 
-    # Initialize dof indices by updated DofMap
+    # Reinitialize shape values and dof indices by updated DofMap
     @inbounds for (i, p) in enumerate(ptrange)
         allinds = neighboring_nodes(grid, coords[i], point_radius)
         DofHelpers.map!(dofmap, dofindices[i], allinds)
@@ -95,13 +97,13 @@ function _reinit!(space, coordinates, exclude, point_radius)
     end
 end
 
-function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, point_radius::Real) where {dim}
-    grid = space.grid
-    gridindices = space.gridindices
-    @assert length(gridindices) == length(coordinates)
+function reinit!(space::MPSpace{dim}, coordinates; exclude = nothing) where {dim}
+    point_radius = ShapeFunctions.support_length(space.F)
+
+    @assert length(space.gridindices) == length(coordinates)
 
     Threads.@threads for _ in 1:Threads.nthreads()
-        _reinit!(space, coordinates, exclude, point_radius)
+        reinit_threads!(space, coordinates, exclude, point_radius)
     end
 
     # update global dofmap and dofindices
@@ -142,10 +144,6 @@ function reinit_dofmap!(space::MPSpace{dim}, coordinates; exclude = nothing, poi
         end
     end
 
-    space
-end
-
-function reinit_shapevalue!(space::MPSpace, coordinates)
     Threads.@threads for i in 1:Threads.nthreads()
         rng = space.ptranges[Threads.threadid()]
         @inbounds for p in rng
@@ -153,13 +151,7 @@ function reinit_shapevalue!(space::MPSpace, coordinates)
             reinit!(space.Nᵢ[p], space.grid, inds, coordinates[p])
         end
     end
-    space
-end
 
-function reinit!(space::MPSpace, coordinates; exclude = nothing)
-    point_radius = ShapeFunctions.support_length(space.F)
-    reinit_dofmap!(space, coordinates; point_radius, exclude)
-    reinit_shapevalue!(space, coordinates)
     space
 end
 
