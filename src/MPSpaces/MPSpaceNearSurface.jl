@@ -17,7 +17,7 @@ function set!(dest::PointState, src::NearSurfaceState)
     dest
 end
 
-function set!(dest::GridState, src::NearSurfaceState)
+function set!(dest::Union{GridState, GridStateThreads}, src::NearSurfaceState)
     set!(dest, src.parent, src.nearsurface)
     dest
 end

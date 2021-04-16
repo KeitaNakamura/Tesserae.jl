@@ -1,6 +1,6 @@
 struct GridStateCollection{T} <: AbstractCollection{2}
     data::T
-    dofindices::Vector{Vector{Int}}
+    dofindices::PointToDofIndices
 end
 
 GridStateCollection(x::UnionGridState) = GridStateCollection(nonzeros(x), dofindices(x))

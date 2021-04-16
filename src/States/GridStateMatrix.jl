@@ -1,16 +1,16 @@
 struct GridStateMatrix{T, ElType}
     A::SparseMatrixCOO{ElType}
-    dofindices::Vector{Vector{Int}}
+    dofindices::PointToDofIndices
     freedofs::Vector{Int}
 end
 
 # for vector field
-function gridstate_matrix(::Type{<: Tensor{Tuple{dim, dim}, T}}, dofindices::Vector{Vector{Int}}, freedofs::Vector{Int}) where {dim, T}
+function gridstate_matrix(::Type{<: Tensor{Tuple{dim, dim}, T}}, dofindices::PointToDofIndices, freedofs::Vector{Int}) where {dim, T}
     GridStateMatrix{Tensor{Tuple{dim,dim}}, T}(SparseMatrixCOO{T}(), dofindices, freedofs)
 end
 
 # for scalar field
-function gridstate_matrix(::Type{T}, dofindices::Vector{Vector{Int}}, freedofs::Vector{Int}) where {T <: Real}
+function gridstate_matrix(::Type{T}, dofindices::PointToDofIndices, freedofs::Vector{Int}) where {T <: Real}
     GridStateMatrix{T, T}(SparseMatrixCOO{T}(), dofindices, freedofs)
 end
 

@@ -28,7 +28,7 @@ for op in (:*, :/)
     @eval begin
         if $op == /
             # ∑ₚ(mₚ * vₚ * N) / mᵢ
-            function Base.$op(x::PointToGridOperation, y::GridState)
+            function Base.$op(x::PointToGridOperation, y::Union{GridState, GridStateThreads})
                 PointToGridOperation($op(parent(x), GridStateCollection(y)))
             end
         end
@@ -40,22 +40,41 @@ for op in (:*, :/)
     end
 end
 
-function add!(S::GridState, ∑ₚN::PointToGridOperation)
+function add!(S::GridState, ∑ₚN::PointToGridOperation, pointinds = eachindex(dofindices(S)))
     nzval = nonzeros(S)
-    dofinds = S.dofindices
-    @inbounds for p in eachindex(dofinds)
-        v = view(nzval, dofinds[p])
+    dofinds = dofindices(S)
+    @assert length(dofinds) == length(pointinds)
+    @inbounds for (i, p) in enumerate(pointinds)
+        v = view(nzval, dofinds[i])
         u = ∑ₚN[p]
         @assert length(v) == length(u)
-        @simd for i in 1:length(v)
-            @inbounds v[i] += u[i]
+        @simd for j in 1:length(v)
+            v[j] += u[j]
         end
     end
     S
 end
-function add!(S::GridState, ∑ₚN::PointToGridOperation, activepoints::BitVector)
+
+function add!(S::GridStateThreads, ∑ₚN::PointToGridOperation)
+    Threads.@threads for _ in 1:Threads.nthreads()
+        id = Threads.threadid()
+        add!(S.state_threads[id], ∑ₚN, S.ptranges[id])
+    end
+    state = S.state
+    @inbounds for i in eachindex(state)
+        nzindices(state)[i] === nothing && continue
+        v = zero(state[i])
+        @simd for x in S.state_threads
+            v += x[i]
+        end
+        state[i] = v
+    end
+    S
+end
+
+function add!(S::Union{GridState, GridStateThreads}, ∑ₚN::PointToGridOperation, activepoints::BitVector)
     nzval = nonzeros(S)
-    dofinds = S.dofindices
+    dofinds = dofindices(S)
     @inbounds for p in eachindex(dofinds, activepoints)
         if activepoints[p]
             v = view(nzval, dofinds[p])
@@ -69,14 +88,14 @@ function add!(S::GridState, ∑ₚN::PointToGridOperation, activepoints::BitVect
     S
 end
 
-function set!(S::GridState, list::List{PointToGridOperation})
+function set!(S::Union{GridState, GridStateThreads}, list::List{PointToGridOperation})
     zeros!(S)
     for item in list
         add!(S, item)
     end
     S
 end
-function set!(S::GridState, list::List{PointToGridOperation}, activepoints::BitVector)
+function set!(S::Union{GridState, GridStateThreads}, list::List{PointToGridOperation}, activepoints::BitVector)
     zeros!(S)
     for item in list
         add!(S, item, activepoints)
@@ -84,8 +103,8 @@ function set!(S::GridState, list::List{PointToGridOperation}, activepoints::BitV
     S
 end
 
-set!(S::GridState, x::ListGroup{PointToGridOperation}) = set!(S, List(x))
-set!(S::GridState, x::ListGroup{PointToGridOperation}, activepoints::BitVector) = set!(S, List(x), activepoints)
+set!(S::Union{GridState, GridStateThreads}, x::ListGroup{PointToGridOperation}) = set!(S, List(x))
+set!(S::Union{GridState, GridStateThreads}, x::ListGroup{PointToGridOperation}, activepoints::BitVector) = set!(S, List(x), activepoints)
 
 _to_matrix(x::Real, dim::Int) = ScalarMatrix(x, dim)
 _to_matrix(x::SecondOrderTensor, dim::Int) = x

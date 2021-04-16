@@ -12,6 +12,6 @@ which_type(::Vararg) = error()
     else t <: UnionGridState
         states = [:(xs[$i]) for (i,x) in enumerate(xs.parameters) if x <: UnionGridState]
         exps = [x <: UnionGridState ? :(_collection(nonzeros(xs[$i]))) : :(Ref(xs[$i])) for (i,x) in enumerate(xs.parameters)]
-        return :(GridStateOperation(indices($(states...)), dofindices($(states...)), LazyCollection(op, $(exps...))))
+        return :(GridStateOperation(nzindices($(states...)), dofindices($(states...)), LazyCollection(op, $(exps...))))
     end
 end

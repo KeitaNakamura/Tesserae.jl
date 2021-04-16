@@ -11,7 +11,7 @@ end
 
 Base.in(state, space::MPSpaceBound) = GridStateBound(state, space.bounddofs)
 
-function set!(dest::GridState, src::GridStateBound)
+function set!(dest::Union{GridState, GridStateThreads}, src::GridStateBound)
     set!(dest, src.parent, src.bounddofs)
     dest
 end

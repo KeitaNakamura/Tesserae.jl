@@ -10,8 +10,8 @@ using Base.Broadcast: broadcasted
 using SparseArrays
 
 import SparseArrays: nonzeros, nnz, sparse!, sparse
+import Jams.Arrays: nzindices
 import Jams.Collections: lazy, set!
-import Jams.DofHelpers: indices
 import Jams.ShapeFunctions: reinit!
 
 export
@@ -21,6 +21,7 @@ export
     generate_pointstates,
 # GridState
     GridState,
+    GridStateThreads,
     gridstate,
     nonzeros, # from SparseArrays
     nnz,      # from SparseArrays
@@ -39,7 +40,13 @@ export
 # PointToGridOperation
     ∑ₚ,
 # GridToPointOperation
-    ∑ᵢ
+    ∑ᵢ,
+# indices
+    PointToDofIndices,
+    PointToGridIndices
+
+const PointToDofIndices = Vector{Vector{Int}}
+const PointToGridIndices{dim} = Vector{Vector{CartesianIndex{dim}}}
 
 include("PointState.jl")
 include("GridState.jl")

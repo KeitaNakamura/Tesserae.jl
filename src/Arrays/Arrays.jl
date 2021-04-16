@@ -1,7 +1,8 @@
 module Arrays
 
+using Jams.DofHelpers
 using SparseArrays
-import SparseArrays: sparse, sparse!
+import SparseArrays: sparse, sparse!, nonzeros, nnz
 
 using Base: @_propagate_inbounds_meta
 
@@ -17,6 +18,11 @@ export
     SparseMatrixCSC,
     sparse,
     sparse!,
+# SparseArray
+    SparseArray,
+    nonzeros,
+    nzindices,
+    nnz,
 # List
     List,
     ListGroup
@@ -24,6 +30,7 @@ export
 include("FillArray.jl")
 include("ScalarMatrix.jl")
 include("SparseMatrixCOO.jl")
+include("SparseArray.jl")
 include("List.jl")
 
 end
