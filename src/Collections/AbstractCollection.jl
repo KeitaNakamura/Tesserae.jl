@@ -37,6 +37,7 @@ Base.size(c::AbstractCollection) = (length(c),)
 Base.eachindex(c::AbstractCollection) = Base.OneTo(lastindex(c))
 Base.firstindex(c::AbstractCollection) = 1
 Base.lastindex(c::AbstractCollection) = length(c)
+@inline Base.getindex(c::AbstractCollection, I::Vararg{Any}) = (@_propagate_inbounds_meta; view(c, I...))
 
 # iterate
 @inline Base.iterate(c::AbstractCollection, i = 1) = (i % UInt) - 1 < length(c) ? (@inbounds c[i], i + 1) : nothing
