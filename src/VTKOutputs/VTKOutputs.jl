@@ -30,7 +30,7 @@ julia> vtk_save(vtkfile)
  "vtkfile.vtu"
 ```
 """
-function vtk_points(vtk, x::PointState{<: Vec})
+function vtk_points(vtk, x::Union{PointState{<: Vec}, AbstractVector{<: Vec}})
     coords = vtk_format(x)
     npts = length(x)
     cells = [MeshCell(VTKCellTypes.VTK_VERTEX, [i]) for i in 1:npts]
