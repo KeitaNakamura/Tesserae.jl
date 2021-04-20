@@ -1,12 +1,12 @@
+# Monaghan model
 struct WaterModel{T} <: MaterialModel
     B::T
     γ::T
 end
 
 # https://www.researchgate.net/publication/220789258_Weakly_Compressible_SPH_for_Free_Surface_Flows
-# B = 1119 (kPa)
 # γ = 7
-function WaterModel(; B::Real = 1119e3, γ::Real = 7)
+function WaterModel(; B::Real, γ::Real = 7)
     T = promote_type(typeof(B), typeof(γ))
     WaterModel{T}(B, γ)
 end
