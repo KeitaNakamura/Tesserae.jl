@@ -11,9 +11,9 @@ function WaterModel(; B::Real, γ::Real = 7)
     WaterModel{T}(B, γ)
 end
 
-function update_stress(model::WaterModel, σ::SymmetricSecondOrderTensor{3}, F::SecondOrderTensor{3})
+function update_stress(model::WaterModel, F::SecondOrderTensor{3})
     B = model.B
     γ = model.γ
     p = B * (1/det(F)^γ - 1)
-    -p*one(σ)
+    -p*one(SymmetricSecondOrderTensor{3, typeof(p)})
 end
