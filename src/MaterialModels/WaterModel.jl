@@ -17,3 +17,10 @@ function update_stress(model::WaterModel, F::SecondOrderTensor{3})
     p = B * (1/det(F)^γ - 1)
     -p*one(SymmetricSecondOrderTensor{3, typeof(p)})
 end
+
+function deformation_gradient(model::WaterModel, p::Real)
+    B = model.B
+    γ = model.γ
+    detF = (1 / (p/B + 1))^(1/γ)
+    (detF)^(1/3) * one(SecondOrderTensor{3, typeof(p)})
+end
