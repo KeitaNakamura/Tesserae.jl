@@ -12,6 +12,7 @@ export
     VonMises,
     DruckerPrager,
     WaterModel,
+    NewtonianFluid,
     update_stress,
     soundspeed,
     volumetric_stress,
@@ -28,5 +29,6 @@ include("SoilElastic.jl")
 include("VonMises.jl")
 include("DruckerPrager.jl")
 include("WaterModel.jl")
+include("NewtonianFluid.jl")
 
 end
