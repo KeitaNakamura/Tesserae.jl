@@ -2,7 +2,7 @@ module Grids
 
 using Reexport
 using Coordinates
-@reexport using Jams.TensorValues
+@reexport using Poingr.TensorValues
 
 using Base: @_inline_meta, @_propagate_inbounds_meta
 using Base.Cartesian: @ntuple, @nall

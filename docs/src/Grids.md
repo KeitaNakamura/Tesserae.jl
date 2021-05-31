@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.Grids
+CurrentModule = Poingr.Grids
 ```
 
-# Jams.Grids
+# Poingr.Grids
 
 ```@index
 Modules = [Grids]

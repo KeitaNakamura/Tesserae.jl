@@ -1,32 +1,32 @@
 using Documenter
-using Jams
+using Poingr
 
 # Setup for doctests in docstrings
-DocMeta.setdocmeta!(Jams, :DocTestSetup, recursive = true,
+DocMeta.setdocmeta!(Poingr, :DocTestSetup, recursive = true,
     quote
-        using Jams
+        using Poingr
     end
 )
 
 makedocs(;
     format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == "true"),
-    modules = [Jams],
-    sitename = "Jams.jl",
+    modules = [Poingr],
+    sitename = "Poingr.jl",
     pages=[
         "Home" => "index.md",
-        "Jams.DofHelpers" => "DofHelpers.md",
-        "Jams.Arrays" => "Arrays.md",
-        "Jams.Collections" => "Collections.md",
-        "Jams.Grids" => "Grids.md",
-        "Jams.ShapeFunctions" => "ShapeFunctions.md",
-        "Jams.MPSpaces" => "MPSpaces.md",
-        "Jams.ContactMechanics" => "ContactMechanics.md",
-        "Jams.Loggers" => "Loggers.md",
-        "Jams.VTKOutputs" => "VTKOutputs.md",
+        "Poingr.DofHelpers" => "DofHelpers.md",
+        "Poingr.Arrays" => "Arrays.md",
+        "Poingr.Collections" => "Collections.md",
+        "Poingr.Grids" => "Grids.md",
+        "Poingr.ShapeFunctions" => "ShapeFunctions.md",
+        "Poingr.MPSpaces" => "MPSpaces.md",
+        "Poingr.ContactMechanics" => "ContactMechanics.md",
+        "Poingr.Loggers" => "Loggers.md",
+        "Poingr.VTKOutputs" => "VTKOutputs.md",
     ],
     doctest = true, # :fix
 )
 
 deploydocs(
-    repo = "github.com/Nakamura-Lab/Jams.jl.git",
+    repo = "github.com/KeitaNakamura/Poingr.jl.git",
 )

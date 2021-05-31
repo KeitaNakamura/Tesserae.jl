@@ -1,7 +1,7 @@
 module Collections
 
-using Jams.TensorValues
-using Jams.MaterialModels
+using Poingr.TensorValues
+using Poingr.MaterialModels
 
 using Base: @_propagate_inbounds_meta, @_inline_meta, @pure
 using LinearAlgebra

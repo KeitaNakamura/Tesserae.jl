@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.Collections
+CurrentModule = Poingr.Collections
 ```
 
-# Jams.Collections
+# Poingr.Collections
 
 ```@index
 Modules = [Collections]

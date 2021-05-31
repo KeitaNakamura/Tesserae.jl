@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.Arrays
+CurrentModule = Poingr.Arrays
 ```
 
-# Jams.Arrays
+# Poingr.Arrays
 
 ```@index
 Modules = [Arrays]

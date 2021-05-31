@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.MPSpaces
+CurrentModule = Poingr.MPSpaces
 ```
 
-# Jams.MPSpaces
+# Poingr.MPSpaces
 
 ```@index
 Modules = [MPSpaces]

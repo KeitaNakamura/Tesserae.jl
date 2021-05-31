@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.VTKOutputs
+CurrentModule = Poingr.VTKOutputs
 ```
 
-# Jams.VTKOutputs
+# Poingr.VTKOutputs
 
 ```@index
 Modules = [VTKOutputs]

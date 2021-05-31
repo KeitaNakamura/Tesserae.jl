@@ -1,7 +1,7 @@
 module ContactMechanics
 
-using Jams.TensorValues
-using Jams.Collections
+using Poingr.TensorValues
+using Poingr.Collections
 
 export Contact
 

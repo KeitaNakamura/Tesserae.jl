@@ -2,10 +2,10 @@ module VTKOutputs
 
 using Reexport
 @reexport using WriteVTK
-using Jams.TensorValues
-using Jams.Collections
-using Jams.Grids
-using Jams.States
+using Poingr.TensorValues
+using Poingr.Collections
+using Poingr.Grids
+using Poingr.States
 
 export
     vtk_points

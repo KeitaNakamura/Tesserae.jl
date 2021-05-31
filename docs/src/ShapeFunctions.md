@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.ShapeFunctions
+CurrentModule = Poingr.ShapeFunctions
 ```
 
-# Jams.ShapeFunctions
+# Poingr.ShapeFunctions
 
 ```@index
 Modules = [ShapeFunctions]

@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.ContactMechanics
+CurrentModule = Poingr.ContactMechanics
 ```
 
-# Jams.ContactMechanics
+# Poingr.ContactMechanics
 
 ```@index
 Modules = [ContactMechanics]

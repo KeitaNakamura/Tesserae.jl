@@ -1,11 +1,11 @@
 module ShapeFunctions
 
 using Reexport
-@reexport using Jams.TensorValues, Jams.Grids
-using Jams.Collections
+@reexport using Poingr.TensorValues, Poingr.Grids
+using Poingr.Collections
 using StaticArrays
 
-import Jams.TensorValues: gradient, ∇
+import Poingr.TensorValues: gradient, ∇
 
 using Base: @pure, @_propagate_inbounds_meta, @_inline_meta
 

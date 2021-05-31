@@ -1,15 +1,15 @@
 module MPSpaces
 
-using Jams.Arrays
-using Jams.TensorValues
-using Jams.DofHelpers
-using Jams.ShapeFunctions
-using Jams.States
-using Jams.Collections
+using Poingr.Arrays
+using Poingr.TensorValues
+using Poingr.DofHelpers
+using Poingr.ShapeFunctions
+using Poingr.States
+using Poingr.Collections
 
-import Jams.DofHelpers: ndofs
-import Jams.ShapeFunctions: reinit!, construct
-import Jams.States: pointstate, gridstate, gridstate_matrix, set!
+import Poingr.DofHelpers: ndofs
+import Poingr.ShapeFunctions: reinit!, construct
+import Poingr.States: pointstate, gridstate, gridstate_matrix, set!
 
 using Base: @_propagate_inbounds_meta
 

@@ -1,6 +1,6 @@
 module AssemblingTest
 
-using Jams
+using Poingr
 using Test, LinearAlgebra
 
 function check_point_to_grid(x, N)

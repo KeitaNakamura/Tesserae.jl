@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.Loggers
+CurrentModule = Poingr.Loggers
 ```
 
-# Jams.Loggers
+# Poingr.Loggers
 
 ```@index
 Modules = [Loggers]

@@ -3,7 +3,7 @@ module MaterialModels
 using Base: @_inline_meta
 
 using Reexport
-@reexport using Jams.TensorValues
+@reexport using Poingr.TensorValues
 
 export
     MaterialModel,

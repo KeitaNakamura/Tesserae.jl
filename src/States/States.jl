@@ -1,18 +1,18 @@
 module States
 
-using Jams.Arrays
-using Jams.Collections
-using Jams.DofHelpers
-using Jams.Grids
+using Poingr.Arrays
+using Poingr.Collections
+using Poingr.DofHelpers
+using Poingr.Grids
 using Base: @_propagate_inbounds_meta
 using Base.Cartesian: @nall
 using Base.Broadcast: broadcasted
 using SparseArrays
 
 import SparseArrays: nonzeros, nnz, sparse!, sparse
-import Jams.Arrays: nzindices
-import Jams.Collections: lazy, set!
-import Jams.ShapeFunctions: reinit!
+import Poingr.Arrays: nzindices
+import Poingr.Collections: lazy, set!
+import Poingr.ShapeFunctions: reinit!
 
 export
 # PointState

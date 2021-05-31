@@ -1,4 +1,4 @@
-module Jams
+module Poingr
 
 include("TensorValues/TensorValues.jl")
 include("DofHelpers/DofHelpers.jl")
@@ -15,17 +15,17 @@ include("VTKOutputs/VTKOutputs.jl")
 
 # Exports
 using Reexport
-@reexport using Jams.TensorValues
-@reexport using Jams.DofHelpers
-@reexport using Jams.Arrays
-@reexport using Jams.MaterialModels
-@reexport using Jams.Collections
-@reexport using Jams.Grids
-@reexport using Jams.ShapeFunctions
-@reexport using Jams.States
-@reexport using Jams.MPSpaces
-@reexport using Jams.ContactMechanics
-@reexport using Jams.Loggers
-@reexport using Jams.VTKOutputs
+@reexport using Poingr.TensorValues
+@reexport using Poingr.DofHelpers
+@reexport using Poingr.Arrays
+@reexport using Poingr.MaterialModels
+@reexport using Poingr.Collections
+@reexport using Poingr.Grids
+@reexport using Poingr.ShapeFunctions
+@reexport using Poingr.States
+@reexport using Poingr.MPSpaces
+@reexport using Poingr.ContactMechanics
+@reexport using Poingr.Loggers
+@reexport using Poingr.VTKOutputs
 
 end # module

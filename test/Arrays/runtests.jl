@@ -1,9 +1,9 @@
 module ArraysTest
 
-using Jams.Arrays
+using Poingr.Arrays
 using Test, LinearAlgebra
 
-@testset "Jams.Arrays" begin
+@testset "Poingr.Arrays" begin
     include("FillArray.jl")
     include("List.jl")
     include("ScalarMatrix.jl")

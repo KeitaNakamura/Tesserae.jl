@@ -1,6 +1,6 @@
 module Arrays
 
-using Jams.DofHelpers
+using Poingr.DofHelpers
 using SparseArrays
 import SparseArrays: sparse, sparse!, nonzeros, nnz
 

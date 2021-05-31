@@ -1,9 +1,9 @@
 module MaterialModelsTest
 
-using Jams.MaterialModels
+using Poingr.MaterialModels
 using Test
 
-@testset "Jams.MaterialModels" begin
+@testset "Poingr.MaterialModels" begin
     include("SoilElastic.jl")
 end
 

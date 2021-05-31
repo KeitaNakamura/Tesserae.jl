@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Jams.DofHelpers
+CurrentModule = Poingr.DofHelpers
 ```
 
-# Jams.DofHelpers
+# Poingr.DofHelpers
 
 ```@index
 Modules = [DofHelpers]
