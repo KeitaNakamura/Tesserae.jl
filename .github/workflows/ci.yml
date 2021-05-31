@@ -1,18 +1,24 @@
 name: CI
 on:
-  - push
-  - pull_request
+  pull_request:
+  push:
+    branches: main
+    tags: '*'
 jobs:
   test:
     if: "!contains(github.event.head_commit.message, 'skip ci')"
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         version:
-          - '1.5'
+          - '1'
+          - 'nightly'
         os:
           - ubuntu-latest
+          - macOS-latest
+          - windows-latest
         arch:
           - x64
     steps:
@@ -31,17 +37,31 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
-      - name: Add Nakamura-Lab-Registry
-        run: |
-          git config --global credential.helper store
-          echo -e $GIT_CREDENTIALS > ~/.git-credentials
-          julia --color=yes -e 'using Pkg; pkg"registry add https://github.com/Nakamura-Lab/Nakamura-Lab-Registry.git"'
-        env:
-          GIT_CREDENTIALS: ${{ secrets.GIT_CREDENTIALS }}
-      - uses: julia-actions/julia-buildpkg@latest
-      - uses: julia-actions/julia-runtest@latest
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           file: lcov.info
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: '1'
+      - run: |
+          julia --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+      # - run: |
+          # julia --project=docs -e '
+            # using Documenter: doctest
+            # using Poingr
+            # doctest(Poingr)'
+      - run: julia --project=docs docs/make.jl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
