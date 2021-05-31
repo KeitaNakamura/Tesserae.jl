@@ -29,4 +29,5 @@ makedocs(;
 
 deploydocs(
     repo = "github.com/KeitaNakamura/Poingr.jl.git",
+    devbranch = "main",
 )
