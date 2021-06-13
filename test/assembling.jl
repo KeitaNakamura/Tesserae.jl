@@ -51,7 +51,7 @@ end
     A ← ex
     B = SparseMatrixCOO()
     for p in 1:npoints(space)
-        ∇Nᵢ = vcat(∇(N)[p]...)
+        ∇Nᵢ = Array(vcat(∇(N)[p]...))
         inds = MPSpaces.dofindices(space, p; dof)
         push!(B, ∇Nᵢ*∇Nᵢ', inds, inds)
     end
