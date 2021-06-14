@@ -58,7 +58,7 @@ end
 function add!(S::GridStateThreads, ∑ₚN::PointToGridOperation)
     Threads.@threads for _ in 1:Threads.nthreads()
         id = Threads.threadid()
-        add!(S.state_threads[id], ∑ₚN, S.ptranges[id])
+        add!(S.state_threads[id], ∑ₚN, S.ptindices_threads[id])
     end
     state = S.state
     @inbounds for i in eachindex(state)

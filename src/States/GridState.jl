@@ -35,7 +35,7 @@ Base.resize!(A::GridState) = (resize!(nonzeros(A), nnz(A)); A)
 
 struct GridStateThreads{dim, T, V} <: AbstractArray{T, dim}
     state::GridState{dim, T, V}
-    ptranges::Vector{UnitRange{Int}}
+    ptindices_threads::Vector{Vector{Int}}
     state_threads::Vector{GridState{dim, T, V}}
 end
 
