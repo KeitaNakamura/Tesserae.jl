@@ -21,6 +21,8 @@ end
 
 Base.fill!(p::PointState, v) = fill!(p.data, v)
 
+Base.deleteat!(p::PointState, inds) = (deleteat!(p.data, inds); p)
+
 Base.filter(f, p::PointState) = PointState(filter(f, p.data))
 Base.findall(f, p::PointState) = findall(f, p.data)
 
