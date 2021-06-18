@@ -30,7 +30,7 @@ function reinit!(it::WLSValue{<: Any, <: Any, dim}, grid::AbstractGrid{dim}, ind
     resize!(it.w, length(indices))
     @inbounds for (j, I) in enumerate(view(CartesianIndices(grid), indices))
         xᵢ = grid[I]
-        ξ = Vec{dim}(d -> @inbounds (x[d] - xᵢ[d]) / gridsteps(grid, d))
+        ξ = (x - xᵢ) ./ gridstep(grid)
         it.w[j] = F(ξ)
     end
     P = polynomial(it)

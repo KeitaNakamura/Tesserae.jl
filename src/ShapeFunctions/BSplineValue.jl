@@ -23,7 +23,7 @@ function reinit!(it::BSplineValue{<: Any, dim}, grid::AbstractGrid{dim}, indices
 end
 
 function _value(F::ShapeFunction, x::Vec{dim}, xᵢ::Vec{dim}, h::NTuple{dim}, pos) where {dim}
-    ξ = Vec{dim}(i -> @inbounds((x[i] - xᵢ[i]) / h[i]))
+    ξ = (x - xᵢ) ./ h
     value(F, ξ, pos)
 end
 
