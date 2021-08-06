@@ -113,8 +113,8 @@ end
 function BSplinePosition(A::AbstractArray{<: Any, dim}, I::NTuple{dim, Int}) where {dim}
     @boundscheck checkbounds(A, I...)
     ntuple(Val(dim)) do d
-        l = I[d] - firstindex(A, I[d])
-        r = lastindex(A, I[d]) - I[d]
+        l = I[d] - firstindex(A, d)
+        r = lastindex(A, d) - I[d]
         pos = l < r ? l : -r
         BSplinePosition(pos)
     end
