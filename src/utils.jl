@@ -1,8 +1,15 @@
 @generated function initval(::Type{T}) where {T}
-    exps = [:(zero($t)) for t in fieldtypes(T)]
-    quote
-        @_inline_meta
-        T($(exps...))
+    if Base._return_type(zero, (T,)) == Union{}
+        exps = [:(zero($t)) for t in fieldtypes(T)]
+        quote
+            @_inline_meta
+            T($(exps...))
+        end
+    else
+        quote
+            @_inline_meta
+            zero(T)
+        end
     end
 end
 @generated function initval(::Type{T}) where {T <: NamedTuple}
@@ -14,9 +21,7 @@ end
 end
 initval(x) = initval(typeof(x))
 
-# TODO: find more clever way
-reinit!(x::StructArray) = (broadcast!(initval, x, x); x)
-reinit!(x::AbstractArray) = (broadcast!(zero, x, x); x)
+reinit!(x::AbstractArray) = (broadcast!(initval, x, x); x)
 
 
 function Tensor3D(x::SecondOrderTensor{2,T}) where {T}
