@@ -52,18 +52,13 @@ end
 @inline function Base.getindex(x::MaskedArray, i::Int)
     @boundscheck checkbounds(x, i)
     mask = x.mask
-    @inbounds begin
-        # mask[i] || throw(UndefRefError())
-        # x.data[mask.indices[i]]
-        mask[i] ? x.data[mask.indices[i]] : zero(eltype(x))
-    end
+    @inbounds mask[i] ? x.data[mask.indices[i]] : initval(eltype(x))
 end
 @inline function Base.setindex!(x::MaskedArray, v, i::Int)
     @boundscheck checkbounds(x, i)
     mask = x.mask
     @inbounds begin
-        # mask[i] || throw(UndefRefError())
-        mask[i] || return x
+        mask[i] || throw(UndefRefError())
         x.data[mask.indices[i]] = v
     end
     x
