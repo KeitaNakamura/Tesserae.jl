@@ -14,15 +14,11 @@ makedocs(;
     sitename = "Poingr.jl",
     pages=[
         "Home" => "index.md",
-        "Poingr.DofHelpers" => "DofHelpers.md",
-        "Poingr.Arrays" => "Arrays.md",
-        "Poingr.Collections" => "Collections.md",
-        "Poingr.Grids" => "Grids.md",
-        "Poingr.ShapeFunctions" => "ShapeFunctions.md",
-        "Poingr.MPSpaces" => "MPSpaces.md",
-        "Poingr.ContactMechanics" => "ContactMechanics.md",
-        "Poingr.Loggers" => "Loggers.md",
-        "Poingr.VTKOutputs" => "VTKOutputs.md",
+        "Grid" => "grid.md",
+        "Shape functions" => "shape_functions.md",
+        "ContactMechanics" => "contact_mechanics.md",
+        "Loggers" => "logger.md",
+        "VTK outputs" => "VTK_outputs.md",
     ],
     doctest = true, # :fix
 )
