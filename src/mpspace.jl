@@ -100,7 +100,7 @@ end
     quote
         shapevalues = space.shapevalues[p]
         gridindices = space.gridindices[p]
-        @inbounds for i in eachindex(shapevalues, gridindices)
+        @inbounds @simd for i in eachindex(shapevalues, gridindices)
             it = shapevalues[i]
             I = gridindices[i]
             res = p2g(it, p, I)
@@ -174,7 +174,7 @@ function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, spa
     vals = zero.(eltype.(pointstates))
     shapevalues = space.shapevalues[p]
     gridindices = space.gridindices[p]
-    @inbounds for i in eachindex(shapevalues, gridindices)
+    @inbounds @simd for i in eachindex(shapevalues, gridindices)
         it = shapevalues[i]
         I = gridindices[i]
         res = g2p(it, I, p)
