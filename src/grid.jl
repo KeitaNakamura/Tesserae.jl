@@ -185,13 +185,16 @@ CartesianIndex(2, 2)
         xmin = gridorigin(grid)
         xmax = xmin .+ dx .* ncells
         @inbounds begin
-            (@nall $dim d -> xmin[d] ≤ x[d] ≤ xmax[d]) || return nothing
-            CartesianIndex(@ntuple $dim d -> floor(Int, (x[d] - xmin[d]) / dx[d]) + 1)
+            I = CartesianIndex(@ntuple $dim d -> floor(Int, (x[d] - xmin[d]) / dx[d]) + 1)
+            ifelse(checkbounds(Bool, CartesianIndices(size(grid).-1), I), I, nothing)
         end
     end
 end
 
+blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
+
 function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
+    @assert size(ptsinblk) == blocksize(grid)
     empty!.(ptsinblk)
     for p in eachindex(xₚ)
         I = whichcell(grid, xₚ[p])
@@ -203,8 +206,7 @@ function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{di
 end
 
 function pointsinblock(grid::Grid, xₚ::AbstractVector)
-    blocksize = @. (($size(grid) - 1) - 1) >> BLOCK_UNIT + 1
-    ptsinblk = [Int[] for i in CartesianIndices(blocksize)]
+    ptsinblk = [Int[] for i in CartesianIndices(blocksize(grid))]
     pointsinblock!(ptsinblk, grid, xₚ)
 end
 
