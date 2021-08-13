@@ -250,6 +250,9 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coordina
 
     pointstate
 end
+function generate_pointstate(indomain, grid::Grid{dim, T}, coordinate_system = :plane_strain_if_2D; n::Int = 2) where {dim, T}
+    generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V0::T, h::Vec{dim,T}}, grid, coordinate_system; n)
+end
 
 struct Bound{dim, CI <: CartesianIndices{dim}}
     n::Vec{dim, Int}
