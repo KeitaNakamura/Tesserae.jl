@@ -16,19 +16,17 @@ end
 npoints(space::MPSpace) = length(space.shapevalues)
 gridsize(space::MPSpace) = space.gridsize
 
-# reinitialize pointsinblock and reordering pointstate
-function reinit!(pointsinblock::Array, pointstate::StructVector, grid::Grid)
-    pointsinblock!(pointsinblock, grid, pointstate.x)
-    # inds = Vector{Int}(undef, length(pointstate))
-    # cnt = 1
-    # for block in pointsinblock
-        # @inbounds for i in eachindex(block)
-            # inds[cnt] = block[i]
-            # block[i] = cnt
-            # cnt += 1
-        # end
-    # end
-    # @. pointstate = pointstate[inds]
+function reordering_pointstate!(pointstate::StructVector, space::MPSpace)
+    inds = Vector{Int}(undef, length(pointstate))
+    cnt = 1
+    for block in space.pointsinblock
+        @inbounds for i in eachindex(block)
+            inds[cnt] = block[i]
+            block[i] = cnt
+            cnt += 1
+        end
+    end
+    @. pointstate = pointstate[inds]
     nothing
 end
 
@@ -37,7 +35,7 @@ function reinit!(space::MPSpace, grid::Grid, pointstate::AbstractVector; exclude
     @assert length(pointstate) == npoints(space)
 
     gridstate = grid.state
-    reinit!(space.pointsinblock, pointstate, grid)
+    pointsinblock!(space.pointsinblock, grid, pointstate.x)
     xₚ = pointstate.x
 
     point_radius = support_length(space.F)
