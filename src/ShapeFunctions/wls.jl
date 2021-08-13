@@ -86,27 +86,30 @@ function reinit!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim
     resize!(it.N, length(indices))
     resize!(it.∇N, length(indices))
     resize!(it.w, length(indices))
-    @inbounds for (j, I) in enumerate(indices)
+    @inbounds @simd for i in eachindex(indices)
+        I = indices[i]
         xᵢ = grid[I]
         ξ = (x - xᵢ) ./ gridsteps(grid)
-        it.w[j] = F(ξ)
+        it.w[i] = F(ξ)
     end
     P = polynomial(it)
     M = zero(it.M⁻¹[])
-    @inbounds for (j, I) in enumerate(indices)
+    @inbounds @simd for i in eachindex(indices)
+        I = indices[i]
         xᵢ = grid[I]
         p = P(xᵢ - x)
-        M += it.w[j] * p ⊗ p
+        M += it.w[i] * p ⊗ p
     end
     it.M⁻¹[] = inv(M)
     p₀ = P(x - x)
     ∇p₀ = P'(x - x)
-    @inbounds for (j, I) in enumerate(indices)
+    @inbounds @simd for i in eachindex(indices)
+        I = indices[i]
         xᵢ = grid[I]
         q = it.M⁻¹[] ⋅ P(xᵢ - x)
-        wq = it.w[j] * q
-        it.N[j] = wq ⋅ p₀
-        it.∇N[j] = wq ⋅ ∇p₀
+        wq = it.w[i] * q
+        it.N[i] = wq ⋅ p₀
+        it.∇N[i] = wq ⋅ ∇p₀
     end
 end
 
