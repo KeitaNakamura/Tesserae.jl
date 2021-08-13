@@ -58,7 +58,8 @@ end
     @boundscheck checkbounds(x, i)
     mask = x.mask
     @inbounds begin
-        mask[i] || throw(UndefRefError())
+        # mask[i] || throw(UndefRefError()) # cannot use this because `@. A[indices] = A[indices]` doesn't work well yet
+        mask[i] || return x
         x.data[mask.indices[i]] = v
     end
     x
