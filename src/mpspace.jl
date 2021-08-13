@@ -93,6 +93,10 @@ function reinit!(space::MPSpace, grid::Grid, pointstate::AbstractVector; exclude
     space
 end
 
+##################
+# point_to_grid! #
+##################
+
 @generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, space::MPSpace, p::Int) where {N}
     exps = [:(gridstates[$i][I] += res[$i]) for i in 1:N]
     quote
@@ -119,6 +123,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, space::MP
     end
     gridstates
 end
+
 function point_to_grid!(p2g, gridstate::AbstractArray, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     point_to_grid!((gridstate,), space, pointmask) do it, p, I
         @_inline_meta
@@ -126,6 +131,46 @@ function point_to_grid!(p2g, gridstate::AbstractArray, space::MPSpace, pointmask
         (p2g(it, p, I),)
     end
 end
+
+function stress_to_force(coord_system::Symbol, N, ∇N, x::Vec, σ::SymmetricSecondOrderTensor{3})
+    f = Tensor2D(σ) ⋅ ∇N
+    if coord_system == :axisymmetric
+        return f + Vec(1,0) * σ[3,3] * N / x[1]
+    end
+    f
+end
+
+function default_point_to_grid!(grid::Grid,
+                        pointstate::StructVector,
+                        space::MPSpace{<: Any, <: Any, <: WLS},
+                        coord_system::Symbol)
+    P = polynomial(space.F)
+    point_to_grid!((grid.state.m, grid.state.w, grid.state.v, grid.state.f), space) do it, p, i
+        @_inline_meta
+        @_propagate_inbounds_meta
+        N = it.N
+        ∇N = it.∇N
+        w = it.w
+        xₚ = pointstate.x[p]
+        mₚ = pointstate.m[p]
+        V0ₚ = pointstate.V0[p]
+        Fₚ = pointstate.F[p]
+        Cₚ = pointstate.C[p]
+        σₚ = pointstate.σ[p]
+        bₚ = pointstate.b[p]
+        xᵢ = grid[i]
+        m = mₚ * N
+        v = w * Cₚ ⋅ P(xᵢ - xₚ)
+        f = -(V0ₚ*det(Fₚ)) * stress_to_force(coord_system, N, ∇N, xₚ, σₚ) + m * bₚ
+        m, w, v, f
+    end
+    @. grid.state.v /= grid.state.w
+    grid
+end
+
+##################
+# grid_to_point! #
+##################
 
 function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, space::MPSpace, p::Int) where {N}
     vals = zero.(eltype.(pointstates))
@@ -148,10 +193,50 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, space::
     end
     pointstates
 end
+
 function grid_to_point!(g2p, pointstate::AbstractVector, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     grid_to_point!((pointstate,), space, pointmask) do it, I, p
         @_inline_meta
         @_propagate_inbounds_meta
         (g2p(it, I, p),)
     end
+end
+
+function velocity_gradient(coord_system::Symbol, x::Vec, v::Vec, ∇v::SecondOrderTensor{2})
+    L = Poingr.Tensor3D(∇v)
+    if coord_system == :axisymmetric
+        return L + @Mat [0.0 0.0 0.0
+                         0.0 0.0 0.0
+                         0.0 0.0 v[1] / x[1]]
+    end
+    L
+end
+
+function default_grid_to_point!(pointstate::StructVector,
+                        grid::Grid,
+                        space::MPSpace{dim, <: Any, <: WLS},
+                        dt::Real,
+                        coord_system::Symbol) where {dim}
+    P = polynomial(space.F)
+    p0 = P(zero(Vec{dim, Int}))
+    ∇p0 = P'(zero(Vec{dim, Int}))
+    grid_to_point!(pointstate.C, space) do it, i, p
+        @_inline_meta
+        @_propagate_inbounds_meta
+        w = it.w
+        M⁻¹ = it.M⁻¹
+        grid.state.v[i] ⊗ (w * M⁻¹ ⋅ P(grid[i] - pointstate.x[p]))
+    end
+    @inbounds Threads.@threads for p in eachindex(pointstate)
+        Cₚ = pointstate.C[p]
+        xₚ = pointstate.x[p]
+        vₚ = Cₚ ⋅ p0
+        ∇vₚ = velocity_gradient(coord_system, xₚ, vₚ, Cₚ ⋅ ∇p0)
+        Fₚ = pointstate.F[p]
+        pointstate.v[p] = vₚ
+        pointstate.∇v[p] = ∇vₚ
+        pointstate.F[p] = Fₚ + dt*(∇vₚ ⋅ Fₚ)
+        pointstate.x[p] = xₚ + vₚ * dt
+    end
+    pointstate
 end
