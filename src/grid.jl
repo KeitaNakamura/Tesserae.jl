@@ -241,9 +241,9 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coordina
     for i in 1:npoints
         if dim == 2 && coordinate_system == :axisymmetric
             r = pointstate.x[i][1]
-            pointstate.V[i] = r * V
+            pointstate.V0[i] = r * V
         else
-            pointstate.V[i] = V
+            pointstate.V0[i] = V
         end
         pointstate.h[i] = Vec(h)
     end
