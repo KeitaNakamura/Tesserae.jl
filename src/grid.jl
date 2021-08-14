@@ -21,7 +21,7 @@ end
 
 Base.size(x::Grid) = size(x.coordinates)
 gridsteps(x::Grid) = map(step, gridaxes(x))
-gridsteps(x::Grid, i::Int) = gridsteps(x)[i]
+gridsteps(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps(x)[i])
 gridaxes(x::Grid) = coordinateaxes(x.coordinates)
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridorigin(x::Grid) = map(first, gridaxes(x))
