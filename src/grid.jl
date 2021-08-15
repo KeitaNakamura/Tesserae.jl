@@ -24,7 +24,7 @@ gridsteps(x::Grid) = map(step, gridaxes(x))
 gridsteps(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps(x)[i])
 gridaxes(x::Grid) = coordinateaxes(x.coordinates)
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
-gridorigin(x::Grid) = map(first, gridaxes(x))
+gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 
 function Grid(::Type{Node}, axes::Tuple{Vararg{AbstractVector}}) where {Node}
     coordinates = Coordinate(axes)

@@ -17,6 +17,8 @@ export
 # grid
     Grid,
     gridsteps,
+    gridaxes,
+    gridorigin,
     generate_pointstate,
     eachboundary,
 # shape functions
