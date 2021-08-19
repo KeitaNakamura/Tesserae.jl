@@ -167,11 +167,13 @@ struct BSplineValues{order, dim, T} <: ShapeValues{dim, T}
     ∇N::Vector{Vec{dim, T}}
 end
 
-function ShapeValues(::Type{T}, F::BSpline{order, dim}) where {order, dim, T}
+function BSplineValues{order, dim, T}() where {order, dim, T}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
-    BSplineValues(F, N, ∇N)
+    BSplineValues(BSpline{order, dim}(), N, ∇N)
 end
+
+ShapeValues(::Type{T}, F::BSpline{order, dim}) where {order, dim, T} = BSplineValues{order, dim, T}()
 
 function reinit!(it::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
     @boundscheck checkbounds(grid, indices)

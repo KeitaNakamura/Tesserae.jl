@@ -43,12 +43,15 @@ Base.adjoint(p::Polynomial{order}) where {order} = PolynomialGradient(p)
 (p::PolynomialGradient)(x) = gradient(p.parent, x)
 
 
-struct WLS{order, weight_order, dim} <: ShapeFunction{dim}
-    poly::Polynomial{order}
-    bspline::BSpline{weight_order, dim}
+struct WLS{poly_order, bspline_order, dim} <: ShapeFunction{dim}
+    poly::Polynomial{poly_order}
+    bspline::BSpline{bspline_order, dim}
 end
 
-WLS{order}(bspline::BSpline) where {order} = WLS(Polynomial{order}(), bspline)
+WLS{poly_order, bspline_order, dim}() where {poly_order, bspline_order, dim} =
+    WLS(Polynomial{poly_order}(), BSpline{bspline_order, dim}())
+
+WLS{poly_order}(bspline::BSpline) where {poly_order} = WLS(Polynomial{poly_order}(), bspline)
 
 polynomial(wls::WLS) = wls.poly
 weight_function(wls::WLS) = wls.bspline
@@ -56,8 +59,8 @@ weight_function(wls::WLS) = wls.bspline
 support_length(wls::WLS) = support_length(weight_function(wls))
 
 
-struct WLSValues{order, weight_order, dim, T, L, M} <: ShapeValues{dim, T}
-    F::WLS{order, weight_order, dim}
+struct WLSValues{poly_order, bspline_order, dim, T, L, M} <: ShapeValues{dim, T}
+    F::WLS{poly_order, bspline_order, dim}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
     w::Vector{T}
@@ -70,14 +73,18 @@ weight_function(it::WLSValues) = weight_function(it.F)
 weight_value(it::WLSValues) = Collection{1}(it.w)
 moment_matrix_inverse(it::WLSValues) = it.M⁻¹[]
 
-function ShapeValues(::Type{T}, F::WLS{order, weight_order, dim}) where {order, weight_order, dim, T}
-    p = polynomial(F)
-    L = length(p(zero(Vec{dim, T})))
+function WLSValues{poly_order, bspline_order, dim, T, L, M}() where {poly_order, bspline_order, dim, T, L, M}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
     w = Vector{T}(undef, 0)
-    M⁻¹ = zero(Mat{L, L, T})
-    WLSValues(F, N, ∇N, w, Ref(M⁻¹))
+    M⁻¹ = zero(Mat{L, L, T, M})
+    WLSValues(WLS{poly_order, bspline_order, dim}(), N, ∇N, w, Ref(M⁻¹))
+end
+
+function ShapeValues(::Type{T}, F::WLS{poly_order, bspline_order, dim}) where {poly_order, bspline_order, dim, T}
+    p = polynomial(F)
+    L = length(p(zero(Vec{dim, T})))
+    WLSValues{poly_order, bspline_order, dim, T, L, L^2}()
 end
 
 function reinit!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
