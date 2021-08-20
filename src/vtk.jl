@@ -8,10 +8,7 @@ This should be used instead of calling `vtk_grid` in `WriteVTK` package.
 ```jldoctest
 julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0);
 
-julia> pointstate = generate_pointstate((x, y) -> (x-5)^2 + (y-5)^2 < 3^2,
-                                        @NamedTuple{x::Vec{2, Float64}, V::Float64, h::Vec{2, Float64}},
-                                        grid,
-                                        n = 4);
+julia> pointstate = generate_pointstate((x, y) -> (x-5)^2 + (y-5)^2 < 3^2, grid, n = 4);
 
 julia> vtkfile = vtk_points("vtkfile", pointstate.x)
 VTK file 'vtkfile.vtu' (UnstructuredGrid file, open)
