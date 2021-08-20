@@ -140,22 +140,26 @@ julia> Poingr.neighboring_cells(grid, Poingr.whichcell(grid, x), 1) == ans
 true
 ```
 """
-@generated function neighboring_cells(grid::Grid{dim}, cellindex::CartesianIndex{dim}, h::Int) where {dim}
-    quote
-        @boundscheck checkbounds(grid, cellindex + oneunit(cellindex))
-        @inbounds CartesianIndices(
-            @ntuple $dim d -> begin
-                i = cellindex[d]
-                len = size(grid, d) - 1
-                start, stop = clamp.((i-h, i+h), 1, len) # cut violated indices
-                start:stop
-            end
-        )
-    end
+function neighboring_cells(grid::Grid{dim}, cellindex::CartesianIndex{dim}, h::Int) where {dim}
+    inds = CartesianIndices(size(grid) .- 1)
+    @boundscheck checkbounds(inds, cellindex)
+    u = oneunit(cellindex)
+    inds ∩ (cellindex-h*u:cellindex+h*u)
 end
 
 @inline function neighboring_cells(grid::Grid{dim}, x::Vec{dim}, h::Int) where {dim}
     neighboring_cells(grid, whichcell(grid, x), h)
+end
+
+function neighboring_blocks(grid::Grid{dim}, blockindex::CartesianIndex{dim}, h::Int) where {dim}
+    inds = CartesianIndices(blocksize(grid))
+    @boundscheck checkbounds(inds, blockindex)
+    u = oneunit(blockindex)
+    inds ∩ (blockindex-h*u:blockindex+h*u)
+end
+
+@inline function neighboring_blocks(grid::Grid{dim}, x::Vec{dim}, h::Int) where {dim}
+    neighboring_blocks(grid, whichblock(grid, x), h)
 end
 
 """
