@@ -55,7 +55,7 @@ function reordering_pointstate!(pointstate::AbstractVector, space::MPSpace)
         end
     end
     @. pointstate = pointstate[inds]
-    nothing
+    pointstate
 end
 
 function reinit!(space::MPSpace, grid::Grid, xₚ::AbstractVector; exclude = nothing)

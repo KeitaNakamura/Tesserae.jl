@@ -8,7 +8,7 @@ using Base.Broadcast: Broadcasted, BroadcastStyle, AbstractArrayStyle, ArrayStyl
 using Reexport
 @reexport using Tensorial
 @reexport using WriteVTK
-using StaticArrays, StructArrays
+using StaticArrays, StructArrays, MappedArrays
 using Coordinates
 
 const BLOCK_UNIT = unsigned(3) # 2^3
@@ -68,6 +68,7 @@ export
 include("utils.jl")
 include("maskedarray.jl")
 include("grid.jl")
+include("pointstate.jl")
 
 include("ShapeFunctions/shapefunction.jl")
 include("ShapeFunctions/bspline.jl")
