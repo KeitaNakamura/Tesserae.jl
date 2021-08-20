@@ -211,18 +211,18 @@ function pointsinblock(grid::Grid, xₚ::AbstractVector)
 end
 
 
-struct BlockIndices{N} <: AbstractArray{CartesianIndex{N}, N}
+struct BlockStepIndices{N} <: AbstractArray{CartesianIndex{N}, N}
     inds::Coordinate{N, NTuple{N, Int}, NTuple{N, StepRange{Int, Int}}}
 end
-Base.size(x::BlockIndices) = size(x.inds)
-Base.getindex(x::BlockIndices{N}, i::Vararg{Int, N}) where {N} = (@_propagate_inbounds_meta; CartesianIndex(x.inds[i...]))
+Base.size(x::BlockStepIndices) = size(x.inds)
+Base.getindex(x::BlockStepIndices{N}, i::Vararg{Int, N}) where {N} = (@_propagate_inbounds_meta; CartesianIndex(x.inds[i...]))
 
 nfill(v, ::Val{N}) where {N} = ntuple(d -> v, Val(N))
 function coloringblocks(dims::NTuple{dim, Int}) where {dim}
     ncells = dims .- 1
     starts = SArray{NTuple{dim, 2}}(Iterators.ProductIterator(nfill((1,2), Val(dim)))...)
     nblocks = @. (ncells - 1) >> BLOCK_UNIT + 1
-    vec(map(st -> BlockIndices(Coordinate(StepRange.(st, 2, nblocks))), starts))
+    vec(map(st -> BlockStepIndices(Coordinate(StepRange.(st, 2, nblocks))), starts))
 end
 
 function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coordinate_system = :plane_strain_if_2D; n::Int = 2) where {dim, T}
