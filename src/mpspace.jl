@@ -1,16 +1,43 @@
+struct ResizeableVector{T} <: AbstractVector{T}
+    len::Base.RefValue{Int}
+    data::Vector{T}
+end
+ResizeableVector(data::Vector) = ResizeableVector(Ref(length(data)), data)
+Base.size(x::ResizeableVector) = (x.len[],)
+@inline Base.getindex(x::ResizeableVector, i::Int) = (@_propagate_inbounds_meta; x.data[i])
+function Base.resize!(x::ResizeableVector, n::Integer)
+    if length(x.data) > n
+        resize!(x.data, n)
+    else
+        x.len[] = n
+    end
+    x
+end
+function allocate!(f, x::ResizeableVector, n::Integer)
+    actual_len = length(x.data)
+    resize!(x, n)
+    if n > actual_len # growend
+        @simd for i in actual_len+1:length(x)
+            @inbounds x[i] = f(i)
+        end
+    end
+    x
+end
+
+
 struct MPSpace{dim, T, Tf <: ShapeFunction{dim}, Tshape <: ShapeValues{dim, T}}
     F::Tf
-    shapevalues::Vector{Tshape}
+    shapevalues::ResizeableVector{Tshape}
     gridsize::NTuple{dim, Int}
-    gridindices::Vector{Vector{GridIndex{dim}}}
+    gridindices::ResizeableVector{Vector{GridIndex{dim}}}
     pointsinblock::Array{Vector{Int}, dim}
     nearsurface::BitVector
 end
 
 function MPSpace(F::ShapeFunction, grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     npoints = length(xₚ)
-    shapevalues = [ShapeValues(T, F) for _ in 1:npoints]
-    gridindices = [GridIndex{dim}[] for _ in 1:npoints]
+    shapevalues = ResizeableVector([ShapeValues(T, F) for _ in 1:npoints])
+    gridindices = ResizeableVector([GridIndex{dim}[] for _ in 1:npoints])
     MPSpace(F, shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), falses(npoints))
 end
 
@@ -31,32 +58,11 @@ function reordering_pointstate!(pointstate::AbstractVector, space::MPSpace)
     nothing
 end
 
-function allocate!(x::Vector{Tshape}, n::Integer) where {Tshape <: ShapeValues}
-    len = length(x)
-    resize!(x, n)
-    if length(x) > len # growend
-        @simd for i in len+1:length(x)
-            @inbounds x[i] = Tshape()
-        end
-    end
-    x
-end
-function allocate!(x::Vector{Vector{GridIndex{dim}}}, n::Integer) where {dim}
-    len = length(x)
-    resize!(x, n)
-    if length(x) > len # growend
-        @simd for i in len+1:length(x)
-            @inbounds x[i] = GridIndex{dim}[]
-        end
-    end
-    x
-end
-
 function reinit!(space::MPSpace, grid::Grid, xₚ::AbstractVector; exclude = nothing)
     @assert size(grid) == gridsize(space)
 
-    allocate!(space.shapevalues, length(xₚ))
-    allocate!(space.gridindices, length(xₚ))
+    allocate!(i -> eltype(space.shapevalues)(), space.shapevalues, length(xₚ))
+    allocate!(i -> GridIndex{dim}[], space.gridindices, length(xₚ))
     resize!(space.nearsurface, length(xₚ))
 
     gridstate = grid.state
