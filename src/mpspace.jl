@@ -31,9 +31,33 @@ function reordering_pointstate!(pointstate::AbstractVector, space::MPSpace)
     nothing
 end
 
+function allocate!(x::Vector{Tshape}, n::Integer) where {Tshape <: ShapeValues}
+    len = length(x)
+    resize!(x, n)
+    if length(x) > len # growend
+        @simd for i in len+1:length(x)
+            @inbounds x[i] = Tshape()
+        end
+    end
+    x
+end
+function allocate!(x::Vector{Vector{GridIndex{dim}}}, n::Integer) where {dim}
+    len = length(x)
+    resize!(x, n)
+    if length(x) > len # growend
+        @simd for i in len+1:length(x)
+            @inbounds x[i] = GridIndex{dim}[]
+        end
+    end
+    x
+end
+
 function reinit!(space::MPSpace, grid::Grid, xₚ::AbstractVector; exclude = nothing)
     @assert size(grid) == gridsize(space)
-    @assert length(xₚ) == npoints(space)
+
+    allocate!(space.shapevalues, length(xₚ))
+    allocate!(space.gridindices, length(xₚ))
+    resize!(space.nearsurface, length(xₚ))
 
     gridstate = grid.state
     pointsinblock!(space.pointsinblock, grid, xₚ)
