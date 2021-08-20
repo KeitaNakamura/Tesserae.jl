@@ -1,6 +1,8 @@
 using Poingr
 using Test
 
+using Poingr: GridIndex
+
 struct NodeState
     a::Float64
     b::Float64

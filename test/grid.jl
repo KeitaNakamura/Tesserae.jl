@@ -80,3 +80,15 @@
     @test bounds[6].n == Vec(0, 0, 1)
     @test bounds[6].indices == CartesianIndices((1:11, 1:7, 5:5))
 end
+
+@testset "GridIndex" begin
+    li = LinearIndices((10,10))
+    ci = CartesianIndices((10,10))
+    @test (@inferred GridIndex(li, 13))::GridIndex{2} === GridIndex(13, CartesianIndex(3,2))
+    @test (@inferred GridIndex(ci, 13))::GridIndex{2} === GridIndex(13, CartesianIndex(3,2))
+    @test (@inferred GridIndex(li, CartesianIndex(3,2)))::GridIndex{2} === GridIndex(13, CartesianIndex(3,2))
+    @test (@inferred GridIndex(ci, CartesianIndex(3,2)))::GridIndex{2} === GridIndex(13, CartesianIndex(3,2))
+    index = GridIndex(13, CartesianIndex(3,2))
+    @test (@inferred Base.to_indices(li, (index,))) == (index.i,)
+    @test (@inferred Base.to_indices(ci, (index,))) == Tuple(index.I)
+end
