@@ -71,6 +71,7 @@ function reinit!(x::MaskedArray{T}) where {T}
     reinit!(x.data)
     x
 end
+reinit!(x::MaskedArray{Nothing}) = x # for Grid without NodeState type
 
 Base.unaliascopy(x::MaskedArray) = MaskedArray(Base.unaliascopy(x.data), Base.copy(x.mask))
 
