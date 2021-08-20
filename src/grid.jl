@@ -191,16 +191,47 @@ CartesianIndex(2, 2)
     end
 end
 
+"""
+    Poingr.whichblock(grid, x::Vec)
+
+Return block index where `x` locates.
+The unit block size is `2^$BLOCK_UNIT` cells.
+
+# Examples
+```jldoctest
+julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0)
+11×11 Grid{2, Float64, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}, Nothing, Poingr.MaskedArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}}:
+ [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   [0.0, 3.0]   …  [0.0, 8.0]   [0.0, 9.0]   [0.0, 10.0]
+ [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]   [1.0, 3.0]      [1.0, 8.0]   [1.0, 9.0]   [1.0, 10.0]
+ [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]   [2.0, 3.0]      [2.0, 8.0]   [2.0, 9.0]   [2.0, 10.0]
+ [3.0, 0.0]   [3.0, 1.0]   [3.0, 2.0]   [3.0, 3.0]      [3.0, 8.0]   [3.0, 9.0]   [3.0, 10.0]
+ [4.0, 0.0]   [4.0, 1.0]   [4.0, 2.0]   [4.0, 3.0]      [4.0, 8.0]   [4.0, 9.0]   [4.0, 10.0]
+ [5.0, 0.0]   [5.0, 1.0]   [5.0, 2.0]   [5.0, 3.0]   …  [5.0, 8.0]   [5.0, 9.0]   [5.0, 10.0]
+ [6.0, 0.0]   [6.0, 1.0]   [6.0, 2.0]   [6.0, 3.0]      [6.0, 8.0]   [6.0, 9.0]   [6.0, 10.0]
+ [7.0, 0.0]   [7.0, 1.0]   [7.0, 2.0]   [7.0, 3.0]      [7.0, 8.0]   [7.0, 9.0]   [7.0, 10.0]
+ [8.0, 0.0]   [8.0, 1.0]   [8.0, 2.0]   [8.0, 3.0]      [8.0, 8.0]   [8.0, 9.0]   [8.0, 10.0]
+ [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]   [9.0, 3.0]      [9.0, 8.0]   [9.0, 9.0]   [9.0, 10.0]
+ [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  [10.0, 3.0]  …  [10.0, 8.0]  [10.0, 9.0]  [10.0, 10.0]
+
+julia> Poingr.whichblock(grid, Vec(8.5, 1.5))
+CartesianIndex(2, 1)
+```
+"""
+function whichblock(grid::Grid, x::Vec)
+    I = whichcell(grid, x)
+    I === nothing && return nothing
+    CartesianIndex(@. ($Tuple(I)-1) >> BLOCK_UNIT + 1)
+end
+
 blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
 
 function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
     @assert size(ptsinblk) == blocksize(grid)
     empty!.(ptsinblk)
     for p in eachindex(xₚ)
-        I = whichcell(grid, xₚ[p])
+        I = whichblock(grid, xₚ[p])
         I === nothing && continue
-        blockindex = @. ($Tuple(I)-1) >> BLOCK_UNIT + 1
-        push!(ptsinblk[blockindex...], p)
+        push!(ptsinblk[I], p)
     end
     ptsinblk
 end

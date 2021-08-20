@@ -24,6 +24,8 @@
     @test @inferred(Poingr.neighboring_cells(grid, Vec(0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:3, 2:6))
     @test (Poingr.whichcell(grid, Vec(0.6, 8.8)))::CartesianIndex == CartesianIndex(1, 4)
     @test (Poingr.whichcell(grid, Vec(-0.6, 8.8)))::Nothing == nothing
+    @test (Poingr.whichblock(grid, Vec(8.8, 4.6)))::CartesianIndex == CartesianIndex(2, 1)
+    @test (Poingr.whichblock(grid, Vec(-8.8, 4.6)))::Nothing == nothing
 
     # pointsinblock
     @test Poingr.blocksize(grid) == (2, 2)
