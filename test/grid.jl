@@ -41,4 +41,42 @@
                                               [CartesianIndex(2,1) CartesianIndex(2,3)],
                                               [CartesianIndex(1,2) CartesianIndex(1,4); CartesianIndex(3,2) CartesianIndex(3,4)],
                                               [CartesianIndex(2,2) CartesianIndex(2,4)]]
+
+    # Bound
+    ## 1D
+    grid = Grid(0:10)
+    bounds = eachboundary(grid)
+    @test length(bounds) == 2
+    @test bounds[1].n == Vec(-1)
+    @test bounds[1].indices == [CartesianIndex(1)]
+    @test bounds[2].n == Vec( 1)
+    @test bounds[2].indices == [CartesianIndex(11)]
+    ## 2D
+    grid = Grid(0:10, 0:6)
+    bounds = eachboundary(grid)
+    @test length(bounds) == 4
+    @test bounds[1].n == Vec(-1, 0)
+    @test bounds[1].indices == CartesianIndices((1:1, 1:7))
+    @test bounds[2].n == Vec(1, 0)
+    @test bounds[2].indices == CartesianIndices((11:11, 1:7))
+    @test bounds[3].n == Vec(0, -1)
+    @test bounds[3].indices == CartesianIndices((1:11, 1:1))
+    @test bounds[4].n == Vec(0, 1)
+    @test bounds[4].indices == CartesianIndices((1:11, 7:7))
+    ## 3D
+    grid = Grid(0:10, 0:6, 0:4)
+    bounds = eachboundary(grid)
+    @test length(bounds) == 6
+    @test bounds[1].n == Vec(-1, 0, 0)
+    @test bounds[1].indices == CartesianIndices((1:1, 1:7, 1:5))
+    @test bounds[2].n == Vec(1, 0, 0)
+    @test bounds[2].indices == CartesianIndices((11:11, 1:7, 1:5))
+    @test bounds[3].n == Vec(0, -1, 0)
+    @test bounds[3].indices == CartesianIndices((1:11, 1:1, 1:5))
+    @test bounds[4].n == Vec(0, 1, 0)
+    @test bounds[4].indices == CartesianIndices((1:11, 7:7, 1:5))
+    @test bounds[5].n == Vec(0, 0, -1)
+    @test bounds[5].indices == CartesianIndices((1:11, 1:7, 1:1))
+    @test bounds[6].n == Vec(0, 0, 1)
+    @test bounds[6].indices == CartesianIndices((1:11, 1:7, 5:5))
 end
