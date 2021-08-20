@@ -14,8 +14,6 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1'
-          - '1.5'
           - '1.6'
           - 'nightly'
         os:
@@ -25,9 +23,7 @@ jobs:
         arch:
           - x64
         exclude:
-          - {os: 'macOS-latest', version: '1.5'}
           - {os: 'macOS-latest', version: 'nightly'}
-          - {os: 'windows-latest', version: '1.5'}
           - {os: 'windows-latest', version: 'nightly'}
     steps:
       - uses: actions/checkout@v2
