@@ -24,6 +24,29 @@ initval(x) = initval(typeof(x))
 reinit!(x::AbstractArray) = (broadcast!(initval, x, x); x)
 
 
+@generated function interpolate(x::T, y::T, α::Real) where {T}
+    if Base._return_type(zero, (T,)) == Union{}
+        exps = [:(α*x.$name + (1-α)*y.$name) for name in fieldnames(T)]
+        quote
+            @_inline_meta
+            T($(exps...))
+        end
+    else
+        quote
+            @_inline_meta
+            α*x + (1-α)*y
+        end
+    end
+end
+@generated function interpolate(x::T, y::T, α::Real) where {T <: NamedTuple}
+    exps = [:(α*x.$name + (1-α)*y.$name) for name in fieldnames(T)]
+    quote
+        @_inline_meta
+        T(($(exps...),))
+    end
+end
+
+
 function Tensor3D(x::SecondOrderTensor{2,T}) where {T}
     z = zero(T)
     @inbounds SecondOrderTensor{3,T}(x[1,1], x[2,1], z, x[1,2], x[2,2], z, z, z, z)

@@ -36,4 +36,4 @@ end
         StructVector{T}(($(exps...),))
     end
 end
-interpolate(prev, current, α) = _mappedarray((p,c) -> (1-α)*p + α*c, prev, current)
+interpolate(current, prev, α) = _mappedarray((c,p) -> (1-α)*p + α*c, current, prev)
