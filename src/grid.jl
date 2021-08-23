@@ -1,6 +1,5 @@
 """
-    Grid(axes::AbstractVector...)
-    Grid{dim}(axis::AbstractVector)
+    Grid([::Type{NodeState}], [::ShapeFunction], axes::AbstractVector...)
 
 Construct `Grid` by `axes`.
 
@@ -14,7 +13,8 @@ julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Grid{dim, T, Axes, Node, State <: MaskedArray{Node, dim}} <: AbstractArray{Vec{dim, T}, dim}
+struct Grid{dim, T, F <: Union{Nothing, ShapeFunction{dim}}, Node, State <: MaskedArray{Node, dim}, Axes} <: AbstractArray{Vec{dim, T}, dim}
+    shapefunction::F
     coordinates::Coordinate{dim, NTuple{dim, T}, Axes}
     state::State
 end
@@ -26,21 +26,23 @@ gridaxes(x::Grid) = coordinateaxes(x.coordinates)
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 
-function Grid(::Type{Node}, axes::Tuple{Vararg{AbstractVector}}) where {Node}
-    coordinates = Coordinate(axes)
-    state = MaskedArray(StructVector{Node}(undef, 0), Mask(size(coordinates)))
-    Grid(coordinates, state)
-end
-Grid(Node::Type, axes::AbstractVector...) = Grid(Node, axes)
-Grid(axes::Tuple{Vararg{AbstractVector}}) = Grid(Nothing, axes)
-Grid(axes::AbstractVector...) = Grid(axes)
+checkshapefunction(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of shape function, see help `?Grid` for more details."))
+checkshapefunction(::Grid{<: Any, <: Any, <: ShapeFunction}) = nothing
 
-function Grid{dim}(::Type{Node}, axis::AbstractVector) where {dim, Node}
-    coordinates = Coordinate{dim}(axis)
+function Grid(::Type{Node}, shapefunction, coordinates::Coordinate) where {Node}
     state = MaskedArray(StructVector{Node}(undef, 0), Mask(size(coordinates)))
-    Grid(coordinates, state)
+    Grid(shapefunction, coordinates, state)
 end
-Grid{dim}(axis::AbstractVector) where {dim} = Grid{dim}(Nothing, axis)
+
+Grid(::Type{Node}, shapefunction, axes::Tuple{Vararg{AbstractVector}}) where {Node} = Grid(Node, shapefunction, Coordinate(axes))
+Grid(::Type{Node}, axes::Tuple{Vararg{AbstractVector}}) where {Node} = Grid(Node, nothing, axes)
+Grid(shapefunction, axes::Tuple{Vararg{AbstractVector}}) = Grid(Nothing, shapefunction, axes)
+Grid(axes::Tuple{Vararg{AbstractVector}}) = Grid(Nothing, nothing, axes)
+
+Grid(Node::Type, shapefunction, axes::AbstractVector...) = Grid(Node, shapefunction, axes)
+Grid(Node::Type, axes::AbstractVector...) = Grid(Node, nothing, axes)
+Grid(shapefunction, axes::AbstractVector...) = Grid(Nothing, shapefunction, axes)
+Grid(axes::AbstractVector...) = Grid(Nothing, nothing, axes)
 
 @inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(grid, i...)
@@ -108,6 +110,11 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
         )
     end
 end
+@inline function neighboring_nodes(grid::Grid, x::Vec)
+    checkshapefunction(grid)
+    neighboring_nodes(grid, x, support_length(grid.shapefunction))
+end
+
 
 """
     Poingr.neighboring_cells(grid, x::Vec, h::Int)

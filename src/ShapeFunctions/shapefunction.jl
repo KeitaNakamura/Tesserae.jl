@@ -90,9 +90,3 @@ julia> sum(sv.N)
 ```
 """
 reinit!
-
-function reinit!(it::ShapeValues, grid::Grid, x::Vec)
-    reinit!(it, grid, eachindex(grid), x)
-end
-
-Base.length(it::ShapeValues) = length(it.N)

@@ -87,7 +87,7 @@ function ShapeValues(::Type{T}, F::WLS{poly_order, bspline_order, dim}) where {p
     WLSValues{poly_order, bspline_order, dim, T, L, L^2}()
 end
 
-function reinit!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
+function reinit!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
     @boundscheck checkbounds(grid, indices)
     F = weight_function(it)
     resize!(it.N, length(indices))

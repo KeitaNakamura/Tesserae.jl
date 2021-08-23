@@ -66,13 +66,14 @@ export
 
 
 include("utils.jl")
-include("maskedarray.jl")
-include("grid.jl")
-include("pointstate.jl")
 
 include("ShapeFunctions/shapefunction.jl")
 include("ShapeFunctions/bspline.jl")
 include("ShapeFunctions/wls.jl")
+
+include("maskedarray.jl")
+include("grid.jl")
+include("pointstate.jl")
 
 include("mpspace.jl")
 include("contact_mechanics.jl")

@@ -1,5 +1,4 @@
-struct MPSpace{dim, T, Tf <: ShapeFunction{dim}, Tshape <: ShapeValues{dim, T}}
-    F::Tf
+struct MPSpace{dim, T, Tshape <: ShapeValues{dim, T}}
     shapevalues::Vector{Tshape}
     gridsize::NTuple{dim, Int}
     gridindices::Vector{Vector{GridIndex{dim}}}
@@ -7,14 +6,15 @@ struct MPSpace{dim, T, Tf <: ShapeFunction{dim}, Tshape <: ShapeValues{dim, T}}
     nearsurface::BitVector
 end
 
-function MPSpace(F::ShapeFunction, grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
+function MPSpace(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
+    checkshapefunction(grid)
     npoints = length(xₚ)
-    shapevalues = [ShapeValues(T, F) for _ in 1:npoints]
+    shapevalues = [ShapeValues(T, grid.shapefunction) for _ in 1:npoints]
     gridindices = [GridIndex{dim}[] for _ in 1:npoints]
-    MPSpace(F, shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), falses(npoints))
+    MPSpace(shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), falses(npoints))
 end
 
-npoints(space::MPSpace) = length(space.shapevalues)
+npoints(space::MPSpace) = length(space.nearsurface)
 gridsize(space::MPSpace) = space.gridsize
 
 function reordering_pointstate!(pointstate::AbstractVector, space::MPSpace)
@@ -43,6 +43,7 @@ function allocate!(f, x::Vector, n::Integer)
 end
 
 function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exclude = nothing) where {dim}
+    checkshapefunction(grid)
     @assert size(grid) == gridsize(space)
 
     allocate!(i -> eltype(space.shapevalues)(), space.shapevalues, length(xₚ))
@@ -52,13 +53,12 @@ function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
     gridstate = grid.state
     pointsinblock!(space.pointsinblock, grid, xₚ)
 
-    point_radius = support_length(space.F)
     mask = gridstate.mask
     mask .= false
     for color in coloringblocks(gridsize(space))
         Threads.@threads for blockindex in color
             @inbounds for p in space.pointsinblock[blockindex]
-                inds = neighboring_nodes(grid, xₚ[p], point_radius)
+                inds = neighboring_nodes(grid, xₚ[p])
                 mask[inds] .= true
             end
         end
@@ -83,7 +83,7 @@ function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
     @inbounds Threads.@threads for p in eachindex(xₚ)
         x = xₚ[p]
         gridindices = space.gridindices[p]
-        inds = neighboring_nodes(grid, x, point_radius)
+        inds = neighboring_nodes(grid, x)
         cnt = 0
         for I in inds
             mask[I] && (cnt += 1)
@@ -152,11 +152,11 @@ function stress_to_force(coord_system::Symbol, N, ∇N, x::Vec, σ::SymmetricSec
     f
 end
 
-function default_point_to_grid!(grid::Grid,
+function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
                                 pointstate::StructVector,
-                                space::MPSpace{<: Any, <: Any, <: WLS},
+                                space::MPSpace{<: Any, <: Any, <: WLSValues},
                                 coord_system::Symbol)
-    P = polynomial(space.F)
+    P = polynomial(grid.shapefunction)
     point_to_grid!((grid.state.m, grid.state.w, grid.state.v, grid.state.f), space) do it, p, i
         @_inline_meta
         @_propagate_inbounds_meta
@@ -225,11 +225,11 @@ function velocity_gradient(coord_system::Symbol, x::Vec, v::Vec, ∇v::SecondOrd
 end
 
 function default_grid_to_point!(pointstate::StructVector,
-                                grid::Grid,
-                                space::MPSpace{dim, <: Any, <: WLS},
+                                grid::Grid{dim, <: Any, <: WLS},
+                                space::MPSpace{dim, <: Any, <: WLSValues},
                                 dt::Real,
                                 coord_system::Symbol) where {dim}
-    P = polynomial(space.F)
+    P = polynomial(grid.shapefunction)
     p0 = P(zero(Vec{dim, Int}))
     ∇p0 = P'(zero(Vec{dim, Int}))
     grid_to_point!(pointstate.C, space) do it, i, p

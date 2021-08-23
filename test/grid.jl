@@ -3,12 +3,18 @@
     @test @inferred(Grid(0:10))::Grid{1, Int} == Vec.(0:10)
     @test @inferred(Grid(0:10, 0:20))::Grid{2, Int} == Vec.(collect(Iterators.product(0:10, 0:20)))
     @test @inferred(Grid(0:10, 0:20, 0:30))::Grid{3, Int} == Vec.(collect(Iterators.product(0:10, 0:20, 0:30)))
-    @test @inferred(Grid{1}(0:10))::Grid{1, Int} == Vec.(0:10)
-    @test @inferred(Grid{2}(0:10))::Grid{2, Int} == Vec.(collect(Iterators.product(0:10, 0:10)))
-    @test @inferred(Grid{3}(0:10))::Grid{3, Int} == Vec.(collect(Iterators.product(0:10, 0:10, 0:10)))
+    @test @inferred(Grid(LinearBSpline{1}(), 0:10))::Grid{1, Int} == Grid(0:10)
+    @test @inferred(Grid(LinearBSpline{2}(), 0:10, 0:20))::Grid{2, Int} == Grid(0:10, 0:20)
+    @test @inferred(Grid(LinearBSpline{3}(), 0:10, 0:20, 0:30))::Grid{3, Int} == Grid(0:10, 0:20, 0:30)
+    @test @inferred(Grid(NodeState, 0:10))::Grid{1, Int} == Grid(0:10)
+    @test @inferred(Grid(NodeState, 0:10, 0:20))::Grid{2, Int} == Grid(0:10, 0:20)
+    @test @inferred(Grid(NodeState, 0:10, 0:20, 0:30))::Grid{3, Int} == Grid(0:10, 0:20, 0:30)
+    @test @inferred(Grid(NodeState, WLS{1}(LinearBSpline{1}()), 0:10))::Grid{1, Int} == Grid(0:10)
+    @test @inferred(Grid(NodeState, WLS{1}(LinearBSpline{2}()), 0:10, 0:20))::Grid{2, Int} == Grid(0:10, 0:20)
+    @test @inferred(Grid(NodeState, WLS{1}(LinearBSpline{3}()), 0:10, 0:20, 0:30))::Grid{3, Int} == Grid(0:10, 0:20, 0:30)
 
     # gridsteps/gridaxes/gridorigin
-    grid = Grid(0:1.0:10, 1:2.0:20)
+    grid = Grid(CubicBSpline{2}(), 0:1.0:10, 1:2.0:20)
     @test @inferred(gridsteps(grid)) === (1.0, 2.0)
     @test @inferred(gridsteps(grid, 1)) === 1.0
     @test @inferred(gridsteps(grid, 2)) === 2.0
@@ -20,6 +26,7 @@
     # neighboring_nodes/neighboring_cells/whichcell/whichblock
     @test @inferred(Poingr.neighboring_nodes(grid, Vec(0.6, 8.8), 1))::CartesianIndices == CartesianIndices((1:2, 4:5))
     @test @inferred(Poingr.neighboring_nodes(grid, Vec(0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:3, 3:6))
+    @test @inferred(Poingr.neighboring_nodes(grid, Vec(0.6, 8.8)))::CartesianIndices == CartesianIndices((1:3, 3:6))
     @test @inferred(Poingr.neighboring_cells(grid, Vec(0.6, 8.8), 1))::CartesianIndices == CartesianIndices((1:2, 3:5))
     @test @inferred(Poingr.neighboring_cells(grid, Vec(0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:3, 2:6))
     @test_throws BoundsError Poingr.neighboring_cells(grid, CartesianIndex(11, 9), 1)
