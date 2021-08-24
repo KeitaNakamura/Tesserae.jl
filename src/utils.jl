@@ -47,6 +47,15 @@ end
 end
 
 
+@generated function Base.popat!(x::StructVector{T, <: NamedTuple{names}}, i::Int) where {T, names}
+    exps = [:(popat!(x.$name, i)) for name in names]
+    quote
+        @boundscheck checkbounds(x, i)
+        @inbounds StructArrays.createinstance(T, $(exps...))
+    end
+end
+
+
 function Tensor3D(x::SecondOrderTensor{2,T}) where {T}
     z = zero(T)
     @inbounds SecondOrderTensor{3,T}(x[1,1], x[2,1], z, x[1,2], x[2,2], z, z, z, z)
