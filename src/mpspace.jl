@@ -53,13 +53,13 @@ function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
     gridstate = grid.state
     pointsinblock!(space.pointsinblock, grid, xₚ)
 
-    mask = gridstate.mask
-    mask .= false
+    spat = gridstate.spat
+    spat .= false
     for color in coloringblocks(gridsize(space))
         Threads.@threads for blockindex in color
             @inbounds for p in space.pointsinblock[blockindex]
                 inds = neighboring_nodes(grid, xₚ[p])
-                mask[inds] .= true
+                spat[inds] .= true
             end
         end
     end
@@ -67,13 +67,13 @@ function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
     if exclude !== nothing
         @inbounds Threads.@threads for I in eachindex(grid)
             x = grid[I]
-            exclude(x) && (mask[I] = false)
+            exclude(x) && (spat[I] = false)
         end
         for color in coloringblocks(gridsize(space))
             Threads.@threads for blockindex in color
                 @inbounds for p in space.pointsinblock[blockindex]
                     inds = neighboring_nodes(grid, xₚ[p], 1)
-                    mask[inds] .= true
+                    spat[inds] .= true
                 end
             end
         end
@@ -86,12 +86,12 @@ function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
         inds = neighboring_nodes(grid, x)
         cnt = 0
         for I in inds
-            mask[I] && (cnt += 1)
+            spat[I] && (cnt += 1)
         end
         resize!(gridindices, cnt)
         cnt = 0
         for I in inds
-            if mask[I]
+            if spat[I]
                 gridindices[cnt+=1] = Index(grid, I)
             else
                 space.nearsurface[p] = true

@@ -71,7 +71,7 @@ include("ShapeFunctions/shapefunction.jl")
 include("ShapeFunctions/bspline.jl")
 include("ShapeFunctions/wls.jl")
 
-include("maskedarray.jl")
+include("sparray.jl")
 include("grid.jl")
 include("pointstate.jl")
 

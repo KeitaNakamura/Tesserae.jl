@@ -9,7 +9,7 @@ struct NodeState
 end
 
 include("utils.jl")
-include("maskedarray.jl")
+include("sparray.jl")
 include("grid.jl")
 
 include("MaterialModels/SoilElastic.jl")

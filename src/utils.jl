@@ -12,32 +12,6 @@ end
 @inline Base.to_indices(A, inds, I::Tuple{Index, Vararg{Any}}) = _to_indices(IndexStyle(A), A, inds, I)
 
 
-@generated function initval(::Type{T}) where {T}
-    if Base._return_type(zero, (T,)) == Union{}
-        exps = [:(zero($t)) for t in fieldtypes(T)]
-        quote
-            @_inline_meta
-            T($(exps...))
-        end
-    else
-        quote
-            @_inline_meta
-            zero(T)
-        end
-    end
-end
-@generated function initval(::Type{T}) where {T <: NamedTuple}
-    exps = [:(zero($t)) for t in fieldtypes(T)]
-    quote
-        @_inline_meta
-        T(($(exps...),))
-    end
-end
-initval(x) = initval(typeof(x))
-
-reinit!(x::AbstractArray) = (broadcast!(initval, x, x); x)
-
-
 @generated function interpolate(x::T, y::T, α::Real) where {T}
     if Base._return_type(zero, (T,)) == Union{}
         exps = [:(α*x.$name + (1-α)*y.$name) for name in fieldnames(T)]

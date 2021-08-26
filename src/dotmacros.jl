@@ -18,7 +18,7 @@ end
     _copyto!(dest, bc)
 end
 
-@inline function _threads_copyto!(f, dest::MaskedArray, args...)
+@inline function _threads_copyto!(f, dest::SpArray, args...)
     if identical_mask(dest, args...)
         bc = broadcasted(f, args...)
         _copyto!(dest, broadcasted(dot_threads, bc))
@@ -35,7 +35,7 @@ end
     end
 end
 
-@inline function Base.copyto!(dest::MaskedArray, bc::Broadcasted{ThreadedStyle})
+@inline function Base.copyto!(dest::SpArray, bc::Broadcasted{ThreadedStyle})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bcf = Broadcast.flatten(bc.args[1])
     _threads_copyto!(bcf.f, dest, bcf.args...)
