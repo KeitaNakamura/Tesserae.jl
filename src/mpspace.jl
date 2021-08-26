@@ -1,7 +1,7 @@
 struct MPSpace{dim, T, Tshape <: ShapeValues{dim, T}}
     shapevalues::Vector{Tshape}
     gridsize::NTuple{dim, Int}
-    gridindices::Vector{Vector{GridIndex{dim}}}
+    gridindices::Vector{Vector{Index{dim}}}
     pointsinblock::Array{Vector{Int}, dim}
     nearsurface::BitVector
 end
@@ -10,7 +10,7 @@ function MPSpace(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     checkshapefunction(grid)
     npoints = length(xₚ)
     shapevalues = [ShapeValues(T, grid.shapefunction) for _ in 1:npoints]
-    gridindices = [GridIndex{dim}[] for _ in 1:npoints]
+    gridindices = [Index{dim}[] for _ in 1:npoints]
     MPSpace(shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), falses(npoints))
 end
 
@@ -47,7 +47,7 @@ function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
     @assert size(grid) == gridsize(space)
 
     allocate!(i -> eltype(space.shapevalues)(), space.shapevalues, length(xₚ))
-    allocate!(i -> GridIndex{dim}[], space.gridindices, length(xₚ))
+    allocate!(i -> Index{dim}[], space.gridindices, length(xₚ))
     resize!(space.nearsurface, length(xₚ))
 
     gridstate = grid.state
@@ -92,7 +92,7 @@ function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
         cnt = 0
         for I in inds
             if mask[I]
-                gridindices[cnt+=1] = GridIndex(grid, I)
+                gridindices[cnt+=1] = Index(grid, I)
             else
                 space.nearsurface[p] = true
             end

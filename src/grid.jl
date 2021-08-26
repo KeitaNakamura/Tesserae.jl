@@ -304,14 +304,3 @@ end
 eachboundary(grid::AbstractArray{<: Any, 1}) = (Bound(grid, "-x"), Bound(grid, "+x"))
 eachboundary(grid::AbstractArray{<: Any, 2}) = (Bound(grid, "-x"), Bound(grid, "+x"), Bound(grid, "-y"), Bound(grid, "+y"))
 eachboundary(grid::AbstractArray{<: Any, 3}) = (Bound(grid, "-x"), Bound(grid, "+x"), Bound(grid, "-y"), Bound(grid, "+y"), Bound(grid, "-z"), Bound(grid, "+z"))
-
-struct GridIndex{dim}
-    i::Int
-    I::CartesianIndex{dim}
-end
-@inline GridIndex(grid, i::Int) = (@_propagate_inbounds_meta; GridIndex(i, CartesianIndices(grid)[i]))
-@inline GridIndex(grid, I::CartesianIndex) = (@_propagate_inbounds_meta; GridIndex(LinearIndices(grid)[I], I))
-@inline Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, i::GridIndex) = checkindex(Bool, inds, i.i)
-@inline _to_indices(::IndexLinear, A, inds, I::Tuple{GridIndex, Vararg{Any}}) = to_indices(A, inds, (I[1].i, Base.tail(I)...))
-@inline _to_indices(::IndexCartesian, A, inds, I::Tuple{GridIndex, Vararg{Any}}) = to_indices(A, inds, (Tuple(I[1].I)..., Base.tail(I)...))
-@inline Base.to_indices(A, inds, I::Tuple{GridIndex, Vararg{Any}}) = _to_indices(IndexStyle(A), A, inds, I)
