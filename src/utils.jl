@@ -12,25 +12,11 @@ end
 @inline Base.to_indices(A, inds, I::Tuple{Index, Vararg{Any}}) = _to_indices(IndexStyle(A), A, inds, I)
 
 
-@generated function interpolate(x::T, y::T, α::Real) where {T}
-    if Base._return_type(zero, (T,)) == Union{}
-        exps = [:(α*x.$name + (1-α)*y.$name) for name in fieldnames(T)]
-        quote
-            @_inline_meta
-            T($(exps...))
-        end
-    else
-        quote
-            @_inline_meta
-            α*x + (1-α)*y
-        end
-    end
-end
-@generated function interpolate(x::T, y::T, α::Real) where {T <: NamedTuple}
-    exps = [:(α*x.$name + (1-α)*y.$name) for name in fieldnames(T)]
+interpolate(current::AbstractVector, prev::AbstractVector, α::Real) = broadcast((c,p) -> (1-α)*p + α*c, current, prev)
+@generated function interpolate(x::V, y::V, α::Real) where {names, T, V <: StructVector{T, <: NamedTuple{names}}}
+    exps = [:(interpolate(x.$name, y.$name, α)) for name in names]
     quote
-        @_inline_meta
-        T(($(exps...),))
+        StructVector{T}(($(exps...),))
     end
 end
 

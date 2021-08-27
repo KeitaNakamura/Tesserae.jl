@@ -29,11 +29,3 @@ end
 function generate_pointstate(indomain, grid::Grid{dim, T}, coordinate_system = :plane_strain_if_2D; n::Int = 2) where {dim, T}
     generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V0::T, h::Vec{dim,T}}, grid, coordinate_system; n)
 end
-
-@generated function _mappedarray(f, x::V, y::V) where {names, T, V <: StructVector{T, <: NamedTuple{names}}}
-    exps = [:(mappedarray(f, x.$name, y.$name)) for name in names]
-    quote
-        StructVector{T}(($(exps...),))
-    end
-end
-interpolate(current, prev, α) = _mappedarray((c,p) -> (1-α)*p + α*c, current, prev)

@@ -5,7 +5,6 @@ version = "0.5.0"
 
 [deps]
 Coordinates = "15ac8fbd-cb39-4be8-bb90-8f74d06af8f8"
-MappedArrays = "dbb5928d-eab1-5f90-85c2-b9b0edb7c900"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
@@ -15,10 +14,10 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
 Coordinates = "0.2"
-MappedArrays = "0.4"
 ProgressMeter = "1.5"
 Reexport = "1"
 StaticArrays = "1.1"
+StructArrays = "0.6"
 Tensorial = "0.9"
 WriteVTK = "1.9"
 julia = "1.6"
