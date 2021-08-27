@@ -60,6 +60,11 @@ export
     logindex,
 # VTK
     vtk_points,
+# async
+    currenttime,
+    issynced,
+    synced_pointstate,
+    asyncstep!,
 # dot macros
     @dot_threads,
     @dot_lazy
@@ -88,6 +93,7 @@ include("MaterialModels/DruckerPrager.jl")
 include("MaterialModels/WaterModel.jl")
 include("MaterialModels/NewtonianFluid.jl")
 
+include("async.jl")
 include("dotmacros.jl")
 
 include("logger.jl")
