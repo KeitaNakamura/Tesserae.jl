@@ -91,6 +91,17 @@ function updatetimestep!(calculate_timestep::Function, sch::Scheduler, grid::Gri
                 nearsurface[I] = true
             end
         end
+        temp = copy(nearsurface)
+        @inbounds for I in CartesianIndices(blocks)
+            block = blocks[I]
+            if temp[I]
+                for J in neighboring_blocks(grid, I, 1)
+                    if !isempty(blocks[J].pointstate)
+                        nearsurface[J] = true
+                    end
+                end
+            end
+        end
     end
 
     # for non-empty blocks
