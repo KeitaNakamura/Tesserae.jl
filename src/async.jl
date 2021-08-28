@@ -172,10 +172,13 @@ function advance!(microstep::Function, sch::Scheduler, grid::Grid, dtime::Time)
     @inbounds for I in eachindex(blocks)
         block = blocks[I]
         if mask_equal[I]
+            @assert block.T == time.T
             append!(sch.pointstate, block.pointstate)
         elseif mask_larger[I]
+            @assert block.T_buffer == time.T
             append!(sch.pointstate, block.buffer)
         elseif mask_smaller[I]
+            @assert block.T == time.T
             append!(sch.pointstate, block.pointstate)
         end
     end
