@@ -29,6 +29,15 @@ end
 gridsize(sch::Scheduler) = sch.gridsize
 currenttime(sch::Scheduler) = convert(Float64, sch.time)
 
+function paint_timesteps(sch::Scheduler)
+    cells = Array{Float64}(undef, gridsize(sch) .- 1)
+    for I in CartesianIndices(cells)
+        blockindex = CartesianIndex(@. ($Tuple(I) - 1) >> BLOCK_UNIT + 1)
+        cells[I] = sch.blocks[blockindex].dT * sch.time.tϵ
+    end
+    cells
+end
+
 function issynced(sch::Scheduler)
     iter = (block.T for block in sch.blocks if !isempty(block.pointstate))
     x0 = first(iter)
