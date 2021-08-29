@@ -135,7 +135,9 @@ function updatetimestep!(calculate_timestep::Function, sch::Scheduler, grid::Gri
     # for nearsurface blocks
     @inbounds Threads.@threads for I in eachindex(blocks)
         block = blocks[I]
+        (mod(time.T, block.dT) == 0 && !isempty(block.pointstate)) || continue
         if nearsurface[I]
+            @assert mod(time.T, dTmin) == 0
             block.dT = dTmin
         end
     end
@@ -166,17 +168,18 @@ function advance!(microstep::Function, sch::Scheduler, grid::Grid, dtime::Time)
     mask_smaller = falses(size(blocks))
     @inbounds for I in CartesianIndices(blocks)
         block = blocks[I]
-        if block.T == time.T && block.dT == dT
+        if block.dT == dT
+            @assert block.T == time.T
             mask_equal[I] = true
             for J in neighboring_blocks(grid, I, 1)
                 block_nearby = blocks[J]
                 if block_nearby.dT > block.dT
-                    mask_larger[J] = true
                     @assert block.T == block_nearby.T_buffer
+                    mask_larger[J] = true
                 end
                 if block_nearby.dT < block.dT
-                    mask_smaller[J] = true
                     @assert block.T == block_nearby.T
+                    mask_smaller[J] = true
                 end
             end
         end
@@ -214,9 +217,11 @@ function advance!(microstep::Function, sch::Scheduler, grid::Grid, dtime::Time)
         if mask_equal[I]
             empty!(block.pointstate)
             block.T += dT # advance block for pointstate
+            @assert block.T == time.T + dT
         elseif mask_larger[I] && block.Tmin_local == time.T + dT
             empty!(block.buffer)
             block.T_buffer += dT # advance block for buffer
+            @assert block.T_buffer == time.T + dT
         end
     end
 
