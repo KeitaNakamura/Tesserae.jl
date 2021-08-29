@@ -46,7 +46,11 @@ end
 
 function synced_pointstate(sch::Scheduler)
     @assert issynced(sch)
-    vcat((block.pointstate for block in sch.blocks)...)
+    pointstate = similar(sch.pointstate, 0)
+    for block in sch.blocks
+        append!(pointstate, block.pointstate)
+    end
+    pointstate
 end
 
 function Scheduler(grid::Grid, pointstate::PointState, tϵ::Real = 1) where {PointState <: StructVector}
