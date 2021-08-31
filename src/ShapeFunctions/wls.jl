@@ -93,7 +93,7 @@ function reinit!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, indices:
     resize!(it.N, length(indices))
     resize!(it.∇N, length(indices))
     resize!(it.w, length(indices))
-    @inbounds @simd for i in eachindex(indices)
+    @inbounds @simd for i in 1:length(indices)
         I = indices[i]
         xᵢ = grid[I]
         ξ = (x - xᵢ) ./ gridsteps(grid)
@@ -101,7 +101,7 @@ function reinit!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, indices:
     end
     P = polynomial(it)
     M = zero(it.M⁻¹[])
-    @inbounds @simd for i in eachindex(indices)
+    @inbounds @simd for i in 1:length(indices)
         I = indices[i]
         xᵢ = grid[I]
         p = P(xᵢ - x)
@@ -110,7 +110,7 @@ function reinit!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, indices:
     it.M⁻¹[] = inv(M)
     p₀ = P(x - x)
     ∇p₀ = P'(x - x)
-    @inbounds @simd for i in eachindex(indices)
+    @inbounds @simd for i in 1:length(indices)
         I = indices[i]
         xᵢ = grid[I]
         q = it.M⁻¹[] ⋅ P(xᵢ - x)
