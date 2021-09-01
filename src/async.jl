@@ -24,6 +24,7 @@ mutable struct Scheduler{PointState, dim}
     gridsize::NTuple{dim, Int}
     time::Time
     pointstate::PointState
+    precise_near_surface::Bool
 end
 
 gridsize(sch::Scheduler) = sch.gridsize
@@ -53,13 +54,13 @@ function synced_pointstate(sch::Scheduler)
     pointstate
 end
 
-function Scheduler(grid::Grid, pointstate::PointState, tϵ::Real = 1) where {PointState <: StructVector}
+function Scheduler(grid::Grid, pointstate::PointState, tϵ::Real = 1; precise_near_surface = false) where {PointState <: StructVector}
     blocks = map(pointsinblock(grid, pointstate.x)) do pointindices
         ps = pointstate[pointindices]
         buf = copy(ps)
         Block{PointState}(ps, buf, 0, 0, 0, 1)
     end
-    Scheduler(blocks, size(grid), Time(0, tϵ), similar(pointstate, 0))
+    Scheduler(blocks, size(grid), Time(0, tϵ), similar(pointstate, 0), precise_near_surface)
 end
 
 function updatetimestep!(calculate_timestep::Function, sch::Scheduler, grid::Grid; exclude = nothing)
@@ -100,9 +101,7 @@ function updatetimestep!(calculate_timestep::Function, sch::Scheduler, grid::Gri
             block = blocks[I]
             if temp[I]
                 for J in neighboring_blocks(grid, I, 1)
-                    if !isempty(blocks[J].pointstate)
-                        nearsurface[J] = true
-                    end
+                    nearsurface[J] = true
                 end
             end
         end
@@ -119,7 +118,7 @@ function updatetimestep!(calculate_timestep::Function, sch::Scheduler, grid::Gri
             block.dT *= 2
         end
     end
-    dTmin, dTmax = extrema(block.dT for block in blocks if mod(time.T, block.dT) == 0 && !isempty(block.pointstate))
+    dTmin, dTmax = extrema(block.dT for block in blocks if !isempty(block.pointstate))
 
     # for empty blocks
     @inbounds Threads.@threads for block in blocks
@@ -135,12 +134,16 @@ function updatetimestep!(calculate_timestep::Function, sch::Scheduler, grid::Gri
     # for nearsurface blocks
     @inbounds Threads.@threads for I in eachindex(blocks)
         block = blocks[I]
-        (mod(time.T, block.dT) == 0 && !isempty(block.pointstate)) || continue
+        mod(time.T, block.dT) == 0 || continue
         if nearsurface[I]
             @assert mod(time.T, dTmin) == 0
             block.dT = dTmin
+            if mod(time.T, dTmax) == 0 && sch.precise_near_surface
+                block.dT /= 2
+            end
         end
     end
+    dTmin, dTmax = extrema(block.dT for block in blocks)
 
     # most minimum T in local region
     @inbounds Threads.@threads for I in CartesianIndices(blocks)
