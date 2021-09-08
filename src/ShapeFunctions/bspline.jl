@@ -112,6 +112,8 @@ end
 
 BSplinePosition(A::AbstractArray{<: Any, dim}, I::CartesianIndex{dim}) where {dim} =
     (@_propagate_inbounds_meta; BSplinePosition(A, Tuple(I)))
+BSplinePosition(A::AbstractArray{<: Any, dim}, I::Index{dim}) where {dim} =
+    (@_propagate_inbounds_meta; BSplinePosition(A, I.I))
 
 nthfrombound(pos::BSplinePosition) = pos.nth
 dirfrombound(pos::BSplinePosition) = pos.dir
@@ -180,9 +182,10 @@ function reinit!(it::BSplineValues{<: Any, dim}, grid, x::Vec{dim}, indices::Abs
     F = it.F
     resize!(it.N, length(indices))
     resize!(it.∇N, length(indices))
-    @inbounds for (j, I) in enumerate(view(CartesianIndices(grid), indices))
+    @inbounds @simd for i in 1:length(indices)
+        I = indices[i]
         xᵢ = grid[I]
-        it.N[j], it.∇N[j] = _value_gradient(F, x, xᵢ, gridsteps(grid), BSplinePosition(grid, I))
+        it.N[i], it.∇N[i] = _value_gradient(F, x, xᵢ, gridsteps(grid), BSplinePosition(grid, I))
     end
     it
 end
