@@ -184,17 +184,19 @@ end
 # grid_to_point! #
 ##################
 
-function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, space::MPSpace, p::Int) where {N}
-    vals = zero.(eltype.(pointstates))
-    shapevalues = space.shapevalues[p]
-    gridindices = space.gridindices[p]
-    @inbounds @simd for i in eachindex(shapevalues, gridindices)
-        it = shapevalues[i]
-        I = gridindices[i]
-        res = g2p(it, I, p)
-        vals = vals .+ res
+@generated function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, space::MPSpace, p::Int) where {N}
+    quote
+        vals = tuple($([:(zero(eltype(pointstates[$i]))) for i in 1:N]...))
+        shapevalues = space.shapevalues[p]
+        gridindices = space.gridindices[p]
+        @inbounds @simd for i in eachindex(shapevalues, gridindices)
+            it = shapevalues[i]
+            I = gridindices[i]
+            res = g2p(it, I, p)
+            vals = tuple($([:(vals[$i] + res[$i]) for i in 1:N]...))
+        end
+        $([:(setindex!(pointstates[$i], vals[$i], p)) for i in 1:N]...)
     end
-    setindex!.(pointstates, vals, p)
 end
 function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     @assert all(==(npoints(space)), length.(pointstates))
