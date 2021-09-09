@@ -108,10 +108,7 @@ end
 
 function stress_to_force(coord_system::Symbol, N, ∇N, x::Vec, σ::SymmetricSecondOrderTensor{3})
     f = Tensor2D(σ) ⋅ ∇N
-    if coord_system == :axisymmetric
-        return f + Vec(1,0) * σ[3,3] * N / x[1]
-    end
-    f
+    @inbounds coord_system == :axisymmetric ? f + Vec(1,0)*σ[3,3]*N/x[1] : f
 end
 
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
@@ -179,12 +176,7 @@ end
 
 function velocity_gradient(coord_system::Symbol, x::Vec, v::Vec, ∇v::SecondOrderTensor{2})
     L = Poingr.Tensor3D(∇v)
-    if coord_system == :axisymmetric
-        return L + @Mat [0.0 0.0 0.0
-                         0.0 0.0 0.0
-                         0.0 0.0 v[1] / x[1]]
-    end
-    L
+    @inbounds coord_system == :axisymmetric ? L + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]]) : L
 end
 
 function default_grid_to_point!(pointstate::StructVector,
