@@ -6,7 +6,7 @@ Construct `Grid` by `axes`.
 # Examples
 ```jldoctest
 julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
-4×4 Grid{2, Float64, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}}:
+4×4 Grid{2, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}}:
  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
@@ -78,7 +78,7 @@ In 1D, for example, the searching range becomes `x ± h*dx`.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0)
-6-element Grid{1, Float64, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}, Nothing, Poingr.SpArray{Nothing, 1, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}}:
+6-element Grid{1, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 1, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}}:
  [0.0]
  [1.0]
  [2.0]
@@ -148,7 +148,7 @@ In 1D, for example, the searching range becomes `x ± h*dx`.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
-6×6 Grid{2, Float64, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}}:
+6×6 Grid{2, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -198,7 +198,7 @@ Return cell index where `x` locates.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
-6×6 Grid{2, Float64, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}}:
+6×6 Grid{2, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -232,18 +232,18 @@ The unit block size is `2^$BLOCK_UNIT` cells.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0)
-11×11 Grid{2, Float64, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}}:
- [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   [0.0, 3.0]   …  [0.0, 8.0]   [0.0, 9.0]   [0.0, 10.0]
- [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]   [1.0, 3.0]      [1.0, 8.0]   [1.0, 9.0]   [1.0, 10.0]
- [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]   [2.0, 3.0]      [2.0, 8.0]   [2.0, 9.0]   [2.0, 10.0]
- [3.0, 0.0]   [3.0, 1.0]   [3.0, 2.0]   [3.0, 3.0]      [3.0, 8.0]   [3.0, 9.0]   [3.0, 10.0]
- [4.0, 0.0]   [4.0, 1.0]   [4.0, 2.0]   [4.0, 3.0]      [4.0, 8.0]   [4.0, 9.0]   [4.0, 10.0]
- [5.0, 0.0]   [5.0, 1.0]   [5.0, 2.0]   [5.0, 3.0]   …  [5.0, 8.0]   [5.0, 9.0]   [5.0, 10.0]
- [6.0, 0.0]   [6.0, 1.0]   [6.0, 2.0]   [6.0, 3.0]      [6.0, 8.0]   [6.0, 9.0]   [6.0, 10.0]
- [7.0, 0.0]   [7.0, 1.0]   [7.0, 2.0]   [7.0, 3.0]      [7.0, 8.0]   [7.0, 9.0]   [7.0, 10.0]
- [8.0, 0.0]   [8.0, 1.0]   [8.0, 2.0]   [8.0, 3.0]      [8.0, 8.0]   [8.0, 9.0]   [8.0, 10.0]
- [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]   [9.0, 3.0]      [9.0, 8.0]   [9.0, 9.0]   [9.0, 10.0]
- [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  [10.0, 3.0]  …  [10.0, 8.0]  [10.0, 9.0]  [10.0, 10.0]
+11×11 Grid{2, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, Tuple{StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}}}}:
+ [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
+ [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
+ [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]
+ [3.0, 0.0]   [3.0, 1.0]   [3.0, 2.0]      [3.0, 9.0]   [3.0, 10.0]
+ [4.0, 0.0]   [4.0, 1.0]   [4.0, 2.0]      [4.0, 9.0]   [4.0, 10.0]
+ [5.0, 0.0]   [5.0, 1.0]   [5.0, 2.0]   …  [5.0, 9.0]   [5.0, 10.0]
+ [6.0, 0.0]   [6.0, 1.0]   [6.0, 2.0]      [6.0, 9.0]   [6.0, 10.0]
+ [7.0, 0.0]   [7.0, 1.0]   [7.0, 2.0]      [7.0, 9.0]   [7.0, 10.0]
+ [8.0, 0.0]   [8.0, 1.0]   [8.0, 2.0]      [8.0, 9.0]   [8.0, 10.0]
+ [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]      [9.0, 9.0]   [9.0, 10.0]
+ [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
 
 julia> Poingr.whichblock(grid, Vec(8.5, 1.5))
 CartesianIndex(2, 1)
