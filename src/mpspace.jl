@@ -72,11 +72,9 @@ end
 # point_to_grid! #
 ##################
 
-@generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, space::MPSpace, p::Int) where {N}
+@generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, shapevalues::ShapeValues, gridindices::Vector{<: Index}, p::Int) where {N}
     exps = [:(gridstates[$i][I] += res[$i]) for i in 1:N]
     quote
-        shapevalues = space.shapevalues[p]
-        gridindices = space.gridindices[p]
         @inbounds @simd for i in eachindex(shapevalues, gridindices)
             it = shapevalues[i]
             I = gridindices[i]
@@ -85,14 +83,15 @@ end
         end
     end
 end
+
 function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     @assert all(==(gridsize(space)), size.(gridstates))
     pointmask !== nothing && @assert length(pointmask) == npoints(space)
     for color in coloringblocks(gridsize(space))
         Threads.@threads for blockindex in color
-            for p in space.pointsinblock[blockindex]
+            @inbounds for p in space.pointsinblock[blockindex]
                 pointmask !== nothing && !pointmask[p] && continue
-                _point_to_grid!(p2g, gridstates, space, p)
+                _point_to_grid!(p2g, gridstates, space.shapevalues[p], space.gridindices[p], p)
             end
         end
     end
@@ -147,11 +146,9 @@ end
 # grid_to_point! #
 ##################
 
-@generated function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, space::MPSpace, p::Int) where {N}
+@generated function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, shapevalues::ShapeValues, gridindices::Vector{<: Index}, p::Int) where {N}
     quote
         vals = tuple($([:(zero(eltype(pointstates[$i]))) for i in 1:N]...))
-        shapevalues = space.shapevalues[p]
-        gridindices = space.gridindices[p]
         @inbounds @simd for i in eachindex(shapevalues, gridindices)
             it = shapevalues[i]
             I = gridindices[i]
@@ -161,12 +158,13 @@ end
         $([:(setindex!(pointstates[$i], vals[$i], p)) for i in 1:N]...)
     end
 end
+
 function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     @assert all(==(npoints(space)), length.(pointstates))
     pointmask !== nothing && @assert length(pointmask) == npoints(space)
     Threads.@threads for p in 1:npoints(space)
         pointmask !== nothing && !pointmask[p] && continue
-        _grid_to_point!(g2p, pointstates, space, p)
+        _grid_to_point!(g2p, pointstates, space.shapevalues[p], space.gridindices[p], p)
     end
     pointstates
 end
