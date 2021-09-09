@@ -159,7 +159,7 @@ end
 function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     @assert all(==(npoints(space)), length.(pointstates))
     pointmask !== nothing && @assert length(pointmask) == npoints(space)
-    Threads.@threads for p in 1:npoints(space)
+    @inbounds Threads.@threads for p in 1:npoints(space)
         pointmask !== nothing && !pointmask[p] && continue
         _grid_to_point!(g2p, pointstates, space.shapevalues[p], space.gridindices[p], p)
     end
