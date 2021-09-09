@@ -53,54 +53,17 @@ function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
     gridstate = grid.state
     pointsinblock!(space.pointsinblock, grid, xₚ)
 
-    spat = gridstate.spat
-    spat .= false
-    for color in coloringblocks(gridsize(space))
-        Threads.@threads for blockindex in color
-            @inbounds for p in space.pointsinblock[blockindex]
-                inds = neighboring_nodes(grid, xₚ[p])
-                spat[inds] .= true
-            end
-        end
-    end
-
-    if exclude !== nothing
-        @inbounds Threads.@threads for I in eachindex(grid)
-            x = grid[I]
-            exclude(x) && (spat[I] = false)
-        end
-        for color in coloringblocks(gridsize(space))
-            Threads.@threads for blockindex in color
-                @inbounds for p in space.pointsinblock[blockindex]
-                    inds = neighboring_nodes(grid, xₚ[p], 1)
-                    spat[inds] .= true
-                end
-            end
-        end
-    end
-
+    spat = sparsity_pattern(grid, xₚ, space.pointsinblock; exclude)
     space.nearsurface .= false
     @inbounds Threads.@threads for p in eachindex(xₚ)
         x = xₚ[p]
         gridindices = space.gridindices[p]
-        inds = neighboring_nodes(grid, x)
-        cnt = 0
-        for I in inds
-            spat[I] && (cnt += 1)
-        end
-        resize!(gridindices, cnt)
-        cnt = 0
-        for I in inds
-            if spat[I]
-                gridindices[cnt+=1] = Index(grid, I)
-            else
-                space.nearsurface[p] = true
-            end
-        end
+        space.nearsurface[p] = neighboring_nodes!(gridindices, grid, x, spat)
         reinit!(space.shapevalues[p], grid, x, gridindices)
     end
 
-    reinit!(grid.state)
+    gridstate.spat .= spat
+    reinit!(gridstate)
 
     space
 end

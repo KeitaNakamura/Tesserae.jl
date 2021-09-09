@@ -115,6 +115,27 @@ end
     neighboring_nodes(grid, x, support_length(grid.shapefunction))
 end
 
+function neighboring_nodes!(gridindices::Vector{Index{dim}}, grid::Grid{dim}, x::Vec{dim}, spat::BitArray{dim}) where {dim}
+    inds = neighboring_nodes(grid, x)
+    cnt = 0
+    @inbounds @simd for I in inds
+        if spat[I]
+            cnt += 1
+        end
+    end
+    resize!(gridindices, cnt)
+    cnt = 0
+    nearsurface = false
+    @inbounds @simd for I in inds
+        if spat[I]
+            gridindices[cnt+=1] = Index(grid, I)
+        else
+            nearsurface = true
+        end
+    end
+    nearsurface
+end
+
 
 """
     Poingr.neighboring_cells(grid, x::Vec, h::Int)
@@ -250,6 +271,33 @@ end
 function pointsinblock(grid::Grid, xₚ::AbstractVector)
     ptsinblk = [Int[] for i in CartesianIndices(blocksize(grid))]
     pointsinblock!(ptsinblk, grid, xₚ)
+end
+
+function sparsity_pattern(grid::Grid, xₚ::AbstractVector, ptsinblk = pointsinblock(grid, xₚ); exclude = nothing)
+    spat = falses(size(grid))
+    for color in coloringblocks(size(grid))
+        Threads.@threads for blockindex in color
+            @inbounds for p in ptsinblk[blockindex]
+                inds = neighboring_nodes(grid, xₚ[p])
+                spat[inds] .= true
+            end
+        end
+    end
+    if exclude !== nothing
+        @inbounds Threads.@threads for I in eachindex(grid)
+            x = grid[I]
+            exclude(x) && (spat[I] = false)
+        end
+        for color in coloringblocks(size(grid))
+            Threads.@threads for blockindex in color
+                @inbounds for p in ptsinblk[blockindex]
+                    inds = neighboring_nodes(grid, xₚ[p], 1)
+                    spat[inds] .= true
+                end
+            end
+        end
+    end
+    spat
 end
 
 
