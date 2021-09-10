@@ -98,8 +98,37 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, space::MP
     gridstates
 end
 
+function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Grid{dim, T}, xₚ::AbstractVector; exclude = nothing) where {dim, T}
+    @assert all(==(size(grid)), size.(gridstates))
+    ptsinblk = pointsinblock(grid, xₚ)
+    spat = sparsity_pattern(grid, xₚ, ptsinblk; exclude)
+    shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
+    gridindices_threads = [Index{dim}[] for _ in 1:Threads.nthreads()]
+    for color in coloringblocks(size(grid))
+        Threads.@threads for blockindex in color
+            shapevalues = shapevalues_threads[Threads.threadid()]
+            gridindices = gridindices_threads[Threads.threadid()]
+            for p in ptsinblk[blockindex]
+                x = xₚ[p]
+                neighboring_nodes!(gridindices, grid, x, spat)
+                reinit!(shapevalues, grid, x, gridindices)
+                _point_to_grid!(p2g, gridstates, shapevalues, gridindices, p)
+            end
+        end
+    end
+    gridstates
+end
+
 function point_to_grid!(p2g, gridstate::AbstractArray, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     point_to_grid!((gridstate,), space, pointmask) do it, p, I
+        @_inline_meta
+        @_propagate_inbounds_meta
+        (p2g(it, p, I),)
+    end
+end
+
+function point_to_grid!(p2g, gridstate::AbstractArray, grid::Grid, xₚ::AbstractVector; exclude = nothing)
+    point_to_grid!((gridstate,), grid, xₚ; exclude) do it, p, I
         @_inline_meta
         @_propagate_inbounds_meta
         (p2g(it, p, I),)
@@ -166,8 +195,32 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, space::
     pointstates
 end
 
+function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, grid::Grid{dim, T}, xₚ::AbstractVector; exclude = nothing) where {dim, T}
+    @assert all(==(length(xₚ)), length.(pointstates))
+    spat = sparsity_pattern(grid, xₚ; exclude)
+    shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
+    gridindices_threads = [Index{dim}[] for _ in 1:Threads.nthreads()]
+    Threads.@threads for p in 1:length(xₚ)
+        x = xₚ[p]
+        shapevalues = shapevalues_threads[Threads.threadid()]
+        gridindices = gridindices_threads[Threads.threadid()]
+        neighboring_nodes!(gridindices, grid, x, spat)
+        reinit!(shapevalues, grid, x, gridindices)
+        _grid_to_point!(g2p, pointstates, shapevalues, gridindices, p)
+    end
+    pointstates
+end
+
 function grid_to_point!(g2p, pointstate::AbstractVector, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     grid_to_point!((pointstate,), space, pointmask) do it, I, p
+        @_inline_meta
+        @_propagate_inbounds_meta
+        (g2p(it, I, p),)
+    end
+end
+
+function grid_to_point!(g2p, pointstate::AbstractVector, grid::Grid, xₚ::AbstractVector; exclude = nothing)
+    grid_to_point!((pointstate,), grid, xₚ; exclude) do it, I, p
         @_inline_meta
         @_propagate_inbounds_meta
         (g2p(it, I, p),)
