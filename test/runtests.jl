@@ -1,4 +1,5 @@
 using Poingr
+using Random
 using Test
 
 using Poingr: Index
@@ -13,3 +14,4 @@ include("sparray.jl")
 include("grid.jl")
 
 include("MaterialModels/SoilElastic.jl")
+include("MaterialModels/DruckerPrager.jl")

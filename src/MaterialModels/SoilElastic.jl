@@ -83,3 +83,16 @@ end
 function compute_stiffness(model::SoilElastic, ϵᵉ::SymmetricSecondOrderTensor{3})
     ∇²W(model, ϵᵉ)
 end
+
+function bulkmodulus(model::SoilElastic, σ::SymmetricSecondOrderTensor{3})
+    -mean(σ)/model.κ
+end
+
+function shearmodulus(model::SoilElastic, σ::SymmetricSecondOrderTensor{3})
+    κ, α, μ_ref = model.κ, model.α, model.μ_ref
+    e = dev(compute_elastic_strain(model, σ))
+    ϵs = sqrt(2/3 * e ⊡ e)
+    p = mean(σ)
+    μ = -α*p + μ_ref
+    μ - 3*α^2*p*ϵs^2/κ
+end
