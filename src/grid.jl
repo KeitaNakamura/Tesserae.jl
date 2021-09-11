@@ -215,11 +215,13 @@ CartesianIndex(2, 2)
         ncells = size(grid) .- 1
         dx = gridsteps(grid)
         xmin = gridorigin(grid)
-        xmax = xmin .+ dx .* ncells
-        @inbounds begin
-            I = CartesianIndex(@ntuple $dim d -> floor(Int, (x[d] - xmin[d]) / dx[d]) + 1)
-            ifelse(checkbounds(Bool, CartesianIndices(size(grid).-1), I), I, nothing)
-        end
+        @inbounds CartesianIndex(
+            @ntuple $dim d -> begin
+                ξ = (x[d] - xmin[d]) / dx[d]
+                0 ≤ ξ < ncells[d] || return nothing
+                floor(Int, ξ) + 1
+            end
+        )
     end
 end
 
