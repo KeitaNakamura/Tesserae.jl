@@ -78,14 +78,14 @@ function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
     B = model.B
     I₁ = tr(σ)
     s = dev(σ)
-    J₂ = (s ⊡ s) / 2
+    J₂ = tr(s ⋅ s) / 2
     √J₂ - (A - B*I₁)
 end
 
 function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::typeof(σ)
     b = model.b
     s = dev(σ)
-    J₂ = (s ⊡ s) / 2
+    J₂ = tr(s ⋅ s) / 2
     if J₂ < eps(typeof(J₂))
         dgdσ = b * one(σ)
     else
