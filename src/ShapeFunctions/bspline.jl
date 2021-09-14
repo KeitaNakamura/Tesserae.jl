@@ -32,7 +32,6 @@ support_length(::BSpline{4}) = 2.5
 
 function value(::BSpline{1, 0}, ξ::Real)::typeof(ξ)
     ξ = abs(ξ)
-    iszero(ξ) && return one(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
 end
 

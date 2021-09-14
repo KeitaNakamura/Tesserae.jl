@@ -12,6 +12,7 @@ end
 include("utils.jl")
 include("sparray.jl")
 include("grid.jl")
+include("shapefunctions.jl")
 
 include("MaterialModels/SoilElastic.jl")
 include("MaterialModels/DruckerPrager.jl")
