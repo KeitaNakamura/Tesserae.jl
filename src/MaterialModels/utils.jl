@@ -2,7 +2,6 @@
 @inline deviatoric_stress(σ::SymmetricSecondOrderTensor{3}) = (s = dev(σ); sqrt(3/2 * s ⊡ s))
 @inline volumetric_strain(ϵ::SymmetricSecondOrderTensor{3}) = tr(ϵ)
 @inline deviatoric_strain(ϵ::SymmetricSecondOrderTensor{3}) = (e = dev(ϵ); sqrt(2/3 * e ⊡ e))
-@inline infinitesimal_strain(F::SecondOrderTensor{3}) = symmetric(F - one(F))
 
 function soundspeed(K::Real, G::Real, ρ::Real)
     sqrt((K + 4G/3) / ρ)

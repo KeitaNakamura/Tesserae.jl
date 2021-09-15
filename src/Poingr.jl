@@ -51,7 +51,6 @@ export
     deviatoric_stress,
     volumetric_strain,
     deviatoric_strain,
-    infinitesimal_strain,
 # Logger
     Logger,
     update!,
