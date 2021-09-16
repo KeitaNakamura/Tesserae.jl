@@ -62,8 +62,8 @@ function _neighboring_nodes(ξ::Real, h::Real, len::Int)
     ξ_r = ξ + h
     l = ceil(ξ_l)
     r = floor(ξ_r)
-    l === ξ_l && (l += 1)
-    r === ξ_r && (r -= 1)
+    l += ifelse(l == ξ_l, 1, 0)
+    r -= ifelse(l == ξ_r, 1, 0)
     start, stop = clamp.((Int(l+1), Int(r+1)), 1, len) # cut violated indices
     start:stop
 end
