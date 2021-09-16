@@ -30,24 +30,34 @@ support_length(::BSpline{2}) = 1.5
 support_length(::BSpline{3}) = 2.0
 support_length(::BSpline{4}) = 2.5
 
-function value(::BSpline{1, 0}, ξ::Real)::typeof(ξ)
+function value(::BSpline{1, 0}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
 end
 
-function value(::BSpline{2, 0}, ξ::Real)::typeof(ξ)
+function value(::BSpline{2, 0}, ξ::Real)
     ξ = abs(ξ)
     ξ < 0.5 ? (3 - 4ξ^2) / 4 :
     ξ < 1.5 ? (3 - 2ξ)^2 / 8 : zero(ξ)
 end
+@inline function value(::BSpline{2, 0}, ξ::Float64)
+    ξ = abs(ξ)
+    ξ < 0.5 ? 3/4 - ξ^2      :
+    ξ < 1.5 ? (3 - 2ξ)^2 / 8 : zero(ξ)
+end
 
-function value(::BSpline{3, 0}, ξ::Real)::typeof(ξ)
+function value(::BSpline{3, 0}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
     ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
 end
+@inline function value(::BSpline{3, 0}, ξ::Float64)
+    ξ = abs(ξ)
+    ξ < 1 ? ξ^3/2 - ξ^2 + 2/3 :
+    ξ < 2 ? (2 - ξ)^3 / 6     : zero(ξ)
+end
 
-function value(::BSpline{4, 0}, ξ::Real)::typeof(ξ)
+function value(::BSpline{4, 0}, ξ::Real)
     ξ = abs(ξ)
     ξ < 0.5 ? (48ξ^4 - 120ξ^2 + 115) / 192 :
     ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
