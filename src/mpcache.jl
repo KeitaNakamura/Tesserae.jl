@@ -1,4 +1,4 @@
-struct MPSpace{dim, T, Tshape <: ShapeValues{dim, T}}
+struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
     shapevalues::Vector{Tshape}
     gridsize::NTuple{dim, Int}
     gridindices::Vector{Vector{Index{dim}}}
@@ -6,21 +6,21 @@ struct MPSpace{dim, T, Tshape <: ShapeValues{dim, T}}
     nearsurface::BitVector
 end
 
-function MPSpace(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
+function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     checkshapefunction(grid)
     npoints = length(xₚ)
     shapevalues = [ShapeValues(T, grid.shapefunction) for _ in 1:npoints]
     gridindices = [Index{dim}[] for _ in 1:npoints]
-    MPSpace(shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), falses(npoints))
+    MPCache(shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), falses(npoints))
 end
 
-npoints(space::MPSpace) = length(space.nearsurface)
-gridsize(space::MPSpace) = space.gridsize
+npoints(cache::MPCache) = length(cache.nearsurface)
+gridsize(cache::MPCache) = cache.gridsize
 
-function reordering_pointstate!(pointstate::AbstractVector, space::MPSpace)
+function reordering_pointstate!(pointstate::AbstractVector, cache::MPCache)
     inds = Vector{Int}(undef, length(pointstate))
     cnt = 1
-    for block in space.pointsinblock
+    for block in cache.pointsinblock
         @inbounds for i in eachindex(block)
             inds[cnt] = block[i]
             block[i] = cnt
@@ -42,30 +42,30 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function reinit!(space::MPSpace{dim}, grid::Grid{dim}, xₚ::AbstractVector; exclude = nothing) where {dim}
+function reinit!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector; exclude = nothing) where {dim}
     checkshapefunction(grid)
-    @assert size(grid) == gridsize(space)
+    @assert size(grid) == gridsize(cache)
 
-    allocate!(i -> eltype(space.shapevalues)(), space.shapevalues, length(xₚ))
-    allocate!(i -> Index{dim}[], space.gridindices, length(xₚ))
-    resize!(space.nearsurface, length(xₚ))
+    allocate!(i -> eltype(cache.shapevalues)(), cache.shapevalues, length(xₚ))
+    allocate!(i -> Index{dim}[], cache.gridindices, length(xₚ))
+    resize!(cache.nearsurface, length(xₚ))
 
     gridstate = grid.state
-    pointsinblock!(space.pointsinblock, grid, xₚ)
+    pointsinblock!(cache.pointsinblock, grid, xₚ)
 
-    spat = sparsity_pattern(grid, xₚ, space.pointsinblock; exclude)
-    space.nearsurface .= false
+    spat = sparsity_pattern(grid, xₚ, cache.pointsinblock; exclude)
+    cache.nearsurface .= false
     @inbounds Threads.@threads for p in eachindex(xₚ)
         x = xₚ[p]
-        gridindices = space.gridindices[p]
-        space.nearsurface[p] = neighboring_nodes!(gridindices, grid, x, spat)
-        reinit!(space.shapevalues[p], grid, x, gridindices)
+        gridindices = cache.gridindices[p]
+        cache.nearsurface[p] = neighboring_nodes!(gridindices, grid, x, spat)
+        reinit!(cache.shapevalues[p], grid, x, gridindices)
     end
 
     gridstate.spat .= spat
     reinit!(gridstate)
 
-    space
+    cache
 end
 
 ##################
@@ -84,14 +84,14 @@ end
     end
 end
 
-function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
-    @assert all(==(gridsize(space)), size.(gridstates))
-    pointmask !== nothing && @assert length(pointmask) == npoints(space)
-    for color in coloringblocks(gridsize(space))
+function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
+    @assert all(==(gridsize(cache)), size.(gridstates))
+    pointmask !== nothing && @assert length(pointmask) == npoints(cache)
+    for color in coloringblocks(gridsize(cache))
         Threads.@threads for blockindex in color
-            @inbounds for p in space.pointsinblock[blockindex]
+            @inbounds for p in cache.pointsinblock[blockindex]
                 pointmask !== nothing && !pointmask[p] && continue
-                _point_to_grid!(p2g, gridstates, space.shapevalues[p], space.gridindices[p], p)
+                _point_to_grid!(p2g, gridstates, cache.shapevalues[p], cache.gridindices[p], p)
             end
         end
     end
@@ -119,8 +119,8 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Gri
     gridstates
 end
 
-function point_to_grid!(p2g, gridstate::AbstractArray, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
-    point_to_grid!((gridstate,), space, pointmask) do it, p, I
+function point_to_grid!(p2g, gridstate::AbstractArray, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
+    point_to_grid!((gridstate,), cache, pointmask) do it, p, I
         @_inline_meta
         @_propagate_inbounds_meta
         (p2g(it, p, I),)
@@ -142,10 +142,10 @@ end
 
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
                                 pointstate::StructVector,
-                                space::MPSpace{<: Any, <: Any, <: WLSValues},
+                                cache::MPCache{<: Any, <: Any, <: WLSValues},
                                 coord_system::Symbol)
     P = polynomial(grid.shapefunction)
-    point_to_grid!((grid.state.m, grid.state.w, grid.state.v, grid.state.f), space) do it, p, i
+    point_to_grid!((grid.state.m, grid.state.w, grid.state.v, grid.state.f), cache) do it, p, i
         @_inline_meta
         @_propagate_inbounds_meta
         N = it.N
@@ -185,12 +185,12 @@ end
     end
 end
 
-function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
-    @assert all(==(npoints(space)), length.(pointstates))
-    pointmask !== nothing && @assert length(pointmask) == npoints(space)
-    @inbounds Threads.@threads for p in 1:npoints(space)
+function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
+    @assert all(==(npoints(cache)), length.(pointstates))
+    pointmask !== nothing && @assert length(pointmask) == npoints(cache)
+    @inbounds Threads.@threads for p in 1:npoints(cache)
         pointmask !== nothing && !pointmask[p] && continue
-        _grid_to_point!(g2p, pointstates, space.shapevalues[p], space.gridindices[p], p)
+        _grid_to_point!(g2p, pointstates, cache.shapevalues[p], cache.gridindices[p], p)
     end
     pointstates
 end
@@ -211,8 +211,8 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, grid::G
     pointstates
 end
 
-function grid_to_point!(g2p, pointstate::AbstractVector, space::MPSpace, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
-    grid_to_point!((pointstate,), space, pointmask) do it, I, p
+function grid_to_point!(g2p, pointstate::AbstractVector, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
+    grid_to_point!((pointstate,), cache, pointmask) do it, I, p
         @_inline_meta
         @_propagate_inbounds_meta
         (g2p(it, I, p),)
@@ -234,13 +234,13 @@ end
 
 function default_grid_to_point!(pointstate::StructVector,
                                 grid::Grid{dim, <: Any, <: WLS},
-                                space::MPSpace{dim, <: Any, <: WLSValues},
+                                cache::MPCache{dim, <: Any, <: WLSValues},
                                 dt::Real,
                                 coord_system::Symbol) where {dim}
     P = polynomial(grid.shapefunction)
     p0 = P(zero(Vec{dim, Int}))
     ∇p0 = P'(zero(Vec{dim, Int}))
-    grid_to_point!(pointstate.C, space) do it, i, p
+    grid_to_point!(pointstate.C, cache) do it, i, p
         @_inline_meta
         @_propagate_inbounds_meta
         w = it.w

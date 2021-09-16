@@ -29,8 +29,8 @@ export
     CubicBSpline,
     WLS,
     polynomial,
-# MPSpace
-    MPSpace,
+# MPCache
+    MPCache,
     point_to_grid!,
     grid_to_point!,
     default_point_to_grid!,
@@ -79,7 +79,7 @@ include("sparray.jl")
 include("grid.jl")
 include("pointstate.jl")
 
-include("mpspace.jl")
+include("mpcache.jl")
 include("contact_mechanics.jl")
 
 abstract type MaterialModel end
