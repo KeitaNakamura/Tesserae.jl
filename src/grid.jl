@@ -119,9 +119,7 @@ function neighboring_nodes!(gridindices::Vector{Index{dim}}, grid::Grid{dim}, x:
     inds = neighboring_nodes(grid, x)
     cnt = 0
     @inbounds @simd for I in inds
-        if spat[I]
-            cnt += 1
-        end
+        cnt += ifelse(spat[I], 1, 0)
     end
     resize!(gridindices, cnt)
     cnt = 0
@@ -287,8 +285,7 @@ function sparsity_pattern(grid::Grid, xₚ::AbstractVector, ptsinblk = pointsinb
     end
     if exclude !== nothing
         @inbounds Threads.@threads for I in eachindex(grid)
-            x = grid[I]
-            exclude(x) && (spat[I] = false)
+            spat[I] = !exclude(grid[I])
         end
         for color in coloringblocks(size(grid))
             Threads.@threads for blockindex in color
