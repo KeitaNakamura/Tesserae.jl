@@ -63,6 +63,7 @@ export
     currenttime,
     issynced,
     synced_pointstate,
+    updatetimestep!,
     asyncstep!,
 # dot macros
     @dot_threads,
