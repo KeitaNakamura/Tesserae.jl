@@ -4,7 +4,7 @@
         for bspline in (LinearBSpline{dim}(), QuadraticBSpline{dim}(), CubicBSpline{dim}(),)
             it = Poingr.ShapeValues(bspline)
             for x in Iterators.product(ntuple(i -> 0.0:0.05:5.0, Val(dim))...)
-                reinit!(it, grid, Vec(x))
+                update!(it, grid, Vec(x))
                 @test sum(it.N) ≈ 1
                 if !isa(bspline, LinearBSpline)
                     @test sum(it.∇N) ≈ zero(Vec{dim}) atol = sqrt(eps(Float64))
@@ -20,7 +20,7 @@ end
         for bspline in (QuadraticBSpline{dim}(), CubicBSpline{dim}(),)
             it = Poingr.ShapeValues(WLS{1}(bspline))
             for x in Iterators.product(ntuple(i -> 0.0:0.05:5.0, Val(dim))...)
-                reinit!(it, grid, Vec(x))
+                update!(it, grid, Vec(x))
                 @test sum(it.N) ≈ 1
                 @test sum(it.∇N) ≈ zero(Vec{dim}) atol = sqrt(eps(Float64))
             end

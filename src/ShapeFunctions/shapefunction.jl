@@ -55,7 +55,7 @@ Construct object storing value of `ShapeFunction`.
 ```jldoctest
 julia> sv = Poingr.ShapeValues(QuadraticBSpline{2}());
 
-julia> reinit!(sv, Grid(0:3, 0:3), Vec(1, 1));
+julia> update!(sv, Grid(0:3, 0:3), Vec(1, 1));
 
 julia> sum(sv.N)
 1.0
@@ -69,24 +69,24 @@ julia> sum(sv.∇N)
 ShapeValues(F::ShapeFunction{dim}) where {dim} = ShapeValues(Float64, F)
 
 """
-    reinit!(::ShapeValues, grid::Grid, x::Vec)
-    reinit!(::ShapeValues, grid::Grid, indices::AbstractArray, x::Vec)
+    update!(::ShapeValues, grid::Grid, x::Vec)
+    update!(::ShapeValues, grid::Grid, indices::AbstractArray, x::Vec)
 
-Reinitialize value of shape function at `x` with each `grid` node.
+Update value of shape function at `x` with each `grid` node.
 
 # Examples
 ```jldoctest
 julia> sv = Poingr.ShapeValues(QuadraticBSpline{2}());
 
-julia> reinit!(sv, Grid(0:3, 0:3), Vec(1, 1));
+julia> update!(sv, Grid(0:3, 0:3), Vec(1, 1));
 
 julia> sum(sv.N)
 1.0
 
-julia> reinit!(sv, Grid(0:3, 0:3), Vec(1, 1), CartesianIndices((1:2, 1:2)));
+julia> update!(sv, Grid(0:3, 0:3), Vec(1, 1), CartesianIndices((1:2, 1:2)));
 
 julia> sum(sv.N)
 0.765625
 ```
 """
-reinit!
+update!

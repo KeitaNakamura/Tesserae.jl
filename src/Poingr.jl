@@ -22,7 +22,7 @@ export
     generate_pointstate,
     eachboundary,
 # shape functions
-    reinit!,
+    update!,
     BSpline,
     LinearBSpline,
     QuadraticBSpline,
@@ -53,7 +53,6 @@ export
     deviatoric_strain,
 # Logger
     Logger,
-    update!,
     isfinised,
     islogpoint,
     logindex,

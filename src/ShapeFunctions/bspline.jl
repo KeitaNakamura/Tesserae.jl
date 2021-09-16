@@ -176,7 +176,7 @@ end
 
 ShapeValues(::Type{T}, F::BSpline{order, dim}) where {order, dim, T} = BSplineValues{order, dim, T}()
 
-function reinit!(it::BSplineValues{<: Any, dim}, grid, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
+function update!(it::BSplineValues{<: Any, dim}, grid, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
     @boundscheck checkbounds(grid, indices)
     F = it.F
     resize!(it.N, length(indices))

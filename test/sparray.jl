@@ -17,7 +17,7 @@
     end
 
     # reinit!
-    @test reinit!(spat) == count(spat)
+    @test Poingr.reinit!(spat) == count(spat)
     @test spat.indices == inds
 
     # broadcast
@@ -48,7 +48,7 @@ end
 
     for (x, x_spat) in ((A, A_spat), (B, B_spat))
         x.spat .= x_spat
-        reinit!(x)
+        Poingr.reinit!(x)
         @test x.spat == x_spat
         @test count(x.spat) == length(x.data)
         for i in eachindex(x)

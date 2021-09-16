@@ -42,7 +42,7 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function reinit!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector; exclude = nothing) where {dim}
+function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector; exclude = nothing) where {dim}
     checkshapefunction(grid)
     @assert size(grid) == gridsize(cache)
 
@@ -59,7 +59,7 @@ function reinit!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector; exc
         x = xₚ[p]
         gridindices = cache.gridindices[p]
         cache.nearsurface[p] = neighboring_nodes!(gridindices, grid, x, spat)
-        reinit!(cache.shapevalues[p], grid, x, gridindices)
+        update!(cache.shapevalues[p], grid, x, gridindices)
     end
 
     gridstate.spat .= spat
@@ -111,7 +111,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Gri
             for p in ptsinblk[blockindex]
                 x = xₚ[p]
                 neighboring_nodes!(gridindices, grid, x, spat)
-                reinit!(shapevalues, grid, x, gridindices)
+                update!(shapevalues, grid, x, gridindices)
                 _point_to_grid!(p2g, gridstates, shapevalues, gridindices, p)
             end
         end
@@ -205,7 +205,7 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, grid::G
         shapevalues = shapevalues_threads[Threads.threadid()]
         gridindices = gridindices_threads[Threads.threadid()]
         neighboring_nodes!(gridindices, grid, x, spat)
-        reinit!(shapevalues, grid, x, gridindices)
+        update!(shapevalues, grid, x, gridindices)
         _grid_to_point!(g2p, pointstates, shapevalues, gridindices, p)
     end
     pointstates
