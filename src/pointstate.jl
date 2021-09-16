@@ -1,4 +1,4 @@
-function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coordinate_system = :plane_strain_if_2D; n::Int = 2) where {dim, T}
+function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coord_system::CoordinateSystem = DefaultCoordinateSystem(); n::Int = 2) where {dim, T}
     h = gridsteps(grid) ./ n # length per particle
     allpoints = Grid(LinRange.(first.(gridaxes(grid)) .+ h./2, last.(gridaxes(grid)) .- h./2, n .* (size(grid) .- 1)))
 
@@ -14,7 +14,7 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coordina
 
     V = prod(h)
     for i in 1:npoints
-        if dim == 2 && coordinate_system == :axisymmetric
+        if dim == 2 && coord_system isa Axisymmetric
             r = pointstate.x[i][1]
             pointstate.V0[i] = r * V
         else
@@ -26,6 +26,6 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coordina
     pointstate
 end
 
-function generate_pointstate(indomain, grid::Grid{dim, T}, coordinate_system = :plane_strain_if_2D; n::Int = 2) where {dim, T}
-    generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V0::T, h::Vec{dim,T}}, grid, coordinate_system; n)
+function generate_pointstate(indomain, grid::Grid{dim, T}, coord_system::CoordinateSystem = DefaultCoordinateSystem(); n::Int = 2) where {dim, T}
+    generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V0::T, h::Vec{dim,T}}, grid, coord_system; n)
 end

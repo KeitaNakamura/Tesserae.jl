@@ -14,6 +14,9 @@ using Coordinates
 const BLOCK_UNIT = unsigned(3) # 2^3
 
 export
+# CoordinateSystem
+    PlaneStrain,
+    Axisymmetric,
 # grid
     Grid,
     gridsteps,
@@ -69,6 +72,11 @@ export
     @dot_threads,
     @dot_lazy
 
+
+abstract type CoordinateSystem end
+struct DefaultCoordinateSystem <: CoordinateSystem end
+struct PlaneStrain <: CoordinateSystem end
+struct Axisymmetric <: CoordinateSystem end
 
 include("utils.jl")
 

@@ -135,15 +135,20 @@ function point_to_grid!(p2g, gridstate::AbstractArray, grid::Grid, xₚ::Abstrac
     end
 end
 
-function stress_to_force(coord_system::Symbol, N, ∇N, x::Vec, σ::SymmetricSecondOrderTensor{3})
-    f = Tensor2D(σ) ⋅ ∇N
-    @inbounds coord_system == :axisymmetric ? f + Vec(1,0)*σ[3,3]*N/x[1] : f
+@inline function stress_to_force(::PlaneStrain, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
+    Tensor2D(σ) ⋅ ∇N
+end
+@inline function stress_to_force(::Axisymmetric, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
+    @inbounds Tensor2D(σ) ⋅ ∇N + Vec(1,0)*σ[3,3]*N/x[1]
+end
+@inline function stress_to_force(::DefaultCoordinateSystem, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
+    σ ⋅ ∇N
 end
 
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
                                 pointstate::StructVector,
                                 cache::MPCache{<: Any, <: Any, <: WLSValues},
-                                coord_system::Symbol)
+                                coord_system::CoordinateSystem)
     P = polynomial(grid.shapefunction)
     point_to_grid!((grid.state.m, grid.state.w, grid.state.v, grid.state.f), cache) do it, p, i
         @_inline_meta
@@ -227,16 +232,21 @@ function grid_to_point!(g2p, pointstate::AbstractVector, grid::Grid, xₚ::Abstr
     end
 end
 
-function velocity_gradient(coord_system::Symbol, x::Vec, v::Vec, ∇v::SecondOrderTensor{2})
-    L = Poingr.Tensor3D(∇v)
-    @inbounds coord_system == :axisymmetric ? L + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]]) : L
+@inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
+    Poingr.Tensor3D(∇v)
+end
+@inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
+    @inbounds Poingr.Tensor3D(∇v) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
+end
+@inline function velocity_gradient(::DefaultCoordinateSystem, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
+    ∇v
 end
 
 function default_grid_to_point!(pointstate::StructVector,
                                 grid::Grid{dim, <: Any, <: WLS},
                                 cache::MPCache{dim, <: Any, <: WLSValues},
                                 dt::Real,
-                                coord_system::Symbol) where {dim}
+                                coord_system::CoordinateSystem) where {dim}
     P = polynomial(grid.shapefunction)
     p0 = P(zero(Vec{dim, Int}))
     ∇p0 = P'(zero(Vec{dim, Int}))
