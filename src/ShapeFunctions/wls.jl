@@ -89,23 +89,20 @@ end
 
 function update!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
     @boundscheck checkbounds(grid, indices)
-    F = weight_function(it)
     resize!(it.N, length(indices))
     resize!(it.∇N, length(indices))
     resize!(it.w, length(indices))
-    @inbounds @simd for i in 1:length(indices)
-        I = indices[i]
-        xᵢ = grid[I]
-        ξ = (x - xᵢ) ./ gridsteps(grid)
-        it.w[i] = F(ξ)
-    end
+    F = weight_function(it)
     P = polynomial(it)
     M = zero(it.M⁻¹[])
     @inbounds @simd for i in 1:length(indices)
         I = indices[i]
         xᵢ = grid[I]
+        ξ = (x - xᵢ) ./ gridsteps(grid)
+        w = F(ξ)
         p = P(xᵢ - x)
-        M += it.w[i] * p ⊗ p
+        M += w * p ⊗ p
+        it.w[i] = w
     end
     it.M⁻¹[] = inv(M)
     p₀ = P(x - x)
