@@ -59,6 +59,7 @@ export
 # VTK
     vtk_points,
 # async
+    AsyncScheduler,
     currenttime,
     issynced,
     synced_pointstate,
