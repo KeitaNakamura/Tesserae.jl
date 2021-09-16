@@ -1,16 +1,9 @@
-struct Time <: Real
+mutable struct Time
     T::Rational{Int}
     tϵ::Float64
 end
-checktimecoef(a::Time, b::Time) = @assert a.tϵ == b.tϵ
-Base.convert(::Type{T}, t::Time) where {T <: Real} = convert(T, t.tϵ * t.T)
-Base.convert(::Type{Time}, t::Time) where {T <: Real} = t
-Base.:+(a::Time, b::Time) = (checktimecoef(a, b); Time(a.T + b.T, a.tϵ))
-Base.:-(a::Time, b::Time) = (checktimecoef(a, b); Time(a.T - b.T, a.tϵ))
-Base.promote_type(::Type{Time}, ::Type{<: Real}) = Float64
-Base.promote_type(::Type{<: Real}, ::Type{Time}) = Float64
 
-mutable struct Block{PointState <: StructVector}
+mutable struct AsyncBlock{PointState <: StructVector}
     pointstate::PointState
     buffer::PointState
     T::Rational{Int}
@@ -19,18 +12,18 @@ mutable struct Block{PointState <: StructVector}
     dT::Rational{Int}
 end
 
-mutable struct Scheduler{PointState, dim}
-    blocks::Array{Block{PointState}, dim}
+struct AsyncScheduler{PointState, dim}
+    blocks::Array{AsyncBlock{PointState}, dim}
     gridsize::NTuple{dim, Int}
     time::Time
     pointstate::PointState
     precise_near_surface::Bool
 end
 
-gridsize(sch::Scheduler) = sch.gridsize
-currenttime(sch::Scheduler) = convert(Float64, sch.time)
+gridsize(sch::AsyncScheduler) = sch.gridsize
+currenttime(sch::AsyncScheduler) = (time = sch.time; time.tϵ * time.T)
 
-function paint_timesteps(sch::Scheduler)
+function paint_timesteps(sch::AsyncScheduler)
     cells = Array{Float64}(undef, gridsize(sch) .- 1)
     for I in CartesianIndices(cells)
         blockindex = CartesianIndex(@. ($Tuple(I) - 1) >> BLOCK_UNIT + 1)
@@ -39,13 +32,13 @@ function paint_timesteps(sch::Scheduler)
     cells
 end
 
-function issynced(sch::Scheduler)
+function issynced(sch::AsyncScheduler)
     iter = (block.T for block in sch.blocks if !isempty(block.pointstate))
     x0 = first(iter)
     all(==(x0), iter)
 end
 
-function synced_pointstate(sch::Scheduler)
+function synced_pointstate(sch::AsyncScheduler)
     @assert issynced(sch)
     pointstate = similar(sch.pointstate, 0)
     for block in sch.blocks
@@ -54,16 +47,16 @@ function synced_pointstate(sch::Scheduler)
     pointstate
 end
 
-function Scheduler(grid::Grid, pointstate::PointState, tϵ::Real = 1; precise_near_surface = false) where {PointState <: StructVector}
+function AsyncScheduler(grid::Grid, pointstate::PointState, tϵ::Real = 1; precise_near_surface = false) where {PointState <: StructVector}
     blocks = map(pointsinblock(grid, pointstate.x)) do pointindices
         ps = pointstate[pointindices]
         buf = copy(ps)
-        Block{PointState}(ps, buf, 0, 0, 0, 1)
+        AsyncBlock{PointState}(ps, buf, 0, 0, 0, 1)
     end
-    Scheduler(blocks, size(grid), Time(0, tϵ), similar(pointstate, 0), precise_near_surface)
+    AsyncScheduler(blocks, size(grid), Time(0, tϵ), similar(pointstate, 0), precise_near_surface)
 end
 
-function updatetimestep!(calculate_timestep::Function, sch::Scheduler, grid::Grid; exclude = nothing)
+function updatetimestep!(calculate_timestep::Function, sch::AsyncScheduler, grid::Grid; exclude = nothing)
     time = sch.time
     blocks = sch.blocks
 
@@ -160,10 +153,8 @@ function updatetimestep!(calculate_timestep::Function, sch::Scheduler, grid::Gri
     sch
 end
 
-function advance!(microstep::Function, sch::Scheduler, grid::Grid, dtime::Time)
+function advance!(microstep::Function, sch::AsyncScheduler, grid::Grid, dT::Rational)
     time = sch.time
-
-    dT = dtime.T
     blocks = sch.blocks
 
     mask_equal = falses(size(blocks))
@@ -213,7 +204,7 @@ function advance!(microstep::Function, sch::Scheduler, grid::Grid, dtime::Time)
         end
     end
 
-    microstep(sch.pointstate, convert(Float64, dtime))
+    microstep(sch.pointstate, time.tϵ * dT)
 
     @inbounds Threads.@threads for I in eachindex(blocks)
         block = blocks[I]
@@ -242,17 +233,16 @@ function advance!(microstep::Function, sch::Scheduler, grid::Grid, dtime::Time)
     empty!(sch.pointstate)
 end
 
-function asyncstep!(microstep::Function, sch::Scheduler, grid::Grid)
+function asyncstep!(microstep::Function, sch::AsyncScheduler, grid::Grid)
     time = sch.time
     dTs = sort(unique(block.dT for block in sch.blocks), rev = true)
     for dT in dTs
         if mod(time.T, dT) == 0
-            advance!(microstep, sch, grid, Time(dT, time.tϵ))
+            advance!(microstep, sch, grid, dT)
         end
     end
     dTmin = dTs[end]
     dT = dTmin - mod(time.T, dTmin)
-    dtime = Time(dT, time.tϵ)
-    sch.time += dtime
-    convert(Float64, dtime)
+    time.T += dT
+    time.tϵ * dT
 end
