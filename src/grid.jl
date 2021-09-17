@@ -13,14 +13,15 @@ julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Grid{dim, T, F <: Union{Nothing, ShapeFunction{dim}}, Node, State <: SpArray{Node, dim}, Axes} <: AbstractArray{Vec{dim, T}, dim}
+struct Grid{dim, T, F <: Union{Nothing, ShapeFunction{dim}}, Node, State <: SpArray{Node, dim}} <: AbstractArray{Vec{dim, T}, dim}
     shapefunction::F
-    coordinates::Coordinate{dim, NTuple{dim, T}, Axes}
+    coordinates::Coordinate{dim, NTuple{dim, T}, NTuple{dim, Vector{T}}}
+    gridsteps::NTuple{dim, T}
     state::State
 end
 
-Base.size(x::Grid) = size(x.coordinates)
-gridsteps(x::Grid) = map(step, gridaxes(x))
+Base.size(x::Grid) = map(length, gridaxes(x))
+gridsteps(x::Grid) = x.gridsteps
 gridsteps(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps(x)[i])
 gridaxes(x::Grid) = coordinateaxes(x.coordinates)
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
@@ -31,7 +32,8 @@ checkshapefunction(::Grid{<: Any, <: Any, <: ShapeFunction}) = nothing
 
 function Grid(::Type{Node}, shapefunction, coordinates::Coordinate) where {Node}
     state = SpArray(StructVector{Node}(undef, 0), SpPattern(size(coordinates)))
-    Grid(shapefunction, coordinates, state)
+    axes = coordinateaxes(coordinates)
+    Grid(shapefunction, Coordinate(Array.(axes)), map(step, axes), state)
 end
 
 Grid(::Type{Node}, shapefunction, axes::Tuple{Vararg{AbstractVector}}) where {Node} = Grid(Node, shapefunction, Coordinate(axes))
@@ -49,11 +51,11 @@ Grid(axes::AbstractVector...) = Grid(Nothing, nothing, axes)
     @inbounds Vec(grid.coordinates[i...])
 end
 
-function neighboring_nodes(ax::AbstractVector, x::Real, h::Real)
+function neighboring_nodes(ax::AbstractVector, dx::Real, x::Real, h::Real)
     xmin = first(ax)
     xmax = last(ax)
     xmin ≤ x ≤ xmax || return 1:0
-    ξ = (x - xmin) / step(ax)
+    ξ = (x - xmin) / dx
     _neighboring_nodes(ξ, h, length(ax))
 end
 
@@ -105,7 +107,8 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
         @inbounds CartesianIndices(
             @ntuple $dim d -> begin
                 ax = gridaxes(grid, d)
-                neighboring_nodes(ax, x[d], h)
+                dx = gridsteps(grid, d)
+                neighboring_nodes(ax, dx, x[d], h)
             end
         )
     end

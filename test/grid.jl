@@ -15,12 +15,12 @@
 
     # gridsteps/gridaxes/gridorigin
     grid = Grid(CubicBSpline{2}(), 0:1.0:10, 1:2.0:20)
-    @test @inferred(gridsteps(grid)) === (1.0, 2.0)
-    @test @inferred(gridsteps(grid, 1)) === 1.0
-    @test @inferred(gridsteps(grid, 2)) === 2.0
-    @test @inferred(gridaxes(grid)) === (0:1.0:10, 1:2.0:20)
-    @test @inferred(gridaxes(grid, 1)) === 0:1.0:10
-    @test @inferred(gridaxes(grid, 2)) === 1:2.0:20
+    @test @inferred(gridsteps(grid)) == (1.0, 2.0)
+    @test @inferred(gridsteps(grid, 1)) == 1.0
+    @test @inferred(gridsteps(grid, 2)) == 2.0
+    @test @inferred(gridaxes(grid)) == (0:1.0:10, 1:2.0:20)
+    @test @inferred(gridaxes(grid, 1)) == 0:1.0:10
+    @test @inferred(gridaxes(grid, 2)) == 1:2.0:20
     @test @inferred(gridorigin(grid))::Vec{2} == Vec(0,1)
 
     # neighboring_nodes/neighboring_cells/whichcell/whichblock
