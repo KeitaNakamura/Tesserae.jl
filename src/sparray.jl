@@ -53,15 +53,17 @@ end
 @inline function Base.getindex(x::SpArray, i::Int)
     @boundscheck checkbounds(x, i)
     spat = x.spat
-    @inbounds spat[i] ? x.data[spat.indices[i]] : initval(eltype(x))
+    index = spat.indices[i]
+    @inbounds index !== -1 ? x.data[index] : initval(eltype(x))
 end
 @inline function Base.setindex!(x::SpArray, v, i::Int)
     @boundscheck checkbounds(x, i)
     spat = x.spat
     @inbounds begin
         # spat[i] || throw(UndefRefError()) # cannot use this because `@. A[indices] = A[indices]` doesn't work well yet
-        spat[i] || return x
-        x.data[spat.indices[i]] = v
+        index = spat.indices[i]
+        index === -1 && return x
+        x.data[index] = v
     end
     x
 end
