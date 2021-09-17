@@ -73,7 +73,7 @@ end
 ##################
 
 @generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, shapevalues::ShapeValues, gridindices::Vector{<: Index}, p::Int) where {N}
-    exps = [:(gridstates[$i][I] += res[$i]) for i in 1:N]
+    exps = [:(add!(gridstates[$i], res[$i], I.i)) for i in 1:N]
     quote
         @inbounds @simd for i in eachindex(shapevalues, gridindices)
             it = shapevalues[i]

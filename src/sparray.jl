@@ -68,6 +68,22 @@ end
     x
 end
 
+@inline function add!(x::SpArray, v, i::Int)
+    @boundscheck checkbounds(x, i)
+    spat = x.spat
+    @inbounds begin
+        index = spat.indices[i]
+        index === -1 && return x
+        x.data[index] += v
+    end
+    x
+end
+@inline function add!(x::AbstractArray, v, i::Int)
+    @boundscheck checkbounds(x, i)
+    @inbounds x[i] += v
+    x
+end
+
 @generated function initval(::Type{T}) where {T}
     if Base._return_type(zero, (T,)) == Union{}
         exps = [:(zero($t)) for t in fieldtypes(T)]
