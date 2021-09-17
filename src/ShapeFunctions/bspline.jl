@@ -64,8 +64,12 @@ function value(::BSpline{4, 0}, ξ::Real)
     ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
 
-@inline function value(::BSpline{order, dim}, ξ::Vec{dim}) where {order, dim}
-    prod(value.(BSpline{order, 0}(), ξ))
+@generated function value(::BSpline{order, dim}, ξ::Vec{dim}) where {order, dim}
+    exps = [:(value(BSpline{order, 0}(), ξ[$i])) for i in 1:dim]
+    quote
+        @_inline_meta
+        *($(exps...))
+    end
 end
 
 """

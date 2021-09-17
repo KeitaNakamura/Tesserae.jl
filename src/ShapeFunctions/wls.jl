@@ -99,21 +99,22 @@ function update!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, indices:
         I = indices[i]
         xᵢ = grid[I]
         ξ = (x - xᵢ) ./ gridsteps(grid)
-        w = F(ξ)
+        it.w[i] = F(ξ)
+    end
+    @inbounds @simd for i in 1:length(indices)
+        I = indices[i]
+        xᵢ = grid[I]
         p = P(xᵢ - x)
-        M += w * p ⊗ p
-        it.w[i] = w
+        M += it.w[i] * p ⊗ p
     end
     it.M⁻¹[] = inv(M)
-    p₀ = P(x - x)
-    ∇p₀ = P'(x - x)
     @inbounds @simd for i in 1:length(indices)
         I = indices[i]
         xᵢ = grid[I]
         q = it.M⁻¹[] ⋅ P(xᵢ - x)
         wq = it.w[i] * q
-        it.N[i] = wq ⋅ p₀
-        it.∇N[i] = wq ⋅ ∇p₀
+        it.N[i] = wq ⋅ P(x - x)
+        it.∇N[i] = wq ⋅ P'(x - x)
     end
 end
 
