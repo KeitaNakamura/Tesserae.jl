@@ -222,7 +222,7 @@ CartesianIndex(2, 2)
             @ntuple $dim d -> begin
                 ξ = (x[d] - xmin[d]) / dx[d]
                 0 ≤ ξ < ncells[d] || return nothing
-                floor(Int, ξ) + 1
+                unsafe_trunc(Int, floor(ξ)) + 1
             end
         )
     end
