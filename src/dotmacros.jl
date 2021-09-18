@@ -19,7 +19,7 @@ end
 end
 
 @inline function _threads_copyto!(f, dest::SpArray, args...)
-    if identical_mask(dest, args...)
+    if identical_spat(dest, args...)
         bc = broadcasted(f, args...)
         _copyto!(dest, broadcasted(dot_threads, bc))
     else
