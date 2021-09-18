@@ -56,17 +56,19 @@ function neighboring_nodes(ax::AbstractVector, dx::Real, x::Real, h::Real)
     xmax = last(ax)
     xmin ≤ x ≤ xmax || return 1:0
     ξ = (x - xmin) / dx
-    _neighboring_nodes(ξ, h, length(ax))
+    _neighboring_nodes(ξ, oftype(ξ, h), length(ax))
 end
 
-function _neighboring_nodes(ξ::Real, h::Real, len::Int)
+function _neighboring_nodes(ξ::T, h::T, len::Int) where {T}
+    o = one(T)
+    z = zero(T)
     ξ_l = ξ - h
     ξ_r = ξ + h
     l = ceil(ξ_l)
     r = floor(ξ_r)
-    l += ifelse(l == ξ_l, 1, 0)
-    r -= ifelse(l == ξ_r, 1, 0)
-    start, stop = clamp.((Int(l+1), Int(r+1)), 1, len) # cut violated indices
+    l = l + ifelse(l == ξ_l, o, z) + o
+    r = r - ifelse(l == ξ_r, o, z) + o
+    start, stop = clamp.(unsafe_trunc.(Int, (l,r)), 1, len) # cut violated indices
     start:stop
 end
 
