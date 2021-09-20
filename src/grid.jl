@@ -120,7 +120,7 @@ end
     neighboring_nodes(grid, x, support_length(grid.shapefunction))
 end
 
-function neighboring_nodes!(gridindices::Vector{Index{dim}}, grid::Grid{dim}, x::Vec{dim}, spat::BitArray{dim}) where {dim}
+function update!(gridindices::Vector{Index{dim}}, grid::Grid{dim}, x::Vec{dim}, spat::BitArray{dim}) where {dim}
     inds = neighboring_nodes(grid, x)
     cnt = 0
     @inbounds @simd for I in inds
@@ -128,15 +128,12 @@ function neighboring_nodes!(gridindices::Vector{Index{dim}}, grid::Grid{dim}, x:
     end
     resize!(gridindices, cnt)
     cnt = 0
-    nearsurface = false
-    @inbounds @simd for I in inds
+    @inbounds for I in inds
         if spat[I]
             gridindices[cnt+=1] = Index(grid, I)
-        else
-            nearsurface = true
         end
     end
-    nearsurface
+    gridindices
 end
 
 
@@ -278,28 +275,23 @@ function pointsinblock(grid::Grid, xₚ::AbstractVector)
     pointsinblock!(ptsinblk, grid, xₚ)
 end
 
-function sparsity_pattern(grid::Grid, xₚ::AbstractVector, ptsinblk = pointsinblock(grid, xₚ); exclude = nothing)
+function sparsity_pattern(grid::Grid, xₚ::AbstractVector, ptsinblk::AbstractArray{Vector{Int}})
     spat = falses(size(grid))
     for color in coloringblocks(size(grid))
         Threads.@threads for blockindex in color
             @inbounds for p in ptsinblk[blockindex]
-                inds = neighboring_nodes(grid, xₚ[p])
+                inds = neighboring_nodes(grid, xₚ[p], 1)
                 spat[inds] .= true
             end
         end
     end
-    if exclude !== nothing
-        @inbounds Threads.@threads for I in eachindex(grid)
-            spat[I] = !exclude(grid[I])
-        end
-        for color in coloringblocks(size(grid))
-            Threads.@threads for blockindex in color
-                @inbounds for p in ptsinblk[blockindex]
-                    inds = neighboring_nodes(grid, xₚ[p], 1)
-                    spat[inds] .= true
-                end
-            end
-        end
+    spat
+end
+function sparsity_pattern(grid::Grid, xₚ::AbstractVector)
+    spat = falses(size(grid))
+    @inbounds for x in xₚ
+        inds = neighboring_nodes(grid, x, 1)
+        spat[inds] .= true
     end
     spat
 end

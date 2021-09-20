@@ -3,7 +3,7 @@ struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
     gridsize::NTuple{dim, Int}
     gridindices::Vector{Vector{Index{dim}}}
     pointsinblock::Array{Vector{Int}, dim}
-    nearsurface::BitVector
+    npoints::Base.RefValue{Int}
 end
 
 function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
@@ -11,10 +11,10 @@ function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     npoints = length(xₚ)
     shapevalues = [ShapeValues(T, grid.shapefunction) for _ in 1:npoints]
     gridindices = [Index{dim}[] for _ in 1:npoints]
-    MPCache(shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), falses(npoints))
+    MPCache(shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), Ref(npoints))
 end
 
-npoints(cache::MPCache) = length(cache.nearsurface)
+npoints(cache::MPCache) = cache.npoints[]
 gridsize(cache::MPCache) = cache.gridsize
 
 function reordering_pointstate!(pointstate::AbstractVector, cache::MPCache)
@@ -42,26 +42,25 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector; exclude = nothing) where {dim}
+function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
     checkshapefunction(grid)
     @assert size(grid) == gridsize(cache)
 
+    cache.npoints[] = length(xₚ)
     allocate!(i -> eltype(cache.shapevalues)(), cache.shapevalues, length(xₚ))
     allocate!(i -> Index{dim}[], cache.gridindices, length(xₚ))
-    resize!(cache.nearsurface, length(xₚ))
 
-    gridstate = grid.state
     pointsinblock!(cache.pointsinblock, grid, xₚ)
-
-    spat = sparsity_pattern(grid, xₚ, cache.pointsinblock; exclude)
-    cache.nearsurface .= false
+    spat = sparsity_pattern(grid, xₚ, cache.pointsinblock)
     @inbounds Threads.@threads for p in eachindex(xₚ)
         x = xₚ[p]
         gridindices = cache.gridindices[p]
-        cache.nearsurface[p] = neighboring_nodes!(gridindices, grid, x, spat)
-        update!(cache.shapevalues[p], grid, x, gridindices)
+        shapevalues = cache.shapevalues[p]
+        update!(gridindices, grid, x, spat)
+        update!(shapevalues, grid, x, gridindices)
     end
 
+    gridstate = grid.state
     gridstate.spat .= spat
     reinit!(gridstate)
 
@@ -98,10 +97,10 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
     gridstates
 end
 
-function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Grid{dim, T}, xₚ::AbstractVector; exclude = nothing) where {dim, T}
+function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     @assert all(==(size(grid)), size.(gridstates))
     ptsinblk = pointsinblock(grid, xₚ)
-    spat = sparsity_pattern(grid, xₚ, ptsinblk; exclude)
+    spat = sparsity_pattern(grid, xₚ, ptsinblk)
     shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
     gridindices_threads = [Index{dim}[] for _ in 1:Threads.nthreads()]
     for color in coloringblocks(size(grid))
@@ -110,7 +109,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Gri
             gridindices = gridindices_threads[Threads.threadid()]
             for p in ptsinblk[blockindex]
                 x = xₚ[p]
-                neighboring_nodes!(gridindices, grid, x, spat)
+                update!(gridindices, grid, x, spat)
                 update!(shapevalues, grid, x, gridindices)
                 _point_to_grid!(p2g, gridstates, shapevalues, gridindices, p)
             end
@@ -127,8 +126,8 @@ function point_to_grid!(p2g, gridstate::AbstractArray, cache::MPCache, pointmask
     end
 end
 
-function point_to_grid!(p2g, gridstate::AbstractArray, grid::Grid, xₚ::AbstractVector; exclude = nothing)
-    point_to_grid!((gridstate,), grid, xₚ; exclude) do it, p, I
+function point_to_grid!(p2g, gridstate::AbstractArray, grid::Grid, xₚ::AbstractVector)
+    point_to_grid!((gridstate,), grid, xₚ) do it, p, I
         @_inline_meta
         @_propagate_inbounds_meta
         (p2g(it, p, I),)
@@ -200,16 +199,16 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, cache::
     pointstates
 end
 
-function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, grid::Grid{dim, T}, xₚ::AbstractVector; exclude = nothing) where {dim, T}
+function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     @assert all(==(length(xₚ)), length.(pointstates))
-    spat = sparsity_pattern(grid, xₚ; exclude)
+    spat = sparsity_pattern(grid, xₚ)
     shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
     gridindices_threads = [Index{dim}[] for _ in 1:Threads.nthreads()]
     Threads.@threads for p in 1:length(xₚ)
         x = xₚ[p]
         shapevalues = shapevalues_threads[Threads.threadid()]
         gridindices = gridindices_threads[Threads.threadid()]
-        neighboring_nodes!(gridindices, grid, x, spat)
+        update!(gridindices, grid, x, spat)
         update!(shapevalues, grid, x, gridindices)
         _grid_to_point!(g2p, pointstates, shapevalues, gridindices, p)
     end
@@ -224,8 +223,8 @@ function grid_to_point!(g2p, pointstate::AbstractVector, cache::MPCache, pointma
     end
 end
 
-function grid_to_point!(g2p, pointstate::AbstractVector, grid::Grid, xₚ::AbstractVector; exclude = nothing)
-    grid_to_point!((pointstate,), grid, xₚ; exclude) do it, I, p
+function grid_to_point!(g2p, pointstate::AbstractVector, grid::Grid, xₚ::AbstractVector)
+    grid_to_point!((pointstate,), grid, xₚ) do it, I, p
         @_inline_meta
         @_propagate_inbounds_meta
         (g2p(it, I, p),)

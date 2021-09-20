@@ -56,42 +56,25 @@ function AsyncScheduler(grid::Grid, pointstate::PointState, tϵ::Real = 1; preci
     AsyncScheduler(blocks, size(grid), Time(0, tϵ), similar(pointstate, 0), precise_near_surface)
 end
 
-function updatetimestep!(calculate_timestep::Function, sch::AsyncScheduler, grid::Grid; exclude = nothing)
+function updatetimestep!(calculate_timestep::Function, sch::AsyncScheduler, grid::Grid; isincontact = nothing)
     time = sch.time
     blocks = sch.blocks
 
     nearsurface = falses(size(blocks))
-    if exclude !== nothing
-        gridmask = falses(size(grid))
-        for color in coloringblocks(size(grid))
-            @inbounds Threads.@threads for I in color
-                xₚ = blocks[I].pointstate.x
-                for x in xₚ
-                    inds = neighboring_nodes(grid, x, 1)
-                    gridmask[inds] .= true
+    if isincontact !== nothing
+        @inbounds Threads.@threads for i in eachindex(blocks)
+            block = blocks[i]
+            isincontact_in_block = false
+            for x in block.pointstate.x
+                if isincontact(x)
+                    isincontact_in_block = true
+                    break
                 end
             end
-        end
-        Threads.@threads for I in eachindex(blocks)
-            block = blocks[I]
-            xₚ = block.pointstate.x
-            isnearsurface = false
-            for x in xₚ
-                @inbounds for i in neighboring_nodes(grid, x)
-                    if !gridmask[i] && exclude(grid[i])
-                        isnearsurface = true
-                        break
-                    end
-                end
-                isnearsurface && break
-            end
-            if isnearsurface
-                nearsurface[I] = true
-            end
+            nearsurface[i] = isincontact_in_block
         end
         temp = copy(nearsurface)
         @inbounds for I in CartesianIndices(blocks)
-            block = blocks[I]
             if temp[I]
                 for J in neighboring_blocks(grid, I, 1)
                     nearsurface[J] = true
