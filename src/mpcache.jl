@@ -43,7 +43,7 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
+function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spat::BitArray{dim} = sparsity_pattern(grid, xₚ)) where {dim}
     checkshapefunction(grid)
     @assert size(grid) == gridsize(cache)
 
@@ -52,7 +52,6 @@ function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) whe
     allocate!(i -> eltype(cache.shapevalues)(), cache.shapevalues, length(xₚ))
     allocate!(i -> Index{dim}[], cache.gridindices, length(xₚ))
 
-    spat = sparsity_pattern(grid, xₚ)
     @inbounds Threads.@threads for p in eachindex(xₚ)
         x = xₚ[p]
         gridindices = cache.gridindices[p]
