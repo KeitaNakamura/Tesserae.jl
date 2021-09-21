@@ -51,7 +51,7 @@ function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) whe
     allocate!(i -> Index{dim}[], cache.gridindices, length(xₚ))
 
     pointsinblock!(cache.pointsinblock, grid, xₚ)
-    spat = sparsity_pattern(grid, xₚ, cache.pointsinblock)
+    spat = sparsity_pattern(grid, xₚ)
     @inbounds Threads.@threads for p in eachindex(xₚ)
         x = xₚ[p]
         gridindices = cache.gridindices[p]
@@ -100,7 +100,7 @@ end
 function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     @assert all(==(size(grid)), size.(gridstates))
     ptsinblk = pointsinblock(grid, xₚ)
-    spat = sparsity_pattern(grid, xₚ, ptsinblk)
+    spat = sparsity_pattern(grid, xₚ)
     shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
     gridindices_threads = [Index{dim}[] for _ in 1:Threads.nthreads()]
     for color in coloringblocks(size(grid))

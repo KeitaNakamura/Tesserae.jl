@@ -244,25 +244,14 @@ function pointsinblock(grid::Grid, xₚ::AbstractVector)
     pointsinblock!(ptsinblk, grid, xₚ)
 end
 
-function sparsity_pattern(grid::Grid, xₚ::AbstractVector, ptsinblk::AbstractArray{Vector{Int}})
-    spat = falses(size(grid))
-    for color in coloringblocks(size(grid))
-        Threads.@threads for blockindex in color
-            @inbounds for p in ptsinblk[blockindex]
-                inds = neighboring_nodes(grid, xₚ[p], 1)
-                spat[inds] .= true
-            end
-        end
-    end
-    spat
-end
 function sparsity_pattern(grid::Grid, xₚ::AbstractVector)
-    spat = falses(size(grid))
-    @inbounds for x in xₚ
+    spat_threads = [falses(size(grid)) for _ in 1:Threads.nthreads()]
+    @inbounds Threads.@threads for x in xₚ
+        spat = spat_threads[Threads.threadid()]
         inds = neighboring_nodes(grid, x, 1)
         spat[inds] .= true
     end
-    spat
+    broadcast(|, spat_threads...)
 end
 
 
