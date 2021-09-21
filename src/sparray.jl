@@ -68,21 +68,23 @@ end
     x
 end
 
-@inline function add!(x::SpArray, v, i::Int)
+@inline function applyat!(op, x::SpArray, i::Int, v)
     @boundscheck checkbounds(x, i)
     spat = x.spat
     @inbounds begin
         index = spat.indices[i]
         index === -1 && return x
-        x.data[index] += v
+        x.data[index] = op(x.data[index], v)
     end
     x
 end
-@inline function add!(x::AbstractArray, v, i::Int)
+@inline function applyat!(op, x::AbstractArray, i::Int, v)
     @boundscheck checkbounds(x, i)
-    @inbounds x[i] += v
+    @inbounds x[i] = op(x[i], v)
     x
 end
+
+@inline add!(x::AbstractArray, i::Int, v) = applyat!(+, x, i, v)
 
 @generated function initval(::Type{T}) where {T}
     if Base._return_type(zero, (T,)) == Union{}
