@@ -51,27 +51,6 @@ Grid(axes::AbstractVector...) = Grid(Nothing, nothing, axes)
     @inbounds Vec(grid.coordinates[i...])
 end
 
-function neighboring_nodes(ax::AbstractVector, dx::Real, x::Real, h::Real)
-    xmin = first(ax)
-    xmax = last(ax)
-    xmin ≤ x ≤ xmax || return 1:0
-    ξ = (x - xmin) / dx
-    _neighboring_nodes(ξ, oftype(ξ, h), length(ax))
-end
-
-function _neighboring_nodes(ξ::T, h::T, len::Int) where {T}
-    o = one(T)
-    z = zero(T)
-    ξ_l = ξ - h
-    ξ_r = ξ + h
-    l = ceil(ξ_l)
-    r = floor(ξ_r)
-    l = l + ifelse(l == ξ_l, o, z) + o
-    r = r - ifelse(l == ξ_r, o, z) + o
-    start, stop = clamp.(unsafe_trunc.(Int, (l,r)), 1, len) # cut violated indices
-    start:stop
-end
-
 """
     Poingr.neighboring_nodes(grid, x::Vec, h::Real)
 
@@ -103,17 +82,14 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
  CartesianIndex(4,)
 ```
 """
-@generated function neighboring_nodes(grid::Grid{dim}, x::Vec{dim}, h::Real) where {dim}
-    quote
-        @_inline_meta
-        @inbounds CartesianIndices(
-            @ntuple $dim d -> begin
-                ax = gridaxes(grid, d)
-                dx = gridsteps(grid, d)
-                neighboring_nodes(ax, dx, x[d], h)
-            end
-        )
-    end
+@inline function neighboring_nodes(grid::Grid{dim}, x::Vec{dim}, h::Real) where {dim}
+    dx = gridsteps(grid)
+    xmin = gridorigin(grid)
+    ξ = Tuple((x - xmin) ./ dx)
+    all(@. 0 ≤ ξ ≤ $size(grid)-1) || return CartesianIndices(ntuple(d->1:0, Val(dim)))
+    inds = CartesianIndices(@. UnitRange(unsafe_trunc(Int,  ceil(ξ - h))+1,
+                                         unsafe_trunc(Int, floor(ξ + h))+1))
+    CartesianIndices(grid) ∩ inds
 end
 @inline function neighboring_nodes(grid::Grid, x::Vec)
     checkshapefunction(grid)
@@ -210,19 +186,12 @@ julia> Poingr.whichcell(grid, Vec(1.5, 1.5))
 CartesianIndex(2, 2)
 ```
 """
-@generated function whichcell(grid::Grid{dim}, x::Vec{dim}) where {dim}
-    quote
-        ncells = size(grid) .- 1
-        dx = gridsteps(grid)
-        xmin = gridorigin(grid)
-        @inbounds CartesianIndex(
-            @ntuple $dim d -> begin
-                ξ = (x[d] - xmin[d]) / dx[d]
-                0 ≤ ξ < ncells[d] || return nothing
-                unsafe_trunc(Int, floor(ξ)) + 1
-            end
-        )
-    end
+@inline function whichcell(grid::Grid{dim}, x::Vec{dim}) where {dim}
+    dx = gridsteps(grid)
+    xmin = gridorigin(grid)
+    ξ = Tuple((x - xmin) ./ dx)
+    all(@. 0 ≤ ξ ≤ $size(grid)-1) || return nothing
+    CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
 end
 
 """
@@ -251,7 +220,7 @@ julia> Poingr.whichblock(grid, Vec(8.5, 1.5))
 CartesianIndex(2, 1)
 ```
 """
-function whichblock(grid::Grid, x::Vec)
+@inline function whichblock(grid::Grid, x::Vec)
     I = whichcell(grid, x)
     I === nothing && return nothing
     CartesianIndex(@. ($Tuple(I)-1) >> BLOCK_UNIT + 1)
