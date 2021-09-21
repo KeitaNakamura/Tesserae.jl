@@ -109,7 +109,19 @@ function reinit!(x::SpArray{T}) where {T}
 end
 reinit!(x::SpArray{Nothing}) = x # for Grid without NodeState type
 
-Base.unaliascopy(x::SpArray) = SpArray(Base.unaliascopy(x.data), Base.copy(x.spat))
+function complement!(op, x::SpArray, y::SpArray)
+    @assert size(x) == size(y)
+    @inbounds @simd for i in eachindex(x, y)
+        index_x = x.spat.indices[i]
+        index_y = y.spat.indices[i]
+        if index_x !== -1 && index_y !== -1
+            val = op(x.data[index_x], y.data[index_y])
+            x.data[index_x] = val
+            y.data[index_y] = val
+        end
+    end
+end
+
 
 
 Broadcast.BroadcastStyle(::Type{<: SpArray}) = ArrayStyle{SpArray}()
@@ -135,7 +147,8 @@ function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) wher
     reinit!(SpArray(Vector{ElType}(undef, length(bc)), spat))
 end
 
-Broadcast.broadcast_unalias(dest::SpArray, src::SpArray) = Base.unalias(dest, src)
+Base.unaliascopy(x::SpArray) = SpArray(Base.unaliascopy(x.data), Base.copy(x.spat))
+Broadcast.broadcast_unalias(dest::SpArray, src::SpArray) = Base.unalias(dest, src) # used in preprocess
 function _copyto!(f, dest::SpArray, args...)
     if identical_spat(dest, args...)
         broadcast!(f, getdata(dest), map(getdata, args)...)
