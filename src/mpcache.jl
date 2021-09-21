@@ -1,9 +1,9 @@
-struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
+mutable struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
     shapevalues::Vector{Tshape}
     gridsize::NTuple{dim, Int}
     gridindices::Vector{Vector{Index{dim}}}
+    npoints::Int
     pointsinblock::Array{Vector{Int}, dim}
-    npoints::Base.RefValue{Int}
 end
 
 function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
@@ -11,16 +11,17 @@ function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     npoints = length(xₚ)
     shapevalues = [ShapeValues(T, grid.shapefunction) for _ in 1:npoints]
     gridindices = [Index{dim}[] for _ in 1:npoints]
-    MPCache(shapevalues, size(grid), gridindices, pointsinblock(grid, xₚ), Ref(npoints))
+    MPCache(shapevalues, size(grid), gridindices, npoints, pointsinblock(grid, xₚ))
 end
 
-npoints(cache::MPCache) = cache.npoints[]
 gridsize(cache::MPCache) = cache.gridsize
+npoints(cache::MPCache) = cache.npoints
+pointsinblock(cache::MPCache) = cache.pointsinblock
 
 function reordering_pointstate!(pointstate::AbstractVector, cache::MPCache)
     inds = Vector{Int}(undef, length(pointstate))
     cnt = 1
-    for block in cache.pointsinblock
+    for block in pointsinblock(cache)
         @inbounds for i in eachindex(block)
             inds[cnt] = block[i]
             block[i] = cnt
@@ -46,11 +47,11 @@ function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) whe
     checkshapefunction(grid)
     @assert size(grid) == gridsize(cache)
 
-    cache.npoints[] = length(xₚ)
+    cache.npoints = length(xₚ)
+    cache.pointsinblock = pointsinblock(grid, xₚ)
     allocate!(i -> eltype(cache.shapevalues)(), cache.shapevalues, length(xₚ))
     allocate!(i -> Index{dim}[], cache.gridindices, length(xₚ))
 
-    pointsinblock!(cache.pointsinblock, grid, xₚ)
     spat = sparsity_pattern(grid, xₚ)
     @inbounds Threads.@threads for p in eachindex(xₚ)
         x = xₚ[p]
@@ -88,7 +89,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
     pointmask !== nothing && @assert length(pointmask) == npoints(cache)
     for color in coloringblocks(gridsize(cache))
         Threads.@threads for blockindex in color
-            @inbounds for p in cache.pointsinblock[blockindex]
+            @inbounds for p in pointsinblock(cache)[blockindex]
                 pointmask !== nothing && !pointmask[p] && continue
                 _point_to_grid!(p2g, gridstates, cache.shapevalues[p], cache.gridindices[p], p)
             end

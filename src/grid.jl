@@ -228,20 +228,27 @@ end
 
 blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
 
-function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
-    @assert size(ptsinblk) == blocksize(grid)
-    empty!.(ptsinblk)
-    for p in eachindex(xₚ)
+function pointsinblock(grid::Grid, xₚ::AbstractVector)
+    ptsinblk_threads = [Array{Vector{Int}}(undef, blocksize(grid)) for _ in 1:Threads.nthreads()]
+    @inbounds Threads.@threads for id in 1:Threads.nthreads()
+        ptsinblk = ptsinblk_threads[id]
+        @simd for i in eachindex(ptsinblk)
+            ptsinblk[i] = Int[]
+        end
+    end
+    @inbounds Threads.@threads for p in eachindex(xₚ)
         I = whichblock(grid, xₚ[p])
         I === nothing && continue
+        ptsinblk = ptsinblk_threads[Threads.threadid()]
         push!(ptsinblk[I], p)
     end
-    ptsinblk
-end
-
-function pointsinblock(grid::Grid, xₚ::AbstractVector)
-    ptsinblk = [Int[] for i in CartesianIndices(blocksize(grid))]
-    pointsinblock!(ptsinblk, grid, xₚ)
+    dest = first(ptsinblk_threads)
+    @inbounds for src in ptsinblk_threads[2:end]
+        @simd for i in eachindex(src)
+            append!(dest[i], src[i])
+        end
+    end
+    dest
 end
 
 function sparsity_pattern(grid::Grid, xₚ::AbstractVector)
