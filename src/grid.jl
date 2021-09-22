@@ -230,8 +230,8 @@ blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT
 
 function pointsinblock(grid::Grid, xₚ::AbstractVector)
     ptsinblk_threads = [Array{Vector{Int}}(undef, blocksize(grid)) for _ in 1:Threads.nthreads()]
-    @inbounds Threads.@threads for id in 1:Threads.nthreads()
-        ptsinblk = ptsinblk_threads[id]
+    @inbounds Threads.@threads for _ in 1:Threads.nthreads()
+        ptsinblk = ptsinblk_threads[Threads.threadid()]
         @simd for i in eachindex(ptsinblk)
             ptsinblk[i] = Int[]
         end
