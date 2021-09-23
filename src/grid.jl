@@ -228,43 +228,46 @@ end
 
 blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
 
-function pointsinblock(grid::Grid, xₚ::AbstractVector)
-    ptsinblk_threads = [Array{Vector{Int}}(undef, blocksize(grid)) for _ in 1:Threads.nthreads()]
-    @inbounds Threads.@threads for _ in 1:Threads.nthreads()
-        ptsinblk = ptsinblk_threads[Threads.threadid()]
-        @simd for i in eachindex(ptsinblk)
-            ptsinblk[i] = Int[]
-        end
-    end
+function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
+    empty!.(ptsinblk)
     @inbounds Threads.@threads for p in eachindex(xₚ)
         I = whichblock(grid, xₚ[p])
         I === nothing && continue
-        ptsinblk = ptsinblk_threads[Threads.threadid()]
         push!(ptsinblk[I], p)
     end
-    dest = first(ptsinblk_threads)
-    @inbounds for src in ptsinblk_threads[2:end]
-        @simd for i in eachindex(src)
-            append!(dest[i], src[i])
-        end
+    ptsinblk
+end
+
+function pointsinblock(grid::Grid, xₚ::AbstractVector)
+    ptsinblk = Array{Vector{Int}}(undef, blocksize(grid))
+    @inbounds @simd for i in eachindex(ptsinblk)
+        ptsinblk[i] = Int[]
     end
-    dest
+    pointsinblock!(ptsinblk, grid, xₚ)
 end
 
 function sparsity_pattern(grid::Grid, xₚ::AbstractVector)
-    spat_threads = [Array{Bool}(undef, size(grid)) for _ in 1:Threads.nthreads()]
-    @inbounds Threads.@threads for _ in 1:Threads.nthreads()
-        spat = spat_threads[Threads.threadid()]
-        @simd for i in eachindex(spat)
-            spat[i] = false
-        end
-    end
+    spat_threads = [fill(false, size(grid)) for _ in 1:Threads.nthreads()]
     @inbounds Threads.@threads for x in xₚ
         spat = spat_threads[Threads.threadid()]
         inds = neighboring_nodes(grid, x, 1)
         spat[inds] .= true
     end
     broadcast(|, spat_threads...)
+end
+
+# this seems to be faster when using `reordering_pointstate!`
+function sparsity_pattern(grid::Grid, xₚ::AbstractVector, ptsinblk::AbstractArray{Vector{Int}})
+    spat = falses(size(grid))
+    for color in coloringblocks(size(grid))
+        Threads.@threads for blockindex in color
+            @inbounds for p in ptsinblk[blockindex]
+                inds = neighboring_nodes(grid, xₚ[p], 1)
+                spat[inds] .= true
+            end
+        end
+    end
+    spat
 end
 
 

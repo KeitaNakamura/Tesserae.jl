@@ -1,8 +1,8 @@
-mutable struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
+struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
     shapevalues::Vector{Tshape}
     gridsize::NTuple{dim, Int}
     gridindices::Vector{Vector{Index{dim}}}
-    npoints::Int
+    npoints::Base.RefValue{Int}
     pointsinblock::Array{Vector{Int}, dim}
 end
 
@@ -11,11 +11,11 @@ function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     npoints = length(xₚ)
     shapevalues = [ShapeValues(T, grid.shapefunction) for _ in 1:npoints]
     gridindices = [Index{dim}[] for _ in 1:npoints]
-    MPCache(shapevalues, size(grid), gridindices, npoints, pointsinblock(grid, xₚ))
+    MPCache(shapevalues, size(grid), gridindices, Ref(npoints), pointsinblock(grid, xₚ))
 end
 
 gridsize(cache::MPCache) = cache.gridsize
-npoints(cache::MPCache) = cache.npoints
+npoints(cache::MPCache) = cache.npoints[]
 pointsinblock(cache::MPCache) = cache.pointsinblock
 
 function reordering_pointstate!(pointstate::AbstractVector, cache::MPCache)
@@ -43,12 +43,11 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spat::BitArray{dim} = sparsity_pattern(grid, xₚ)) where {dim}
-    checkshapefunction(grid)
+# pointsinblock in cache must be updated in advance
+function _update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spat::BitArray{dim}) where {dim}
     @assert size(grid) == gridsize(cache)
 
-    cache.npoints = length(xₚ)
-    cache.pointsinblock = pointsinblock(grid, xₚ)
+    cache.npoints[] = length(xₚ)
     allocate!(i -> eltype(cache.shapevalues)(), cache.shapevalues, length(xₚ))
     allocate!(i -> Index{dim}[], cache.gridindices, length(xₚ))
 
@@ -65,6 +64,19 @@ function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spa
     reinit!(gridstate)
 
     cache
+end
+
+function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spat::BitArray{dim}) where {dim}
+    @assert size(grid) == gridsize(cache)
+    pointsinblock!(cache.pointsinblock, grid, xₚ)
+    _update!(cache, grid, xₚ, spat)
+end
+
+function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
+    @assert size(grid) == gridsize(cache)
+    pointsinblock!(cache.pointsinblock, grid, xₚ)
+    spat = sparsity_pattern(grid, xₚ, cache.pointsinblock) # create sparsity_pattern using pointsinblock
+    _update!(cache, grid, xₚ, spat)
 end
 
 ##################
