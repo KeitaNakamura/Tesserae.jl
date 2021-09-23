@@ -70,7 +70,7 @@ end
     @test @inferred(A .* B)::Poingr.SpArray{Float64} == AA .* BB
     @test @inferred(broadcast!(*, A, A, A))::Poingr.SpArray{Float64} == broadcast!(*, AA, AA, AA)
     @test @inferred(broadcast!(*, A, A, B))::Poingr.SpArray{Float64} == broadcast!(*, AA, AA, BB)
-    @test A.spat == A_spat .| B_spat
+    @test A.spat == A_spat # sparsity pattern is never changed in `broadcast`
     @test @inferred(broadcast!(*, A, AA, B, 2))::Poingr.SpArray{Float64} == broadcast!(*, AA, AA, BB, 2)
-    @test all(A.spat)
+    @test A.spat == A_spat # sparsity pattern is never changed in `broadcast`
 end

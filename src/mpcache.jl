@@ -180,7 +180,7 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
         f = -(V0ₚ*det(Fₚ)) * stress_to_force(coord_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, w, v, f
     end
-    @. grid.state.v /= grid.state.w
+    @dot_threads grid.state.v /= grid.state.w
     grid
 end
 

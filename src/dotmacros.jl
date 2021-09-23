@@ -1,7 +1,7 @@
 # https://discourse.julialang.org/t/multithreaded-broadcast/26786/6
 struct ThreadedStyle <: BroadcastStyle end
 function dot_threads end
-Broadcast.broadcasted(f::typeof(dot_threads), x) = Broadcasted{ThreadedStyle}(identity, (x,))
+@inline Broadcast.broadcasted(f::typeof(dot_threads), x) = Broadcasted{ThreadedStyle}(identity, (x,))
 
 @inline function _copyto!(dest::AbstractArray, bc::Broadcasted{ThreadedStyle})
     @assert bc.f === identity
@@ -16,29 +16,7 @@ end
 @inline function Base.copyto!(dest::AbstractArray, bc::Broadcasted{ThreadedStyle})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     _copyto!(dest, bc)
-end
-
-@inline function _threads_copyto!(f, dest::SpArray, args...)
-    if identical_spat(dest, args...)
-        bc = broadcasted(f, args...)
-        _copyto!(dest, broadcasted(dot_threads, bc))
-    else
-        bc = broadcasted(f, args...)
-        bc′ = preprocess(dest, bc)
-        broadcast!(|, dest.mask, getmask.(args)...) # don't use bc′
-        reinit!(dest)
-        @inbounds Threads.@threads for i in eachindex(bc′)
-            if dest.mask[i]
-                dest[i] = bc′[i]
-            end
-        end
-    end
-end
-
-@inline function Base.copyto!(dest::SpArray, bc::Broadcasted{ThreadedStyle})
-    axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
-    bcf = Broadcast.flatten(bc.args[1])
-    _threads_copyto!(bcf.f, dest, bcf.args...)
+    dest
 end
 
 macro dot_threads(ex)

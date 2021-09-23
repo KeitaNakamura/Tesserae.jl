@@ -79,6 +79,7 @@ struct PlaneStrain <: CoordinateSystem end
 struct Axisymmetric <: CoordinateSystem end
 
 include("utils.jl")
+include("dotmacros.jl")
 
 include("ShapeFunctions/shapefunction.jl")
 include("ShapeFunctions/bspline.jl")
@@ -102,7 +103,6 @@ include("MaterialModels/WaterModel.jl")
 include("MaterialModels/NewtonianFluid.jl")
 
 include("async.jl")
-include("dotmacros.jl")
 
 include("logger.jl")
 include("vtk.jl")
