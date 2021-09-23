@@ -84,7 +84,7 @@ end
     x
 end
 
-@inline add!(x::AbstractArray, i::Int, v) = applyat!(+, x, i, v)
+@inline add!(x::AbstractArray, i::Int, v) = (@_propagate_inbounds_meta; applyat!(+, x, i, v))
 
 @generated function initval(::Type{T}) where {T}
     if Base._return_type(zero, (T,)) == Union{}
