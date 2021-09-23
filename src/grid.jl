@@ -230,7 +230,7 @@ blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT
 
 function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
     empty!.(ptsinblk)
-    @inbounds Threads.@threads for p in eachindex(xₚ)
+    @inbounds for p in eachindex(xₚ)
         I = whichblock(grid, xₚ[p])
         I === nothing && continue
         push!(ptsinblk[I], p)
