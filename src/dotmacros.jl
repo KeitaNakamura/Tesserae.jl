@@ -13,6 +13,10 @@ function dot_threads end
     dest
 end
 
+function Base.similar(bc::Broadcasted{ThreadedStyle}, ::Type{ElType}) where {ElType}
+    similar(bc.args[1], ElType)
+end
+
 @inline function Base.copyto!(dest::AbstractArray, bc::Broadcasted{ThreadedStyle})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     _copyto!(dest, bc)
@@ -26,8 +30,11 @@ macro dot_threads(ex)
             break
         end
     end
-    @assert Meta.isexpr(ex, :(=))
-    ex.args[2] = Expr(:call, :(Poingr.dot_threads), ex.args[2])
+    if Meta.isexpr(ex, :(=))
+        ex.args[2] = Expr(:call, :(Poingr.dot_threads), ex.args[2])
+    else
+        ex = Expr(:call, :(Poingr.dot_threads), ex)
+    end
     esc(Broadcast.__dot__(ex))
 end
 
