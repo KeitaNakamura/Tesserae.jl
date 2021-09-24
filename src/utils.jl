@@ -12,15 +12,6 @@ end
 @inline Base.to_indices(A, inds, I::Tuple{Index, Vararg{Any}}) = _to_indices(IndexStyle(A), A, inds, I)
 
 
-interpolate(current::AbstractVector, prev::AbstractVector, α::Real) = broadcast((c,p) -> (1-α)*p + α*c, current, prev)
-@generated function interpolate(x::V, y::V, α::Real) where {names, T, V <: StructVector{T, <: NamedTuple{names}}}
-    exps = [:(interpolate(x.$name, y.$name, α)) for name in names]
-    quote
-        StructVector{T}(($(exps...),))
-    end
-end
-
-
 function Tensor3D(x::SecondOrderTensor{2,T}) where {T}
     z = zero(T)
     @inbounds SecondOrderTensor{3,T}(x[1,1], x[2,1], z, x[1,2], x[2,2], z, z, z, z)
