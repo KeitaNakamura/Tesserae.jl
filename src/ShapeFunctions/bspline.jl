@@ -42,8 +42,8 @@ function value(::BSpline{2, 0}, ξ::Real)
 end
 @inline function value(::BSpline{2, 0}, ξ::Float64)
     ξ = abs(ξ)
-    ξ < 0.5 ? 3/4 - ξ^2      :
-    ξ < 1.5 ? (3 - 2ξ)^2 / 8 : zero(ξ)
+    ξ < 0.5 ? 0.75 - ξ^2         :
+    ξ < 1.5 ? 0.125 * (3 - 2ξ)^2 : zero(ξ)
 end
 
 function value(::BSpline{3, 0}, ξ::Real)
