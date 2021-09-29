@@ -30,7 +30,7 @@ export
     LinearBSpline,
     QuadraticBSpline,
     CubicBSpline,
-    WLS,
+    LinearWLS,
     polynomial,
 # MPCache
     MPCache,

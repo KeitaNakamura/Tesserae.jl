@@ -48,6 +48,8 @@ struct WLS{poly_order, bspline_order, dim} <: ShapeFunction{dim}
     bspline::BSpline{bspline_order, dim}
 end
 
+const LinearWLS{bspline_order, dim} = WLS{1, bspline_order, dim}
+
 WLS{poly_order, bspline_order, dim}() where {poly_order, bspline_order, dim} =
     WLS(Polynomial{poly_order}(), BSpline{bspline_order, dim}())
 

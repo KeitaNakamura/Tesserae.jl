@@ -21,7 +21,7 @@ end
         for dim in 1:2
             grid = Grid(ntuple(i -> 0.0:0.1:5.0, Val(dim)))
             for bspline in (QuadraticBSpline{dim}(), CubicBSpline{dim}(),)
-                it = Poingr.ShapeValues(T, WLS{1}(bspline))
+                it = Poingr.ShapeValues(T, LinearWLS(bspline))
                 for x in Iterators.product(ntuple(i -> 0.0:0.05:5.0, Val(dim))...)
                     update!(it, grid, Vec(x))
                     @test sum(it.N) ≈ 1
