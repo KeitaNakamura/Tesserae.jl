@@ -97,9 +97,10 @@ function update_gridindices!(it::ShapeValues, grid, x::Vec{dim}, spat::BitArray{
     inds = neighboring_nodes(grid, x, support_length(it.F))
     count = 0
     @inbounds for I in inds
-        if spat[I]
+        i = LinearIndices(grid)[I]
+        if spat[i]
             @assert count != length(it.inds)
-            it.inds[count+=1] = Index(grid, I)
+            it.inds[count+=1] = Index(i, I)
         end
     end
     it.len[] = count
