@@ -1,23 +1,23 @@
 """
-    BSpline{order, dim}()
-    LinearBSpline{dim}()
-    QuadraticBSpline{dim}()
-    CubicBSpline{dim}()
+    BSpline{order}()
+    LinearBSpline()
+    QuadraticBSpline()
+    CubicBSpline()
 
 Create B-spline shape function.
 
 # Examples
 ```jldoctest
-julia> f = LinearBSpline{2}()
-LinearBSpline{2}()
+julia> f = LinearBSpline()
+LinearBSpline()
 
-julia> f(Vec(0.5, 0.5))
+julia> Poingr.value(f, Vec(0.5, 0.5))
 0.25
 ```
 """
-struct BSpline{order, dim} <: ShapeFunction{dim}
-    function BSpline{order, dim}() where {order, dim}
-        new{order::Int, dim::Int}()
+struct BSpline{order} <: ShapeFunction
+    function BSpline{order}() where {order}
+        new{order::Int}()
     end
 end
 
@@ -32,42 +32,42 @@ support_length(::BSpline{4}) = 2.5
 
 @pure nnodes(bspline::BSpline, ::Val{dim}) where {dim} = prod(nfill(Int(2*support_length(bspline)), Val(dim)))
 
-function value(::BSpline{1, 0}, ξ::Real)
+function value(::BSpline{1}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
 end
 
-function value(::BSpline{2, 0}, ξ::Real)
+function value(::BSpline{2}, ξ::Real)
     ξ = abs(ξ)
     ξ < 0.5 ? (3 - 4ξ^2) / 4 :
     ξ < 1.5 ? (3 - 2ξ)^2 / 8 : zero(ξ)
 end
-@inline function value(::BSpline{2, 0}, ξ::Float64)
+@inline function value(::BSpline{2}, ξ::Float64)
     ξ = abs(ξ)
     ξ < 0.5 ? 0.75 - ξ^2         :
     ξ < 1.5 ? 0.125 * (3 - 2ξ)^2 : zero(ξ)
 end
 
-function value(::BSpline{3, 0}, ξ::Real)
+function value(::BSpline{3}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
     ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
 end
-@inline function value(::BSpline{3, 0}, ξ::Float64)
+@inline function value(::BSpline{3}, ξ::Float64)
     ξ = abs(ξ)
     ξ < 1 ? ξ^3/2 - ξ^2 + 2/3 :
     ξ < 2 ? (2 - ξ)^3 / 6     : zero(ξ)
 end
 
-function value(::BSpline{4, 0}, ξ::Real)
+function value(::BSpline{4}, ξ::Real)
     ξ = abs(ξ)
     ξ < 0.5 ? (48ξ^4 - 120ξ^2 + 115) / 192 :
     ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
     ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
 
-@generated function value(::BSpline{order, dim}, ξ::Vec{dim}) where {order, dim}
-    exps = [:(value(BSpline{order, 0}(), ξ[$i])) for i in 1:dim]
+@generated function value(bspline::BSpline, ξ::Vec{dim}) where {dim}
+    exps = [:(value(bspline, ξ[$i])) for i in 1:dim]
     quote
         @_inline_meta
         *($(exps...))
@@ -91,10 +91,10 @@ BSplinePosition(nth = 1, dir = -1)
 julia> pos = Poingr.BSplinePosition([1,2,3,4,5], 1)
 BSplinePosition(nth = 0, dir = 0)
 
-julia> f = QuadraticBSpline{0}()
-QuadraticBSpline{0}()
+julia> f = QuadraticBSpline()
+QuadraticBSpline()
 
-julia> f(0.0, pos)
+julia> Poingr.value(f, 0.0, pos)
 1.0
 ```
 """
@@ -133,11 +133,11 @@ BSplinePosition(A::AbstractArray{<: Any, dim}, I::Index{dim}) where {dim} =
 nthfrombound(pos::BSplinePosition) = pos.nth
 dirfrombound(pos::BSplinePosition) = pos.dir
 
-function value(spline::BSpline{1, 0}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
+function value(spline::BSpline{1}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
     value(spline, ξ)
 end
 
-function value(spline::BSpline{2, 0}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
+function value(spline::BSpline{2}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
     if nthfrombound(pos) == 0
         ξ = abs(ξ)
         ξ < 0.5 ? (3 - 4ξ^2) / 3 :
@@ -153,7 +153,7 @@ function value(spline::BSpline{2, 0}, ξ::Real, pos::BSplinePosition)::typeof(ξ
     end
 end
 
-function value(spline::BSpline{3, 0}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
+function value(spline::BSpline{3}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
     if nthfrombound(pos) == 0
         ξ = abs(ξ)
         ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 4 :
@@ -169,8 +169,8 @@ function value(spline::BSpline{3, 0}, ξ::Real, pos::BSplinePosition)::typeof(ξ
     end
 end
 
-@inline function value(::BSpline{order, dim}, ξ::Vec{dim}, pos::NTuple{dim, BSplinePosition}) where {order, dim}
-    prod(value.(BSpline{order, 0}(), ξ, pos))
+@inline function value(bspline::BSpline, ξ::Vec{dim}, pos::NTuple{dim, BSplinePosition}) where {dim}
+    prod(value.(Ref(bspline), ξ, pos))
 end
 
 function Base.show(io::IO, pos::BSplinePosition)
@@ -179,7 +179,7 @@ end
 
 
 struct BSplineValues{order, dim, T, L} <: ShapeValues{dim, T}
-    F::BSpline{order, dim}
+    F::BSpline{order}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
     inds::MVector{L, Index{dim}}
@@ -190,10 +190,10 @@ function BSplineValues{order, dim, T, L}() where {order, dim, T, L}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
     inds = MVector{L, Index{dim}}(undef)
-    BSplineValues(BSpline{order, dim}(), N, ∇N, inds, Ref(0))
+    BSplineValues(BSpline{order}(), N, ∇N, inds, Ref(0))
 end
 
-function ShapeValues(::Type{T}, F::BSpline{order, dim}) where {order, dim, T}
+function ShapeValues{dim, T}(F::BSpline{order}) where {order, dim, T}
     L = nnodes(F, Val(dim))
     BSplineValues{order, dim, T, L}()
 end
@@ -225,9 +225,10 @@ end
 struct BSplineValue{dim, T}
     N::T
     ∇N::Vec{dim, T}
+    index::Index{dim}
 end
 
 @inline function Base.getindex(it::BSplineValues, i::Int)
     @_propagate_inbounds_meta
-    BSplineValue(it.N[i], it.∇N[i])
+    BSplineValue(it.N[i], it.∇N[i], it.inds[i])
 end

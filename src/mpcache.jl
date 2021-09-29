@@ -8,7 +8,7 @@ end
 function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     checkshapefunction(grid)
     npoints = length(xₚ)
-    shapevalues = [ShapeValues(T, grid.shapefunction) for _ in 1:npoints]
+    shapevalues = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:npoints]
     MPCache(shapevalues, size(grid), Ref(npoints), pointsinblock(grid, xₚ))
 end
 
