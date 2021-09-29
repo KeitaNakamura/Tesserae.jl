@@ -59,12 +59,14 @@ weight_function(wls::WLS) = wls.bspline
 support_length(wls::WLS) = support_length(weight_function(wls))
 
 
-struct WLSValues{poly_order, bspline_order, dim, T, L, M} <: ShapeValues{dim, T}
+struct WLSValues{poly_order, bspline_order, dim, T, L, M, O} <: ShapeValues{dim, T}
     F::WLS{poly_order, bspline_order, dim}
-    N::Vector{T}
-    ∇N::Vector{Vec{dim, T}}
-    w::Vector{T}
-    M⁻¹::Base.RefValue{Mat{L, L, T, M}}
+    N::MVector{L, T}
+    ∇N::MVector{L, Vec{dim, T}}
+    w::MVector{L, T}
+    M⁻¹::Base.RefValue{Mat{M, M, T, O}}
+    inds::MVector{L, Index{dim}}
+    len::Base.RefValue{Int}
 end
 
 polynomial(it::WLSValues) = polynomial(it.F)
@@ -73,49 +75,52 @@ weight_function(it::WLSValues) = weight_function(it.F)
 weight_value(it::WLSValues) = Collection{1}(it.w)
 moment_matrix_inverse(it::WLSValues) = it.M⁻¹[]
 
-function WLSValues{poly_order, bspline_order, dim, T, L, M}() where {poly_order, bspline_order, dim, T, L, M}
-    N = Vector{T}(undef, 0)
-    ∇N = Vector{Vec{dim, T}}(undef, 0)
-    w = Vector{T}(undef, 0)
-    M⁻¹ = zero(Mat{L, L, T, M})
-    WLSValues(WLS{poly_order, bspline_order, dim}(), N, ∇N, w, Ref(M⁻¹))
+function WLSValues{poly_order, bspline_order, dim, T, L, M, O}() where {poly_order, bspline_order, dim, T, L, M, O}
+    N = MVector{L, T}(undef)
+    ∇N = MVector{L, Vec{dim, T}}(undef)
+    w = MVector{L, T}(undef)
+    M⁻¹ = zero(Mat{M, M, T, O})
+    inds = MVector{L, Index{dim}}(undef)
+    WLSValues(WLS{poly_order, bspline_order, dim}(), N, ∇N, w, Ref(M⁻¹), inds, Ref(0))
 end
 
 function ShapeValues(::Type{T}, F::WLS{poly_order, bspline_order, dim}) where {poly_order, bspline_order, dim, T}
     p = polynomial(F)
-    L = length(p(zero(Vec{dim, T})))
-    WLSValues{poly_order, bspline_order, dim, T, L, L^2}()
+    M = length(p(zero(Vec{dim, T})))
+    L = nnodes(weight_function(F), Val(dim))
+    WLSValues{poly_order, bspline_order, dim, T, L, M, M^2}()
 end
 
-function update!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
-    @boundscheck checkbounds(grid, indices)
-    resize!(it.N, length(indices))
-    resize!(it.∇N, length(indices))
-    resize!(it.w, length(indices))
+function update!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+    update_gridindices!(it, grid, x, spat)
+    it.N .= zero(it.N)
+    it.∇N .= zero(it.∇N)
+    it.w .= zero(it.w)
     F = weight_function(it)
     P = polynomial(it)
     M = zero(it.M⁻¹[])
-    @inbounds @simd for i in 1:length(indices)
-        I = indices[i]
+    @inbounds @simd for i in 1:length(it)
+        I = it.inds[i]
         xᵢ = grid[I]
         ξ = (x - xᵢ) ./ gridsteps(grid)
         it.w[i] = F(ξ)
     end
-    @inbounds @simd for i in 1:length(indices)
-        I = indices[i]
+    @inbounds @simd for i in 1:length(it)
+        I = it.inds[i]
         xᵢ = grid[I]
         p = P(xᵢ - x)
         M += it.w[i] * p ⊗ p
     end
     it.M⁻¹[] = inv(M)
-    @inbounds @simd for i in 1:length(indices)
-        I = indices[i]
+    @inbounds @simd for i in 1:length(it)
+        I = it.inds[i]
         xᵢ = grid[I]
         q = it.M⁻¹[] ⋅ P(xᵢ - x)
         wq = it.w[i] * q
         it.N[i] = wq ⋅ P(x - x)
         it.∇N[i] = wq ⋅ P'(x - x)
     end
+    it
 end
 
 
@@ -124,9 +129,10 @@ struct WLSValue{dim, T, L, M}
     ∇N::Vec{dim, T}
     w::T
     M⁻¹::Mat{L, L, T, M}
+    index::Index{dim}
 end
 
 @inline function Base.getindex(it::WLSValues, i::Int)
     @_propagate_inbounds_meta
-    WLSValue(it.N[i], it.∇N[i], it.w[i], it.M⁻¹[])
+    WLSValue(it.N[i], it.∇N[i], it.w[i], it.M⁻¹[], it.inds[i])
 end

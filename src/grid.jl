@@ -87,29 +87,14 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
     xmin = gridorigin(grid)
     ξ = Tuple((x - xmin) ./ dx)
     all(@. 0 ≤ ξ ≤ $size(grid)-1) || return CartesianIndices(ntuple(d->1:0, Val(dim)))
-    inds = CartesianIndices(@. UnitRange(unsafe_trunc(Int,  ceil(ξ - h))+1,
-                                         unsafe_trunc(Int, floor(ξ + h))+1))
+    imin = @. unsafe_trunc(Int,  ceil(ξ - h)) + 1
+    imax = @. imin + unsafe_trunc(Int, ceil(2h)) - 1
+    inds = CartesianIndices(@. UnitRange(imin, imax))
     CartesianIndices(grid) ∩ inds
 end
 @inline function neighboring_nodes(grid::Grid, x::Vec)
     checkshapefunction(grid)
     neighboring_nodes(grid, x, support_length(grid.shapefunction))
-end
-
-function update!(gridindices::Vector{Index{dim}}, grid::Grid{dim}, x::Vec{dim}, spat::BitArray{dim}) where {dim}
-    inds = neighboring_nodes(grid, x)
-    cnt = 0
-    @inbounds @simd for I in inds
-        cnt += ifelse(spat[I], 1, 0)
-    end
-    resize!(gridindices, cnt)
-    cnt = 0
-    @inbounds for I in inds
-        if spat[I]
-            gridindices[cnt+=1] = Index(grid, I)
-        end
-    end
-    gridindices
 end
 
 
@@ -277,7 +262,6 @@ end
 Base.size(x::BlockStepIndices) = size(x.inds)
 Base.getindex(x::BlockStepIndices{N}, i::Vararg{Int, N}) where {N} = (@_propagate_inbounds_meta; CartesianIndex(x.inds[i...]))
 
-nfill(v, ::Val{N}) where {N} = ntuple(d -> v, Val(N))
 function coloringblocks(dims::NTuple{dim, Int}) where {dim}
     ncells = dims .- 1
     starts = SArray{NTuple{dim, 2}}(Iterators.ProductIterator(nfill((1,2), Val(dim)))...)

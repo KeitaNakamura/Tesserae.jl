@@ -30,6 +30,8 @@ support_length(::BSpline{2}) = 1.5
 support_length(::BSpline{3}) = 2.0
 support_length(::BSpline{4}) = 2.5
 
+@pure nnodes(bspline::BSpline, ::Val{dim}) where {dim} = prod(nfill(Int(2*support_length(bspline)), Val(dim)))
+
 function value(::BSpline{1, 0}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
@@ -176,27 +178,33 @@ function Base.show(io::IO, pos::BSplinePosition)
 end
 
 
-struct BSplineValues{order, dim, T} <: ShapeValues{dim, T}
+struct BSplineValues{order, dim, T, L} <: ShapeValues{dim, T}
     F::BSpline{order, dim}
-    N::Vector{T}
-    ∇N::Vector{Vec{dim, T}}
+    N::MVector{L, T}
+    ∇N::MVector{L, Vec{dim, T}}
+    inds::MVector{L, Index{dim}}
+    len::Base.RefValue{Int}
 end
 
-function BSplineValues{order, dim, T}() where {order, dim, T}
-    N = Vector{T}(undef, 0)
-    ∇N = Vector{Vec{dim, T}}(undef, 0)
-    BSplineValues(BSpline{order, dim}(), N, ∇N)
+function BSplineValues{order, dim, T, L}() where {order, dim, T, L}
+    N = MVector{L, T}(undef)
+    ∇N = MVector{L, Vec{dim, T}}(undef)
+    inds = MVector{L, Index{dim}}(undef)
+    BSplineValues(BSpline{order, dim}(), N, ∇N, inds, Ref(0))
 end
 
-ShapeValues(::Type{T}, F::BSpline{order, dim}) where {order, dim, T} = BSplineValues{order, dim, T}()
+function ShapeValues(::Type{T}, F::BSpline{order, dim}) where {order, dim, T}
+    L = nnodes(F, Val(dim))
+    BSplineValues{order, dim, T, L}()
+end
 
-function update!(it::BSplineValues{<: Any, dim}, grid, x::Vec{dim}, indices::AbstractArray = CartesianIndices(grid)) where {dim}
-    @boundscheck checkbounds(grid, indices)
+function update!(it::BSplineValues{<: Any, dim}, grid, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+    update_gridindices!(it, grid, x, spat)
+    it.N .= zero(it.N)
+    it.∇N .= zero(it.∇N)
     F = it.F
-    resize!(it.N, length(indices))
-    resize!(it.∇N, length(indices))
-    @inbounds @simd for i in 1:length(indices)
-        I = indices[i]
+    @inbounds @simd for i in 1:length(it)
+        I = it.inds[i]
         xᵢ = grid[I]
         it.N[i], it.∇N[i] = _value_gradient(F, x, xᵢ, gridsteps(grid), BSplinePosition(grid, I))
     end

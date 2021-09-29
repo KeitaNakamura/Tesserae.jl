@@ -1,6 +1,6 @@
 module Poingr
 
-using Base: @_inline_meta, @_propagate_inbounds_meta
+using Base: @_inline_meta, @_propagate_inbounds_meta, @pure
 using Base.Cartesian: @ntuple, @nall
 
 using Base.Broadcast: Broadcasted, BroadcastStyle, AbstractArrayStyle, ArrayStyle, broadcasted, broadcastable, throwdm, preprocess

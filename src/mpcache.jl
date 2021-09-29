@@ -1,7 +1,6 @@
 struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
     shapevalues::Vector{Tshape}
     gridsize::NTuple{dim, Int}
-    gridindices::Vector{Vector{Index{dim}}}
     npoints::Base.RefValue{Int}
     pointsinblock::Array{Vector{Int}, dim}
 end
@@ -10,8 +9,7 @@ function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     checkshapefunction(grid)
     npoints = length(xₚ)
     shapevalues = [ShapeValues(T, grid.shapefunction) for _ in 1:npoints]
-    gridindices = [Index{dim}[] for _ in 1:npoints]
-    MPCache(shapevalues, size(grid), gridindices, Ref(npoints), pointsinblock(grid, xₚ))
+    MPCache(shapevalues, size(grid), Ref(npoints), pointsinblock(grid, xₚ))
 end
 
 gridsize(cache::MPCache) = cache.gridsize
@@ -49,14 +47,9 @@ function _update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, sp
 
     cache.npoints[] = length(xₚ)
     allocate!(i -> eltype(cache.shapevalues)(), cache.shapevalues, length(xₚ))
-    allocate!(i -> Index{dim}[], cache.gridindices, length(xₚ))
 
-    @inbounds Threads.@threads for p in eachindex(xₚ)
-        x = xₚ[p]
-        gridindices = cache.gridindices[p]
-        shapevalues = cache.shapevalues[p]
-        update!(gridindices, grid, x, spat)
-        update!(shapevalues, grid, x, gridindices)
+    Threads.@threads for p in eachindex(xₚ)
+        @inbounds update!(cache.shapevalues[p], grid, xₚ[p], spat)
     end
 
     gridstate = grid.state
@@ -83,12 +76,12 @@ end
 # point_to_grid! #
 ##################
 
-@generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, shapevalues::ShapeValues, gridindices::Vector{<: Index}, p::Int) where {N}
+@generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, shapevalues::ShapeValues, p::Int) where {N}
     exps = [:(add!(gridstates[$i], I.i, res[$i])) for i in 1:N]
     quote
-        @inbounds @simd for i in eachindex(shapevalues, gridindices)
+        @inbounds @simd for i in eachindex(shapevalues)
             it = shapevalues[i]
-            I = gridindices[i]
+            I = it.index
             res = p2g(it, p, I)
             $(exps...)
         end
@@ -102,7 +95,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
         Threads.@threads for blockindex in color
             @inbounds for p in pointsinblock(cache)[blockindex]
                 pointmask !== nothing && !pointmask[p] && continue
-                _point_to_grid!(p2g, gridstates, cache.shapevalues[p], cache.gridindices[p], p)
+                _point_to_grid!(p2g, gridstates, cache.shapevalues[p], p)
             end
         end
     end
@@ -114,16 +107,12 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Gri
     ptsinblk = pointsinblock(grid, xₚ)
     spat = sparsity_pattern(grid, xₚ)
     shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
-    gridindices_threads = [Index{dim}[] for _ in 1:Threads.nthreads()]
     for color in coloringblocks(size(grid))
         Threads.@threads for blockindex in color
             shapevalues = shapevalues_threads[Threads.threadid()]
-            gridindices = gridindices_threads[Threads.threadid()]
             for p in ptsinblk[blockindex]
-                x = xₚ[p]
-                update!(gridindices, grid, x, spat)
-                update!(shapevalues, grid, x, gridindices)
-                _point_to_grid!(p2g, gridstates, shapevalues, gridindices, p)
+                update!(shapevalues, grid, xₚ[p], spat)
+                _point_to_grid!(p2g, gridstates, shapevalues, p)
             end
         end
     end
@@ -188,12 +177,12 @@ end
 # grid_to_point! #
 ##################
 
-@generated function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, shapevalues::ShapeValues, gridindices::Vector{<: Index}, p::Int) where {N}
+@generated function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, shapevalues::ShapeValues, p::Int) where {N}
     quote
         vals = tuple($([:(zero(eltype(pointstates[$i]))) for i in 1:N]...))
-        @inbounds @simd for i in eachindex(shapevalues, gridindices)
+        @inbounds @simd for i in eachindex(shapevalues)
             it = shapevalues[i]
-            I = gridindices[i]
+            I = it.index
             res = g2p(it, I, p)
             vals = tuple($([:(vals[$i] + res[$i]) for i in 1:N]...))
         end
@@ -206,7 +195,7 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, cache::
     pointmask !== nothing && @assert length(pointmask) == npoints(cache)
     @inbounds Threads.@threads for p in 1:npoints(cache)
         pointmask !== nothing && !pointmask[p] && continue
-        _grid_to_point!(g2p, pointstates, cache.shapevalues[p], cache.gridindices[p], p)
+        _grid_to_point!(g2p, pointstates, cache.shapevalues[p], p)
     end
     pointstates
 end
@@ -215,14 +204,10 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, grid::G
     @assert all(==(length(xₚ)), length.(pointstates))
     spat = sparsity_pattern(grid, xₚ)
     shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
-    gridindices_threads = [Index{dim}[] for _ in 1:Threads.nthreads()]
     Threads.@threads for p in 1:length(xₚ)
-        x = xₚ[p]
         shapevalues = shapevalues_threads[Threads.threadid()]
-        gridindices = gridindices_threads[Threads.threadid()]
-        update!(gridindices, grid, x, spat)
-        update!(shapevalues, grid, x, gridindices)
-        _grid_to_point!(g2p, pointstates, shapevalues, gridindices, p)
+        update!(shapevalues, grid, xₚ[p], spat)
+        _grid_to_point!(g2p, pointstates, shapevalues, p)
     end
     pointstates
 end

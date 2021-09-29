@@ -43,7 +43,7 @@ value(∇f::GradientShapeFunction{dim}, ξ::Vec{dim}, args...) where {dim} = gra
 
 abstract type ShapeValues{dim, T} <: AbstractVector{T} end
 
-Base.size(x::ShapeValues) = size(x.N)
+Base.size(x::ShapeValues) = (x.len[],)
 
 """
     Poingr.ShapeValues(::ShapeFunction)
@@ -90,3 +90,18 @@ julia> sum(sv.N)
 ```
 """
 update!
+
+update!(it::ShapeValues, grid, x::Vec) = update!(it, grid, x, trues(size(grid)))
+
+function update_gridindices!(it::ShapeValues, grid, x::Vec{dim}, spat::BitArray{dim}) where {dim}
+    inds = neighboring_nodes(grid, x, support_length(it.F))
+    count = 0
+    @inbounds for I in inds
+        if spat[I]
+            @assert count != length(it.inds)
+            it.inds[count+=1] = Index(grid, I)
+        end
+    end
+    it.len[] = count
+    it
+end
