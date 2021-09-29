@@ -5,6 +5,7 @@ struct LinearElastic{T} <: MaterialModel
     λ::T
     ν::T
     D::SymmetricFourthOrderTensor{3, T, 36}
+    Dinv::SymmetricFourthOrderTensor{3, T, 36}
 end
 
 function LinearElastic(; kwargs...)
@@ -76,7 +77,8 @@ function LinearElastic(; kwargs...)
     T = promote_type(typeof.((G, ν, K, E, λ))...)
     δ = one(SymmetricSecondOrderTensor{3, T})
     I = one(SymmetricFourthOrderTensor{3, T})
-    LinearElastic(E, K, G, λ, ν, λ * δ ⊗ δ + 2G * I)
+    D = λ * δ ⊗ δ + 2G * I
+    LinearElastic(E, K, G, λ, ν, D, inv(D))
 end
 
 function update_stress(model::LinearElastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
