@@ -16,7 +16,8 @@ gridsize(cache::MPCache) = cache.gridsize
 npoints(cache::MPCache) = cache.npoints[]
 pointsinblock(cache::MPCache) = cache.pointsinblock
 
-function reordering_pointstate!(pointstate::AbstractVector, cache::MPCache)
+function reorder_pointstate!(pointstate::AbstractVector, cache::MPCache)
+    @assert length(pointstate) == npoints(cache)
     inds = Vector{Int}(undef, length(pointstate))
     cnt = 1
     for block in pointsinblock(cache)
@@ -26,7 +27,7 @@ function reordering_pointstate!(pointstate::AbstractVector, cache::MPCache)
             cnt += 1
         end
     end
-    @. pointstate = pointstate[inds]
+    @inbounds @. pointstate = pointstate[inds]
     pointstate
 end
 
