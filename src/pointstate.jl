@@ -26,7 +26,7 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coord_sy
         end
     end
     if :side_length in propertynames(pointstate)
-        pointstate.h .= Vec(h)
+        pointstate.side_length .= Vec(h)
     end
     if :index in propertynames(pointstate)
         pointstate.index .= 1:npoints
