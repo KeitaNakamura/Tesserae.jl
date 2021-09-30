@@ -107,7 +107,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Gri
     @assert all(==(size(grid)), size.(gridstates))
     ptsinblk = pointsinblock(grid, xₚ)
     spat = sparsity_pattern(grid, xₚ)
-    shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
+    shapevalues_threads = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:Threads.nthreads()]
     for color in coloringblocks(size(grid))
         Threads.@threads for blockindex in color
             shapevalues = shapevalues_threads[Threads.threadid()]
@@ -204,7 +204,7 @@ end
 function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     @assert all(==(length(xₚ)), length.(pointstates))
     spat = sparsity_pattern(grid, xₚ)
-    shapevalues_threads = [ShapeValues(T, grid.shapefunction) for _ in 1:Threads.nthreads()]
+    shapevalues_threads = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:Threads.nthreads()]
     Threads.@threads for p in 1:length(xₚ)
         shapevalues = shapevalues_threads[Threads.threadid()]
         update!(shapevalues, grid, xₚ[p], spat)
