@@ -9,7 +9,7 @@ struct LinearElastic{T} <: MaterialModel
 end
 
 function LinearElastic(; kwargs...)
-    params = kwargs.data
+    params = values(kwargs)
     if haskey(params, :K)
         K = params.K
         if haskey(params, :E)
