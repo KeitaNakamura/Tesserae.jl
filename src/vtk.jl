@@ -27,7 +27,13 @@ end
 
 function vtk_points(f::Function, vtk, x)
     vtk = vtk_points(vtk, x)
-    f(vtk)
+    local outfile::Vector{String}
+    try
+        f(vtk)
+    finally
+        outfile = vtk_save(vtk)
+    end
+    outfile
 end
 
 """
@@ -51,12 +57,7 @@ function WriteVTK.vtk_grid(vtk::AbstractString, grid::Grid)
     vtk_grid(vtk, map(collect, gridaxes(grid))...)
 end
 
-"""
-    vtk_point_data(vtk, data::AbstractVector{<: Vec}, name)
-
-Write the vector field data to the `vtk` file.
-"""
-function WriteVTK.vtk_point_data(vtk::WriteVTK.DatasetFile, data::AbstractVector{<: Tensor}, name::AbstractString)
+function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractVector{<: Tensor}, name::AbstractString, ::WriteVTK.VTKPointData)
     vtk_point_data(vtk, vtk_format(data), name)
 end
 
