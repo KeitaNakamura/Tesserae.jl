@@ -139,7 +139,7 @@ end
 @inline function stress_to_force(coordinate_system::Symbol, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
     f = Tensor2D(σ) ⋅ ∇N
     if coordinate_system == :axisymmetric
-        @inbounds f += Tensor2D(σ) ⋅ ∇N + Vec(1,0)*σ[3,3]*N/x[1]
+        @inbounds f += Vec(1,0)*σ[3,3]*N/x[1]
     end
     f
 end
