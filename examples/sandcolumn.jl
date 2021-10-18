@@ -1,3 +1,5 @@
+module SandColumn
+
 using Poingr
 
 struct NodeState
@@ -21,7 +23,7 @@ struct PointState
     C::Mat{2, 3, Float64, 6}
 end
 
-function main()
+function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool = true)
     ρ₀ = 1.6e3
     g = 9.81
     h = 0.3
@@ -31,7 +33,7 @@ function main()
     E = 1e6
     dx = 0.005
 
-    grid = Grid(NodeState, LinearWLS(CubicBSpline()), 0:dx:1.0, 0:dx:1.0)
+    grid = Grid(NodeState, shape_function, 0:dx:1.0, 0:dx:1.0)
     pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, PointState, grid)
     cache = MPCache(grid, pointstate.x)
     elastic = LinearElastic(E = E, ν = ν)
@@ -64,7 +66,7 @@ function main()
     ## copy this file
     cp(@__FILE__, joinpath(proj_dir, "main.jl"), force = true)
 
-    logger = Logger(0.0:0.01:0.6; progress = true)
+    logger = Logger(0.0:0.01:0.6; progress = show_progress)
 
     t = 0.0
     while !isfinised(logger, t)
@@ -88,6 +90,7 @@ function main()
             σ = update_stress(model, pointstate.σ[p], symmetric(pointstate.∇v[p]) * dt)
             σ = Poingr.jaumann_stress(σ, pointstate.σ[p], pointstate.∇v[p], dt)
             if mean(σ) > 0
+                σ = zero(σ)
                 ϵv = tr(elastic.Dinv ⊡ (σ - pointstate.σ0[p]))
                 J = exp(ϵv)
                 pointstate.F[p] = J^(1/3) * one(pointstate.F[p])
@@ -120,8 +123,10 @@ end
 
 function boundary_velocity(v::Vec, n::Vec)
     if n == Vec(0, -1) # bottom
-        v + Contact(:friction, 0.3)(v, n)
+        v + Contact(:friction, 0.2)(v, n)
     else
         v + Contact(:slip)(v, n)
     end
+end
+
 end
