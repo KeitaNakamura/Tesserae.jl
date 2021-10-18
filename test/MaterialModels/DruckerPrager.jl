@@ -1,6 +1,6 @@
 @testset "DruckerPrager" begin
     for elastic in (LinearElastic(E = 1e6, ν = 0.3),
-                    SoilElastic(κ = 0.019, α = 40.0, p_ref = -1.0, μ_ref = 10.0),)
+                    SoilHyperelastic(κ = 0.019, α = 40.0, p_ref = -1.0, μ_ref = 10.0),)
         for mc_type in (:circumscribed, :inscribed, :plane_strain)
             Random.seed!(1234)
             steps = 100

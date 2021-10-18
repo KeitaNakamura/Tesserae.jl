@@ -85,3 +85,7 @@ function update_stress(model::LinearElastic, σ::SymmetricSecondOrderTensor{3}, 
     @_inline_meta
     σ + model.D ⊡ dϵ
 end
+
+function compute_stiffness_tensor(model::LinearElastic, σ::SymmetricSecondOrderTensor{3})
+    model.D
+end

@@ -1,5 +1,5 @@
-@testset "SoilElastic" begin
-    model = SoilElastic(κ = 0.01, α = 40.0, p_ref = -98.0, μ_ref = 6000.0)
+@testset "SoilHyperelastic" begin
+    model = SoilHyperelastic(κ = 0.01, α = 40.0, p_ref = -98.0, μ_ref = 6000.0)
     ϵᵉ = -rand(SymmetricSecondOrderTensor{3}) * 0.01
     σ = (@inferred Poingr.compute_stress(model, ϵᵉ))
     @test (@inferred Poingr.compute_elastic_strain(model, σ)) ≈ ϵᵉ

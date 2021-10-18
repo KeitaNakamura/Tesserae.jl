@@ -1,4 +1,4 @@
-struct DruckerPrager{T, Elastic <: Union{LinearElastic{T}, SoilElastic{T}}} <: MaterialModel
+struct DruckerPrager{T, Elastic <: Union{LinearElastic{T}, SoilHypoelastic{T}, SoilHyperelastic{T}}} <: MaterialModel
     elastic::Elastic
     A::T
     B::T
@@ -31,9 +31,9 @@ function DruckerPrager(elastic, mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = �
     DruckerPrager(elastic; A, B, b)
 end
 
-function update_stress(model::DruckerPrager{<: Any, <: LinearElastic}, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
+function update_stress(model::DruckerPrager{<: Any, <: Union{LinearElastic, SoilHypoelastic}}, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
     # compute the stress at the elastic trial state
-    De = model.elastic.D
+    De = compute_stiffness_tensor(model.elastic, σ)
     σ_trial = σ + De ⊡ dϵ
     # compute the yield function at the elastic trial state
     dfdσ, f_trial = gradient(σ_trial -> yield_function(model, σ_trial), σ_trial, :all)
@@ -45,7 +45,7 @@ function update_stress(model::DruckerPrager{<: Any, <: LinearElastic}, σ::Symme
     σ_trial - Δγ * (De ⊡ dgdσ)
 end
 
-function update_stress(model::DruckerPrager{<: Any, <: SoilElastic}, σ::SymmetricSecondOrderTensor{3, T}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ) where {T}
+function update_stress(model::DruckerPrager{<: Any, <: SoilHyperelastic}, σ::SymmetricSecondOrderTensor{3, T}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ) where {T}
     # compute the stress at the elastic trial state
     ϵᵉ = compute_elastic_strain(model.elastic, σ)
     ϵᵉ_trial = ϵᵉ + dϵ
