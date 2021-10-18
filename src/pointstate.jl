@@ -1,4 +1,4 @@
-function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coord_system::CoordinateSystem = DefaultCoordinateSystem(); n::Int = 2) where {dim, T}
+function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
     h = gridsteps(grid) ./ n # length per particle
     allpoints = Grid(@. LinRange(
         first($gridaxes(grid)) + h/2,
@@ -19,7 +19,7 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coord_sy
     end
     if :V0 in propertynames(pointstate)
         V = prod(h)
-        if dim == 2 && coord_system isa Axisymmetric
+        if dim == 2 && grid.coordinate_system == :axisymmetric
             @. pointstate.V0 = getindex(pointstate.x, 1) * V
         else
             @. pointstate.V0 = V
@@ -35,6 +35,6 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}, coord_sy
     pointstate
 end
 
-function generate_pointstate(indomain, grid::Grid{dim, T}, coord_system::CoordinateSystem = DefaultCoordinateSystem(); n::Int = 2) where {dim, T}
-    generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V0::T, side_length::Vec{dim, T}, index::Int}, grid, coord_system; n)
+function generate_pointstate(indomain, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
+    generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V0::T, side_length::Vec{dim, T}, index::Int}, grid; n)
 end

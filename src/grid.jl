@@ -18,6 +18,7 @@ struct Grid{dim, T, F <: Union{Nothing, ShapeFunction}, Node, State <: SpArray{N
     coordinates::Coordinate{dim, NTuple{dim, T}, NTuple{dim, Vector{T}}}
     gridsteps::NTuple{dim, T}
     state::State
+    coordinate_system::Symbol
 end
 
 Base.size(x::Grid) = map(length, gridaxes(x))
@@ -30,21 +31,41 @@ gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 checkshapefunction(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of shape function, see help `?Grid` for more details."))
 checkshapefunction(::Grid{<: Any, <: Any, <: ShapeFunction}) = nothing
 
-function Grid(::Type{Node}, shapefunction, coordinates::Coordinate) where {Node}
+not_supported_coordinate_system(coordinate_system) =
+    throw(ArgumentError("coordinate system `$(coordinate_system)` is not supported, use `:normal` in 1D and 3D, and `:plane_strain` or `:axisymmetric` in 2D."))
+function Grid(::Type{Node}, shapefunction, coordinates::Coordinate{dim}; coordinate_system = nothing) where {Node, dim}
     state = SpArray(StructVector{Node}(undef, 0), SpPattern(size(coordinates)))
     axes = coordinateaxes(coordinates)
-    Grid(shapefunction, Coordinate(Array.(axes)), map(step, axes), state)
+    if coordinate_system !== nothing
+        coordinate_system = Symbol(coordinate_system) # handle string
+        if dim == 2
+            if coordinate_system != :plane_strain && coordinate_system != :axisymmetric
+                not_supported_coordinate_system(coordinate_system)
+            end
+        else
+            if coordinate_system != :normal
+                not_supported_coordinate_system(coordinate_system)
+            end
+        end
+    else
+        if dim == 2
+            coordinate_system = :plane_strain
+        else
+            coordinate_system = :normal
+        end
+    end
+    Grid(shapefunction, Coordinate(Array.(axes)), map(step, axes), state, coordinate_system)
 end
 
-Grid(::Type{Node}, shapefunction, axes::Tuple{Vararg{AbstractVector}}) where {Node} = Grid(Node, shapefunction, Coordinate(axes))
-Grid(::Type{Node}, axes::Tuple{Vararg{AbstractVector}}) where {Node} = Grid(Node, nothing, axes)
-Grid(shapefunction, axes::Tuple{Vararg{AbstractVector}}) = Grid(Nothing, shapefunction, axes)
-Grid(axes::Tuple{Vararg{AbstractVector}}) = Grid(Nothing, nothing, axes)
+Grid(::Type{Node}, shapefunction, axes::Tuple{Vararg{AbstractVector}}; kwargs...) where {Node} = Grid(Node, shapefunction, Coordinate(axes); kwargs...)
+Grid(::Type{Node}, axes::Tuple{Vararg{AbstractVector}}; kwargs...) where {Node} = Grid(Node, nothing, axes; kwargs...)
+Grid(shapefunction, axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(Nothing, shapefunction, axes; kwargs...)
+Grid(axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
 
-Grid(Node::Type, shapefunction, axes::AbstractVector...) = Grid(Node, shapefunction, axes)
-Grid(Node::Type, axes::AbstractVector...) = Grid(Node, nothing, axes)
-Grid(shapefunction, axes::AbstractVector...) = Grid(Nothing, shapefunction, axes)
-Grid(axes::AbstractVector...) = Grid(Nothing, nothing, axes)
+Grid(Node::Type, shapefunction, axes::AbstractVector...; kwargs...) = Grid(Node, shapefunction, axes; kwargs...)
+Grid(Node::Type, axes::AbstractVector...; kwargs...) = Grid(Node, nothing, axes; kwargs...)
+Grid(shapefunction, axes::AbstractVector...; kwargs...) = Grid(Nothing, shapefunction, axes; kwargs...)
+Grid(axes::AbstractVector...; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
 
 @inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(grid, i...)

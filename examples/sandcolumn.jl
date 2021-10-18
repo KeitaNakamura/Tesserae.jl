@@ -22,8 +22,6 @@ struct PointState
 end
 
 function main()
-    coord_system = PlaneStrain()
-
     ρ₀ = 1.6e3
     g = 9.81
     h = 0.3
@@ -34,7 +32,7 @@ function main()
     dx = 0.005
 
     grid = Grid(NodeState, LinearWLS(CubicBSpline()), 0:dx:1.0, 0:dx:1.0)
-    pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, PointState, grid, coord_system)
+    pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, PointState, grid)
     cache = MPCache(grid, pointstate.x)
     elastic = LinearElastic(E = E, ν = ν)
     model = DruckerPrager(elastic, :plane_strain; c = 0, ϕ, ψ)
@@ -78,22 +76,21 @@ function main()
         end
 
         update!(cache, grid, pointstate.x)
-        default_point_to_grid!(grid, pointstate, cache, coord_system)
+        default_point_to_grid!(grid, pointstate, cache)
         @. grid.state.v += (grid.state.f / grid.state.m) * dt
 
         for bd in eachboundary(grid)
             @. grid.state.v[bd.indices] = boundary_velocity(grid.state.v[bd.indices], bd.n)
         end
 
-        default_grid_to_point!(pointstate, grid, cache, dt, coord_system)
+        default_grid_to_point!(pointstate, grid, cache, dt)
         @inbounds Threads.@threads for p in eachindex(pointstate)
             σ = update_stress(model, pointstate.σ[p], symmetric(pointstate.∇v[p]) * dt)
             σ = Poingr.jaumann_stress(σ, pointstate.σ[p], pointstate.∇v[p], dt)
             if mean(σ) > 0
-                σ = zero(σ)
-                # ϵv = tr(elastic.Dinv ⊡ (σ - pointstate.σ0[p]))
-                # J = exp(ϵv)
-                # pointstate.F[p] = J^(1/3) * one(pointstate.F[p])
+                ϵv = tr(elastic.Dinv ⊡ (σ - pointstate.σ0[p]))
+                J = exp(ϵv)
+                pointstate.F[p] = J^(1/3) * one(pointstate.F[p])
             end
             pointstate.σ[p] = σ
         end

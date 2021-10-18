@@ -136,20 +136,20 @@ function point_to_grid!(p2g, gridstate::AbstractArray, grid::Grid, xₚ::Abstrac
     end
 end
 
-@inline function stress_to_force(::PlaneStrain, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
-    Tensor2D(σ) ⋅ ∇N
+@inline function stress_to_force(coordinate_system::Symbol, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
+    f = Tensor2D(σ) ⋅ ∇N
+    if coordinate_system == :axisymmetric
+        @inbounds f += Tensor2D(σ) ⋅ ∇N + Vec(1,0)*σ[3,3]*N/x[1]
+    end
+    f
 end
-@inline function stress_to_force(::Axisymmetric, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
-    @inbounds Tensor2D(σ) ⋅ ∇N + Vec(1,0)*σ[3,3]*N/x[1]
-end
-@inline function stress_to_force(::DefaultCoordinateSystem, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
+@inline function stress_to_force(::Symbol, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
     σ ⋅ ∇N
 end
 
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: BSpline},
                                 pointstate::StructVector,
-                                cache::MPCache{<: Any, <: Any, <: BSplineValues},
-                                coord_system::CoordinateSystem)
+                                cache::MPCache{<: Any, <: Any, <: BSplineValues})
     point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do it, p, i
         @_inline_meta
         @_propagate_inbounds_meta
@@ -165,7 +165,7 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: BSpline},
         xᵢ = grid[i]
         m = mₚ * N
         v = m * vₚ
-        f = -(V0ₚ*det(Fₚ)) * stress_to_force(coord_system, N, ∇N, xₚ, σₚ) + m * bₚ
+        f = -(V0ₚ*det(Fₚ)) * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, v, f
     end
     @dot_threads grid.state.v /= grid.state.m
@@ -175,8 +175,7 @@ end
 
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
                                 pointstate::StructVector,
-                                cache::MPCache{<: Any, <: Any, <: WLSValues},
-                                coord_system::CoordinateSystem)
+                                cache::MPCache{<: Any, <: Any, <: WLSValues})
     P = polynomial(grid.shapefunction)
     point_to_grid!((grid.state.m, grid.state.w, grid.state.v, grid.state.f), cache) do it, p, i
         @_inline_meta
@@ -194,7 +193,7 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
         xᵢ = grid[i]
         m = mₚ * N
         v = w * Cₚ ⋅ P(xᵢ - xₚ)
-        f = -(V0ₚ*det(Fₚ)) * stress_to_force(coord_system, N, ∇N, xₚ, σₚ) + m * bₚ
+        f = -(V0ₚ*det(Fₚ)) * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, w, v, f
     end
     @dot_threads grid.state.v /= grid.state.w
@@ -256,21 +255,21 @@ function grid_to_point!(g2p, pointstate::AbstractVector, grid::Grid, xₚ::Abstr
     end
 end
 
-@inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    Poingr.Tensor3D(∇v)
+@inline function velocity_gradient(coordinate_system::Symbol, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
+    ∇v = Poingr.Tensor3D(∇v)
+    if coordinate_system == :axisymmetric
+        @inbounds ∇v += @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
+    end
+    ∇v
 end
-@inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    @inbounds Poingr.Tensor3D(∇v) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
-end
-@inline function velocity_gradient(::DefaultCoordinateSystem, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
+@inline function velocity_gradient(::Symbol, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
     ∇v
 end
 
 function default_grid_to_point!(pointstate::StructVector,
                                 grid::Grid{dim, <: Any, <: BSpline},
                                 cache::MPCache{dim, <: Any, <: BSplineValues},
-                                dt::Real,
-                                coord_system::CoordinateSystem) where {dim}
+                                dt::Real) where {dim}
     @inbounds Threads.@threads for p in 1:npoints(cache)
         shapevalues = cache.shapevalues[p]
         T = eltype(pointstate.v[p])
@@ -288,7 +287,7 @@ function default_grid_to_point!(pointstate::StructVector,
             vₚ += N * vᵢ
             ∇vₚ += vᵢ ⊗ ∇N
         end
-        ∇vₚ_3x3 = velocity_gradient(coord_system, pointstate.x[p], vₚ, ∇vₚ)
+        ∇vₚ_3x3 = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         Fₚ = pointstate.F[p]
         pointstate.∇v[p] = ∇vₚ_3x3
         pointstate.F[p] = Fₚ + dt*(∇vₚ_3x3 ⋅ Fₚ)
@@ -301,8 +300,7 @@ end
 function default_grid_to_point!(pointstate::StructVector,
                                 grid::Grid{dim, <: Any, <: WLS},
                                 cache::MPCache{dim, <: Any, <: WLSValues},
-                                dt::Real,
-                                coord_system::CoordinateSystem) where {dim}
+                                dt::Real) where {dim}
     P = polynomial(grid.shapefunction)
     p0 = P(zero(Vec{dim, Int}))
     ∇p0 = P'(zero(Vec{dim, Int}))
@@ -317,7 +315,7 @@ function default_grid_to_point!(pointstate::StructVector,
         Cₚ = pointstate.C[p]
         xₚ = pointstate.x[p]
         vₚ = Cₚ ⋅ p0
-        ∇vₚ = velocity_gradient(coord_system, xₚ, vₚ, Cₚ ⋅ ∇p0)
+        ∇vₚ = velocity_gradient(grid.coordinate_system, xₚ, vₚ, Cₚ ⋅ ∇p0)
         Fₚ = pointstate.F[p]
         pointstate.v[p] = vₚ
         pointstate.∇v[p] = ∇vₚ
