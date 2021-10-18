@@ -57,6 +57,7 @@ polynomial(wls::WLS) = wls.poly
 weight_function(wls::WLS) = wls.bspline
 
 support_length(wls::WLS) = support_length(weight_function(wls))
+active_length(::WLS) = 1.0 # for sparsity pattern
 
 
 struct WLSValues{poly_order, bspline_order, dim, T, L, M, O} <: ShapeValues{dim, T}

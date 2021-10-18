@@ -29,6 +29,7 @@ support_length(::BSpline{1}) = 1.0
 support_length(::BSpline{2}) = 1.5
 support_length(::BSpline{3}) = 2.0
 support_length(::BSpline{4}) = 2.5
+active_length(bspline::BSpline) = support_length(bspline) # for sparsity pattern
 
 @pure nnodes(bspline::BSpline, ::Val{dim}) where {dim} = prod(nfill(Int(2*support_length(bspline)), Val(dim)))
 
@@ -206,21 +207,14 @@ function update!(it::BSplineValues{<: Any, dim}, grid, x::Vec{dim}, spat::Abstra
     @inbounds @simd for i in 1:length(it)
         I = it.inds[i]
         xᵢ = grid[I]
-        it.N[i], it.∇N[i] = _value_gradient(F, x, xᵢ, gridsteps(grid), BSplinePosition(grid, I))
+        it.∇N[i], it.N[i] = gradient(x, :all) do x
+            @_inline_meta
+            ξ = (x - xᵢ) ./ gridsteps(grid)
+            value(F, ξ, BSplinePosition(grid, I))
+        end
     end
     it
 end
-
-function _value(F::ShapeFunction, x::Vec{dim}, xᵢ::Vec{dim}, h::NTuple{dim}, pos) where {dim}
-    ξ = (x - xᵢ) ./ h
-    value(F, ξ, pos)
-end
-
-function _value_gradient(F::ShapeFunction, x::Vec, xᵢ::Vec, h::Tuple, pos)
-    dv, v = gradient(x -> _value(F, x, xᵢ, h, pos), x, :all)
-    v, dv
-end
-
 
 struct BSplineValue{dim, T}
     N::T

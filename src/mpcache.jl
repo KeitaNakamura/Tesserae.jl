@@ -146,6 +146,33 @@ end
     σ ⋅ ∇N
 end
 
+function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: BSpline},
+                                pointstate::StructVector,
+                                cache::MPCache{<: Any, <: Any, <: BSplineValues},
+                                coord_system::CoordinateSystem)
+    point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do it, p, i
+        @_inline_meta
+        @_propagate_inbounds_meta
+        N = it.N
+        ∇N = it.∇N
+        xₚ = pointstate.x[p]
+        mₚ = pointstate.m[p]
+        V0ₚ = pointstate.V0[p]
+        Fₚ = pointstate.F[p]
+        vₚ = pointstate.v[p]
+        σₚ = pointstate.σ[p]
+        bₚ = pointstate.b[p]
+        xᵢ = grid[i]
+        m = mₚ * N
+        v = m * vₚ
+        f = -(V0ₚ*det(Fₚ)) * stress_to_force(coord_system, N, ∇N, xₚ, σₚ) + m * bₚ
+        m, v, f
+    end
+    @dot_threads grid.state.v /= grid.state.m
+    @. grid.state.v_n = grid.state.v
+    grid
+end
+
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
                                 pointstate::StructVector,
                                 cache::MPCache{<: Any, <: Any, <: WLSValues},
@@ -237,6 +264,38 @@ end
 end
 @inline function velocity_gradient(::DefaultCoordinateSystem, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
     ∇v
+end
+
+function default_grid_to_point!(pointstate::StructVector,
+                                grid::Grid{dim, <: Any, <: BSpline},
+                                cache::MPCache{dim, <: Any, <: BSplineValues},
+                                dt::Real,
+                                coord_system::CoordinateSystem) where {dim}
+    @inbounds Threads.@threads for p in 1:npoints(cache)
+        shapevalues = cache.shapevalues[p]
+        T = eltype(pointstate.v[p])
+        dvₚ = zero(Vec{dim, T})
+        vₚ = zero(Vec{dim, T})
+        ∇vₚ = zero(Mat{dim, dim, T})
+        @simd for i in eachindex(shapevalues)
+            it = shapevalues[i]
+            I = it.index
+            N = it.N
+            ∇N = it.∇N
+            dvᵢ = grid.state.v[I] - grid.state.v_n[I]
+            vᵢ = grid.state.v[I]
+            dvₚ += N * dvᵢ
+            vₚ += N * vᵢ
+            ∇vₚ += vᵢ ⊗ ∇N
+        end
+        ∇vₚ_3x3 = velocity_gradient(coord_system, pointstate.x[p], vₚ, ∇vₚ)
+        Fₚ = pointstate.F[p]
+        pointstate.∇v[p] = ∇vₚ_3x3
+        pointstate.F[p] = Fₚ + dt*(∇vₚ_3x3 ⋅ Fₚ)
+        pointstate.v[p] += dvₚ
+        pointstate.x[p] += vₚ * dt
+    end
+    pointstate
 end
 
 function default_grid_to_point!(pointstate::StructVector,
