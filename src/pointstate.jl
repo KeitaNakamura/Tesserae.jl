@@ -17,12 +17,12 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int =
             end
         end
     end
-    if :V0 in propertynames(pointstate)
+    if :V in propertynames(pointstate)
         V = prod(h)
         if dim == 2 && grid.coordinate_system == :axisymmetric
-            @. pointstate.V0 = getindex(pointstate.x, 1) * V
+            @. pointstate.V = getindex(pointstate.x, 1) * V
         else
-            @. pointstate.V0 = V
+            @. pointstate.V = V
         end
     end
     if :side_length in propertynames(pointstate)
@@ -36,5 +36,5 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int =
 end
 
 function generate_pointstate(indomain, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
-    generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V0::T, side_length::Vec{dim, T}, index::Int}, grid; n)
+    generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V::T, side_length::Vec{dim, T}, index::Int}, grid; n)
 end

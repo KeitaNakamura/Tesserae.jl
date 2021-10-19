@@ -12,13 +12,12 @@ end
 
 struct PointState
     m::Float64
-    V0::Float64
+    V::Float64
     x::Vec{2, Float64}
     v::Vec{2, Float64}
     b::Vec{2, Float64}
     σ::SymmetricSecondOrderTensor{3, Float64, 6}
-    σ0::SymmetricSecondOrderTensor{3, Float64, 6}
-    F::SecondOrderTensor{3, Float64, 9}
+    ϵ::SymmetricSecondOrderTensor{3, Float64, 6}
     ∇v::SecondOrderTensor{3, Float64, 9}
     C::Mat{2, 3, Float64, 6}
 end
@@ -47,10 +46,8 @@ function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool 
                                  0.0 σ_y 0.0
                                  0.0 0.0 σ_x]) |> symmetric
     end
-    @. pointstate.m = ρ₀ * pointstate.V0
-    @. pointstate.F = one(SecondOrderTensor{3,Float64})
+    @. pointstate.m = ρ₀ * pointstate.V
     @. pointstate.b = Vec(0.0, -g)
-    @. pointstate.σ0 = pointstate.σ
 
     @show length(pointstate)
 
@@ -72,7 +69,7 @@ function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool 
     while !isfinised(logger, t)
 
         dt = minimum(pointstate) do p
-            ρ = p.m / (p.V0 * det(p.F))
+            ρ = p.m / p.V
             vc = soundspeed(elastic.K, elastic.G, ρ)
             minimum(gridsteps(grid)) / vc
         end
@@ -87,15 +84,26 @@ function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool 
 
         default_grid_to_point!(pointstate, grid, cache, dt)
         @inbounds Threads.@threads for p in eachindex(pointstate)
-            σ = update_stress(model, pointstate.σ[p], symmetric(pointstate.∇v[p]) * dt)
-            σ = Poingr.jaumann_stress(σ, pointstate.σ[p], pointstate.∇v[p], dt)
+            ∇v = pointstate.∇v[p]
+            σ_n = pointstate.σ[p]
+            dϵ = symmetric(∇v) * dt
+            σ = update_stress(model, σ_n, dϵ)
+            σ = Poingr.jaumann_stress(σ, σ_n, ∇v, dt)
             if mean(σ) > 0
+                # in this case, since soils should not act as continuum body,
+                # it is quite difficult to determine the amount of plastic strain.
+                # thus, we just compute the elastic strain to keep consistency
+                # with the stress on edge of yield function, and ignore the
+                # plastic strain to prevent excessive plastic strain.
+                # if we include this plastic strain, dry density can continue
+                # to decrease even though the soil particles are not contacted
+                # with each other in tension side.
                 σ = zero(σ)
-                ϵv = tr(elastic.Dinv ⊡ (σ - pointstate.σ0[p]))
-                J = exp(ϵv)
-                pointstate.F[p] = J^(1/3) * one(pointstate.F[p])
+                dϵ = elastic.Dinv ⊡ (σ - σ_n)
             end
             pointstate.σ[p] = σ
+            pointstate.ϵ[p] += dϵ
+            pointstate.V[p] *= exp(tr(dϵ))
         end
 
         update!(logger, t += dt)
@@ -104,15 +112,15 @@ function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool 
             paraview_collection(paraview_file, append = true) do pvd
                 vtk_multiblock(string(paraview_file, logindex(logger))) do vtm
                     vtk_points(vtm, pointstate.x) do vtk
-                        ϵₚ = @dot_lazy symmetric(pointstate.F - $Ref(I))
+                        ϵ = pointstate.ϵ
                         vtk["velocity"] = pointstate.v
                         vtk["mean stress"] = @dot_lazy -mean(pointstate.σ)
                         vtk["deviatoric stress"] = @dot_lazy deviatoric_stress(pointstate.σ)
-                        vtk["volumetric strain"] = @dot_lazy volumetric_strain(ϵₚ)
-                        vtk["deviatoric strain"] = @dot_lazy deviatoric_strain(ϵₚ)
+                        vtk["volumetric strain"] = @dot_lazy volumetric_strain(ϵ)
+                        vtk["deviatoric strain"] = @dot_lazy deviatoric_strain(ϵ)
                         vtk["stress"] = pointstate.σ
-                        vtk["strain"] = ϵₚ
-                        vtk["density"] = @dot_lazy pointstate.m / (pointstate.V0 * det(pointstate.F))
+                        vtk["strain"] = ϵ
+                        vtk["density"] = @dot_lazy pointstate.m / pointstate.V
                     end
                     pvd[t] = vtm
                 end

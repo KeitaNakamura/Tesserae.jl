@@ -157,15 +157,14 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: BSpline},
         ∇N = it.∇N
         xₚ = pointstate.x[p]
         mₚ = pointstate.m[p]
-        V0ₚ = pointstate.V0[p]
-        Fₚ = pointstate.F[p]
+        Vₚ = pointstate.V[p]
         vₚ = pointstate.v[p]
         σₚ = pointstate.σ[p]
         bₚ = pointstate.b[p]
         xᵢ = grid[i]
         m = mₚ * N
         v = m * vₚ
-        f = -(V0ₚ*det(Fₚ)) * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
+        f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, v, f
     end
     @dot_threads grid.state.v /= grid.state.m
@@ -185,15 +184,14 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
         w = it.w
         xₚ = pointstate.x[p]
         mₚ = pointstate.m[p]
-        V0ₚ = pointstate.V0[p]
-        Fₚ = pointstate.F[p]
+        Vₚ = pointstate.V[p]
         Cₚ = pointstate.C[p]
         σₚ = pointstate.σ[p]
         bₚ = pointstate.b[p]
         xᵢ = grid[i]
         m = mₚ * N
         v = w * Cₚ ⋅ P(xᵢ - xₚ)
-        f = -(V0ₚ*det(Fₚ)) * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
+        f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, w, v, f
     end
     @dot_threads grid.state.v /= grid.state.w
@@ -287,10 +285,7 @@ function default_grid_to_point!(pointstate::StructVector,
             vₚ += N * vᵢ
             ∇vₚ += vᵢ ⊗ ∇N
         end
-        ∇vₚ_3x3 = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
-        Fₚ = pointstate.F[p]
-        pointstate.∇v[p] = ∇vₚ_3x3
-        pointstate.F[p] = Fₚ + dt*(∇vₚ_3x3 ⋅ Fₚ)
+        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] += dvₚ
         pointstate.x[p] += vₚ * dt
     end
@@ -315,11 +310,8 @@ function default_grid_to_point!(pointstate::StructVector,
         Cₚ = pointstate.C[p]
         xₚ = pointstate.x[p]
         vₚ = Cₚ ⋅ p0
-        ∇vₚ = velocity_gradient(grid.coordinate_system, xₚ, vₚ, Cₚ ⋅ ∇p0)
-        Fₚ = pointstate.F[p]
         pointstate.v[p] = vₚ
-        pointstate.∇v[p] = ∇vₚ
-        pointstate.F[p] = Fₚ + dt*(∇vₚ ⋅ Fₚ)
+        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, xₚ, vₚ, Cₚ ⋅ ∇p0)
         pointstate.x[p] = xₚ + vₚ * dt
     end
     pointstate

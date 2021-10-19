@@ -8,7 +8,7 @@ end
 
 struct Point
     m::Float64
-    V0::Float64
+    V::Float64
     x::Vec{2, Float64}
     v::Vec{2, Float64}
     b::Vec{2, Float64}
@@ -27,7 +27,7 @@ end
             cache = MPCache(grid, pointstate.x)
             v0 = rand(Vec{2})
             ρ0 = 1.2e3
-            @. pointstate.m = ρ0 * pointstate.V0
+            @. pointstate.m = ρ0 * pointstate.V
             @. pointstate.v = v0
             @. pointstate.σ = one(SymmetricSecondOrderTensor{3})
             @. pointstate.F = one(SecondOrderTensor{3})
