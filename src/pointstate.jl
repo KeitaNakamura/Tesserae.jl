@@ -7,7 +7,14 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int =
     ))
 
     npoints = count(x -> indomain(x...), allpoints)
-    pointstate = reinit!(StructVector{Point}(undef, npoints))
+    pointstate = StructVector{Point}(undef, npoints)
+    for name in propertynames(pointstate)
+        v = getproperty(pointstate, name)
+        ElType = eltype(v)
+        if isbitstype(ElType)
+            v .= initval(ElType)
+        end
+    end
 
     if :x in propertynames(pointstate)
         cnt = 0
