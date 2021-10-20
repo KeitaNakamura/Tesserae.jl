@@ -252,21 +252,22 @@ function pointsinblock(grid::Grid, xₚ::AbstractVector)
     pointsinblock!(ptsinblk, grid, xₚ)
 end
 
-function sparsity_pattern(grid::Grid, xₚ::AbstractVector)
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector)
     h = active_length(grid.shapefunction)
-    spat_threads = [fill(false, size(grid)) for _ in 1:Threads.nthreads()]
+    spat_threads = [falses(size(grid)) for _ in 1:Threads.nthreads()]
     @inbounds Threads.@threads for x in xₚ
         spat = spat_threads[Threads.threadid()]
         inds = neighboring_nodes(grid, x, h)
         spat[inds] .= true
     end
-    broadcast(|, spat_threads...)
+    broadcast!(|, spat, spat_threads...)
 end
 
 # this seems to be faster when using `reordering_pointstate!`
-function sparsity_pattern(grid::Grid, xₚ::AbstractVector, ptsinblk::AbstractArray{Vector{Int}})
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, ptsinblk::AbstractArray{Vector{Int}})
+    @assert size(spat) == size(grid)
+    fill!(spat, false)
     h = active_length(grid.shapefunction)
-    spat = falses(size(grid))
     for color in coloringblocks(size(grid))
         Threads.@threads for blockindex in color
             @inbounds for p in ptsinblk[blockindex]

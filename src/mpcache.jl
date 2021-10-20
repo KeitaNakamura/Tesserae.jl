@@ -3,13 +3,14 @@ struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
     gridsize::NTuple{dim, Int}
     npoints::Base.RefValue{Int}
     pointsinblock::Array{Vector{Int}, dim}
+    spat::Array{Bool, dim}
 end
 
 function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
     checkshapefunction(grid)
     npoints = length(xₚ)
     shapevalues = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:npoints]
-    MPCache(shapevalues, size(grid), Ref(npoints), pointsinblock(grid, xₚ))
+    MPCache(shapevalues, size(grid), Ref(npoints), pointsinblock(grid, xₚ), fill(false, size(grid)))
 end
 
 gridsize(cache::MPCache) = cache.gridsize
@@ -43,34 +44,35 @@ function allocate!(f, x::Vector, n::Integer)
 end
 
 # pointsinblock in cache must be updated in advance
-function _update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spat::BitArray{dim}) where {dim}
+function _update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
     @assert size(grid) == gridsize(cache)
 
     cache.npoints[] = length(xₚ)
     allocate!(i -> eltype(cache.shapevalues)(), cache.shapevalues, length(xₚ))
 
     Threads.@threads for p in eachindex(xₚ)
-        @inbounds update!(cache.shapevalues[p], grid, xₚ[p], spat)
+        @inbounds update!(cache.shapevalues[p], grid, xₚ[p], cache.spat)
     end
 
     gridstate = grid.state
-    gridstate.spat .= spat
+    gridstate.spat .= cache.spat
     reinit!(gridstate)
 
     cache
 end
 
-function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spat::BitArray{dim}) where {dim}
+function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spat::AbstractArray{Bool, dim}) where {dim}
     @assert size(grid) == gridsize(cache)
     pointsinblock!(cache.pointsinblock, grid, xₚ)
-    _update!(cache, grid, xₚ, spat)
+    copyto!(cache.spat, spat)
+    _update!(cache, grid, xₚ)
 end
 
 function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
     @assert size(grid) == gridsize(cache)
     pointsinblock!(cache.pointsinblock, grid, xₚ)
-    spat = sparsity_pattern(grid, xₚ, cache.pointsinblock) # create sparsity_pattern using pointsinblock
-    _update!(cache, grid, xₚ, spat)
+    sparsity_pattern!(cache.spat, grid, xₚ, cache.pointsinblock) # create sparsity_pattern using pointsinblock
+    _update!(cache, grid, xₚ)
 end
 
 ##################
