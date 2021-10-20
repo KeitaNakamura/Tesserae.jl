@@ -11,9 +11,10 @@ function DruckerPrager(elastic; A::Real, B::Real, b::Real = B, tension_cutoff::R
 end
 
 # for Mohr-Coulomb criterion
-function DruckerPrager(elastic, mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = ϕ, tension_cutoff::Real = 0)
+function DruckerPrager(elastic, mc_type; c::Real, ϕ::Real, ψ::Real = ϕ, tension_cutoff::Real = 0)
     ϕ = deg2rad(ϕ)
     ψ = deg2rad(ψ)
+    mc_type = Symbol(mc_type)
     if mc_type == :circumscribed
         A = 6c*cos(ϕ) / (√3 * (3 - sin(ϕ)))
         B = 2sin(ϕ) / (√3 * (3 - sin(ϕ)))
@@ -27,7 +28,7 @@ function DruckerPrager(elastic, mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = �
         B = tan(ϕ) / sqrt(9 + 12tan(ϕ)^2)
         b = tan(ψ) / sqrt(9 + 12tan(ψ)^2)
     else
-        throw(ArgumentError("Choose Mohr-Coulomb type from :circumscribed, :inscribed and :plane_strain"))
+        throw(ArgumentError("Choose Mohr-Coulomb type from :circumscribed, :inscribed and :plane_strain, got $mc_type"))
     end
     DruckerPrager(elastic, promote(A, B, b, tension_cutoff)...)
 end

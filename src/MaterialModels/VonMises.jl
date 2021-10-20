@@ -7,11 +7,12 @@ function VonMises(elastic::LinearElastic; q_y::Real)
     VonMises(elastic, q_y)
 end
 
-function VonMises(elastic::LinearElastic, mode_type::Symbol; c::Real)
-    if mode_type == :plane_strain
+function VonMises(elastic::LinearElastic, model_type; c::Real)
+    model_type = Symbol(model_type)
+    if model_type == :plane_strain
         q_y = √3c
     else
-        throw(ArgumentError("Supported model type is :plane_strain"))
+        throw(ArgumentError("Supported model type is :plane_strain, got $model_type"))
     end
     VonMises(elastic, q_y)
 end
