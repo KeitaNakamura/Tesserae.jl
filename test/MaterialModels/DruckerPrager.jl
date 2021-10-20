@@ -16,4 +16,21 @@
             end
         end
     end
+    @testset "tension cut-off" begin
+        elastic = LinearElastic(E = 1e6, ν = 0.3)
+        model = DruckerPrager(elastic, :circumscribed, c = 20.0, ϕ = 30, ψ = 0, tension_cutoff = 10.0)
+        n = normalize(dev(rand(SymmetricSecondOrderTensor{3})))
+        # 1
+        σ = 10.0*I + 10.0*n
+        @test Poingr.tension_cutoff(model, σ) ≈ σ
+        @test Poingr.yield_function(model, Poingr.tension_cutoff(model, σ)) < 0
+        # 2
+        σ = 20.0*I + 10.0*n
+        @test Poingr.tension_cutoff(model, σ) ≈ 10.0*I + 10.0*n
+        @test Poingr.yield_function(model, Poingr.tension_cutoff(model, σ)) < 0
+        # 3
+        σ = 20.0*I + 30.0*n
+        @test mean(Poingr.tension_cutoff(model, σ)) ≈ 10.0
+        @test abs(Poingr.yield_function(model, Poingr.tension_cutoff(model, σ))) < sqrt(eps(Float64))
+    end
 end

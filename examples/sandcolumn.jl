@@ -89,16 +89,18 @@ function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool 
             dϵ = symmetric(∇v) * dt
             σ = update_stress(model, σ_n, dϵ)
             σ = Poingr.jaumann_stress(σ, σ_n, ∇v, dt)
-            if mean(σ) > 0
-                # in this case, since soils should not act as continuum body,
-                # it is quite difficult to determine the amount of plastic strain.
-                # thus, we just compute the elastic strain to keep consistency
-                # with the stress on edge of yield function, and ignore the
-                # plastic strain to prevent excessive plastic strain.
-                # if we include this plastic strain, dry density can continue
-                # to decrease even though the soil particles are not contacted
-                # with each other in tension side.
-                σ = zero(σ)
+            if mean(σ) > model.tension_cutoff
+                # In this case, since the soil particles are not contacted with
+                # each other, soils should not act as continuum.
+                # This means that the deformation based on the contitutitive model
+                # no longer occurs.
+                # So, in this process, we just calculate the elastic strain to keep
+                # the consistency with the stress which is on the edge of the yield
+                # function, and ignore the plastic strain to prevent excessive generation.
+                # If we include this plastic strain, the volume of the material points
+                # will continue to increase unexpectedly.
+                σ_tr = update_stress(model.elastic, σ_n, dϵ)
+                σ = Poingr.tension_cutoff(model, σ_tr)
                 dϵ = elastic.Dinv ⊡ (σ - σ_n)
             end
             pointstate.σ[p] = σ

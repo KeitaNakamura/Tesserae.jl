@@ -3,14 +3,15 @@ struct DruckerPrager{T, Elastic <: Union{LinearElastic{T}, SoilHypoelastic{T}, S
     A::T
     B::T
     b::T
+    tension_cutoff::T
 end
 
-function DruckerPrager(elastic; A::Real, B::Real, b::Real = B)
-    DruckerPrager(elastic, A, B, b)
+function DruckerPrager(elastic; A::Real, B::Real, b::Real = B, tension_cutoff::Real = 0)
+    DruckerPrager(elastic, promote(A, B, b, tension_cutoff)...)
 end
 
 # for Mohr-Coulomb criterion
-function DruckerPrager(elastic, mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = ϕ)
+function DruckerPrager(elastic, mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = ϕ, tension_cutoff::Real = 0)
     ϕ = deg2rad(ϕ)
     ψ = deg2rad(ψ)
     if mc_type == :circumscribed
@@ -28,7 +29,24 @@ function DruckerPrager(elastic, mc_type::Symbol; c::Real, ϕ::Real, ψ::Real = �
     else
         throw(ArgumentError("Choose Mohr-Coulomb type from :circumscribed, :inscribed and :plane_strain"))
     end
-    DruckerPrager(elastic; A, B, b)
+    DruckerPrager(elastic, promote(A, B, b, tension_cutoff)...)
+end
+
+function tension_cutoff(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
+    p_t = model.tension_cutoff
+    if mean(σ) > p_t
+        s = dev(σ)
+        σ = p_t*I + s
+        if yield_function(model, σ) > 0
+            A = model.A
+            B = model.B
+            I₁ = tr(σ)
+            J₂ = (A - B*I₁)^2
+            a = sqrt(2J₂ / (s ⊡ s))
+            σ = p_t*I + a*s
+        end
+    end
+    σ
 end
 
 function update_stress(model::DruckerPrager{<: Any, <: Union{LinearElastic, SoilHypoelastic}}, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
