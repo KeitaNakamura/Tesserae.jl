@@ -94,8 +94,8 @@ end
 function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     @assert all(==(gridsize(cache)), size.(gridstates))
     pointmask !== nothing && @assert length(pointmask) == npoints(cache)
-    for color in coloringblocks(gridsize(cache))
-        Threads.@threads for blockindex in color
+    for blocks in threadsafe_blocks(gridsize(cache))
+        Threads.@threads for blockindex in blocks
             @inbounds for p in pointsinblock(cache)[blockindex]
                 pointmask !== nothing && !pointmask[p] && continue
                 _point_to_grid!(p2g, gridstates, cache.shapevalues[p], p)
@@ -110,8 +110,8 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Gri
     ptsinblk = pointsinblock(grid, xₚ)
     spat = sparsity_pattern(grid, xₚ)
     shapevalues_threads = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:Threads.nthreads()]
-    for color in coloringblocks(size(grid))
-        Threads.@threads for blockindex in color
+    for blocks in threadsafe_blocks(size(grid))
+        Threads.@threads for blockindex in blocks
             shapevalues = shapevalues_threads[Threads.threadid()]
             for p in ptsinblk[blockindex]
                 update!(shapevalues, grid, xₚ[p], spat)

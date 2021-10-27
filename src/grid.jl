@@ -268,8 +268,8 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, 
     @assert size(spat) == size(grid)
     fill!(spat, false)
     h = active_length(grid.shapefunction)
-    for color in coloringblocks(size(grid))
-        Threads.@threads for blockindex in color
+    for blocks in threadsafe_blocks(size(grid))
+        Threads.@threads for blockindex in blocks
             @inbounds for p in ptsinblk[blockindex]
                 inds = neighboring_nodes(grid, xₚ[p], h)
                 spat[inds] .= true
@@ -286,7 +286,7 @@ end
 Base.size(x::BlockStepIndices) = size(x.inds)
 Base.getindex(x::BlockStepIndices{N}, i::Vararg{Int, N}) where {N} = (@_propagate_inbounds_meta; CartesianIndex(x.inds[i...]))
 
-function coloringblocks(dims::NTuple{dim, Int}) where {dim}
+function threadsafe_blocks(dims::NTuple{dim, Int}) where {dim}
     ncells = dims .- 1
     starts = SArray{NTuple{dim, 2}}(Coordinate(nfill((1,2), Val(dim)))...)
     nblocks = @. (ncells - 1) >> BLOCK_UNIT + 1

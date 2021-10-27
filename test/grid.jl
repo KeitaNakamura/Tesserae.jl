@@ -44,11 +44,11 @@
     xₚ = Vec{2, Float64}[(2,2), (8, 18), (8, 21), (4, 18), (5, 18)]
     @test Poingr.pointsinblock(grid, xₚ) == reshape([[1], [], [4, 5], [2]], 2, 2)
 
-    # coloringblocks
-    @test Poingr.coloringblocks((20, 30)) == [[CartesianIndex(1,1) CartesianIndex(1,3); CartesianIndex(3,1) CartesianIndex(3,3)],
-                                              [CartesianIndex(2,1) CartesianIndex(2,3)],
-                                              [CartesianIndex(1,2) CartesianIndex(1,4); CartesianIndex(3,2) CartesianIndex(3,4)],
-                                              [CartesianIndex(2,2) CartesianIndex(2,4)]]
+    # threadsafe_blocks
+    @test Poingr.threadsafe_blocks((20, 30)) == [[CartesianIndex(1,1) CartesianIndex(1,3); CartesianIndex(3,1) CartesianIndex(3,3)],
+                                                 [CartesianIndex(2,1) CartesianIndex(2,3)],
+                                                 [CartesianIndex(1,2) CartesianIndex(1,4); CartesianIndex(3,2) CartesianIndex(3,4)],
+                                                 [CartesianIndex(2,2) CartesianIndex(2,4)]]
 
     # Bound
     ## 1D
