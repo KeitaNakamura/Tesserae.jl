@@ -78,8 +78,8 @@ end
 """
     Poingr.BSplinePosition(; nth::Int, dir::Int)
 
-Position of node at `ξ = 0`.
-The node is located at `nth` away from bound with `dir` direction.
+Specify node position.
+The node is located at `nth` away from bound along the `dir` direction.
 
 # Examples
 ```jldoctest
@@ -112,17 +112,17 @@ function BSplinePosition(v::AbstractVector, i::Int)
     @boundscheck checkbounds(v, i)
     l = i - firstindex(v)
     r = lastindex(v) - i
-    pos = l < r ? l : -r
-    BSplinePosition(pos)
+    BSplinePosition(ifelse(l < r, l, -r))
 end
 
 function BSplinePosition(A::AbstractArray{<: Any, dim}, I::NTuple{dim, Int}) where {dim}
     @boundscheck checkbounds(A, I...)
     ntuple(Val(dim)) do d
-        l = I[d] - firstindex(A, d)
-        r = lastindex(A, d) - I[d]
-        pos = l < r ? l : -r
-        BSplinePosition(pos)
+        @inbounds begin
+            l = I[d] - firstindex(A, d)
+            r = lastindex(A, d) - I[d]
+            BSplinePosition(ifelse(l < r, l, -r))
+        end
     end
 end
 

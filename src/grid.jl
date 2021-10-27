@@ -288,7 +288,7 @@ Base.getindex(x::BlockStepIndices{N}, i::Vararg{Int, N}) where {N} = (@_propagat
 
 function coloringblocks(dims::NTuple{dim, Int}) where {dim}
     ncells = dims .- 1
-    starts = SArray{NTuple{dim, 2}}(Iterators.ProductIterator(nfill((1,2), Val(dim)))...)
+    starts = SArray{NTuple{dim, 2}}(Coordinate(nfill((1,2), Val(dim)))...)
     nblocks = @. (ncells - 1) >> BLOCK_UNIT + 1
     vec(map(st -> BlockStepIndices(Coordinate(StepRange.(st, 2, nblocks))), starts))
 end
