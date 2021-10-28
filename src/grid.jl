@@ -7,11 +7,21 @@ dirfrombound(pos::NodePosition) = pos.dir
 
 struct BoundaryCondition{dim}
     boundcontours::NTuple{dim, Array{Int, dim}}
-    isonbound::BitArray{dim}
     node_positions::NTuple{dim, Array{NodePosition, dim}}
 end
 
-node_position(bc::BoundaryCondition, I) = (@_propagate_inbounds_meta; getindex.(bc.node_positions, Ref(I)))
+node_position(bc::BoundaryCondition, I, d) = (@_propagate_inbounds_meta; bc.node_positions[d][I])
+node_position(bc::BoundaryCondition{dim}, I) where {dim} = (@_propagate_inbounds_meta; ntuple(d -> node_position(bc, I, d), Val(dim)))
+
+@inline function isonbound(bc::BoundaryCondition, I, d::Int)
+    @_propagate_inbounds_meta
+    pos = node_position(bc, I, d)
+    pos.nth === 0 && pos.dir !== 0
+end
+@inline function isonbound(bc::BoundaryCondition{dim}, I) where {dim}
+    @_propagate_inbounds_meta
+    |(ntuple(d -> isonbound(bc, I, d), Val(dim))...)
+end
 
 function set_boundcontour!(boundcontour::AbstractVector{Int}, start::Int, dir::Int)
     @boundscheck checkbounds(boundcontour, start)
@@ -72,22 +82,6 @@ function BoundaryCondition(withinbounds::AbstractArray{Bool, dim}) where {dim}
         end
         boundcontour
     end
-    isonbounds = ntuple(Val(dim)) do d
-        boundcontour = boundcontours[d]
-        isonbound = falses(size(boundcontour))
-        for (axis, contour) in zip(eachaxis(isonbound, d), eachaxis(boundcontour, d))
-            @assert length(axis) == length(contour)
-            @inbounds for i in eachindex(axis)
-                if contour[i] == 0
-                    inds = intersect(i-1:i+1, eachindex(axis))
-                    if !all(==(0), @view contour[inds])
-                        axis[i] = true
-                    end
-                end
-            end
-        end
-        isonbound
-    end
     node_positions = ntuple(Val(dim)) do d
         boundcontour = boundcontours[d]
         node_position = Array{NodePosition}(undef, size(boundcontour))
@@ -100,7 +94,7 @@ function BoundaryCondition(withinbounds::AbstractArray{Bool, dim}) where {dim}
         end
         node_position
     end
-    BoundaryCondition(boundcontours, broadcast(|, isonbounds...), node_positions)
+    BoundaryCondition(boundcontours, node_positions)
 end
 
 
@@ -136,6 +130,9 @@ gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 
 node_position(grid::Grid, I) = (@_propagate_inbounds_meta; node_position(grid.bc, I))
+node_position(grid::Grid, I, d) = (@_propagate_inbounds_meta; node_position(grid.bc, I, d))
+isonbound(grid::Grid, I) = (@_propagate_inbounds_meta; isonbound(grid.bc, I))
+isonbound(grid::Grid, I, d::Int) = (@_propagate_inbounds_meta; isonbound(grid.bc, I, d))
 
 checkshapefunction(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of shape function, see help `?Grid` for more details."))
 checkshapefunction(::Grid{<: Any, <: Any, <: ShapeFunction}) = nothing
@@ -403,40 +400,20 @@ function threadsafe_blocks(dims::NTuple{dim, Int}) where {dim}
 end
 
 
-struct Bound{dim, CI <: CartesianIndices{dim}}
+struct Boundary{dim}
     n::Vec{dim, Int}
-    indices::CI
+    I::CartesianIndex{dim}
 end
 
-invalid_boundary_name_error(name) = error("invalid boundary name, got \"$name\", choose from \"-x\", \"+x\", \"-y\", \"+y\", \"-z\" and \"+z\"")
-function Bound(grid::AbstractArray{<: Any, 1}, which::String)
-    CI = CartesianIndices
-    rng(x) = x:x
-    which == "-x" && return Bound(Vec(-1), CI((rng(firstindex(grid, 1)),)))
-    which == "+x" && return Bound(Vec( 1), CI((rng( lastindex(grid, 1)),)))
-    invalid_boundary_name_error(name)
+function eachboundary(grid::Grid{dim, T}) where {dim, T}
+    _dir(pos::NodePosition, d::Int) = Vec{dim}(i -> ifelse(i === d, -pos.dir, 0))
+    function getbound(grid, I, d)
+        @inbounds begin
+            pos = node_position(grid, I, d)
+            Boundary(_dir(pos, d), I)
+        end
+    end
+    ntuple(Val(dim)) do d
+        (getbound(grid, I, d) for I in CartesianIndices(grid) if @inbounds(isonbound(grid, I, d)))
+    end |> Iterators.flatten
 end
-function Bound(grid::AbstractArray{<: Any, 2}, which::String)
-    CI = CartesianIndices
-    rng(x) = x:x
-    which == "-x" && return Bound(Vec(-1, 0), CI((rng(firstindex(grid, 1)),          axes(grid, 2))))
-    which == "+x" && return Bound(Vec( 1, 0), CI((rng( lastindex(grid, 1)),          axes(grid, 2))))
-    which == "-y" && return Bound(Vec( 0,-1), CI((          axes(grid, 1), rng(firstindex(grid, 2)))))
-    which == "+y" && return Bound(Vec( 0, 1), CI((          axes(grid, 1), rng( lastindex(grid, 2)))))
-    invalid_boundary_name_error(name)
-end
-function Bound(grid::AbstractArray{<: Any, 3}, which::String)
-    CI = CartesianIndices
-    rng(x) = x:x
-    which == "-x" && return Bound(Vec(-1, 0, 0), CI((rng(firstindex(grid, 1)),           axes(grid, 2),            axes(grid, 3))))
-    which == "+x" && return Bound(Vec( 1, 0, 0), CI((rng( lastindex(grid, 1)),           axes(grid, 2),            axes(grid, 3))))
-    which == "-y" && return Bound(Vec( 0,-1, 0), CI((          axes(grid, 1),  rng(firstindex(grid, 2)),           axes(grid, 3))))
-    which == "+y" && return Bound(Vec( 0, 1, 0), CI((          axes(grid, 1),  rng( lastindex(grid, 2)),           axes(grid, 3))))
-    which == "-z" && return Bound(Vec( 0, 0,-1), CI((          axes(grid, 1),            axes(grid, 2),  rng(firstindex(grid, 3)))))
-    which == "+z" && return Bound(Vec( 0, 0, 1), CI((          axes(grid, 1),            axes(grid, 2),  rng( lastindex(grid, 3)))))
-    invalid_boundary_name_error(name)
-end
-
-eachboundary(grid::AbstractArray{<: Any, 1}) = (Bound(grid, "-x"), Bound(grid, "+x"))
-eachboundary(grid::AbstractArray{<: Any, 2}) = (Bound(grid, "-x"), Bound(grid, "+x"), Bound(grid, "-y"), Bound(grid, "+y"))
-eachboundary(grid::AbstractArray{<: Any, 3}) = (Bound(grid, "-x"), Bound(grid, "+x"), Bound(grid, "-y"), Bound(grid, "+y"), Bound(grid, "-z"), Bound(grid, "+z"))

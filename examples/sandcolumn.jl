@@ -79,7 +79,7 @@ function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool 
         @. grid.state.v += (grid.state.f / grid.state.m) * dt
 
         for bd in eachboundary(grid)
-            @. grid.state.v[bd.indices] = boundary_velocity(grid.state.v[bd.indices], bd.n)
+            @inbounds grid.state.v[bd.I] = boundary_velocity(grid.state.v[bd.I], bd.n)
         end
 
         default_grid_to_point!(pointstate, grid, cache, dt)

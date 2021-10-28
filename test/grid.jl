@@ -50,41 +50,66 @@
                                                  [CartesianIndex(1,2) CartesianIndex(1,4); CartesianIndex(3,2) CartesianIndex(3,4)],
                                                  [CartesianIndex(2,2) CartesianIndex(2,4)]]
 
-    # Bound
+    # Boundary
     ## 1D
     grid = Grid(0:10)
-    bounds = eachboundary(grid)
+    bounds = collect(eachboundary(grid))
     @test length(bounds) == 2
     @test bounds[1].n == Vec(-1)
-    @test bounds[1].indices == [CartesianIndex(1)]
+    @test bounds[1].I == CartesianIndex(1)
     @test bounds[2].n == Vec( 1)
-    @test bounds[2].indices == [CartesianIndex(11)]
+    @test bounds[2].I == CartesianIndex(11)
     ## 2D
-    grid = Grid(0:10, 0:6)
-    bounds = eachboundary(grid)
-    @test length(bounds) == 4
-    @test bounds[1].n == Vec(-1, 0)
-    @test bounds[1].indices == CartesianIndices((1:1, 1:7))
-    @test bounds[2].n == Vec(1, 0)
-    @test bounds[2].indices == CartesianIndices((11:11, 1:7))
-    @test bounds[3].n == Vec(0, -1)
-    @test bounds[3].indices == CartesianIndices((1:11, 1:1))
-    @test bounds[4].n == Vec(0, 1)
-    @test bounds[4].indices == CartesianIndices((1:11, 7:7))
-    ## 3D
-    grid = Grid(0:10, 0:6, 0:4)
-    bounds = eachboundary(grid)
-    @test length(bounds) == 6
-    @test bounds[1].n == Vec(-1, 0, 0)
-    @test bounds[1].indices == CartesianIndices((1:1, 1:7, 1:5))
-    @test bounds[2].n == Vec(1, 0, 0)
-    @test bounds[2].indices == CartesianIndices((11:11, 1:7, 1:5))
-    @test bounds[3].n == Vec(0, -1, 0)
-    @test bounds[3].indices == CartesianIndices((1:11, 1:1, 1:5))
-    @test bounds[4].n == Vec(0, 1, 0)
-    @test bounds[4].indices == CartesianIndices((1:11, 7:7, 1:5))
-    @test bounds[5].n == Vec(0, 0, -1)
-    @test bounds[5].indices == CartesianIndices((1:11, 1:7, 1:1))
-    @test bounds[6].n == Vec(0, 0, 1)
-    @test bounds[6].indices == CartesianIndices((1:11, 1:7, 5:5))
+    withinbounds = falses(11, 11)
+    withinbounds[begin+3:end-3, begin+3:end-3] .= true
+    grid = Grid(0:10, 0:10; withinbounds)
+    map(I -> Poingr.isonbound(grid, I), CartesianIndices(grid)) == [0 0 0 0 0 0 0 0 0 0 0
+                                                                    0 0 0 0 0 0 0 0 0 0 0
+                                                                    0 0 0 0 0 0 0 0 0 0 0
+                                                                    0 0 0 1 1 1 1 1 0 0 0
+                                                                    0 0 0 1 0 0 0 1 0 0 0
+                                                                    0 0 0 1 0 0 0 1 0 0 0
+                                                                    0 0 0 1 0 0 0 1 0 0 0
+                                                                    0 0 0 1 1 1 1 1 0 0 0
+                                                                    0 0 0 0 0 0 0 0 0 0 0
+                                                                    0 0 0 0 0 0 0 0 0 0 0
+                                                                    0 0 0 0 0 0 0 0 0 0 0]
+    for boundary in eachboundary(grid)
+        if boundary.I == CartesianIndex(1,1)
+            @test boundary.n == Vec(-1,0) || boundary.n == Vec(0,-1)
+        elseif boundary.I == CartesianIndex(11,1)
+            @test boundary.n == Vec(1,0) || boundary.n == Vec(0,-1)
+        elseif boundary.I == CartesianIndex(1,11)
+            @test boundary.n == Vec(-1,0) || boundary.n == Vec(0,1)
+        elseif boundary.I == CartesianIndex(11,11)
+            @test boundary.n == Vec(1,0) || boundary.n == Vec(0,1)
+        elseif boundary.I in CartesianIndices((1:1, 1:11))
+            @test boundary.n == Vec(-1,0)
+        elseif boundary.I in CartesianIndices((11:11, 1:11))
+            @test boundary.n == Vec(1,0)
+        elseif boundary.I in CartesianIndices((1:11, 1:1))
+            @test boundary.n == Vec(0,-1)
+        elseif boundary.I in CartesianIndices((1:11, 11:11))
+            @test boundary.n == Vec(0,1)
+        # following boundaries are from `withinbounds`
+        elseif boundary.I == CartesianIndex(4,4)
+            @test boundary.n == Vec(1,0) || boundary.n == Vec(0,1)
+        elseif boundary.I == CartesianIndex(8,4)
+            @test boundary.n == Vec(-1,0) || boundary.n == Vec(0,1)
+        elseif boundary.I == CartesianIndex(4,8)
+            @test boundary.n == Vec(1,0) || boundary.n == Vec(0,-1)
+        elseif boundary.I == CartesianIndex(8,8)
+            @test boundary.n == Vec(-1,0) || boundary.n == Vec(0,-1)
+        elseif boundary.I in CartesianIndices((4:4, 4:8))
+            @test boundary.n == Vec(1,0)
+        elseif boundary.I in CartesianIndices((8:8, 4:8))
+            @test boundary.n == Vec(-1,0)
+        elseif boundary.I in CartesianIndices((4:8, 4:4))
+            @test boundary.n == Vec(0,1)
+        elseif boundary.I in CartesianIndices((4:8, 8:8))
+            @test boundary.n == Vec(0,-1)
+        else
+            error()
+        end
+    end
 end
