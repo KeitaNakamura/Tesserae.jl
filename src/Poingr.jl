@@ -74,12 +74,15 @@ export
 include("utils.jl")
 include("dotmacros.jl")
 
+include("sparray.jl")
+
+abstract type ShapeFunction end
+include("grid.jl")
+
 include("ShapeFunctions/shapefunction.jl")
 include("ShapeFunctions/bspline.jl")
 include("ShapeFunctions/wls.jl")
 
-include("sparray.jl")
-include("grid.jl")
 include("pointstate.jl")
 
 include("mpcache.jl")

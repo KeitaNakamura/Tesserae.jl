@@ -75,70 +75,11 @@ end
     end
 end
 
-"""
-    Poingr.BSplinePosition(; nth::Int, dir::Int)
-
-Specify node position.
-The node is located at `nth` away from bound along the `dir` direction.
-
-# Examples
-```jldoctest
-julia> Poingr.BSplinePosition([1,2,3,4,5], 2)
-BSplinePosition(nth = 1, dir = 1)
-
-julia> Poingr.BSplinePosition([1,2,3,4,5], 4)
-BSplinePosition(nth = 1, dir = -1)
-
-julia> pos = Poingr.BSplinePosition([1,2,3,4,5], 1)
-BSplinePosition(nth = 0, dir = 0)
-
-julia> f = QuadraticBSpline()
-QuadraticBSpline()
-
-julia> Poingr.value(f, 0.0, pos)
-1.0
-```
-"""
-struct BSplinePosition
-    nth::Int
-    dir::Int
-end
-
-BSplinePosition(; nth::Int, dir::Int) = BSplinePosition(nth, dir)
-
-BSplinePosition(pos::Int) = BSplinePosition(abs(pos), sign(pos))
-
-function BSplinePosition(v::AbstractVector, i::Int)
-    @boundscheck checkbounds(v, i)
-    l = i - firstindex(v)
-    r = lastindex(v) - i
-    BSplinePosition(ifelse(l < r, l, -r))
-end
-
-function BSplinePosition(A::AbstractArray{<: Any, dim}, I::NTuple{dim, Int}) where {dim}
-    @boundscheck checkbounds(A, I...)
-    ntuple(Val(dim)) do d
-        @inbounds begin
-            l = I[d] - firstindex(A, d)
-            r = lastindex(A, d) - I[d]
-            BSplinePosition(ifelse(l < r, l, -r))
-        end
-    end
-end
-
-BSplinePosition(A::AbstractArray{<: Any, dim}, I::CartesianIndex{dim}) where {dim} =
-    (@_propagate_inbounds_meta; BSplinePosition(A, Tuple(I)))
-BSplinePosition(A::AbstractArray{<: Any, dim}, I::Index{dim}) where {dim} =
-    (@_propagate_inbounds_meta; BSplinePosition(A, I.I))
-
-nthfrombound(pos::BSplinePosition) = pos.nth
-dirfrombound(pos::BSplinePosition) = pos.dir
-
-function value(spline::BSpline{1}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
+function value(spline::BSpline{1}, ξ::Real, pos::NodePosition)::typeof(ξ)
     value(spline, ξ)
 end
 
-function value(spline::BSpline{2}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
+function value(spline::BSpline{2}, ξ::Real, pos::NodePosition)::typeof(ξ)
     if nthfrombound(pos) == 0
         ξ = abs(ξ)
         ξ < 0.5 ? (3 - 4ξ^2) / 3 :
@@ -154,7 +95,7 @@ function value(spline::BSpline{2}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
     end
 end
 
-function value(spline::BSpline{3}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
+function value(spline::BSpline{3}, ξ::Real, pos::NodePosition)::typeof(ξ)
     if nthfrombound(pos) == 0
         ξ = abs(ξ)
         ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 4 :
@@ -170,12 +111,8 @@ function value(spline::BSpline{3}, ξ::Real, pos::BSplinePosition)::typeof(ξ)
     end
 end
 
-@inline function value(bspline::BSpline, ξ::Vec{dim}, pos::NTuple{dim, BSplinePosition}) where {dim}
+@inline function value(bspline::BSpline, ξ::Vec{dim}, pos::NTuple{dim, NodePosition}) where {dim}
     prod(value.(Ref(bspline), ξ, pos))
-end
-
-function Base.show(io::IO, pos::BSplinePosition)
-    print(io, "BSplinePosition(nth = $(pos.nth), dir = $(pos.dir))")
 end
 
 
@@ -199,7 +136,7 @@ function ShapeValues{dim, T}(F::BSpline{order}) where {order, dim, T}
     BSplineValues{order, dim, T, L}()
 end
 
-function update!(it::BSplineValues{<: Any, dim}, grid, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+function update!(it::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
     update_gridindices!(it, grid, x, spat)
     it.N .= zero(it.N)
     it.∇N .= zero(it.∇N)
@@ -210,7 +147,7 @@ function update!(it::BSplineValues{<: Any, dim}, grid, x::Vec{dim}, spat::Abstra
         it.∇N[i], it.N[i] = gradient(x, :all) do x
             @_inline_meta
             ξ = (x - xᵢ) ./ gridsteps(grid)
-            value(F, ξ, BSplinePosition(grid, I))
+            value(F, ξ, node_position(grid, I))
         end
     end
     it

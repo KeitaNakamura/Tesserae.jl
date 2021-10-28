@@ -1,4 +1,3 @@
-abstract type ShapeFunction end
 abstract type ShapeValues{dim, T} <: AbstractVector{T} end
 
 Base.size(x::ShapeValues) = (x.len[],)
@@ -26,9 +25,9 @@ julia> sum(sv.∇N)
 """
 ShapeValues{dim}(F::ShapeFunction) where {dim} = ShapeValues{dim, Float64}(F)
 
-update!(it::ShapeValues, grid, x::Vec) = update!(it, grid, x, trues(size(grid)))
+update!(it::ShapeValues, grid::Grid, x::Vec) = update!(it, grid, x, trues(size(grid)))
 
-function update_gridindices!(it::ShapeValues, grid, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+function update_gridindices!(it::ShapeValues, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
     inds = neighboring_nodes(grid, x, support_length(it.F))
     count = 0
     @inbounds for I in inds

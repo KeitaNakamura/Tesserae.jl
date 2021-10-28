@@ -89,7 +89,7 @@ function ShapeValues{dim, T}(F::WLS{poly_order, bspline_order}) where {poly_orde
     WLSValues{poly_order, bspline_order, dim, T, L, M, M^2}()
 end
 
-function update!(it::WLSValues{<: Any, <: Any, dim}, grid, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+function update!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
     update_gridindices!(it, grid, x, spat)
     it.N .= zero(it.N)
     it.∇N .= zero(it.∇N)
