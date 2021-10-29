@@ -1,8 +1,6 @@
-module SandColumn
-
 using Poingr
 
-function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool = true)
+function sandcolumn(shape_function = LinearWLS(CubicBSpline()); show_progress::Bool = true)
     ρ₀ = 1.6e3
     g = 9.81
     h = 0.3
@@ -33,15 +31,15 @@ function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool 
 
     # Output files
     ## proj
-    proj_dir = joinpath("sand.tmp")
-    mkpath(proj_dir)
+    output_dir = joinpath("sandcolumn.tmp")
+    mkpath(output_dir)
 
     ## paraview
-    paraview_file = joinpath(proj_dir, "out")
+    paraview_file = joinpath(output_dir, "out")
     paraview_collection(vtk_save, paraview_file)
 
     ## copy this file
-    cp(@__FILE__, joinpath(proj_dir, "main.jl"), force = true)
+    cp(@__FILE__, joinpath(output_dir, "main.jl"), force = true)
 
     logger = Logger(0.0:0.01:0.6; progress = show_progress)
 
@@ -117,6 +115,4 @@ function boundary_velocity(v::Vec, n::Vec)
     else
         v + Contact(:slip)(v, n)
     end
-end
-
 end
