@@ -1,3 +1,33 @@
+default_pointstate_type(::Nothing, ::Val{dim}, ::Val{T}) where {dim, T} =
+    @NamedTuple{x::Vec{dim, T}, V::T, side_length::Vec{dim, T}, index::Int}
+
+struct DefaultPointStateBSpline{dim, T}
+    m::T
+    V::T
+    x::Vec{dim, T}
+    v::Vec{dim, T}
+    b::Vec{dim, T}
+    σ::SymmetricSecondOrderTensor{3, T, 6}
+    ϵ::SymmetricSecondOrderTensor{3, T, 6}
+    ∇v::SecondOrderTensor{3, T, 9}
+end
+
+default_pointstate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateBSpline{dim, T}
+
+struct DefaultPointStateWLS{dim, T, M}
+    m::T
+    V::T
+    x::Vec{dim, T}
+    v::Vec{dim, T}
+    b::Vec{dim, T}
+    σ::SymmetricSecondOrderTensor{3, T, 6}
+    ϵ::SymmetricSecondOrderTensor{3, T, 6}
+    ∇v::SecondOrderTensor{3, T, 9}
+    C::Mat{dim, M, T, 6}
+end
+
+default_pointstate_type(::LinearWLS, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateWLS{dim, T, dim+1}
+
 function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
     h = gridsteps(grid) ./ n # length per particle
     allpoints = Grid(@. LinRange(
@@ -42,6 +72,7 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int =
     pointstate
 end
 
-function generate_pointstate(indomain, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
-    generate_pointstate(indomain, @NamedTuple{x::Vec{dim, T}, V::T, side_length::Vec{dim, T}, index::Int}, grid; n)
+function generate_pointstate(indomain, grid::Grid{dim, T}; kwargs...) where {dim, T}
+    Point = default_pointstate_type(grid.shapefunction, Val(dim), Val(T))
+    generate_pointstate(indomain, Point, grid; kwargs...)
 end

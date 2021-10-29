@@ -2,26 +2,6 @@ module SandColumn
 
 using Poingr
 
-struct NodeState
-    f::Vec{2, Float64}
-    w::Float64
-    m::Float64
-    v::Vec{2, Float64}
-    v_n::Vec{2, Float64}
-end
-
-struct PointState
-    m::Float64
-    V::Float64
-    x::Vec{2, Float64}
-    v::Vec{2, Float64}
-    b::Vec{2, Float64}
-    σ::SymmetricSecondOrderTensor{3, Float64, 6}
-    ϵ::SymmetricSecondOrderTensor{3, Float64, 6}
-    ∇v::SecondOrderTensor{3, Float64, 9}
-    C::Mat{2, 3, Float64, 6}
-end
-
 function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool = true)
     ρ₀ = 1.6e3
     g = 9.81
@@ -32,8 +12,8 @@ function main(; shape_function = LinearWLS(CubicBSpline()), show_progress::Bool 
     E = 1e6
     dx = 0.005
 
-    grid = Grid(NodeState, shape_function, 0:dx:1.0, 0:dx:1.0)
-    pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, PointState, grid)
+    grid = Grid(shape_function, 0:dx:1.0, 0:dx:1.0)
+    pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, grid)
     cache = MPCache(grid, pointstate.x)
     elastic = LinearElastic(E = E, ν = ν)
     model = DruckerPrager(elastic, :plane_strain; c = 0, ϕ, ψ)

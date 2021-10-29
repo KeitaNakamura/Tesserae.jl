@@ -163,14 +163,20 @@ function Grid(::Type{Node}, shapefunction, coordinates::Coordinate{dim}; coordin
     Grid(shapefunction, Coordinate(Array.(axes)), map(step, axes), state, coordinate_system, BoundaryCondition(withinbounds))
 end
 
+function Grid(shapefunction::ShapeFunction, coordinates::Coordinate{dim, Tup}; kwargs...) where {dim, Tup}
+    T = promote_type(Tup.parameters...)
+    Node = default_nodestate_type(shapefunction, Val(dim), Val(T))
+    Grid(Node, shapefunction, coordinates; kwargs...)
+end
+
+# `shapefunction` must be given if Node is given
 Grid(::Type{Node}, shapefunction, axes::Tuple{Vararg{AbstractVector}}; kwargs...) where {Node} = Grid(Node, shapefunction, Coordinate(axes); kwargs...)
-Grid(::Type{Node}, axes::Tuple{Vararg{AbstractVector}}; kwargs...) where {Node} = Grid(Node, nothing, axes; kwargs...)
-Grid(shapefunction, axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(Nothing, shapefunction, axes; kwargs...)
+Grid(shapefunction::ShapeFunction, axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(shapefunction, Coordinate(axes); kwargs...)
 Grid(axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
 
+# `shapefunction` must be given if Node is given
 Grid(Node::Type, shapefunction, axes::AbstractVector...; kwargs...) = Grid(Node, shapefunction, axes; kwargs...)
-Grid(Node::Type, axes::AbstractVector...; kwargs...) = Grid(Node, nothing, axes; kwargs...)
-Grid(shapefunction, axes::AbstractVector...; kwargs...) = Grid(Nothing, shapefunction, axes; kwargs...)
+Grid(shapefunction::ShapeFunction, axes::AbstractVector...; kwargs...) = Grid(shapefunction, axes; kwargs...)
 Grid(axes::AbstractVector...; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
 
 @inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
