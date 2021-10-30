@@ -56,8 +56,15 @@ function sandcolumn(shape_function = LinearWLS(CubicBSpline()); show_progress::B
         default_point_to_grid!(grid, pointstate, cache)
         @. grid.state.v += (grid.state.f / grid.state.m) * dt
 
-        for bd in eachboundary(grid)
-            @inbounds grid.state.v[bd.I] = boundary_velocity(grid.state.v[bd.I], bd.n)
+        @inbounds for bound in eachboundary(grid)
+            v = grid.state.v[bound.I]
+            n = bound.n
+            if n == Vec(0, -1) # bottom
+                v += Contact(:friction, 0.2)(v, n)
+            else
+                v += Contact(:slip)(v, n)
+            end
+            grid.state.v[bound.I] = v
         end
 
         default_grid_to_point!(pointstate, grid, cache, dt)
@@ -106,13 +113,5 @@ function sandcolumn(shape_function = LinearWLS(CubicBSpline()); show_progress::B
                 end
             end
         end
-    end
-end
-
-function boundary_velocity(v::Vec, n::Vec)
-    if n == Vec(0, -1) # bottom
-        v + Contact(:friction, 0.2)(v, n)
-    else
-        v + Contact(:slip)(v, n)
     end
 end

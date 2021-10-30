@@ -43,9 +43,9 @@ function check_example(testname::String, shape_functions)
                 expected_points = get_points(expected)
                 result_points = get_points(result)
                 @assert size(expected_points) == size(result_points)
-                for i in eachindex(expected_points)
+                @test all(eachindex(expected_points)) do i
                     val = expected_points[i]
-                    @test 0.99*val ≤ result_points[i] ≤ 1.01*val # ±1%
+                    0.99*val ≤ result_points[i] ≤ 1.01*val # ±1%
                 end
             end
         end
