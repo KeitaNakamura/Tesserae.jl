@@ -20,6 +20,7 @@ export
     gridaxes,
     gridorigin,
     generate_pointstate,
+    setbounds!,
     eachboundary,
 # shape functions
     update!,

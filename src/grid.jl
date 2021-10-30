@@ -75,16 +75,24 @@ function _direction(contour::AbstractVector{Int})
 end
 
 function BoundaryCondition(withinbounds::AbstractArray{Bool, dim}) where {dim}
-    boundcontours = ntuple(Val(dim)) do d
-        boundcontour = fill(size(withinbounds, d)+1, size(withinbounds))
+    boundcontours = ntuple(d -> Array{Int}(undef, size(withinbounds)), Val(dim))
+    node_positions = ntuple(d -> Array{NodePosition}(undef, size(withinbounds)), Val(dim))
+    bc = BoundaryCondition(boundcontours, node_positions)
+    setbounds!(bc, withinbounds)
+    bc
+end
+
+function setbounds!(bc::BoundaryCondition{dim}, withinbounds::AbstractArray{Bool, dim}) where {dim}
+    for d in 1:dim
+        # update boundcontours
+        boundcontour = bc.boundcontours[d]
+        @assert size(boundcontour) == size(withinbounds)
+        fill!(boundcontour, size(boundcontour, d) + 1) # set large value for initialization
         for args in zip(eachaxis(boundcontour, d), eachaxis(withinbounds, d))
             set_boundcontour!(args...)
         end
-        boundcontour
-    end
-    node_positions = ntuple(Val(dim)) do d
-        boundcontour = boundcontours[d]
-        node_position = Array{NodePosition}(undef, size(boundcontour))
+        # update node_positions
+        node_position = bc.node_positions[d]
         for (axis, contour) in zip(eachaxis(node_position, d), eachaxis(boundcontour, d))
             @assert length(axis) == length(contour)
             @inbounds for i in eachindex(axis)
@@ -92,9 +100,7 @@ function BoundaryCondition(withinbounds::AbstractArray{Bool, dim}) where {dim}
                 axis[i] = NodePosition(contour[i], _direction(@view contour[inds]))
             end
         end
-        node_position
     end
-    BoundaryCondition(boundcontours, node_positions)
 end
 
 
@@ -133,6 +139,7 @@ node_position(grid::Grid, I) = (@_propagate_inbounds_meta; node_position(grid.bc
 node_position(grid::Grid, I, d) = (@_propagate_inbounds_meta; node_position(grid.bc, I, d))
 isonbound(grid::Grid, I) = (@_propagate_inbounds_meta; isonbound(grid.bc, I))
 isonbound(grid::Grid, I, d::Int) = (@_propagate_inbounds_meta; isonbound(grid.bc, I, d))
+setbounds!(grid::Grid, withinbounds::AbstractArray{Bool}) = setbounds!(grid.bc, withinbounds)
 
 checkshapefunction(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of shape function, see help `?Grid` for more details."))
 checkshapefunction(::Grid{<: Any, <: Any, <: ShapeFunction}) = nothing
