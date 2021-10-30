@@ -8,7 +8,7 @@ function sandcolumn(shape_function = LinearWLS(CubicBSpline()); show_progress::B
     ψ = 0
     ν = 0.333
     E = 1e6
-    dx = 0.005
+    dx = 0.01
 
     grid = Grid(shape_function, 0:dx:1.0, 0:dx:1.0)
     pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, grid)
