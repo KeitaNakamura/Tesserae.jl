@@ -23,6 +23,16 @@ end
     |(ntuple(d -> isonbound(bc, I, d), Val(dim))...)
 end
 
+@inline function isinbound(bc::BoundaryCondition, I, d::Int)
+    @_propagate_inbounds_meta
+    pos = node_position(bc, I, d)
+    pos.nth === 0 && pos.dir === 0
+end
+@inline function isinbound(bc::BoundaryCondition{dim}, I) where {dim}
+    @_propagate_inbounds_meta
+    prod(ntuple(d -> isinbound(bc, I, d), Val(dim)))
+end
+
 function set_boundcontour!(boundcontour::AbstractVector{Int}, start::Int, dir::Int)
     @boundscheck checkbounds(boundcontour, start)
     @assert dir == 1 || dir == -1
@@ -139,6 +149,8 @@ node_position(grid::Grid, I) = (@_propagate_inbounds_meta; node_position(grid.bc
 node_position(grid::Grid, I, d) = (@_propagate_inbounds_meta; node_position(grid.bc, I, d))
 isonbound(grid::Grid, I) = (@_propagate_inbounds_meta; isonbound(grid.bc, I))
 isonbound(grid::Grid, I, d::Int) = (@_propagate_inbounds_meta; isonbound(grid.bc, I, d))
+isinbound(grid::Grid, I) = (@_propagate_inbounds_meta; isinbound(grid.bc, I))
+isinbound(grid::Grid, I, d::Int) = (@_propagate_inbounds_meta; isinbound(grid.bc, I, d))
 setbounds!(grid::Grid, withinbounds::AbstractArray{Bool}) = setbounds!(grid.bc, withinbounds)
 
 checkshapefunction(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of shape function, see help `?Grid` for more details."))
@@ -380,6 +392,11 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector)
         spat[inds] .= true
     end
     broadcast!(|, spat, spat_threads...)
+    @inbounds Threads.@threads for I in eachindex(grid)
+        if isinbound(grid, I)
+            spat[I] = false
+        end
+    end
 end
 
 # this seems to be faster when using `reordering_pointstate!`
@@ -393,6 +410,11 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, 
                 inds = neighboring_nodes(grid, xₚ[p], h)
                 spat[inds] .= true
             end
+        end
+    end
+    @inbounds Threads.@threads for I in eachindex(grid)
+        if isinbound(grid, I)
+            spat[I] = false
         end
     end
     spat

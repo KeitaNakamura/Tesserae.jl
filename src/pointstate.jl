@@ -10,6 +10,7 @@ struct DefaultPointStateBSpline{dim, T}
     σ::SymmetricSecondOrderTensor{3, T, 6}
     ϵ::SymmetricSecondOrderTensor{3, T, 6}
     ∇v::SecondOrderTensor{3, T, 9}
+    dϵ_v::T
 end
 
 default_pointstate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateBSpline{dim, T}
@@ -24,6 +25,7 @@ struct DefaultPointStateWLS{dim, T, M}
     ϵ::SymmetricSecondOrderTensor{3, T, 6}
     ∇v::SecondOrderTensor{3, T, 9}
     C::Mat{dim, M, T, 6}
+    dϵ_v::T
 end
 
 default_pointstate_type(::LinearWLS, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateWLS{dim, T, dim+1}

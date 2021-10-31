@@ -318,3 +318,18 @@ function default_grid_to_point!(pointstate::StructVector,
     end
     pointstate
 end
+
+function smooth_volumetric_strain!(pointstate::StructVector, grid::Grid, cache::MPCache, dt::Real)
+    point_to_grid!(grid.state.dϵ_v, cache) do it, p, i
+        @_inline_meta
+        @_propagate_inbounds_meta
+        ∇vₚ = pointstate.∇v[p]
+        it.N * pointstate.m[p] * tr(symmetric(dt * ∇vₚ))
+    end
+    @dot_threads grid.state.dϵ_v /= grid.state.m
+    grid_to_point!(pointstate.dϵ_v, cache) do it, i, p
+        @_inline_meta
+        @_propagate_inbounds_meta
+        it.N * grid.state.dϵ_v[i]
+    end
+end
