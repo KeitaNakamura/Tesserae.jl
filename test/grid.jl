@@ -26,6 +26,7 @@
     # neighboring_nodes/neighboring_cells/whichcell/whichblock
     @test @inferred(Poingr.neighboring_nodes(grid, Vec(0.6, 8.8), 1))::CartesianIndices == CartesianIndices((1:2, 4:5))
     @test @inferred(Poingr.neighboring_nodes(grid, Vec(0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:3, 3:6))
+    @test @inferred(Poingr.neighboring_nodes(grid, Vec(0.6, 8.8), Vec(1,2)))::CartesianIndices == CartesianIndices((1:2, 3:6))
     @test @inferred(Poingr.neighboring_nodes(grid, Vec(0.6, 8.8)))::CartesianIndices == CartesianIndices((1:3, 3:6))
     @test @inferred(Poingr.neighboring_nodes(grid, Vec(-0.6, 8.8)))::CartesianIndices == CartesianIndices((1:0, 1:0))
     @test @inferred(Poingr.neighboring_cells(grid, Vec(0.6, 8.8), 1))::CartesianIndices == CartesianIndices((1:2, 3:5))

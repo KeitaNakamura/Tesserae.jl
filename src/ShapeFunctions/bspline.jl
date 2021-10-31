@@ -137,10 +137,10 @@ function ShapeValues{dim, T}(F::BSpline{order}) where {order, dim, T}
 end
 
 function update!(it::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
-    update_gridindices!(it, grid, x, spat)
+    F = it.F
     it.N .= zero(it.N)
     it.∇N .= zero(it.∇N)
-    F = it.F
+    update_gridindices!(it, grid, neighboring_nodes(grid, x, support_length(F)), spat)
     @inbounds @simd for i in 1:length(it)
         I = it.inds[i]
         xᵢ = grid[I]

@@ -204,7 +204,7 @@ Grid(axes::AbstractVector...; kwargs...) = Grid(Nothing, nothing, axes; kwargs..
 end
 
 """
-    Poingr.neighboring_nodes(grid, x::Vec, h::Real)
+    Poingr.neighboring_nodes(grid, x::Vec, h)
 
 Return `CartesianIndices` storing neighboring node indices around `x`.
 `h` is a range for searching and its unit is `gridsteps` `dx`.
@@ -234,13 +234,13 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
  CartesianIndex(4,)
 ```
 """
-@inline function neighboring_nodes(grid::Grid{dim}, x::Vec{dim}, h::Real) where {dim}
+@inline function neighboring_nodes(grid::Grid{dim}, x::Vec{dim}, h) where {dim}
     dx = gridsteps(grid)
     xmin = gridorigin(grid)
     ξ = Tuple((x - xmin) ./ dx)
     all(@. 0 ≤ ξ ≤ $size(grid)-1) || return CartesianIndices(ntuple(d->1:0, Val(dim)))
-    imin = @. unsafe_trunc(Int,  ceil(ξ - h)) + 1
-    imax = @. imin + unsafe_trunc(Int, ceil(2h)) - 1
+    imin = Tuple(@. unsafe_trunc(Int,  ceil(ξ - h)) + 1)
+    imax = Tuple(@. imin + unsafe_trunc(Int, ceil(2h)) - 1)
     inds = CartesianIndices(@. UnitRange(imin, imax))
     CartesianIndices(grid) ∩ inds
 end

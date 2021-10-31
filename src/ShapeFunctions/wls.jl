@@ -90,13 +90,13 @@ function ShapeValues{dim, T}(F::WLS{poly_order, bspline_order}) where {poly_orde
 end
 
 function update!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
-    update_gridindices!(it, grid, x, spat)
     it.N .= zero(it.N)
     it.∇N .= zero(it.∇N)
     it.w .= zero(it.w)
     F = weight_function(it)
     P = polynomial(it)
     M = zero(it.M⁻¹[])
+    update_gridindices!(it, grid, neighboring_nodes(grid, x, support_length(F)), spat)
     @inbounds @simd for i in 1:length(it)
         I = it.inds[i]
         xᵢ = grid[I]

@@ -27,10 +27,11 @@ ShapeValues{dim}(F::ShapeFunction) where {dim} = ShapeValues{dim, Float64}(F)
 
 update!(it::ShapeValues, grid::Grid, x::Vec) = update!(it, grid, x, trues(size(grid)))
 
-function update_gridindices!(it::ShapeValues, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
-    inds = neighboring_nodes(grid, x, support_length(it.F))
+function update_gridindices!(it::ShapeValues, grid::Grid{dim}, gridindices::CartesianIndices, spat::AbstractArray{Bool, dim}) where {dim}
+    @assert size(grid) == size(spat)
+    @boundscheck checkbounds(grid, gridindices)
     count = 0
-    @inbounds for I in inds
+    @inbounds for I in gridindices
         i = LinearIndices(grid)[I]
         if spat[i]
             @assert count != length(it.inds)
