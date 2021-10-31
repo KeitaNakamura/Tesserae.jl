@@ -1,16 +1,18 @@
 default_pointstate_type(::Nothing, ::Val{dim}, ::Val{T}) where {dim, T} =
-    @NamedTuple{x::Vec{dim, T}, V::T, side_length::Vec{dim, T}, index::Int}
+    @NamedTuple{x::Vec{dim, T}, V::T, r::Vec{dim, T}, index::Int}
 
 struct DefaultPointStateBSpline{dim, T}
     m::T
     V::T
     x::Vec{dim, T}
     v::Vec{dim, T}
+    r::Vec{dim, T}
     b::Vec{dim, T}
     σ::SymmetricSecondOrderTensor{3, T, 6}
     ϵ::SymmetricSecondOrderTensor{3, T, 6}
     ∇v::SecondOrderTensor{3, T, 9}
     dϵ_v::T
+    index::Int
 end
 
 default_pointstate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateBSpline{dim, T}
@@ -20,12 +22,14 @@ struct DefaultPointStateWLS{dim, T, M}
     V::T
     x::Vec{dim, T}
     v::Vec{dim, T}
+    r::Vec{dim, T}
     b::Vec{dim, T}
     σ::SymmetricSecondOrderTensor{3, T, 6}
     ϵ::SymmetricSecondOrderTensor{3, T, 6}
     ∇v::SecondOrderTensor{3, T, 9}
     C::Mat{dim, M, T, 6}
     dϵ_v::T
+    index::Int
 end
 
 default_pointstate_type(::LinearWLS, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateWLS{dim, T, dim+1}
@@ -64,8 +68,8 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int =
             @. pointstate.V = V
         end
     end
-    if :side_length in propertynames(pointstate)
-        pointstate.side_length .= Vec(h)
+    if :r in propertynames(pointstate)
+        pointstate.r .= Vec(h) / 2
     end
     if :index in propertynames(pointstate)
         pointstate.index .= 1:npoints
