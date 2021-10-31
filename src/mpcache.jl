@@ -43,36 +43,28 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-# pointsinblock in cache must be updated in advance
-function _update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
+function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
     @assert size(grid) == gridsize(cache)
 
+    shapevalues = cache.shapevalues
+    pointsinblock = cache.pointsinblock
+    spat = cache.spat
+
     cache.npoints[] = length(xₚ)
-    allocate!(i -> eltype(cache.shapevalues)(), cache.shapevalues, length(xₚ))
+    allocate!(i -> eltype(shapevalues)(), shapevalues, length(xₚ))
+
+    pointsinblock!(pointsinblock, grid, xₚ)
+    sparsity_pattern!(spat, grid, xₚ, pointsinblock)
 
     Threads.@threads for p in eachindex(xₚ)
-        @inbounds update!(cache.shapevalues[p], grid, xₚ[p], cache.spat)
+        @inbounds update!(shapevalues[p], grid, xₚ[p], spat)
     end
 
     gridstate = grid.state
-    gridstate.spat .= cache.spat
+    gridstate.spat .= spat
     reinit!(gridstate)
 
     cache
-end
-
-function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector, spat::AbstractArray{Bool, dim}) where {dim}
-    @assert size(grid) == gridsize(cache)
-    pointsinblock!(cache.pointsinblock, grid, xₚ)
-    copyto!(cache.spat, spat)
-    _update!(cache, grid, xₚ)
-end
-
-function update!(cache::MPCache{dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
-    @assert size(grid) == gridsize(cache)
-    pointsinblock!(cache.pointsinblock, grid, xₚ)
-    sparsity_pattern!(cache.spat, grid, xₚ, cache.pointsinblock) # create sparsity_pattern using pointsinblock
-    _update!(cache, grid, xₚ)
 end
 
 ##################
@@ -99,23 +91,6 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
             @inbounds for p in pointsinblock(cache)[blockindex]
                 pointmask !== nothing && !pointmask[p] && continue
                 _point_to_grid!(p2g, gridstates, cache.shapevalues[p], p)
-            end
-        end
-    end
-    gridstates
-end
-
-function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
-    @assert all(==(size(grid)), size.(gridstates))
-    ptsinblk = pointsinblock(grid, xₚ)
-    spat = sparsity_pattern(grid, xₚ)
-    shapevalues_threads = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:Threads.nthreads()]
-    for blocks in threadsafe_blocks(size(grid))
-        Threads.@threads for blockindex in blocks
-            shapevalues = shapevalues_threads[Threads.threadid()]
-            for p in ptsinblk[blockindex]
-                update!(shapevalues, grid, xₚ[p], spat)
-                _point_to_grid!(p2g, gridstates, shapevalues, p)
             end
         end
     end
@@ -223,18 +198,6 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, cache::
     @inbounds Threads.@threads for p in 1:npoints(cache)
         pointmask !== nothing && !pointmask[p] && continue
         _grid_to_point!(g2p, pointstates, cache.shapevalues[p], p)
-    end
-    pointstates
-end
-
-function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
-    @assert all(==(length(xₚ)), length.(pointstates))
-    spat = sparsity_pattern(grid, xₚ)
-    shapevalues_threads = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:Threads.nthreads()]
-    Threads.@threads for p in 1:length(xₚ)
-        shapevalues = shapevalues_threads[Threads.threadid()]
-        update!(shapevalues, grid, xₚ[p], spat)
-        _grid_to_point!(g2p, pointstates, shapevalues, p)
     end
     pointstates
 end
