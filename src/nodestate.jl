@@ -1,4 +1,4 @@
-struct DefaultNodeStateBSpline{dim, T}
+struct DefaultNodeState{dim, T}
     m::Float64
     f::Vec{dim, T}
     v::Vec{dim, T}
@@ -6,7 +6,8 @@ struct DefaultNodeStateBSpline{dim, T}
     dϵ_v::T
 end
 
-default_nodestate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultNodeStateBSpline{dim, T}
+default_nodestate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultNodeState{dim, T}
+default_nodestate_type(::GIMP, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultNodeState{dim, T}
 
 struct DefaultNodeStateWLS{dim, T}
     m::Float64

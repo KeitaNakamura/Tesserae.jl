@@ -368,44 +368,6 @@ end
 
 blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
 
-function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
-    empty!.(ptsinblk)
-    @inbounds for p in eachindex(xₚ)
-        I = whichblock(grid, xₚ[p])
-        I === nothing && continue
-        push!(ptsinblk[I], p)
-    end
-    ptsinblk
-end
-
-function pointsinblock(grid::Grid, xₚ::AbstractVector)
-    ptsinblk = Array{Vector{Int}}(undef, blocksize(grid))
-    @inbounds @simd for i in eachindex(ptsinblk)
-        ptsinblk[i] = Int[]
-    end
-    pointsinblock!(ptsinblk, grid, xₚ)
-end
-
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, ptsinblk::AbstractArray{Vector{Int}})
-    @assert size(spat) == size(grid)
-    fill!(spat, false)
-    h = active_length(grid.shapefunction)
-    for blocks in threadsafe_blocks(size(grid))
-        Threads.@threads for blockindex in blocks
-            @inbounds for p in ptsinblk[blockindex]
-                inds = neighboring_nodes(grid, xₚ[p], h)
-                spat[inds] .= true
-            end
-        end
-    end
-    @inbounds Threads.@threads for I in eachindex(grid)
-        if isinbound(grid, I)
-            spat[I] = false
-        end
-    end
-    spat
-end
-
 
 struct BlockStepIndices{N} <: AbstractArray{CartesianIndex{N}, N}
     inds::Coordinate{N, NTuple{N, Int}, NTuple{N, StepRange{Int, Int}}}

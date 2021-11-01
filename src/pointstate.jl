@@ -1,7 +1,7 @@
 default_pointstate_type(::Nothing, ::Val{dim}, ::Val{T}) where {dim, T} =
     @NamedTuple{x::Vec{dim, T}, V::T, r::Vec{dim, T}, index::Int}
 
-struct DefaultPointStateBSpline{dim, T}
+struct DefaultPointState{dim, T}
     m::T
     V::T
     x::Vec{dim, T}
@@ -15,7 +15,8 @@ struct DefaultPointStateBSpline{dim, T}
     index::Int
 end
 
-default_pointstate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateBSpline{dim, T}
+default_pointstate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
+default_pointstate_type(::GIMP, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
 
 struct DefaultPointStateWLS{dim, T, M}
     m::T

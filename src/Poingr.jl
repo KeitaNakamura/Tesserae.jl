@@ -8,7 +8,7 @@ using Base.Broadcast: Broadcasted, BroadcastStyle, AbstractArrayStyle, ArrayStyl
 using Reexport
 @reexport using Tensorial
 @reexport using WriteVTK
-using StaticArrays, StructArrays
+using StaticArrays, StructArrays, FillArrays
 using Coordinates
 
 const BLOCK_UNIT = unsigned(3) # 2^3
@@ -30,6 +30,7 @@ export
     CubicBSpline,
     LinearWLS,
     polynomial,
+    GIMP,
 # MPCache
     MPCache,
     point_to_grid!,
@@ -83,6 +84,7 @@ include("grid.jl")
 include("ShapeFunctions/shapefunction.jl")
 include("ShapeFunctions/bspline.jl")
 include("ShapeFunctions/wls.jl")
+include("ShapeFunctions/gimp.jl")
 
 include("nodestate.jl")
 include("pointstate.jl")

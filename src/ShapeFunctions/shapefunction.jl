@@ -26,6 +26,7 @@ julia> sum(sv.∇N)
 ShapeValues{dim}(F::ShapeFunction) where {dim} = ShapeValues{dim, Float64}(F)
 
 update!(it::ShapeValues, grid::Grid, x::Vec) = update!(it, grid, x, trues(size(grid)))
+update!(it::ShapeValues, grid::Grid, x::Vec, r::Vec) = update!(it, grid, x, r, trues(size(grid)))
 
 function update_gridindices!(it::ShapeValues, grid::Grid{dim}, gridindices::CartesianIndices, spat::AbstractArray{Bool, dim}) where {dim}
     @assert size(grid) == size(spat)

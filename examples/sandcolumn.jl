@@ -1,6 +1,9 @@
 using Poingr
 
-function sandcolumn(shape_function = LinearWLS(CubicBSpline()); show_progress::Bool = true)
+function sandcolumn(
+        shape_function = LinearWLS(CubicBSpline());
+        CFL = 1.0,
+        show_progress::Bool = true)
     ρ₀ = 1.6e3
     g = 9.81
     h = 0.3
@@ -49,10 +52,10 @@ function sandcolumn(shape_function = LinearWLS(CubicBSpline()); show_progress::B
         dt = minimum(pointstate) do p
             ρ = p.m / p.V
             vc = soundspeed(elastic.K, elastic.G, ρ)
-            minimum(gridsteps(grid)) / vc
+            CFL * minimum(gridsteps(grid)) / vc
         end
 
-        update!(cache, grid, pointstate.x)
+        update!(cache, grid, pointstate)
         default_point_to_grid!(grid, pointstate, cache)
         @. grid.state.v += (grid.state.f / grid.state.m) * dt
 

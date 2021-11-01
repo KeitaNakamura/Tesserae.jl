@@ -54,5 +54,5 @@ end
 
 @testset "Check examples" begin
     check_example("sandcolumn", (QuadraticBSpline(), LinearWLS(QuadraticBSpline())))
-    check_example("stripfooting", (LinearBSpline(), LinearWLS(QuadraticBSpline())))
+    check_example("stripfooting", (LinearBSpline(), GIMP(), LinearWLS(QuadraticBSpline())))
 end
