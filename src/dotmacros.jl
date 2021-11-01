@@ -51,6 +51,7 @@ Base.size(A::LazyDotArray) = map(length, axes(A))
 @inline _LazyDotArray(bc::Broadcasted{<: Any, <: Any, F, Args}, axes::Tuple{Vararg{Any, N}}) where {N, F, Args} =
     LazyDotArray{Broadcast.combine_eltypes(bc.f, bc.args), N, F, Args}(bc.f, bc.args)
 @inline LazyDotArray(bc::Broadcasted) = _LazyDotArray(bc, axes(bc))
+@inline LazyDotArray(f, args...) = LazyDotArray(broadcasted(f, args...))
 
 struct LazyDotStyle <: BroadcastStyle end
 function dot_lazy end
