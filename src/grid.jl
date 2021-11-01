@@ -234,13 +234,16 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
  CartesianIndex(4,)
 ```
 """
-@inline function neighboring_nodes(grid::Grid{dim}, x::Vec{dim}, h) where {dim}
+@inline function neighboring_nodes(grid::Grid{dim, T}, x::Vec{dim}, h) where {dim, T}
+    # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
+    # This means `neighboring_nodes` doesn't include bounds of range.
+    h′ = @. h - sqrt(eps(T))
     dx = gridsteps(grid)
     xmin = gridorigin(grid)
     ξ = Tuple((x - xmin) ./ dx)
     all(@. 0 ≤ ξ ≤ $size(grid)-1) || return CartesianIndices(ntuple(d->1:0, Val(dim)))
-    imin = Tuple(@. unsafe_trunc(Int,  ceil(ξ - h)) + 1)
-    imax = Tuple(@. imin + unsafe_trunc(Int, ceil(2h)) - 1)
+    imin = Tuple(@. unsafe_trunc(Int, ceil(ξ - h′))  + 1)
+    imax = Tuple(@. unsafe_trunc(Int, floor(ξ + h′)) + 1)
     inds = CartesianIndices(@. UnitRange(imin, imax))
     CartesianIndices(grid) ∩ inds
 end
