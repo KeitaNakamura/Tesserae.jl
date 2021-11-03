@@ -51,7 +51,7 @@ function sandcolumn(
 
         dt = minimum(pointstate) do p
             ρ = p.m / p.V
-            vc = soundspeed(elastic.K, elastic.G, ρ)
+            vc = matcalc(Val(:sound_speed), elastic.K, elastic.G, ρ)
             CFL * minimum(gridsteps(grid)) / vc
         end
 
@@ -75,8 +75,8 @@ function sandcolumn(
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]
             dϵ = symmetric(∇v) * dt
-            σ = update_stress(model, σ_n, dϵ)
-            σ = Poingr.jaumann_stress(σ, σ_n, ∇v, dt)
+            σ = matcalc(Val(:stress), model, σ_n, dϵ)
+            σ = matcalc(Val(:jaumann_stress), σ, σ_n, ∇v, dt)
             if mean(σ) > model.tension_cutoff
                 # In this case, since the soil particles are not contacted with
                 # each other, soils should not act as continuum.
@@ -87,7 +87,7 @@ function sandcolumn(
                 # function, and ignore the plastic strain to prevent excessive generation.
                 # If we include this plastic strain, the volume of the material points
                 # will continue to increase unexpectedly.
-                σ_tr = update_stress(model.elastic, σ_n, dϵ)
+                σ_tr = matcalc(Val(:stress), model.elastic, σ_n, dϵ)
                 σ = Poingr.tension_cutoff(model, σ_tr)
                 dϵ = elastic.Dinv ⊡ (σ - σ_n)
             end

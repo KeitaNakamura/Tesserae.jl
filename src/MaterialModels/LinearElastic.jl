@@ -81,11 +81,11 @@ function LinearElastic(; kwargs...)
     LinearElastic(E, K, G, λ, ν, D, inv(D))
 end
 
-function update_stress(model::LinearElastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
+function matcalc(::Val{:stress}, model::LinearElastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
     @_inline_meta
     σ + model.D ⊡ dϵ
 end
 
-function compute_stiffness_tensor(model::LinearElastic, σ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:stiffness}, model::LinearElastic, σ::SymmetricSecondOrderTensor{3})
     model.D
 end

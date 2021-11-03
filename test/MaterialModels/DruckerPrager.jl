@@ -8,8 +8,8 @@
             σ = -100.0*one(SymmetricSecondOrderTensor{3})
             dϵ = -0.1*rand(SymmetricSecondOrderTensor{3}) / steps
             for i in 1:steps
-                σ = @inferred update_stress(model, σ, dϵ)
-                f = @inferred Poingr.yield_function(model, σ)
+                σ = @inferred matcalc(Val(:stress), model, σ, dϵ)
+                f = @inferred matcalc(Val(:yield_function), model, σ)
                 if f > 0
                     @test f < 1e-5
                 end
@@ -23,14 +23,14 @@
         # 1
         σ = 10.0*I + 10.0*n
         @test Poingr.tension_cutoff(model, σ) ≈ σ
-        @test Poingr.yield_function(model, Poingr.tension_cutoff(model, σ)) < 0
+        @test matcalc(Val(:yield_function), model, Poingr.tension_cutoff(model, σ)) < 0
         # 2
         σ = 20.0*I + 10.0*n
         @test Poingr.tension_cutoff(model, σ) ≈ 10.0*I + 10.0*n
-        @test Poingr.yield_function(model, Poingr.tension_cutoff(model, σ)) < 0
+        @test matcalc(Val(:yield_function), model, Poingr.tension_cutoff(model, σ)) < 0
         # 3
         σ = 20.0*I + 30.0*n
         @test mean(Poingr.tension_cutoff(model, σ)) ≈ 10.0
-        @test abs(Poingr.yield_function(model, Poingr.tension_cutoff(model, σ))) < sqrt(eps(Float64))
+        @test abs(matcalc(Val(:yield_function), model, Poingr.tension_cutoff(model, σ))) < sqrt(eps(Float64))
     end
 end

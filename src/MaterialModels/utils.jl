@@ -3,11 +3,11 @@
 @inline volumetric_strain(ϵ::SymmetricSecondOrderTensor{3}) = tr(ϵ)
 @inline deviatoric_strain(ϵ::SymmetricSecondOrderTensor{3}) = (e = dev(ϵ); sqrt(2/3 * e ⊡ e))
 
-function soundspeed(K::Real, G::Real, ρ::Real)
+function matcalc(::Val{:sound_speed}, K::Real, G::Real, ρ::Real)
     sqrt((K + 4G/3) / ρ)
 end
 
-function jaumann_stress(σ::SymmetricSecondOrderTensor{3}, σ_n::SymmetricSecondOrderTensor{3}, L::SecondOrderTensor{3}, dt::Real)
+function matcalc(::Val{:jaumann_stress}, σ::SymmetricSecondOrderTensor{3}, σ_n::SymmetricSecondOrderTensor{3}, L::SecondOrderTensor{3}, dt::Real)
     W = skew(L)
     σ + dt * symmetric(W ⋅ σ_n - σ_n ⋅ W)
 end

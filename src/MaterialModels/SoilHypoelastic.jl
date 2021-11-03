@@ -18,19 +18,19 @@ function SoilHypoelastic(; κ::Real, ν::Real, e0::Real)
     SoilHypoelastic(κ, ν, e0, K, G, D)
 end
 
-function update_stress(model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
+function matcalc(::Val{:stress}, model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
     @_inline_meta
-    σ + compute_stiffness_tensor(model, σ) ⊡ dϵ
+    σ + calc(Val(:stiffness), model, σ) ⊡ dϵ
 end
 
-function compute_stiffness_tensor(model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3})
+function calc(::Val{:stiffness}, model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3})
     model.D_p⁻¹ * abs(mean(σ))
 end
 
-function bulkmodulus(model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:bulk_modulus}, model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3})
     model.K_p⁻¹ * abs(mean(σ))
 end
 
-function shearmodulus(model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:shear_modulus}, model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3})
     model.G_p⁻¹ * abs(mean(σ))
 end

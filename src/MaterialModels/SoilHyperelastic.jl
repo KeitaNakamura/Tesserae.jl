@@ -67,30 +67,30 @@ function ∇²W̃(model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3, T})
     1/9*(-κ/p + α^2/2μ^3*(s ⊡ s))*(δ ⊗ δ) + α/6μ^2*(s ⊗ δ + δ ⊗ s) + D/2μ
 end
 
-function compute_stress(model::SoilHyperelastic, ϵᵉ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:stress}, model::SoilHyperelastic, ϵᵉ::SymmetricSecondOrderTensor{3})
     ∇W(model, ϵᵉ)
 end
 
-function compute_elastic_strain(model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:elastic_strain}, model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3})
     ∇W̃(model, σ)
 end
 
-function update_stress(model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3}, dϵᵉ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:stress}, model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3}, dϵᵉ::SymmetricSecondOrderTensor{3})
     ϵᵉ = ∇W̃(model, σ) + dϵᵉ
-    compute_stress(model, ϵᵉ)
+    matcalc(Val(:stress), model, ϵᵉ)
 end
 
-function compute_stiffness(model::SoilHyperelastic, ϵᵉ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:stiffness}, model::SoilHyperelastic, ϵᵉ::SymmetricSecondOrderTensor{3})
     ∇²W(model, ϵᵉ)
 end
 
-function bulkmodulus(model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:bulk_modulus}, model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3})
     -mean(σ)/model.κ
 end
 
-function shearmodulus(model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3})
+function matcalc(::Val{:shear_modulus}, model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3})
     κ, α, μ_ref = model.κ, model.α, model.μ_ref
-    e = dev(compute_elastic_strain(model, σ))
+    e = dev(matcalc(Val(:elastic_strain), model, σ))
     ϵs = sqrt(2/3 * e ⊡ e)
     p = mean(σ)
     μ = -α*p + μ_ref

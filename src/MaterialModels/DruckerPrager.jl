@@ -38,7 +38,7 @@ function tension_cutoff(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
     if mean(σ) > p_t
         s = dev(σ)
         σ = p_t*I + s
-        if yield_function(model, σ) > 0
+        if matcalc(Val(:yield_function), model, σ) > 0
             A = model.A
             B = model.B
             I₁ = tr(σ)
@@ -50,34 +50,34 @@ function tension_cutoff(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
     σ
 end
 
-function update_stress(model::DruckerPrager{<: Any, <: Union{LinearElastic, SoilHypoelastic}}, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
+function matcalc(::Val{:stress}, model::DruckerPrager{<: Any, <: Union{LinearElastic, SoilHypoelastic}}, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
     # compute the stress at the elastic trial state
-    De = compute_stiffness_tensor(model.elastic, σ)
+    De = matcalc(Val(:stiffness), model.elastic, σ)
     σ_trial = σ + De ⊡ dϵ
     # compute the yield function at the elastic trial state
-    dfdσ, f_trial = gradient(σ_trial -> yield_function(model, σ_trial), σ_trial, :all)
+    dfdσ, f_trial = gradient(σ_trial -> matcalc(Val(:yield_function), model, σ_trial), σ_trial, :all)
     f_trial ≤ 0.0 && return σ_trial
     # compute the increment of the plastic multiplier
-    dgdσ = plastic_flow(model, σ_trial)
+    dgdσ = matcalc(Val(:plastic_flow), model, σ_trial)
     Δγ = f_trial / (dgdσ ⊡ De ⊡ dfdσ)
     # compute the stress
     σ_trial - Δγ * (De ⊡ dgdσ)
 end
 
-function update_stress(model::DruckerPrager{<: Any, <: SoilHyperelastic}, σ::SymmetricSecondOrderTensor{3, T}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ) where {T}
+function matcalc(::Val{:stress}, model::DruckerPrager{<: Any, <: SoilHyperelastic}, σ::SymmetricSecondOrderTensor{3, T}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ) where {T}
     # compute the stress at the elastic trial state
-    ϵᵉ = compute_elastic_strain(model.elastic, σ)
+    ϵᵉ = matcalc(Val(:elastic_strain), model.elastic, σ)
     ϵᵉ_trial = ϵᵉ + dϵ
-    σ_trial = compute_stress(model.elastic, ϵᵉ_trial)
-    yield_function(model, σ_trial) ≤ 0.0 && return σ_trial
+    σ_trial = matcalc(Val(:stress), model.elastic, ϵᵉ_trial)
+    matcalc(Val(:yield_function), model, σ_trial) ≤ 0.0 && return σ_trial
 
     # prepare solution vector x
     ϵᵉ = ϵᵉ_trial
     Δγ = zero(T)
     for i in 1:20
         Dᵉ, σ = gradient(ϵᵉ -> ∇W(model.elastic, ϵᵉ), ϵᵉ, :all)
-        dfdσ, f = gradient(σ -> yield_function(model, σ), σ, :all)
-        dgdσ = plastic_flow(model, σ)
+        dfdσ, f = gradient(σ -> matcalc(Val(:yield_function), model, σ), σ, :all)
+        dgdσ = matcalc(Val(:plastic_flow), model, σ)
 
         R = ϵᵉ - ϵᵉ_trial + Δγ*dgdσ
         norm(R) < sqrt(eps(T)) && abs(f) < sqrt(eps(T)) && break
@@ -92,7 +92,7 @@ function update_stress(model::DruckerPrager{<: Any, <: SoilHyperelastic}, σ::Sy
     σ
 end
 
-function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::eltype(σ)
+function matcalc(::Val{:yield_function}, model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::eltype(σ)
     A = model.A
     B = model.B
     I₁ = tr(σ)
@@ -101,7 +101,7 @@ function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
     √J₂ - (A - B*I₁)
 end
 
-function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::typeof(σ)
+function matcalc(::Val{:plastic_flow}, model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})::typeof(σ)
     b = model.b
     s = dev(σ)
     J₂ = tr(s ⋅ s) / 2
