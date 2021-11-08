@@ -11,7 +11,7 @@ struct DefaultPointState{dim, T}
     σ::SymmetricSecondOrderTensor{3, T, 6}
     ϵ::SymmetricSecondOrderTensor{3, T, 6}
     ∇v::SecondOrderTensor{3, T, 9}
-    dϵ_v::T
+    tr_∇v::T
     index::Int
 end
 
@@ -29,7 +29,7 @@ struct DefaultPointStateWLS{dim, T, M}
     ϵ::SymmetricSecondOrderTensor{3, T, 6}
     ∇v::SecondOrderTensor{3, T, 9}
     C::Mat{dim, M, T, 6}
-    dϵ_v::T
+    tr_∇v::T
     index::Int
 end
 

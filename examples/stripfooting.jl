@@ -2,7 +2,7 @@ using Poingr
 
 function stripfooting(
         shape_function = LinearWLS(CubicBSpline());
-        smooth_volumetric_strain = true,
+        smooth_trace_of_velocity_gradient = true,
         CFL = 1.0,
         show_progress::Bool = true,
     )
@@ -85,21 +85,20 @@ function stripfooting(
 
         default_grid_to_point!(pointstate, grid, cache, dt)
 
-        if smooth_volumetric_strain
-            Poingr.smooth_volumetric_strain!(pointstate, grid, cache, dt)
+        if smooth_trace_of_velocity_gradient
+            Poingr.smooth_trace_of_velocity_gradient!(pointstate, grid, cache)
         end
 
         @inbounds Threads.@threads for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]
-            if smooth_volumetric_strain
-                dϵ̄_vol = symmetric(@Mat [pointstate.dϵ_v[p]/2 0 0
-                                         0 pointstate.dϵ_v[p]/2 0
-                                         0 0                    0])
-                dϵ = dϵ̄_vol + dev(symmetric(∇v) * dt)
-            else
-                dϵ = symmetric(∇v) * dt
+            if smooth_trace_of_velocity_gradient
+                ∇v_vol = @Mat [pointstate.tr_∇v[p]/2 0 0
+                               0 pointstate.tr_∇v[p]/2 0
+                               0 0                     0]
+                ∇v = ∇v_vol + dev(∇v)
             end
+            dϵ = symmetric(∇v) * dt
             σ = matcalc(Val(:stress), model, σ_n, dϵ)
             σ = matcalc(Val(:jaumann_stress), σ, σ_n, ∇v, dt)
             if mean(σ) > model.tension_cutoff
