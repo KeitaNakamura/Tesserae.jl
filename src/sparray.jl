@@ -54,7 +54,7 @@ end
     @boundscheck checkbounds(x, i)
     spat = x.spat
     index = spat.indices[i]
-    @inbounds index !== -1 ? x.data[index] : initval(eltype(x))
+    @inbounds index !== -1 ? x.data[index] : zerovalue(eltype(x))
 end
 @inline function Base.setindex!(x::SpArray, v, i::Int)
     @boundscheck checkbounds(x, i)
@@ -86,7 +86,7 @@ end
 
 @inline add!(x::AbstractArray, i::Int, v) = (@_propagate_inbounds_meta; applyat!(+, x, i, v))
 
-@generated function initval(::Type{T}) where {T}
+@generated function zerovalue(::Type{T}) where {T}
     if Base._return_type(zero, (T,)) == Union{}
         exps = [:(zero($t)) for t in fieldtypes(T)]
         :(@_inline_meta; T($(exps...)))
@@ -94,17 +94,19 @@ end
         :(@_inline_meta; zero(T))
     end
 end
-@generated function initval(::Type{T}) where {T <: NamedTuple}
+@generated function zerovalue(::Type{T}) where {T <: NamedTuple}
     exps = [:(zero($t)) for t in fieldtypes(T)]
     :(@_inline_meta; T(($(exps...),)))
 end
-initval(x) = initval(typeof(x))
+zerovalue(x) = zerovalue(typeof(x))
 
-reinit!(x::AbstractArray) = (broadcast!(initval, x, x); x)
+fillzero!(x::AbstractArray) = (broadcast!(zerovalue, x, x); x)
+fillzero!(x::SpArray) = (broadcast!(zerovalue, x.data, x.data); x)
+
 function reinit!(x::SpArray{T}) where {T}
     n = reinit!(x.spat)
     resize!(x.data, n)
-    reinit!(x.data)
+    fillzero!(x)
     x
 end
 reinit!(x::SpArray{Nothing}) = x # for Grid without NodeState type
