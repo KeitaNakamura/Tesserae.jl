@@ -81,7 +81,7 @@ function generate_pointstate(indomain, grid::Grid{dim, T}; kwargs...) where {dim
     generate_pointstate(indomain, Point, grid; kwargs...)
 end
 
-function remove_pointstate_outside_domain!(pointstate::StructVector, grid::Grid)
+function remove_pointstate_outside_domain!(pointstate, grid::Grid)
     inds = findall(pointstate.x) do x
         @inbounds begin
             !(grid[begin][1] ≤ x[1] ≤ grid[end][1] &&

@@ -80,27 +80,27 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, 
     spat
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate::StructVector, ptsinblk::AbstractArray{Vector{Int}})
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate, ptsinblk::AbstractArray{Vector{Int}})
     hₚ = Fill(active_length(grid.shapefunction), length(pointstate))
     sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk)
     spat
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, GIMP}, pointstate::StructVector, ptsinblk::AbstractArray{Vector{Int}})
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, GIMP}, pointstate, ptsinblk::AbstractArray{Vector{Int}})
     hₚ = LazyDotArray(rₚ -> active_length(grid.shapefunction, rₚ ./ gridsteps(grid)), pointstate.r)
     sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk)
     spat
 end
 
-function update_shapevalues!(shapevalues::Vector{<: ShapeValues}, grid::Grid, pointstate::StructVector, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
+function update_shapevalues!(shapevalues::Vector{<: ShapeValues}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
     update!(shapevalues[p], grid, pointstate.x[p], spat)
 end
 
-function update_shapevalues!(shapevalues::Vector{<: GIMPValues}, grid::Grid, pointstate::StructVector, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
+function update_shapevalues!(shapevalues::Vector{<: GIMPValues}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
     update!(shapevalues[p], grid, pointstate.x[p], pointstate.r[p], spat)
 end
 
-function update!(cache::MPCache{dim}, grid::Grid{dim}, pointstate::StructVector) where {dim}
+function update!(cache::MPCache{dim}, grid::Grid{dim}, pointstate) where {dim}
     @assert size(grid) == gridsize(cache)
 
     shapevalues = cache.shapevalues
@@ -185,7 +185,7 @@ for (ShapeFunctionType, ShapeValuesType) in ((BSpline, BSplineValues),
                                              (GIMP, GIMPValues))
     @eval function default_point_to_grid!(
             grid::Grid{<: Any, <: Any, <: $ShapeFunctionType},
-            pointstate::StructVector,
+            pointstate,
             cache::MPCache{<: Any, <: Any, <: $ShapeValuesType}
         )
         point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do it, p, i
@@ -212,7 +212,7 @@ for (ShapeFunctionType, ShapeValuesType) in ((BSpline, BSplineValues),
 end
 
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
-                                pointstate::StructVector,
+                                pointstate,
                                 cache::MPCache{<: Any, <: Any, <: WLSValues})
     P = polynomial(grid.shapefunction)
     point_to_grid!((grid.state.m, grid.state.w, grid.state.v, grid.state.f), cache) do it, p, i
@@ -294,7 +294,7 @@ end
 for (ShapeFunctionType, ShapeValuesType) in ((BSpline, BSplineValues),
                                              (GIMP, GIMPValues))
     @eval function default_grid_to_point!(
-            pointstate::StructVector,
+            pointstate,
             grid::Grid{dim, <: Any, <: $ShapeFunctionType},
             cache::MPCache{dim, <: Any, <: $ShapeValuesType},
             dt::Real
@@ -324,7 +324,7 @@ for (ShapeFunctionType, ShapeValuesType) in ((BSpline, BSplineValues),
     end
 end
 
-function default_grid_to_point!(pointstate::StructVector,
+function default_grid_to_point!(pointstate,
                                 grid::Grid{dim, <: Any, <: WLS},
                                 cache::MPCache{dim, <: Any, <: WLSValues},
                                 dt::Real) where {dim}
