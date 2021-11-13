@@ -1,4 +1,6 @@
-struct Polynomial{order}
+abstract type AbstractPolynomial end
+
+struct Polynomial{order} <: AbstractPolynomial
     function Polynomial{order}() where {order}
         new{order::Int}()
     end
@@ -32,26 +34,40 @@ function Tensorial.gradient(poly::Polynomial{1}, x::Vec{3, T}) where {T}
           z z o]
 end
 
-# for ∇ operation
-struct PolynomialGradient{order}
-    parent::Polynomial{order}
+
+struct Bilinear <: AbstractPolynomial end
+
+value(poly::Bilinear, x::Vec{2, T}) where {T} = @inbounds Vec(one(T), x[1], x[2], x[1]*x[2])
+function Tensorial.gradient(poly::Bilinear, x::Vec{2, T}) where {T}
+    z = zero(T)
+    o = one(T)
+    @Mat [z    z
+          o    z
+          z    o
+          x[2] x[1]]
 end
-Base.adjoint(p::Polynomial{order}) where {order} = PolynomialGradient(p)
+
+# for ∇ operation
+struct PolynomialGradient{P}
+    parent::P
+end
+Base.adjoint(x::AbstractPolynomial) = PolynomialGradient(x)
 
 # function like methods
-(p::Polynomial)(x) = value(p, x)
+(p::AbstractPolynomial)(x) = value(p, x)
 (p::PolynomialGradient)(x) = gradient(p.parent, x)
 
 
-struct WLS{poly_order, bspline_order} <: ShapeFunction
-    poly::Polynomial{poly_order}
+struct WLS{P, bspline_order} <: ShapeFunction
+    poly::P
     bspline::BSpline{bspline_order}
 end
 
-const LinearWLS{bspline_order} = WLS{1, bspline_order}
+const LinearWLS = WLS{Polynomial{1}}
+const BilinearWLS = WLS{Bilinear}
 
-WLS{poly_order, bspline_order}() where {poly_order, bspline_order} = WLS(Polynomial{poly_order}(), BSpline{bspline_order}())
-WLS{poly_order}(bspline::BSpline) where {poly_order} = WLS(Polynomial{poly_order}(), bspline)
+WLS{P, bspline_order}() where {P, bspline_order} = WLS(P(), BSpline{bspline_order}())
+WLS{P}(bspline::BSpline) where {P} = WLS(P(), bspline)
 
 polynomial(wls::WLS) = wls.poly
 weight_function(wls::WLS) = wls.bspline
@@ -60,8 +76,8 @@ support_length(wls::WLS) = support_length(weight_function(wls))
 active_length(::WLS) = 1.0 # for sparsity pattern
 
 
-struct WLSValues{poly_order, bspline_order, dim, T, L, M, O} <: ShapeValues{dim, T}
-    F::WLS{poly_order, bspline_order}
+struct WLSValues{P, bspline_order, dim, T, L, M, O} <: ShapeValues{dim, T}
+    F::WLS{P, bspline_order}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
     w::MVector{L, T}
@@ -73,20 +89,20 @@ end
 polynomial(it::WLSValues) = polynomial(it.F)
 weight_function(it::WLSValues) = weight_function(it.F)
 
-function WLSValues{poly_order, bspline_order, dim, T, L, M, O}() where {poly_order, bspline_order, dim, T, L, M, O}
+function WLSValues{P, bspline_order, dim, T, L, M, O}() where {P, bspline_order, dim, T, L, M, O}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
     w = MVector{L, T}(undef)
     M⁻¹ = zero(Mat{M, M, T, O})
     inds = MVector{L, Index{dim}}(undef)
-    WLSValues(WLS{poly_order, bspline_order}(), N, ∇N, w, Ref(M⁻¹), inds, Ref(0))
+    WLSValues(WLS{P, bspline_order}(), N, ∇N, w, Ref(M⁻¹), inds, Ref(0))
 end
 
-function ShapeValues{dim, T}(F::WLS{poly_order, bspline_order}) where {poly_order, bspline_order, dim, T}
+function ShapeValues{dim, T}(F::WLS{P, bspline_order}) where {P, bspline_order, dim, T}
     p = polynomial(F)
     M = length(p(zero(Vec{dim, T})))
     L = nnodes(weight_function(F), Val(dim))
-    WLSValues{poly_order, bspline_order, dim, T, L, M, M^2}()
+    WLSValues{P, bspline_order, dim, T, L, M, M^2}()
 end
 
 function update!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}

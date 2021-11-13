@@ -29,6 +29,7 @@ export
     QuadraticBSpline,
     CubicBSpline,
     LinearWLS,
+    BilinearWLS,
     polynomial,
     GIMP,
 # MPCache

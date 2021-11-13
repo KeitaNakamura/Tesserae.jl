@@ -18,7 +18,7 @@ end
 default_pointstate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
 default_pointstate_type(::GIMP, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
 
-struct DefaultPointStateWLS{dim, T, M}
+struct DefaultPointStateWLS{dim, T, L, dim_L}
     m::T
     V::T
     x::Vec{dim, T}
@@ -28,12 +28,13 @@ struct DefaultPointStateWLS{dim, T, M}
     σ::SymmetricSecondOrderTensor{3, T, 6}
     ϵ::SymmetricSecondOrderTensor{3, T, 6}
     ∇v::SecondOrderTensor{3, T, 9}
-    C::Mat{dim, M, T, 6}
+    C::Mat{dim, L, T, dim_L}
     tr_∇v::T
     index::Int
 end
 
-default_pointstate_type(::LinearWLS, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateWLS{dim, T, dim+1}
+default_pointstate_type(::LinearWLS, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateWLS{dim, T, dim+1, dim*(dim+1)}
+default_pointstate_type(::BilinearWLS, ::Val{2}, ::Val{T}) where {T} = DefaultPointStateWLS{2, T, 4, 8}
 
 function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
     h = gridsteps(grid) ./ n # length per particle

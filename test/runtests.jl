@@ -53,6 +53,6 @@ function check_example(testname::String, shape_functions)
 end
 
 @testset "Check examples" begin
-    check_example("sandcolumn", (QuadraticBSpline(), LinearWLS(QuadraticBSpline())))
+    check_example("sandcolumn", (QuadraticBSpline(), LinearWLS(QuadraticBSpline()), BilinearWLS(QuadraticBSpline())))
     check_example("stripfooting", (LinearBSpline(), GIMP(), LinearWLS(QuadraticBSpline())))
 end
