@@ -120,6 +120,7 @@ struct BSplineValues{order, dim, T, L} <: ShapeValues{dim, T}
     F::BSpline{order}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
+    x::Base.RefValue{Vec{dim, T}}
     inds::MVector{L, Index{dim}}
     len::Base.RefValue{Int}
 end
@@ -128,7 +129,8 @@ function BSplineValues{order, dim, T, L}() where {order, dim, T, L}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
     inds = MVector{L, Index{dim}}(undef)
-    BSplineValues(BSpline{order}(), N, ∇N, inds, Ref(0))
+    x = Ref(zero(Vec{dim, T}))
+    BSplineValues(BSpline{order}(), N, ∇N, x, inds, Ref(0))
 end
 
 function ShapeValues{dim, T}(F::BSpline{order}) where {order, dim, T}
@@ -140,7 +142,8 @@ function update!(it::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{dim}, s
     F = it.F
     it.N .= zero(it.N)
     it.∇N .= zero(it.∇N)
-    update_gridindices!(it, grid, neighboring_nodes(grid, x, support_length(F)), spat)
+    it.x[] = x
+    update_gridindices!(it, grid, x, spat)
     @inbounds @simd for i in 1:length(it)
         I = it.inds[i]
         xᵢ = grid[I]
@@ -156,10 +159,11 @@ end
 struct BSplineValue{dim, T}
     N::T
     ∇N::Vec{dim, T}
+    x::Vec{dim, T}
     index::Index{dim}
 end
 
 @inline function Base.getindex(it::BSplineValues, i::Int)
     @_propagate_inbounds_meta
-    BSplineValue(it.N[i], it.∇N[i], it.inds[i])
+    BSplineValue(it.N[i], it.∇N[i], it.x[], it.inds[i])
 end

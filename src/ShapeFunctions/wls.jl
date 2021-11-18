@@ -82,6 +82,7 @@ struct WLSValues{P, bspline_order, dim, T, L, M, O} <: ShapeValues{dim, T}
     ∇N::MVector{L, Vec{dim, T}}
     w::MVector{L, T}
     M⁻¹::Base.RefValue{Mat{M, M, T, O}}
+    x::Base.RefValue{Vec{dim, T}}
     inds::MVector{L, Index{dim}}
     len::Base.RefValue{Int}
 end
@@ -95,7 +96,8 @@ function WLSValues{P, bspline_order, dim, T, L, M, O}() where {P, bspline_order,
     w = MVector{L, T}(undef)
     M⁻¹ = zero(Mat{M, M, T, O})
     inds = MVector{L, Index{dim}}(undef)
-    WLSValues(WLS{P, bspline_order}(), N, ∇N, w, Ref(M⁻¹), inds, Ref(0))
+    x = Ref(zero(Vec{dim, T}))
+    WLSValues(WLS{P, bspline_order}(), N, ∇N, w, Ref(M⁻¹), x, inds, Ref(0))
 end
 
 function ShapeValues{dim, T}(F::WLS{P, bspline_order}) where {P, bspline_order, dim, T}
@@ -112,7 +114,8 @@ function update!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim
     F = weight_function(it)
     P = polynomial(it)
     M = zero(it.M⁻¹[])
-    update_gridindices!(it, grid, neighboring_nodes(grid, x, support_length(F)), spat)
+    it.x[] = x
+    update_gridindices!(it, grid, x, spat)
     @inbounds @simd for i in 1:length(it)
         I = it.inds[i]
         xᵢ = grid[I]
@@ -143,10 +146,11 @@ struct WLSValue{dim, T, L, M}
     ∇N::Vec{dim, T}
     w::T
     M⁻¹::Mat{L, L, T, M}
+    x::Vec{dim, T}
     index::Index{dim}
 end
 
 @inline function Base.getindex(it::WLSValues, i::Int)
     @_propagate_inbounds_meta
-    WLSValue(it.N[i], it.∇N[i], it.w[i], it.M⁻¹[], it.inds[i])
+    WLSValue(it.N[i], it.∇N[i], it.w[i], it.M⁻¹[], it.x[], it.inds[i])
 end
