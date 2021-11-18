@@ -2,7 +2,7 @@ using Poingr
 
 function stripfooting(
         shape_function = LinearWLS(CubicBSpline());
-        smooth_trace_of_velocity_gradient = true,
+        handle_volumetric_locking = true,
         CFL = 1.0,
         show_progress::Bool = true,
     )
@@ -35,6 +35,7 @@ function stripfooting(
     end
     @. pointstate.m = ρ₀ * pointstate.V
     @. pointstate.b = Vec(0.0, -g)
+    tr∇v = @. tr(pointstate.∇v)
 
     @show length(pointstate)
 
@@ -85,17 +86,18 @@ function stripfooting(
 
         default_grid_to_point!(pointstate, grid, cache, dt)
 
-        if smooth_trace_of_velocity_gradient
-            Poingr.smooth_trace_of_velocity_gradient!(pointstate, grid, cache)
+        @. tr∇v = tr(pointstate.∇v)
+        if handle_volumetric_locking
+            Poingr.smooth_pointstate!(tr∇v, pointstate.V, grid, cache)
         end
 
         @inbounds Threads.@threads for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]
-            if smooth_trace_of_velocity_gradient
-                ∇v_vol = @Mat [pointstate.tr_∇v[p]/2 0 0
-                               0 pointstate.tr_∇v[p]/2 0
-                               0 0                     0]
+            if handle_volumetric_locking
+                ∇v_vol = @Mat [tr∇v[p]/2 0 0
+                               0 tr∇v[p]/2 0
+                               0 0         0]
                 ∇v = ∇v_vol + dev(∇v)
             end
             dϵ = symmetric(∇v) * dt

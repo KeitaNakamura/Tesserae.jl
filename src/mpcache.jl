@@ -349,17 +349,31 @@ function default_grid_to_point!(pointstate,
     pointstate
 end
 
-function smooth_trace_of_velocity_gradient!(pointstate::StructVector, grid::Grid, cache::MPCache)
-    point_to_grid!(grid.state.tr_∇v, cache) do it, p, i
+@generated function safe_inv(x::Mat{dim, dim, T, L}) where {dim, T, L}
+    exps = fill(:z, L-1)
+    quote
         @_inline_meta
-        @_propagate_inbounds_meta
-        ∇vₚ = pointstate.∇v[p]
-        it.N * pointstate.m[p] * tr(∇vₚ)
+        z = zero(T)
+        isapproxzero(det(x)) ? Mat{dim, dim}(inv(x[1]), $(exps...)) : inv(x)
+        # Tensorial.rank(x) != dim ? Mat{dim, dim}(inv(x[1]), $(exps...)) : inv(x) # this is very slow but stable
     end
-    @dot_threads grid.state.tr_∇v /= grid.state.m
-    grid_to_point!(pointstate.tr_∇v, cache) do it, i, p
+end
+
+function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, grid::Grid, cache::MPCache)
+    @assert length(vals) == length(Vₚ) == npoints(cache)
+    polynomial = Polynomial{1}()
+    point_to_grid!((grid.state.poly_coef, grid.state.poly_mat), cache) do it, p, i
         @_inline_meta
         @_propagate_inbounds_meta
-        it.N * grid.state.tr_∇v[i]
+        P = polynomial(it.x - grid[i])
+        VP = (it.N * Vₚ[p]) * P
+        VP * vals[p], VP ⊗ P
+    end
+    @dot_threads grid.state.poly_coef = safe_inv(grid.state.poly_mat) ⋅ grid.state.poly_coef
+    grid_to_point!(vals, cache) do it, i, p
+        @_inline_meta
+        @_propagate_inbounds_meta
+        P = polynomial(it.x - grid[i])
+        it.N * (P ⋅ grid.state.poly_coef[i])
     end
 end
