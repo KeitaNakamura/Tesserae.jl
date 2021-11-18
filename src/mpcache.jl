@@ -142,6 +142,7 @@ end
 
 function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     @assert all(==(gridsize(cache)), size.(gridstates))
+    map(fillzero!, gridstates)
     pointmask !== nothing && @assert length(pointmask) == npoints(cache)
     for blocks in threadsafe_blocks(gridsize(cache))
         Threads.@threads for blockindex in blocks
