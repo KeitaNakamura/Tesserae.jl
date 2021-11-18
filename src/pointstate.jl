@@ -80,13 +80,16 @@ function generate_pointstate(indomain, grid::Grid{dim, T}; kwargs...) where {dim
     generate_pointstate(indomain, Point, grid; kwargs...)
 end
 
-function remove_pointstate_outside_domain!(pointstate, grid::Grid)
-    inds = findall(pointstate.x) do x
+function points_outside_domain(xₚ::AbstractVector, grid::Grid)
+    findall(xₚ) do x
         @inbounds begin
             !(grid[begin][1] ≤ x[1] ≤ grid[end][1] &&
               grid[begin][2] ≤ x[2] ≤ grid[end][2])
         end
     end
+end
+
+function Base.deleteat!(pointstate::StructVector, inds)
     StructArrays.foreachfield(v -> deleteat!(v, inds), pointstate)
     pointstate
 end
