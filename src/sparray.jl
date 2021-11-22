@@ -100,8 +100,11 @@ end
 end
 zerovalue(x) = zerovalue(typeof(x))
 
-fillzero!(x::AbstractArray) = (broadcast!(zerovalue, x, x); x)
-fillzero!(x::SpArray) = (broadcast!(zerovalue, x.data, x.data); x)
+function fillzero!(x::AbstractArray{T}) where {T}
+    isbitstype(T) && broadcast!(zerovalue, x, x)
+    x
+end
+fillzero!(x::SpArray) = (fillzero!(x.data); x)
 
 function reinit!(x::SpArray{T}) where {T}
     n = reinit!(x.spat)
