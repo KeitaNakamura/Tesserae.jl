@@ -12,7 +12,7 @@ Construct object storing value of `ShapeFunction`.
 ```jldoctest
 julia> sv = Poingr.ShapeValues{2}(QuadraticBSpline());
 
-julia> update!(sv, Grid(0:3, 0:3), Vec(1, 1));
+julia> update!(sv, Grid(0.0:3.0, 0.0:3.0), Vec(1, 1));
 
 julia> sum(sv.N)
 1.0
