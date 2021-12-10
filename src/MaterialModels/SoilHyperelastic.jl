@@ -64,7 +64,7 @@ function ∇²W̃(model::SoilHyperelastic, σ::SymmetricSecondOrderTensor{3, T})
     p = mean(σ)
     s = dev(σ)
     μ = -α*p + μ_ref
-    1/9*(-κ/p + α^2/2μ^3*(s ⊡ s))*(δ ⊗ δ) + α/6μ^2*(s ⊗ δ + δ ⊗ s) + D/2μ
+    (-κ/p + α^2/2μ^3*(s ⊡ s))/9*(δ ⊗ δ) + α/6μ^2*(s ⊗ δ + δ ⊗ s) + D/2μ
 end
 
 function matcalc(::Val{:stress}, model::SoilHyperelastic, ϵᵉ::SymmetricSecondOrderTensor{3})

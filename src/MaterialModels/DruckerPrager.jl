@@ -75,7 +75,7 @@ function matcalc(::Val{:stress}, model::DruckerPrager{<: Any, <: SoilHyperelasti
     ϵᵉ = ϵᵉ_trial
     Δγ = zero(T)
     for i in 1:20
-        Dᵉ, σ = gradient(ϵᵉ -> ∇W(model.elastic, ϵᵉ), ϵᵉ, :all)
+        Dᵉ, σ = gradient(ϵᵉ -> matcalc(Val(:stress), model.elastic, ϵᵉ), ϵᵉ, :all)
         dfdσ, f = gradient(σ -> matcalc(Val(:yield_function), model, σ), σ, :all)
         dgdσ = matcalc(Val(:plastic_flow), model, σ)
 
