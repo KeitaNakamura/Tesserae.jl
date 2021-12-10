@@ -76,7 +76,7 @@ function Logger(logpoints::AbstractVector; progress::Bool = false)
         barlen = 20,
         color = :yellow,
     )
-    Logger(logpoints, 0, false, progress, pmeter)
+    Logger(logpoints, -1, false, progress, pmeter)
 end
 
 Base.first(log::Logger) = first(logpoints(log))
@@ -93,7 +93,7 @@ islogpoint(logger) = logger.islogpoint
 
 function update!(logger::Logger, t::Real)
     logger.progress && printprogress(logger, t)
-    i = searchsortedlast(logpoints(logger), t)
+    i = searchsortedlast(logpoints(logger), t) - 1
     if logger.i < i # not yet logged
         logger.i = i
         logger.islogpoint = true
