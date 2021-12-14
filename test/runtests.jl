@@ -28,8 +28,8 @@ function check_example(testname::String, shape_functions)
     @testset "$testname" begin
         include(joinpath("../examples", "$testname.jl"))
         for (case, shape_function) in enumerate(shape_functions)
-            eval(:($(Symbol(testname))($shape_function; show_progress = false)))
-            output_dir = "$testname.tmp"
+            @eval $(Symbol(testname))($shape_function; show_progress = false)
+            output_dir = joinpath("../examples", "$testname.tmp")
 
             result_file = joinpath(output_dir,
                                    sort(filter(file -> endswith(file, ".vtu"), only(walkdir(output_dir))[3]), lt = natural)[end])

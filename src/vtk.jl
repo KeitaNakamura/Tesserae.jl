@@ -72,3 +72,30 @@ end
 function vtk_format(data::AbstractVector{<: SymmetricSecondOrderTensor{3}})
     vtk_format([@inbounds Vec(x[1,1], x[2,2], x[3,3], x[1,2], x[2,3], x[1,3]) for x in data])
 end
+
+
+function defalut_output_paraview_initialize(file)
+    paraview_collection(vtk_save, file)
+end
+function defalut_output_paraview_append(file, grid, pointstate, t, index; output_grid = false)
+    paraview_collection(file, append = true) do pvd
+        vtk_multiblock(string(file, index)) do vtm
+            vtk_points(vtm, pointstate.x) do vtk
+                ϵ = pointstate.ϵ
+                vtk["velocity"] = pointstate.v
+                vtk["mean stress"] = @dot_lazy mean(pointstate.σ)
+                vtk["pressure"] = @dot_lazy -mean(pointstate.σ)
+                vtk["deviatoric stress"] = @dot_lazy deviatoric_stress(pointstate.σ)
+                vtk["volumetric strain"] = @dot_lazy volumetric_strain(ϵ)
+                vtk["deviatoric strain"] = @dot_lazy deviatoric_strain(ϵ)
+                vtk["stress"] = pointstate.σ
+                vtk["strain"] = ϵ
+                vtk["density"] = @dot_lazy pointstate.m / pointstate.V
+            end
+            if output_grid
+                vtk_grid(vtm, grid)
+            end
+            pvd[t] = vtm
+        end
+    end
+end

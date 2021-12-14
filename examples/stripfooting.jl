@@ -39,17 +39,11 @@ function stripfooting(
 
     @show length(pointstate)
 
-    # Output files
-    ## proj
-    output_dir = joinpath("stripfooting.tmp")
-    mkpath(output_dir)
-
-    ## paraview
+    # Outputs
+    output_dir = joinpath(@__DIR__, "stripfooting.tmp")
     paraview_file = joinpath(output_dir, "out")
-    paraview_collection(vtk_save, paraview_file)
-
-    ## copy this file
-    cp(@__FILE__, joinpath(output_dir, "main.jl"), force = true)
+    mkpath(output_dir)
+    Poingr.defalut_output_paraview_initialize(paraview_file)
 
     logger = Logger(0.0:0.01:0.1; progress = show_progress)
 
@@ -128,23 +122,9 @@ function stripfooting(
         push!(load, vertical_load)
 
         if islogpoint(logger)
-            paraview_collection(paraview_file, append = true) do pvd
-                vtk_multiblock(string(paraview_file, logindex(logger))) do vtm
-                    vtk_points(vtm, pointstate.x) do vtk
-                        ϵ = pointstate.ϵ
-                        vtk["velocity"] = pointstate.v
-                        vtk["mean stress"] = @dot_lazy -mean(pointstate.σ)
-                        vtk["deviatoric stress"] = @dot_lazy deviatoric_stress(pointstate.σ)
-                        vtk["volumetric strain"] = @dot_lazy volumetric_strain(ϵ)
-                        vtk["deviatoric strain"] = @dot_lazy deviatoric_strain(ϵ)
-                        vtk["stress"] = pointstate.σ
-                        vtk["strain"] = ϵ
-                        vtk["density"] = @dot_lazy pointstate.m / pointstate.V
-                    end
-                    pvd[t] = vtm
-                end
-            end
+            Poingr.defalut_output_paraview_append(paraview_file, grid, pointstate, t, logindex(logger))
         end
     end
+
     disp, load
 end
