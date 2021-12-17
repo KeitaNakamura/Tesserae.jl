@@ -58,26 +58,26 @@ Base.adjoint(x::AbstractPolynomial) = PolynomialGradient(x)
 (p::PolynomialGradient)(x) = gradient(p.parent, x)
 
 
-struct WLS{P, bspline_order} <: ShapeFunction
+struct WLS{P <: AbstractPolynomial, W <: ShapeFunction} <: ShapeFunction
     poly::P
-    bspline::BSpline{bspline_order}
+    weight::W
 end
 
 const LinearWLS = WLS{Polynomial{1}}
 const BilinearWLS = WLS{Bilinear}
 
-WLS{P, bspline_order}() where {P, bspline_order} = WLS(P(), BSpline{bspline_order}())
-WLS{P}(bspline::BSpline) where {P} = WLS(P(), bspline)
+WLS{P, W}() where {P, W} = WLS(P(), W())
+WLS{P}(weight::ShapeFunction) where {P} = WLS(P(), weight)
 
 polynomial(wls::WLS) = wls.poly
-weight_function(wls::WLS) = wls.bspline
+weight_function(wls::WLS) = wls.weight
 
-support_length(wls::WLS) = support_length(weight_function(wls))
-active_length(::WLS) = 1.0 # for sparsity pattern
+support_length(wls::WLS, args...) = support_length(weight_function(wls), args...)
+active_length(::WLS, args...) = 1.0 # for sparsity pattern
 
 
-struct WLSValues{P, bspline_order, dim, T, L, M, O} <: ShapeValues{dim, T}
-    F::WLS{P, bspline_order}
+struct WLSValues{P, W, dim, T, L, M, O} <: ShapeValues{dim, T}
+    F::WLS{P, W}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
     w::MVector{L, T}
@@ -90,28 +90,27 @@ end
 polynomial(it::WLSValues) = polynomial(it.F)
 weight_function(it::WLSValues) = weight_function(it.F)
 
-function WLSValues{P, bspline_order, dim, T, L, M, O}() where {P, bspline_order, dim, T, L, M, O}
+function WLSValues{P, W, dim, T, L, M, O}() where {P, W, dim, T, L, M, O}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
     w = MVector{L, T}(undef)
     M⁻¹ = zero(Mat{M, M, T, O})
     inds = MVector{L, Index{dim}}(undef)
     x = Ref(zero(Vec{dim, T}))
-    WLSValues(WLS{P, bspline_order}(), N, ∇N, w, Ref(M⁻¹), x, inds, Ref(0))
+    WLSValues(WLS{P, W}(), N, ∇N, w, Ref(M⁻¹), x, inds, Ref(0))
 end
 
-function ShapeValues{dim, T}(F::WLS{P, bspline_order}) where {P, bspline_order, dim, T}
+function ShapeValues{dim, T}(F::WLS{P, W}) where {P, W, dim, T}
     p = polynomial(F)
     M = length(p(zero(Vec{dim, T})))
     L = nnodes(weight_function(F), Val(dim))
-    WLSValues{P, bspline_order, dim, T, L, M, M^2}()
+    WLSValues{P, W, dim, T, L, M, M^2}()
 end
 
-function update!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+function _update!(it::WLSValues{<: Any, <: Any, dim}, F, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
     it.N .= zero(it.N)
     it.∇N .= zero(it.∇N)
     it.w .= zero(it.w)
-    F = weight_function(it)
     P = polynomial(it)
     M = zero(it.M⁻¹[])
     it.x[] = x
@@ -120,13 +119,10 @@ function update!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim
         I = it.inds[i]
         xᵢ = grid[I]
         ξ = (x - xᵢ) ./ gridsteps(grid)
-        it.w[i] = value(F, ξ)
-    end
-    @inbounds @simd for i in 1:length(it)
-        I = it.inds[i]
-        xᵢ = grid[I]
+        w = F(ξ)
         p = P(xᵢ - x)
-        M += it.w[i] * p ⊗ p
+        M += w * p ⊗ p
+        it.w[i] = w
     end
     it.M⁻¹[] = inv(M)
     @inbounds @simd for i in 1:length(it)
@@ -138,6 +134,45 @@ function update!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim
         it.∇N[i] = wq ⋅ P'(x - x)
     end
     it
+end
+
+function _update!(it::WLSValues{Polynomial{1}, <: Any, dim}, F, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+    it.N .= zero(it.N)
+    it.∇N .= zero(it.∇N)
+    it.w .= zero(it.w)
+    P = polynomial(it)
+    M = zero(it.M⁻¹[])
+    it.x[] = x
+    update_gridindices!(it, grid, x, spat)
+    @inbounds @simd for i in 1:length(it)
+        I = it.inds[i]
+        xᵢ = grid[I]
+        ξ = (x - xᵢ) ./ gridsteps(grid)
+        w = F(ξ)
+        p = P(xᵢ - x)
+        M += w * p ⊗ p
+        it.w[i] = w
+    end
+    it.M⁻¹[] = inv(M)
+    @inbounds @simd for i in 1:length(it)
+        I = it.inds[i]
+        xᵢ = grid[I]
+        q = it.M⁻¹[] ⋅ P(xᵢ - x)
+        wq = it.w[i] * q
+        it.N[i] = @Tensor wq[1]
+        it.∇N[i] = @Tensor wq[2:end]
+    end
+    it
+end
+
+function update!(it::WLSValues{<: Any, <: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+    F = weight_function(it)
+    _update!(it, ξ -> value(F, ξ), grid, x, spat)
+end
+
+function update!(it::WLSValues{<: Any, GIMP, dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+    F = weight_function(it)
+    _update!(it, ξ -> value(F, ξ, r./gridsteps(grid)), grid, x, spat)
 end
 
 

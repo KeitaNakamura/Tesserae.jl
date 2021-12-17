@@ -83,8 +83,8 @@ include("grid.jl")
 
 include("ShapeFunctions/shapefunction.jl")
 include("ShapeFunctions/bspline.jl")
-include("ShapeFunctions/wls.jl")
 include("ShapeFunctions/gimp.jl")
+include("ShapeFunctions/wls.jl")
 
 include("nodestate.jl")
 include("pointstate.jl")

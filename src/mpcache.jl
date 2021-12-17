@@ -86,7 +86,7 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate, ptsinblk::
     spat
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, GIMP}, pointstate, ptsinblk::AbstractArray{Vector{Int}})
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, <: Union{GIMP, WLS{<: Any, GIMP}}}, pointstate, ptsinblk::AbstractArray{Vector{Int}})
     hₚ = LazyDotArray(rₚ -> active_length(grid.shapefunction, rₚ ./ gridsteps(grid)), pointstate.r)
     sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk)
     spat
@@ -96,7 +96,7 @@ function update_shapevalues!(shapevalues::Vector{<: ShapeValues}, grid::Grid, po
     update!(shapevalues[p], grid, pointstate.x[p], spat)
 end
 
-function update_shapevalues!(shapevalues::Vector{<: GIMPValues}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
+function update_shapevalues!(shapevalues::Vector{<: Union{GIMPValues, WLSValues{<: Any, GIMP}}}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
     update!(shapevalues[p], grid, pointstate.x[p], pointstate.r[p], spat)
 end
 
