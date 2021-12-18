@@ -1,7 +1,10 @@
+import Dates
 import ProgressMeter
 
+const PROGRESS_METER_MAX = 100
+
 """
-    Logger(logpoints::AbstractVector; progress = false)
+    Logger(logpoints::AbstractVector; show_progress = false)
 
 Construct logger which handle with time event in the calculation.
 The workflow using `Logger` can be written as follows:
@@ -64,19 +67,21 @@ mutable struct Logger{V <: AbstractVector, P}
     i::Int
     islogpoint::Bool
     # progress
-    progress::Bool
+    show_progress::Bool
     pmeter::P
 end
 
-function Logger(logpoints::AbstractVector; progress::Bool = false)
+function Logger(logpoints::AbstractVector; show_progress::Bool = false)
     @assert issorted(logpoints)
     pmeter = ProgressMeter.Progress(
-        10000,
+        PROGRESS_METER_MAX,
         barglyphs = ProgressMeter.BarGlyphs('|','█', ['▌'],' ','|',),
         barlen = 20,
         color = :yellow,
     )
-    Logger(logpoints, -1, false, progress, pmeter)
+    printstyled("Start: ", Dates.now(); color = :yellow)
+    println()
+    Logger(logpoints, -1, false, show_progress, pmeter)
 end
 
 Base.first(log::Logger) = first(logpoints(log))
@@ -86,13 +91,13 @@ logpoints(logger::Logger) = logger.logpoints
 logindex(logger::Logger) = logger.i
 
 function isfinised(logger::Logger, t::Real)
-    getprogress(logger, t) ≥ 10000
+    percentage(logger, t) ≥ PROGRESS_METER_MAX
 end
 
 islogpoint(logger) = logger.islogpoint
 
 function update!(logger::Logger, t::Real)
-    logger.progress && printprogress(logger, t)
+    logger.show_progress && printprogress(logger, t)
     i = searchsortedlast(logpoints(logger), t) - 1
     if logger.i < i # not yet logged
         logger.i = i
@@ -102,12 +107,17 @@ function update!(logger::Logger, t::Real)
     end
 end
 
-function getprogress(logger::Logger, t::Real)
+function percentage(logger::Logger, t::Real)
     t0 = first(logger)
     t1 = last(logger)
-    floor(Int, 10000 * (t - t0) / (t1 - t0))
+    floor(Int, PROGRESS_METER_MAX * ((t - t0) / (t1 - t0)))
 end
 
 function printprogress(logger::Logger, t::Real)
-    ProgressMeter.update!(logger.pmeter, getprogress(logger, t))
+    perc = percentage(logger, t)
+    if perc >= PROGRESS_METER_MAX
+        ProgressMeter.finish!(logger.pmeter)
+    else
+        ProgressMeter.update!(logger.pmeter, perc)
+    end
 end

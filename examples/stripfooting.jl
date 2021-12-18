@@ -45,7 +45,7 @@ function stripfooting(
     mkpath(output_dir)
     Poingr.defalut_output_paraview_initialize(paraview_file)
 
-    logger = Logger(0.0:0.01:0.1; progress = show_progress)
+    logger = Logger(0.0:0.01:0.1; show_progress)
 
     t = 0.0
     disp = Float64[]
