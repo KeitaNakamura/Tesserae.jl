@@ -37,7 +37,9 @@ export
     point_to_grid!,
     grid_to_point!,
     default_point_to_grid!,
+    default_affine_point_to_grid!,
     default_grid_to_point!,
+    default_affine_grid_to_point!,
 # Contact
     Contact,
 # MaterialModel

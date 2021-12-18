@@ -4,6 +4,7 @@ function sandcolumn(
         shape_function = LinearWLS(CubicBSpline());
         CFL = 1.0,
         show_progress::Bool = true,
+        affine_transfer = false,
     )
     ρ₀ = 1.6e3
     g = 9.81
@@ -51,7 +52,11 @@ function sandcolumn(
         end
 
         update!(cache, grid, pointstate)
-        default_point_to_grid!(grid, pointstate, cache)
+        if affine_transfer
+            default_affine_point_to_grid!(grid, pointstate, cache)
+        else
+            default_point_to_grid!(grid, pointstate, cache)
+        end
         @. grid.state.v += (grid.state.f / grid.state.m) * dt
 
         @inbounds for bound in eachboundary(grid)
@@ -65,7 +70,11 @@ function sandcolumn(
             grid.state.v[bound.I] = v
         end
 
-        default_grid_to_point!(pointstate, grid, cache, dt)
+        if affine_transfer
+            default_affine_grid_to_point!(pointstate, grid, cache, dt)
+        else
+            default_grid_to_point!(pointstate, grid, cache, dt)
+        end
         @inbounds Threads.@threads for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]
