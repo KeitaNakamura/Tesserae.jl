@@ -216,12 +216,11 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
                                 pointstate,
                                 cache::MPCache{<: Any, <: Any, <: WLSValues})
     P = polynomial(grid.shapefunction)
-    point_to_grid!((grid.state.m, grid.state.w, grid.state.v, grid.state.f), cache) do it, p, i
+    point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do it, p, i
         @_inline_meta
         @_propagate_inbounds_meta
         N = it.N
         ∇N = it.∇N
-        w = it.w
         xₚ = pointstate.x[p]
         mₚ = pointstate.m[p]
         Vₚ = pointstate.V[p]
@@ -230,11 +229,11 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
         bₚ = pointstate.b[p]
         xᵢ = grid[i]
         m = mₚ * N
-        v = w * Cₚ ⋅ P(xᵢ - xₚ)
+        v = m * Cₚ ⋅ P(xᵢ - xₚ)
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, w, v, f
+        m, v, f
     end
-    @dot_threads grid.state.v /= grid.state.w
+    @dot_threads grid.state.v /= grid.state.m
     grid
 end
 

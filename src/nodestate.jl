@@ -12,7 +12,6 @@ default_nodestate_type(::GIMP, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultNod
 
 struct DefaultNodeStateWLS{dim, T, L, LL}
     m::T
-    w::T
     f::Vec{dim, T}
     v::Vec{dim, T}
     poly_coef::Vec{L, T}
