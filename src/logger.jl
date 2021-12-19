@@ -1,7 +1,7 @@
 import Dates
 import ProgressMeter
 
-const PROGRESS_METER_MAX = 100
+const PROGRESS_METER_MAX = 10000
 
 """
     Logger(logpoints::AbstractVector; show_progress = false)
@@ -91,7 +91,7 @@ logpoints(logger::Logger) = logger.logpoints
 logindex(logger::Logger) = logger.i
 
 function isfinised(logger::Logger, t::Real)
-    percentage(logger, t) ≥ PROGRESS_METER_MAX
+    getprogress(logger, t) ≥ PROGRESS_METER_MAX
 end
 
 islogpoint(logger) = logger.islogpoint
@@ -107,14 +107,14 @@ function update!(logger::Logger, t::Real)
     end
 end
 
-function percentage(logger::Logger, t::Real)
+function getprogress(logger::Logger, t::Real)
     t0 = first(logger)
     t1 = last(logger)
     floor(Int, PROGRESS_METER_MAX * ((t - t0) / (t1 - t0)))
 end
 
 function printprogress(logger::Logger, t::Real)
-    perc = percentage(logger, t)
+    perc = getprogress(logger, t)
     if perc >= PROGRESS_METER_MAX
         ProgressMeter.finish!(logger.pmeter)
     else
