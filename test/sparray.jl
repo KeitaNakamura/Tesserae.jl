@@ -34,15 +34,15 @@
 end
 
 @testset "SpArray" begin
-    A = (@inferred Poingr.SpArray{Float64}(undef,(5,5)))::Poingr.SpArray{Float64, 2, Vector{Float64}}
-    A = (@inferred Poingr.SpArray{Float64}(undef,5,5))::Poingr.SpArray{Float64, 2, Vector{Float64}}
+    A = (@inferred Poingr.SpArray{Float64}((5,5)))::Poingr.SpArray{Float64, 2, Vector{Float64}}
+    A = (@inferred Poingr.SpArray{Float64}(5,5))::Poingr.SpArray{Float64, 2, Vector{Float64}}
 
     @test all(==(0), A)
     for i in eachindex(A)
         # @test_throws Exception A[i] = 1
     end
 
-    B = Poingr.SpArray{Int}(undef,5,5)
+    B = Poingr.SpArray{Int}(5,5)
     A_spat = rand(Bool, size(A))
     B_spat = rand(Bool, size(B))
 

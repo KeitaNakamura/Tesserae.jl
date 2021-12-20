@@ -33,12 +33,12 @@ struct SpArray{T, dim, V <: AbstractVector{T}} <: AbstractArray{T, dim}
     spat::SpPattern{dim}
 end
 
-function SpArray{T}(u::UndefInitializer, dims::Tuple{Vararg{Int}}) where {T}
-    data = Vector{T}(u, prod(dims))
+function SpArray{T}(dims::Tuple{Vararg{Int}}) where {T}
+    data = Vector{T}(undef, prod(dims))
     spat = SpPattern(dims)
     SpArray(data, spat)
 end
-SpArray{T}(u::UndefInitializer, dims::Int...) where {T} = SpArray{T}(u, dims)
+SpArray{T}(dims::Int...) where {T} = SpArray{T}(dims)
 
 Base.IndexStyle(::Type{<: SpArray}) = IndexLinear()
 Base.size(x::SpArray) = size(x.spat)
