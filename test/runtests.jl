@@ -24,7 +24,7 @@ include("MaterialModels/DruckerPrager.jl")
 
 const fix_results = false
 
-function check_example(testname::String, case, shape_function; kwargs...)
+function check_example(testname::String, case, shape_function; dx, kwargs...)
     @testset "$testname" begin
         include(joinpath("../examples", "$testname.jl"))
         @eval $(Symbol(testname))($shape_function; show_progress = false, $kwargs...)
@@ -45,19 +45,18 @@ function check_example(testname::String, case, shape_function; kwargs...)
             result_points = get_points(result)
             @assert size(expected_points) == size(result_points)
             @test all(eachindex(expected_points)) do i
-                val = expected_points[i]
-                0.99*val ≤ result_points[i] ≤ 1.01*val # ±1%
+                norm(expected_points[i] - result_points[i]) < 0.1dx
             end
         end
     end
 end
 
 @testset "Check examples" begin
-    check_example("sandcolumn", 1, QuadraticBSpline())
-    check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()))
-    check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); affine_transfer = true)
-    check_example("sandcolumn", 3, BilinearWLS(QuadraticBSpline()))
-    check_example("stripfooting", 1, LinearBSpline())
-    check_example("stripfooting", 2, GIMP())
-    check_example("stripfooting", 3, LinearWLS(QuadraticBSpline()))
+    check_example("sandcolumn", 1, QuadraticBSpline(); dx = 0.01)
+    check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01)
+    check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01, affine_transfer = true)
+    check_example("sandcolumn", 3, BilinearWLS(QuadraticBSpline()); dx = 0.01)
+    check_example("stripfooting", 1, LinearBSpline(); dx = 0.1)
+    check_example("stripfooting", 2, GIMP(); dx = 0.1)
+    check_example("stripfooting", 3, LinearWLS(QuadraticBSpline()); dx = 0.1)
 end

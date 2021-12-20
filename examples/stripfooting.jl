@@ -5,6 +5,7 @@ function stripfooting(
         handle_volumetric_locking = true,
         CFL = 1.0,
         show_progress::Bool = true,
+        dx = 0.1,
     )
     ρ₀ = 1.0e3
     g = 0.0
@@ -14,7 +15,6 @@ function stripfooting(
     ψ = 0
     ν = 0.49
     E = 1e9
-    dx = 0.1
     v_footing = Vec(0.0, -4.0e-3)
 
     grid = Grid(shape_function, 0:dx:5.0, 0:dx:5.1)

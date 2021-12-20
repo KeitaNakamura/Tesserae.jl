@@ -5,6 +5,7 @@ function sandcolumn(
         CFL = 1.0,
         show_progress::Bool = true,
         affine_transfer = false,
+        dx = 0.01,
     )
     ρ₀ = 1.6e3
     g = 9.81
@@ -13,7 +14,6 @@ function sandcolumn(
     ψ = 0
     ν = 0.333
     E = 1e6
-    dx = 0.01
 
     grid = Grid(shape_function, 0:dx:1.0, 0:dx:1.0)
     pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, grid)
