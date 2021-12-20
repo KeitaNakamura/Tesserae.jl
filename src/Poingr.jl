@@ -84,6 +84,7 @@ abstract type ShapeFunction end
 include("grid.jl")
 
 include("ShapeFunctions/shapefunction.jl")
+include("ShapeFunctions/basisfunctions.jl")
 include("ShapeFunctions/bspline.jl")
 include("ShapeFunctions/gimp.jl")
 include("ShapeFunctions/wls.jl")

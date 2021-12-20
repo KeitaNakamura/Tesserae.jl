@@ -215,7 +215,7 @@ end
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
                                 pointstate,
                                 cache::MPCache{<: Any, <: Any, <: WLSValues})
-    P = polynomial(grid.shapefunction)
+    P = basis_function(grid.shapefunction)
     point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do it, p, i
         @_inline_meta
         @_propagate_inbounds_meta
@@ -229,7 +229,7 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
         bₚ = pointstate.b[p]
         xᵢ = grid[i]
         m = mₚ * N
-        v = m * Cₚ ⋅ P(xᵢ - xₚ)
+        v = m * Cₚ ⋅ value(P, xᵢ - xₚ)
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, v, f
     end
@@ -351,15 +351,15 @@ function default_grid_to_point!(pointstate,
                                 grid::Grid{dim, <: Any, <: WLS},
                                 cache::MPCache{dim, <: Any, <: WLSValues},
                                 dt::Real) where {dim}
-    P = polynomial(grid.shapefunction)
-    p0 = P(zero(Vec{dim, Int}))
-    ∇p0 = P'(zero(Vec{dim, Int}))
+    P = basis_function(grid.shapefunction)
+    p0 = value(P, zero(Vec{dim, Int}))
+    ∇p0 = gradient(P, zero(Vec{dim, Int}))
     grid_to_point!(pointstate.C, cache) do it, i, p
         @_inline_meta
         @_propagate_inbounds_meta
         w = it.w
         M⁻¹ = it.M⁻¹
-        grid.state.v[i] ⊗ (w * M⁻¹ ⋅ P(grid[i] - pointstate.x[p]))
+        grid.state.v[i] ⊗ (w * M⁻¹ ⋅ value(P, grid[i] - pointstate.x[p]))
     end
     @inbounds Threads.@threads for p in eachindex(pointstate)
         Cₚ = pointstate.C[p]
@@ -406,11 +406,11 @@ end
 
 function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, grid::Grid, cache::MPCache)
     @assert length(vals) == length(Vₚ) == npoints(cache)
-    polynomial = Polynomial{1}()
+    basis = PolynomialBasis{1}()
     point_to_grid!((grid.state.poly_coef, grid.state.poly_mat), cache) do it, p, i
         @_inline_meta
         @_propagate_inbounds_meta
-        P = polynomial(it.x - grid[i])
+        P = value(basis, it.x - grid[i])
         VP = (it.N * Vₚ[p]) * P
         VP * vals[p], VP ⊗ P
     end
@@ -418,7 +418,7 @@ function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, grid::Gr
     grid_to_point!(vals, cache) do it, i, p
         @_inline_meta
         @_propagate_inbounds_meta
-        P = polynomial(it.x - grid[i])
+        P = value(basis, it.x - grid[i])
         it.N * (P ⋅ grid.state.poly_coef[i])
     end
 end

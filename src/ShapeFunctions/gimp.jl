@@ -49,13 +49,14 @@ function update!(it::GIMPValues{dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec{dim},
     it.∇N .= zero(it.∇N)
     it.x[] = x
     update_gridindices!(it, grid, x, spat)
+    dx⁻¹ = 1 ./ gridsteps(grid)
     @inbounds @simd for i in 1:length(it)
         I = it.inds[i]
         xᵢ = grid[I]
         it.∇N[i], it.N[i] = gradient(x, :all) do x
             @_inline_meta
-            ξ = (x - xᵢ) ./ gridsteps(grid)
-            value(F, ξ, r ./ gridsteps(grid))
+            ξ = (x - xᵢ) .* dx⁻¹
+            value(F, ξ, r .* dx⁻¹)
         end
     end
     it

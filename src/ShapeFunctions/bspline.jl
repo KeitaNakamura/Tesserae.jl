@@ -144,12 +144,13 @@ function update!(it::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{dim}, s
     it.∇N .= zero(it.∇N)
     it.x[] = x
     update_gridindices!(it, grid, x, spat)
+    dx⁻¹ = 1 ./ gridsteps(grid)
     @inbounds @simd for i in 1:length(it)
         I = it.inds[i]
         xᵢ = grid[I]
         it.∇N[i], it.N[i] = gradient(x, :all) do x
             @_inline_meta
-            ξ = (x - xᵢ) ./ gridsteps(grid)
+            ξ = (x - xᵢ) .* dx⁻¹
             value(F, ξ, node_position(grid, I))
         end
     end
