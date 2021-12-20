@@ -6,31 +6,40 @@ struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
     spat::Array{Bool, dim}
 end
 
-function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector) where {dim, T}
+function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector{<: Vec}) where {dim, T}
     checkshapefunction(grid)
     npoints = length(xₚ)
     shapevalues = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:npoints]
     MPCache(shapevalues, size(grid), Ref(npoints), pointsinblock(grid, xₚ), fill(false, size(grid)))
 end
 
+function MPCache(grid::Grid, pointstate::AbstractVector)
+    MPCache(grid, pointstate.x)
+end
+
 gridsize(cache::MPCache) = cache.gridsize
 npoints(cache::MPCache) = cache.npoints[]
 pointsinblock(cache::MPCache) = cache.pointsinblock
 
-function reorder_pointstate!(pointstate::AbstractVector, cache::MPCache)
-    @assert length(pointstate) == npoints(cache)
+function reorder_pointstate!(pointstate::AbstractVector, ptsinblk::Array)
+    @assert length(pointstate) == sum(length, ptsinblk)
     inds = Vector{Int}(undef, length(pointstate))
     cnt = 1
-    for block in pointsinblock(cache)
-        @inbounds for i in eachindex(block)
-            inds[cnt] = block[i]
-            block[i] = cnt
-            cnt += 1
+    for blocks in threadsafe_blocks(@. $size(ptsinblk) << BLOCK_UNIT + 1)
+        @inbounds for blockindex in blocks
+            block = ptsinblk[blockindex]
+            for i in eachindex(block)
+                inds[cnt] = block[i]
+                block[i] = cnt
+                cnt += 1
+            end
         end
     end
     @inbounds @. pointstate = pointstate[inds]
     pointstate
 end
+reorder_pointstate!(pointstate::AbstractVector, grid::Grid) = reorder_pointstate!(pointstate, pointsinblock(grid, pointstate.x))
+reorder_pointstate!(pointstate::AbstractVector, cache::MPCache) = reorder_pointstate!(pointstate, pointsinblock(cache))
 
 function allocate!(f, x::Vector, n::Integer)
     len = length(x)
