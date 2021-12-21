@@ -44,10 +44,7 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int =
 
     npoints = count(x -> indomain(x...), allpoints)
     pointstate = StructVector{Point}(undef, npoints)
-    for name in propertynames(pointstate)
-        v = getproperty(pointstate, name)
-        fillzero!(v)
-    end
+    fillzero!(pointstate)
 
     if :x in propertynames(pointstate)
         cnt = 0

@@ -86,9 +86,10 @@ end
 
 @inline add!(x::AbstractArray, i::Int, v) = (@_propagate_inbounds_meta; applyat!(+, x, i, v))
 
+zerovalue(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
 @generated function zerovalue(::Type{T}) where {T}
     if Base._return_type(zero, (T,)) == Union{}
-        exps = [:(zero($t)) for t in fieldtypes(T)]
+        exps = [:(zerovalue($t)) for t in fieldtypes(T)]
         :(@_inline_meta; T($(exps...)))
     else
         :(@_inline_meta; zero(T))
@@ -101,7 +102,9 @@ end
 zerovalue(x) = zerovalue(typeof(x))
 
 function fillzero!(x::AbstractArray{T}) where {T}
-    isbitstype(T) && broadcast!(zerovalue, x, x)
+    for i in eachindex(x)
+        x[i] = zerovalue(T)
+    end
     x
 end
 fillzero!(x::SpArray) = (fillzero!(x.data); x)
