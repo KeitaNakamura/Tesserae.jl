@@ -115,7 +115,7 @@ end
 
 
 """
-    Grid([::Type{NodeState}], [::ShapeFunction], axes::AbstractVector...)
+    Grid([::Type{NodeState}], [::Interpolation], axes::AbstractVector...)
 
 Construct `Grid` by `axes`.
 
@@ -129,8 +129,8 @@ julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Grid{dim, T, F <: Union{Nothing, ShapeFunction}, Node, State <: SpArray{Node, dim}} <: AbstractArray{Vec{dim, T}, dim}
-    shapefunction::F
+struct Grid{dim, T, F <: Union{Nothing, Interpolation}, Node, State <: SpArray{Node, dim}} <: AbstractArray{Vec{dim, T}, dim}
+    interpolation::F
     coordinates::Coordinate{dim, NTuple{dim, T}, NTuple{dim, Vector{T}}}
     gridsteps::NTuple{dim, T}
     state::State
@@ -153,12 +153,12 @@ isinbound(grid::Grid, I) = (@_propagate_inbounds_meta; isinbound(grid.bc, I))
 isinbound(grid::Grid, I, d::Int) = (@_propagate_inbounds_meta; isinbound(grid.bc, I, d))
 setbounds!(grid::Grid, withinbounds::AbstractArray{Bool}) = setbounds!(grid.bc, withinbounds)
 
-checkshapefunction(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of shape function, see help `?Grid` for more details."))
-checkshapefunction(::Grid{<: Any, <: Any, <: ShapeFunction}) = nothing
+check_interpolation(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of interpolation, see help `?Grid` for more details."))
+check_interpolation(::Grid{<: Any, <: Any, <: Interpolation}) = nothing
 
 not_supported_coordinate_system(coordinate_system) =
     throw(ArgumentError("coordinate system `$(coordinate_system)` is not supported, use `:normal` in 1D and 3D, and `:plane_strain` or `:axisymmetric` in 2D."))
-function Grid(::Type{Node}, shapefunction, coordinates::Coordinate{dim}; coordinate_system = nothing, withinbounds = falses(size(coordinates))) where {Node, dim}
+function Grid(::Type{Node}, interp, coordinates::Coordinate{dim}; coordinate_system = nothing, withinbounds = falses(size(coordinates))) where {Node, dim}
     state = SpArray(StructVector{Node}(undef, 0), SpPattern(size(coordinates)))
     axes = coordinateaxes(coordinates)
     if coordinate_system !== nothing
@@ -179,23 +179,23 @@ function Grid(::Type{Node}, shapefunction, coordinates::Coordinate{dim}; coordin
             coordinate_system = :normal
         end
     end
-    Grid(shapefunction, Coordinate(Array.(axes)), map(step, axes), state, coordinate_system, BoundaryCondition(withinbounds))
+    Grid(interp, Coordinate(Array.(axes)), map(step, axes), state, coordinate_system, BoundaryCondition(withinbounds))
 end
 
-function Grid(shapefunction::ShapeFunction, coordinates::Coordinate{dim, Tup}; kwargs...) where {dim, Tup}
+function Grid(interp::Interpolation, coordinates::Coordinate{dim, Tup}; kwargs...) where {dim, Tup}
     T = promote_type(Tup.parameters...)
-    Node = default_nodestate_type(shapefunction, Val(dim), Val(T))
-    Grid(Node, shapefunction, coordinates; kwargs...)
+    Node = default_nodestate_type(interp, Val(dim), Val(T))
+    Grid(Node, interp, coordinates; kwargs...)
 end
 
-# `shapefunction` must be given if Node is given
-Grid(::Type{Node}, shapefunction, axes::Tuple{Vararg{AbstractVector}}; kwargs...) where {Node} = Grid(Node, shapefunction, Coordinate(axes); kwargs...)
-Grid(shapefunction::ShapeFunction, axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(shapefunction, Coordinate(axes); kwargs...)
+# `interp` must be given if Node is given
+Grid(::Type{Node}, interp, axes::Tuple{Vararg{AbstractVector}}; kwargs...) where {Node} = Grid(Node, interp, Coordinate(axes); kwargs...)
+Grid(interp::Interpolation, axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(interp, Coordinate(axes); kwargs...)
 Grid(axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
 
-# `shapefunction` must be given if Node is given
-Grid(Node::Type, shapefunction, axes::AbstractVector...; kwargs...) = Grid(Node, shapefunction, axes; kwargs...)
-Grid(shapefunction::ShapeFunction, axes::AbstractVector...; kwargs...) = Grid(shapefunction, axes; kwargs...)
+# `interp` must be given if Node is given
+Grid(Node::Type, interp, axes::AbstractVector...; kwargs...) = Grid(Node, interp, axes; kwargs...)
+Grid(interp::Interpolation, axes::AbstractVector...; kwargs...) = Grid(interp, axes; kwargs...)
 Grid(axes::AbstractVector...; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
 
 @inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
@@ -245,8 +245,8 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
     _neighboring_nodes(grid, ξ, h .- sqrt(eps(T)))
 end
 @inline function neighboring_nodes(grid::Grid, x::Vec)
-    checkshapefunction(grid)
-    neighboring_nodes(grid, x, support_length(grid.shapefunction))
+    check_interpolation(grid)
+    neighboring_nodes(grid, x, support_length(grid.interpolation))
 end
 
 @inline function _neighboring_nodes(grid::Grid, ξ, h)

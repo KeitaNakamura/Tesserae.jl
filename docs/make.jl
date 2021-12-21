@@ -15,7 +15,7 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Grid" => "grid.md",
-        "Shape functions" => "shape_functions.md",
+        "Interpolations" => "interpolations.md",
         "ContactMechanics" => "contact_mechanics.md",
         "Loggers" => "logger.md",
         "VTK outputs" => "VTK_outputs.md",

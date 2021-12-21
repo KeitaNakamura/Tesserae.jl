@@ -22,7 +22,7 @@ export
     generate_pointstate,
     setbounds!,
     eachboundary,
-# shape functions
+# interpolations
     update!,
     BSpline,
     LinearBSpline,
@@ -32,6 +32,7 @@ export
     BilinearWLS,
     polynomial,
     GIMP,
+    MPValues,
 # MPCache
     MPCache,
     point_to_grid!,
@@ -80,14 +81,14 @@ include("dotmacros.jl")
 
 include("sparray.jl")
 
-abstract type ShapeFunction end
+abstract type Interpolation end
 include("grid.jl")
 
-include("ShapeFunctions/shapefunction.jl")
-include("ShapeFunctions/basisfunctions.jl")
-include("ShapeFunctions/bspline.jl")
-include("ShapeFunctions/gimp.jl")
-include("ShapeFunctions/wls.jl")
+include("Interpolations/mpvalues.jl")
+include("Interpolations/bspline.jl")
+include("Interpolations/gimp.jl")
+include("Interpolations/basis.jl")
+include("Interpolations/wls.jl")
 
 include("nodestate.jl")
 include("pointstate.jl")

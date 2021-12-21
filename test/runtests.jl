@@ -15,7 +15,7 @@ end
 include("utils.jl")
 include("sparray.jl")
 include("grid.jl")
-include("shapefunctions.jl")
+include("interpolations.jl")
 
 include("mpcache.jl")
 
@@ -24,10 +24,10 @@ include("MaterialModels/DruckerPrager.jl")
 
 const fix_results = false
 
-function check_example(testname::String, case, shape_function; dx, kwargs...)
+function check_example(testname::String, case, interpolation; dx, kwargs...)
     @testset "$testname" begin
         include(joinpath("../examples", "$testname.jl"))
-        @eval $(Symbol(testname))($shape_function; show_progress = false, $kwargs...)
+        @eval $(Symbol(testname))($interpolation; show_progress = false, $kwargs...)
 
         output_dir = joinpath("../examples", "$testname.tmp")
         result_file = joinpath(

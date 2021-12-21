@@ -77,7 +77,7 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int =
 end
 
 function generate_pointstate(indomain, grid::Grid{dim, T}; kwargs...) where {dim, T}
-    Point = default_pointstate_type(grid.shapefunction, Val(dim), Val(T))
+    Point = default_pointstate_type(grid.interpolation, Val(dim), Val(T))
     generate_pointstate(indomain, Point, grid; kwargs...)
 end
 

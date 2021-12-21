@@ -4,7 +4,7 @@
     QuadraticBSpline()
     CubicBSpline()
 
-Create B-spline shape function.
+Create B-spline kernel.
 
 # Examples
 ```jldoctest
@@ -15,7 +15,7 @@ julia> Poingr.value(f, Vec(0.5, 0.5))
 0.25
 ```
 """
-struct BSpline{order} <: ShapeFunction
+struct BSpline{order} <: Kernel
     function BSpline{order}() where {order}
         new{order::Int}()
     end
@@ -116,45 +116,45 @@ end
 end
 
 
-struct BSplineValues{order, dim, T, L} <: ShapeValues{dim, T}
+struct BSplineValues{order, dim, T, L} <: MPValues{dim, T}
     F::BSpline{order}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
     x::Base.RefValue{Vec{dim, T}}
-    inds::MVector{L, Index{dim}}
+    gridindices::MVector{L, Index{dim}}
     len::Base.RefValue{Int}
 end
 
 function BSplineValues{order, dim, T, L}() where {order, dim, T, L}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
-    inds = MVector{L, Index{dim}}(undef)
+    gridindices = MVector{L, Index{dim}}(undef)
     x = Ref(zero(Vec{dim, T}))
-    BSplineValues(BSpline{order}(), N, ∇N, x, inds, Ref(0))
+    BSplineValues(BSpline{order}(), N, ∇N, x, gridindices, Ref(0))
 end
 
-function ShapeValues{dim, T}(F::BSpline{order}) where {order, dim, T}
+function MPValues{dim, T}(F::BSpline{order}) where {order, dim, T}
     L = nnodes(F, Val(dim))
     BSplineValues{order, dim, T, L}()
 end
 
-function update!(it::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
-    F = it.F
-    it.N .= zero(it.N)
-    it.∇N .= zero(it.∇N)
-    it.x[] = x
-    update_gridindices!(it, grid, x, spat)
+function update!(mpvalues::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+    F = mpvalues.F
+    mpvalues.N .= zero(mpvalues.N)
+    mpvalues.∇N .= zero(mpvalues.∇N)
+    mpvalues.x[] = x
+    update_gridindices!(mpvalues, grid, x, spat)
     dx⁻¹ = 1 ./ gridsteps(grid)
-    @inbounds @simd for i in 1:length(it)
-        I = it.inds[i]
+    @inbounds @simd for i in 1:length(mpvalues)
+        I = mpvalues.gridindices[i]
         xᵢ = grid[I]
-        it.∇N[i], it.N[i] = gradient(x, :all) do x
+        mpvalues.∇N[i], mpvalues.N[i] = gradient(x, :all) do x
             @_inline_meta
             ξ = (x - xᵢ) .* dx⁻¹
             value(F, ξ, node_position(grid, I))
         end
     end
-    it
+    mpvalues
 end
 
 struct BSplineValue{dim, T}
@@ -164,7 +164,7 @@ struct BSplineValue{dim, T}
     index::Index{dim}
 end
 
-@inline function Base.getindex(it::BSplineValues, i::Int)
+@inline function Base.getindex(mpvalues::BSplineValues, i::Int)
     @_propagate_inbounds_meta
-    BSplineValue(it.N[i], it.∇N[i], it.x[], it.inds[i])
+    BSplineValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.x[], mpvalues.gridindices[i])
 end

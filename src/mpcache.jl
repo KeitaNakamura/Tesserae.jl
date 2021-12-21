@@ -1,5 +1,5 @@
-struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
-    shapevalues::Vector{Tshape}
+struct MPCache{dim, T, Tmp <: MPValues{dim, T}}
+    mpvalues::Vector{Tmp}
     gridsize::NTuple{dim, Int}
     npoints::Base.RefValue{Int}
     pointsinblock::Array{Vector{Int}, dim}
@@ -7,10 +7,10 @@ struct MPCache{dim, T, Tshape <: ShapeValues{dim, T}}
 end
 
 function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector{<: Vec}) where {dim, T}
-    checkshapefunction(grid)
+    check_interpolation(grid)
     npoints = length(xₚ)
-    shapevalues = [ShapeValues{dim, T}(grid.shapefunction) for _ in 1:npoints]
-    MPCache(shapevalues, size(grid), Ref(npoints), pointsinblock(grid, xₚ), fill(false, size(grid)))
+    mpvalues = [MPValues{dim, T}(grid.interpolation) for _ in 1:npoints]
+    MPCache(mpvalues, size(grid), Ref(npoints), pointsinblock(grid, xₚ), fill(false, size(grid)))
 end
 
 function MPCache(grid::Grid, pointstate::AbstractVector)
@@ -90,40 +90,40 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, 
 end
 
 function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate, ptsinblk::AbstractArray{Vector{Int}})
-    hₚ = Fill(active_length(grid.shapefunction), length(pointstate))
+    hₚ = Fill(active_length(grid.interpolation), length(pointstate))
     sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk)
     spat
 end
 
 function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, <: Union{GIMP, WLS{<: Any, GIMP}}}, pointstate, ptsinblk::AbstractArray{Vector{Int}})
-    hₚ = LazyDotArray(rₚ -> active_length(grid.shapefunction, rₚ ./ gridsteps(grid)), pointstate.r)
+    hₚ = LazyDotArray(rₚ -> active_length(grid.interpolation, rₚ ./ gridsteps(grid)), pointstate.r)
     sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk)
     spat
 end
 
-function update_shapevalues!(shapevalues::Vector{<: ShapeValues}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
-    update!(shapevalues[p], grid, pointstate.x[p], spat)
+function update_mpvalues!(mpvalues::Vector{<: MPValues}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
+    update!(mpvalues[p], grid, pointstate.x[p], spat)
 end
 
-function update_shapevalues!(shapevalues::Vector{<: Union{GIMPValues, WLSValues{<: Any, GIMP}}}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
-    update!(shapevalues[p], grid, pointstate.x[p], pointstate.r[p], spat)
+function update_mpvalues!(mpvalues::Vector{<: Union{GIMPValues, WLSValues{<: Any, GIMP}}}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
+    update!(mpvalues[p], grid, pointstate.x[p], pointstate.r[p], spat)
 end
 
 function update!(cache::MPCache{dim}, grid::Grid{dim}, pointstate) where {dim}
     @assert size(grid) == gridsize(cache)
 
-    shapevalues = cache.shapevalues
+    mpvalues = cache.mpvalues
     pointsinblock = cache.pointsinblock
     spat = cache.spat
 
     cache.npoints[] = length(pointstate)
-    allocate!(i -> eltype(shapevalues)(), shapevalues, length(pointstate))
+    allocate!(i -> eltype(mpvalues)(), mpvalues, length(pointstate))
 
     pointsinblock!(pointsinblock, grid, pointstate.x)
     sparsity_pattern!(spat, grid, pointstate, pointsinblock)
 
     Threads.@threads for p in eachindex(pointstate)
-        @inbounds update_shapevalues!(shapevalues, grid, pointstate, spat, p)
+        @inbounds update_mpvalues!(mpvalues, grid, pointstate, spat, p)
     end
 
     gridstate = grid.state
@@ -137,13 +137,13 @@ end
 # point_to_grid! #
 ##################
 
-@generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, shapevalues::ShapeValues, p::Int) where {N}
+@generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, mpvalues::MPValues, p::Int) where {N}
     exps = [:(add!(gridstates[$i], I.i, res[$i])) for i in 1:N]
     quote
-        @inbounds @simd for i in eachindex(shapevalues)
-            it = shapevalues[i]
-            I = it.index
-            res = p2g(it, p, I)
+        @inbounds @simd for i in eachindex(mpvalues)
+            mp = mpvalues[i]
+            I = mp.index
+            res = p2g(mp, p, I)
             $(exps...)
         end
     end
@@ -157,7 +157,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
         Threads.@threads for blockindex in blocks
             @inbounds for p in pointsinblock(cache)[blockindex]
                 pointmask !== nothing && !pointmask[p] && continue
-                _point_to_grid!(p2g, gridstates, cache.shapevalues[p], p)
+                _point_to_grid!(p2g, gridstates, cache.mpvalues[p], p)
             end
         end
     end
@@ -165,18 +165,18 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
 end
 
 function point_to_grid!(p2g, gridstate::AbstractArray, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
-    point_to_grid!((gridstate,), cache, pointmask) do it, p, I
+    point_to_grid!((gridstate,), cache, pointmask) do mp, p, I
         @_inline_meta
         @_propagate_inbounds_meta
-        (p2g(it, p, I),)
+        (p2g(mp, p, I),)
     end
 end
 
 function point_to_grid!(p2g, gridstate::AbstractArray, grid::Grid, xₚ::AbstractVector)
-    point_to_grid!((gridstate,), grid, xₚ) do it, p, I
+    point_to_grid!((gridstate,), grid, xₚ) do mp, p, I
         @_inline_meta
         @_propagate_inbounds_meta
-        (p2g(it, p, I),)
+        (p2g(mp, p, I),)
     end
 end
 
@@ -191,18 +191,18 @@ end
     σ ⋅ ∇N
 end
 
-for (ShapeFunctionType, ShapeValuesType) in ((BSpline, BSplineValues),
+for (InterpolationType, InterpolationValuesType) in ((BSpline, BSplineValues),
                                              (GIMP, GIMPValues))
     @eval function default_point_to_grid!(
-            grid::Grid{<: Any, <: Any, <: $ShapeFunctionType},
+            grid::Grid{<: Any, <: Any, <: $InterpolationType},
             pointstate,
-            cache::MPCache{<: Any, <: Any, <: $ShapeValuesType}
+            cache::MPCache{<: Any, <: Any, <: $InterpolationValuesType}
         )
-        point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do it, p, i
+        point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do mp, p, i
             @_inline_meta
             @_propagate_inbounds_meta
-            N = it.N
-            ∇N = it.∇N
+            N = mp.N
+            ∇N = mp.∇N
             xₚ = pointstate.x[p]
             mₚ = pointstate.m[p]
             Vₚ = pointstate.V[p]
@@ -224,12 +224,12 @@ end
 function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
                                 pointstate,
                                 cache::MPCache{<: Any, <: Any, <: WLSValues})
-    P = basis_function(grid.shapefunction)
-    point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do it, p, i
+    P = basis_function(grid.interpolation)
+    point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do mp, p, i
         @_inline_meta
         @_propagate_inbounds_meta
-        N = it.N
-        ∇N = it.∇N
+        N = mp.N
+        ∇N = mp.∇N
         xₚ = pointstate.x[p]
         mₚ = pointstate.m[p]
         Vₚ = pointstate.V[p]
@@ -247,11 +247,11 @@ function default_point_to_grid!(grid::Grid{<: Any, <: Any, <: WLS},
 end
 
 function default_affine_point_to_grid!(grid::Grid{dim}, pointstate, cache::MPCache{dim}) where {dim}
-    point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do it, p, i
+    point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do mp, p, i
         @_inline_meta
         @_propagate_inbounds_meta
-        N = it.N
-        ∇N = it.∇N
+        N = mp.N
+        ∇N = mp.∇N
         xₚ  = pointstate.x[p]
         mₚ  = pointstate.m[p]
         Vₚ  = pointstate.V[p]
@@ -273,13 +273,13 @@ end
 # grid_to_point! #
 ##################
 
-@generated function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, shapevalues::ShapeValues, p::Int) where {N}
+@generated function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, mpvalues::MPValues, p::Int) where {N}
     quote
         vals = tuple($([:(zero(eltype(pointstates[$i]))) for i in 1:N]...))
-        @inbounds @simd for i in eachindex(shapevalues)
-            it = shapevalues[i]
-            I = it.index
-            res = g2p(it, I, p)
+        @inbounds @simd for i in eachindex(mpvalues)
+            mp = mpvalues[i]
+            I = mp.index
+            res = g2p(mp, I, p)
             vals = tuple($([:(vals[$i] + res[$i]) for i in 1:N]...))
         end
         $([:(setindex!(pointstates[$i], vals[$i], p)) for i in 1:N]...)
@@ -291,24 +291,24 @@ function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, cache::
     pointmask !== nothing && @assert length(pointmask) == npoints(cache)
     @inbounds Threads.@threads for p in 1:npoints(cache)
         pointmask !== nothing && !pointmask[p] && continue
-        _grid_to_point!(g2p, pointstates, cache.shapevalues[p], p)
+        _grid_to_point!(g2p, pointstates, cache.mpvalues[p], p)
     end
     pointstates
 end
 
 function grid_to_point!(g2p, pointstate::AbstractVector, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
-    grid_to_point!((pointstate,), cache, pointmask) do it, I, p
+    grid_to_point!((pointstate,), cache, pointmask) do mp, I, p
         @_inline_meta
         @_propagate_inbounds_meta
-        (g2p(it, I, p),)
+        (g2p(mp, I, p),)
     end
 end
 
 function grid_to_point!(g2p, pointstate::AbstractVector, grid::Grid, xₚ::AbstractVector)
-    grid_to_point!((pointstate,), grid, xₚ) do it, I, p
+    grid_to_point!((pointstate,), grid, xₚ) do mp, I, p
         @_inline_meta
         @_propagate_inbounds_meta
-        (g2p(it, I, p),)
+        (g2p(mp, I, p),)
     end
 end
 
@@ -323,25 +323,25 @@ end
     ∇v
 end
 
-for (ShapeFunctionType, ShapeValuesType) in ((BSpline, BSplineValues),
+for (InterpolationType, InterpolationValuesType) in ((BSpline, BSplineValues),
                                              (GIMP, GIMPValues))
     @eval function default_grid_to_point!(
             pointstate,
-            grid::Grid{dim, <: Any, <: $ShapeFunctionType},
-            cache::MPCache{dim, <: Any, <: $ShapeValuesType},
+            grid::Grid{dim, <: Any, <: $InterpolationType},
+            cache::MPCache{dim, <: Any, <: $InterpolationValuesType},
             dt::Real
         ) where {dim}
         @inbounds Threads.@threads for p in 1:npoints(cache)
-            shapevalues = cache.shapevalues[p]
+            mpvalues = cache.mpvalues[p]
             T = eltype(pointstate.v[p])
             dvₚ = zero(Vec{dim, T})
             vₚ = zero(Vec{dim, T})
             ∇vₚ = zero(Mat{dim, dim, T})
-            @simd for i in eachindex(shapevalues)
-                it = shapevalues[i]
-                I = it.index
-                N = it.N
-                ∇N = it.∇N
+            @simd for i in eachindex(mpvalues)
+                mp = mpvalues[i]
+                I = mp.index
+                N = mp.N
+                ∇N = mp.∇N
                 dvᵢ = grid.state.v[I] - grid.state.v_n[I]
                 vᵢ = grid.state.v[I]
                 dvₚ += N * dvᵢ
@@ -360,14 +360,14 @@ function default_grid_to_point!(pointstate,
                                 grid::Grid{dim, <: Any, <: WLS},
                                 cache::MPCache{dim, <: Any, <: WLSValues},
                                 dt::Real) where {dim}
-    P = basis_function(grid.shapefunction)
+    P = basis_function(grid.interpolation)
     p0 = value(P, zero(Vec{dim, Int}))
     ∇p0 = gradient(P, zero(Vec{dim, Int}))
-    grid_to_point!(pointstate.C, cache) do it, i, p
+    grid_to_point!(pointstate.C, cache) do mp, i, p
         @_inline_meta
         @_propagate_inbounds_meta
-        w = it.w
-        M⁻¹ = it.M⁻¹
+        w = mp.w
+        M⁻¹ = mp.M⁻¹
         grid.state.v[i] ⊗ (w * M⁻¹ ⋅ value(P, grid[i] - pointstate.x[p]))
     end
     @inbounds Threads.@threads for p in eachindex(pointstate)
@@ -383,15 +383,15 @@ end
 
 function default_affine_grid_to_point!(pointstate, grid::Grid{dim}, cache::MPCache{dim}, dt::Real) where {dim}
     @inbounds Threads.@threads for p in 1:npoints(cache)
-        shapevalues = cache.shapevalues[p]
+        mpvalues = cache.mpvalues[p]
         T = eltype(pointstate.v[p])
         vₚ = zero(Vec{dim, T})
         ∇vₚ = zero(Mat{dim, dim, T})
-        @simd for i in eachindex(shapevalues)
-            it = shapevalues[i]
-            I = it.index
-            N = it.N
-            ∇N = it.∇N
+        @simd for i in eachindex(mpvalues)
+            mp = mpvalues[i]
+            I = mp.index
+            N = mp.N
+            ∇N = mp.∇N
             vᵢ = grid.state.v[I]
             vₚ += vᵢ * N
             ∇vₚ += vᵢ ⊗ ∇N
@@ -416,18 +416,18 @@ end
 function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, grid::Grid, cache::MPCache)
     @assert length(vals) == length(Vₚ) == npoints(cache)
     basis = PolynomialBasis{1}()
-    point_to_grid!((grid.state.poly_coef, grid.state.poly_mat), cache) do it, p, i
+    point_to_grid!((grid.state.poly_coef, grid.state.poly_mat), cache) do mp, p, i
         @_inline_meta
         @_propagate_inbounds_meta
-        P = value(basis, it.x - grid[i])
-        VP = (it.N * Vₚ[p]) * P
+        P = value(basis, mp.x - grid[i])
+        VP = (mp.N * Vₚ[p]) * P
         VP * vals[p], VP ⊗ P
     end
     @dot_threads grid.state.poly_coef = safe_inv(grid.state.poly_mat) ⋅ grid.state.poly_coef
-    grid_to_point!(vals, cache) do it, i, p
+    grid_to_point!(vals, cache) do mp, i, p
         @_inline_meta
         @_propagate_inbounds_meta
-        P = value(basis, it.x - grid[i])
-        it.N * (P ⋅ grid.state.poly_coef[i])
+        P = value(basis, mp.x - grid[i])
+        mp.N * (P ⋅ grid.state.poly_coef[i])
     end
 end

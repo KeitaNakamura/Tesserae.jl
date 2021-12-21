@@ -1,4 +1,4 @@
-struct GIMP <: ShapeFunction end
+struct GIMP <: Kernel end
 
 support_length(::GIMP) = 2.0
 active_length(::GIMP, l) = 1.0 .+ l # `l` must be normalized by `dx`
@@ -21,45 +21,45 @@ end
 end
 
 
-struct GIMPValues{dim, T, L} <: ShapeValues{dim, T}
+struct GIMPValues{dim, T, L} <: MPValues{dim, T}
     F::GIMP
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
     x::Base.RefValue{Vec{dim, T}}
-    inds::MVector{L, Index{dim}}
+    gridindices::MVector{L, Index{dim}}
     len::Base.RefValue{Int}
 end
 
 function GIMPValues{dim, T, L}() where {dim, T, L}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
-    inds = MVector{L, Index{dim}}(undef)
+    gridindices = MVector{L, Index{dim}}(undef)
     x = Ref(zero(Vec{dim, T}))
-    GIMPValues(GIMP(), N, ∇N, x, inds, Ref(0))
+    GIMPValues(GIMP(), N, ∇N, x, gridindices, Ref(0))
 end
 
-function ShapeValues{dim, T}(F::GIMP) where {dim, T}
+function MPValues{dim, T}(F::GIMP) where {dim, T}
     L = nnodes(F, Val(dim))
     GIMPValues{dim, T, L}()
 end
 
-function update!(it::GIMPValues{dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
-    F = it.F
-    it.N .= zero(it.N)
-    it.∇N .= zero(it.∇N)
-    it.x[] = x
-    update_gridindices!(it, grid, x, spat)
+function update!(mpvalues::GIMPValues{dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
+    F = mpvalues.F
+    mpvalues.N .= zero(mpvalues.N)
+    mpvalues.∇N .= zero(mpvalues.∇N)
+    mpvalues.x[] = x
+    update_gridindices!(mpvalues, grid, x, spat)
     dx⁻¹ = 1 ./ gridsteps(grid)
-    @inbounds @simd for i in 1:length(it)
-        I = it.inds[i]
+    @inbounds @simd for i in 1:length(mpvalues)
+        I = mpvalues.gridindices[i]
         xᵢ = grid[I]
-        it.∇N[i], it.N[i] = gradient(x, :all) do x
+        mpvalues.∇N[i], mpvalues.N[i] = gradient(x, :all) do x
             @_inline_meta
             ξ = (x - xᵢ) .* dx⁻¹
             value(F, ξ, r .* dx⁻¹)
         end
     end
-    it
+    mpvalues
 end
 
 struct GIMPValue{dim, T}
@@ -69,7 +69,7 @@ struct GIMPValue{dim, T}
     index::Index{dim}
 end
 
-@inline function Base.getindex(it::GIMPValues, i::Int)
+@inline function Base.getindex(mpvalues::GIMPValues, i::Int)
     @_propagate_inbounds_meta
-    BSplineValue(it.N[i], it.∇N[i], it.x[], it.inds[i])
+    BSplineValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.x[], mpvalues.gridindices[i])
 end
