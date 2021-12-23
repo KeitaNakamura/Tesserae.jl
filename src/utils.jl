@@ -9,6 +9,20 @@ end
 
 nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
 
+promote_tuple_length(xs::Type{<: NTuple{N, Any}}...) where {N} = N
+@generated function broadcast_tuple(f, xs::Vararg{Any, N}) where {N}
+    L = promote_tuple_length([x for x in xs if x <: Tuple]...)
+    exps = map(1:L) do i
+        args = [xs[j] <: Tuple ? :(xs[$j][$i]) : :(xs[$j]) for j in 1:N]
+        :(f($(args...)))
+    end
+    quote
+        @_inline_meta
+        @_propagate_inbounds_meta
+        tuple($(exps...))
+    end
+end
+
 function Tensor3D(x::SecondOrderTensor{2,T}) where {T}
     z = zero(T)
     @inbounds SecondOrderTensor{3,T}(x[1,1], x[2,1], z, x[1,2], x[2,2], z, z, z, z)

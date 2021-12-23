@@ -54,7 +54,7 @@ end
 
 function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
     empty!.(ptsinblk)
-    @inbounds for p in eachindex(xₚ)
+    @inbounds for p in 1:length(xₚ)
         I = whichblock(grid, xₚ[p])
         I === nothing && continue
         push!(ptsinblk[I], p)
@@ -122,7 +122,7 @@ function update!(cache::MPCache{dim}, grid::Grid{dim}, pointstate) where {dim}
     pointsinblock!(pointsinblock, grid, pointstate.x)
     sparsity_pattern!(spat, grid, pointstate, pointsinblock)
 
-    Threads.@threads for p in eachindex(pointstate)
+    Threads.@threads for p in 1:length(pointstate)
         @inbounds update_mpvalues!(mpvalues, grid, pointstate, spat, p)
     end
 
@@ -137,15 +137,12 @@ end
 # point_to_grid! #
 ##################
 
-@generated function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, mpvalues::MPValues, p::Int) where {N}
-    exps = [:(add!(gridstates[$i], I.i, res[$i])) for i in 1:N]
-    quote
-        @inbounds @simd for i in eachindex(mpvalues)
-            mp = mpvalues[i]
-            I = mp.index
-            res = p2g(mp, p, I)
-            $(exps...)
-        end
+function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, mpvalues::MPValues, p::Int) where {N}
+    @inbounds @simd for i in 1:length(mpvalues)
+        mp = mpvalues[i]
+        I = mp.index
+        res = p2g(mp, p, I)
+        broadcast_tuple(add!, gridstates, I.i, res)
     end
 end
 
@@ -166,14 +163,6 @@ end
 
 function point_to_grid!(p2g, gridstate::AbstractArray, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     point_to_grid!((gridstate,), cache, pointmask) do mp, p, I
-        @_inline_meta
-        @_propagate_inbounds_meta
-        (p2g(mp, p, I),)
-    end
-end
-
-function point_to_grid!(p2g, gridstate::AbstractArray, grid::Grid, xₚ::AbstractVector)
-    point_to_grid!((gridstate,), grid, xₚ) do mp, p, I
         @_inline_meta
         @_propagate_inbounds_meta
         (p2g(mp, p, I),)
@@ -273,39 +262,40 @@ end
 # grid_to_point! #
 ##################
 
-@generated function _grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector, N}}, mpvalues::MPValues, p::Int) where {N}
-    quote
-        vals = tuple($([:(zero(eltype(pointstates[$i]))) for i in 1:N]...))
-        @inbounds @simd for i in eachindex(mpvalues)
-            mp = mpvalues[i]
-            I = mp.index
-            res = g2p(mp, I, p)
-            vals = tuple($([:(vals[$i] + res[$i]) for i in 1:N]...))
-        end
-        $([:(setindex!(pointstates[$i], vals[$i], p)) for i in 1:N]...)
+function grid_to_point(g2p, mpvalues::MPValues)
+    mp = mpvalues[1]
+    vals = g2p(mp, mp.index)
+    @inbounds @simd for i in 2:length(mpvalues)
+        mp = mpvalues[i]
+        res = g2p(mp, mp.index)
+        vals = broadcast_tuple(+, vals, res)
     end
+    vals
 end
 
 function grid_to_point!(g2p, pointstates::Tuple{Vararg{AbstractVector}}, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     @assert all(==(npoints(cache)), length.(pointstates))
-    pointmask !== nothing && @assert length(pointmask) == npoints(cache)
-    @inbounds Threads.@threads for p in 1:npoints(cache)
-        pointmask !== nothing && !pointmask[p] && continue
-        _grid_to_point!(g2p, pointstates, cache.mpvalues[p], p)
+    results = grid_to_point(g2p, cache, pointmask)
+    @assert length(results) == npoints(cache)
+    Threads.@threads for p in 1:npoints(cache)
+        @inbounds broadcast_tuple(setindex!, pointstates, results[p], p)
     end
-    pointstates
+end
+
+function grid_to_point(g2p, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
+    pointmask !== nothing && @assert length(pointmask) == npoints(cache)
+    LazyDotArray(1:npoints(cache)) do p
+        pointmask !== nothing && !pointmask[p] && return @inbounds broadcast_tuple(getindex, pointstates, p)
+        grid_to_point(cache.mpvalues[p]) do mp, I
+            @_inline_meta
+            @_propagate_inbounds_meta
+            g2p(mp, I, p)
+        end
+    end
 end
 
 function grid_to_point!(g2p, pointstate::AbstractVector, cache::MPCache, pointmask::Union{AbstractVector{Bool}, Nothing} = nothing)
     grid_to_point!((pointstate,), cache, pointmask) do mp, I, p
-        @_inline_meta
-        @_propagate_inbounds_meta
-        (g2p(mp, I, p),)
-    end
-end
-
-function grid_to_point!(g2p, pointstate::AbstractVector, grid::Grid, xₚ::AbstractVector)
-    grid_to_point!((pointstate,), grid, xₚ) do mp, I, p
         @_inline_meta
         @_propagate_inbounds_meta
         (g2p(mp, I, p),)
@@ -331,23 +321,17 @@ for (InterpolationType, InterpolationValuesType) in ((BSpline, BSplineValues),
             cache::MPCache{dim, <: Any, <: $InterpolationValuesType},
             dt::Real
         ) where {dim}
+        pointvalues = grid_to_point(cache) do mp, i, p
+            @_inline_meta
+            @_propagate_inbounds_meta
+            N = mp.N
+            ∇N = mp.∇N
+            dvᵢ = grid.state.v[i] - grid.state.v_n[i]
+            vᵢ = grid.state.v[i]
+            N*dvᵢ, N*vᵢ, vᵢ⊗∇N
+        end
         @inbounds Threads.@threads for p in 1:npoints(cache)
-            mpvalues = cache.mpvalues[p]
-            T = eltype(pointstate.v[p])
-            dvₚ = zero(Vec{dim, T})
-            vₚ = zero(Vec{dim, T})
-            ∇vₚ = zero(Mat{dim, dim, T})
-            @simd for i in eachindex(mpvalues)
-                mp = mpvalues[i]
-                I = mp.index
-                N = mp.N
-                ∇N = mp.∇N
-                dvᵢ = grid.state.v[I] - grid.state.v_n[I]
-                vᵢ = grid.state.v[I]
-                dvₚ += N * dvᵢ
-                vₚ += N * vᵢ
-                ∇vₚ += vᵢ ⊗ ∇N
-            end
+            dvₚ, vₚ, ∇vₚ = pointvalues[p]
             pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
             pointstate.v[p] += dvₚ
             pointstate.x[p] += vₚ * dt
@@ -370,7 +354,7 @@ function default_grid_to_point!(pointstate,
         M⁻¹ = mp.M⁻¹
         grid.state.v[i] ⊗ (w * M⁻¹ ⋅ value(P, grid[i] - pointstate.x[p]))
     end
-    @inbounds Threads.@threads for p in eachindex(pointstate)
+    @inbounds Threads.@threads for p in 1:length(pointstate)
         Cₚ = pointstate.C[p]
         xₚ = pointstate.x[p]
         vₚ = Cₚ ⋅ p0
@@ -382,20 +366,16 @@ function default_grid_to_point!(pointstate,
 end
 
 function default_affine_grid_to_point!(pointstate, grid::Grid{dim}, cache::MPCache{dim}, dt::Real) where {dim}
+    pointvalues = grid_to_point(cache) do mp, i, p
+        @_inline_meta
+        @_propagate_inbounds_meta
+        N = mp.N
+        ∇N = mp.∇N
+        vᵢ = grid.state.v[i]
+        vᵢ*N, vᵢ⊗∇N
+    end
     @inbounds Threads.@threads for p in 1:npoints(cache)
-        mpvalues = cache.mpvalues[p]
-        T = eltype(pointstate.v[p])
-        vₚ = zero(Vec{dim, T})
-        ∇vₚ = zero(Mat{dim, dim, T})
-        @simd for i in eachindex(mpvalues)
-            mp = mpvalues[i]
-            I = mp.index
-            N = mp.N
-            ∇N = mp.∇N
-            vᵢ = grid.state.v[I]
-            vₚ += vᵢ * N
-            ∇vₚ += vᵢ ⊗ ∇N
-        end
+        vₚ, ∇vₚ = pointvalues[p]
         pointstate.v[p] = vₚ
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.x[p] += vₚ * dt
