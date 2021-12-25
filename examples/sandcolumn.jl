@@ -55,7 +55,10 @@ function sandcolumn(
         if affine_transfer
             default_affine_point_to_grid!(grid, pointstate, cache)
         else
-            default_point_to_grid!(grid, pointstate, cache)
+            # use `normal` transfer function for testing purposes
+            # since `default_point_to_grid!` calls `default_affine_point_to_grid!`
+            # for `PolynomialBasis{1}` by default.
+            Poingr.default_normal_point_to_grid!(grid, pointstate, cache)
         end
         @. grid.state.v += (grid.state.f / grid.state.m) * dt
 
@@ -73,7 +76,10 @@ function sandcolumn(
         if affine_transfer
             default_affine_grid_to_point!(pointstate, grid, cache, dt)
         else
-            default_grid_to_point!(pointstate, grid, cache, dt)
+            # use `normal` transfer function for testing purposes
+            # since `default_grid_to_point!` calls `default_affine_grid_to_point!`
+            # for `PolynomialBasis{1}` by default.
+            Poingr.default_normal_grid_to_point!(pointstate, grid, cache, dt)
         end
         @inbounds Threads.@threads for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
