@@ -242,18 +242,17 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
     all(@. zero(T) ≤ ξ ≤ T($size(grid)-1)) || return CartesianIndices(nfill(1:0, Val(dim)))
     # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
     # This means `neighboring_nodes` doesn't include bounds of range.
-    _neighboring_nodes(grid, ξ, h .- sqrt(eps(T)))
+    _neighboring_nodes(size(grid), ξ, @. T(h) - sqrt(eps(T)))
 end
 @inline function neighboring_nodes(grid::Grid, x::Vec)
     check_interpolation(grid)
     neighboring_nodes(grid, x, support_length(grid.interpolation))
 end
 
-@inline function _neighboring_nodes(grid::Grid, ξ, h)
-    imin = Tuple(@. unsafe_trunc(Int, ceil(ξ - h))  + 1)
-    imax = Tuple(@. unsafe_trunc(Int, floor(ξ + h)) + 1)
-    inds = CartesianIndices(@. UnitRange(imin, imax))
-    CartesianIndices(grid) ∩ inds
+@inline function _neighboring_nodes(dims::Dims, ξ, h)
+    imin = Tuple(@. max(unsafe_trunc(Int,  ceil(ξ - h)) + 1, 1))
+    imax = Tuple(@. min(unsafe_trunc(Int, floor(ξ + h)) + 1, dims))
+    CartesianIndices(@. UnitRange(imin, imax))
 end
 
 
