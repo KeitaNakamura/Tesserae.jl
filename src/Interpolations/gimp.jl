@@ -49,7 +49,7 @@ function update!(mpvalues::GIMPValues{dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec
     mpvalues.∇N .= zero(mpvalues.∇N)
     mpvalues.x[] = x
     update_gridindices!(mpvalues, grid, x, spat)
-    dx⁻¹ = 1 ./ gridsteps(grid)
+    dx⁻¹ = gridsteps_inv(grid)
     @inbounds @simd for i in 1:length(mpvalues)
         I = mpvalues.gridindices[i]
         xᵢ = grid[I]

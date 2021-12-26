@@ -133,6 +133,7 @@ struct Grid{dim, T, F <: Union{Nothing, Interpolation}, Node, State <: SpArray{N
     interpolation::F
     coordinates::Coordinate{dim, NTuple{dim, T}, NTuple{dim, Vector{T}}}
     gridsteps::NTuple{dim, T}
+    gridsteps_inv::NTuple{dim, T}
     state::State
     coordinate_system::Symbol
     bc::BoundaryCondition{dim}
@@ -141,6 +142,8 @@ end
 Base.size(x::Grid) = map(length, gridaxes(x))
 gridsteps(x::Grid) = x.gridsteps
 gridsteps(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps(x)[i])
+gridsteps_inv(x::Grid) = x.gridsteps_inv
+gridsteps_inv(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps_inv(x)[i])
 gridaxes(x::Grid) = coordinateaxes(x.coordinates)
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
@@ -179,7 +182,13 @@ function Grid(::Type{Node}, interp, coordinates::Coordinate{dim}; coordinate_sys
             coordinate_system = :normal
         end
     end
-    Grid(interp, Coordinate(Array.(axes)), map(step, axes), state, coordinate_system, BoundaryCondition(withinbounds))
+    T = promote_type(eltype.(axes)...)
+    if T <: Integer
+        T = Float64 # default
+    end
+    dx = map(step, axes)
+    dx⁻¹ = inv.(dx)
+    Grid(interp, Coordinate(Array{T}.(axes)), T.(dx), T.(dx⁻¹), state, coordinate_system, BoundaryCondition(withinbounds))
 end
 
 function Grid(interp::Interpolation, coordinates::Coordinate{dim, Tup}; kwargs...) where {dim, Tup}
@@ -235,9 +244,9 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
 ```
 """
 @inline function neighboring_nodes(grid::Grid{dim}, x::Vec{dim}, h) where {dim}
-    dx = gridsteps(grid)
+    dx⁻¹ = gridsteps_inv(grid)
     xmin = gridorigin(grid)
-    ξ = Tuple((x - xmin) ./ dx)
+    ξ = Tuple((x - xmin) .* dx⁻¹)
     T = eltype(ξ)
     all(@. zero(T) ≤ ξ ≤ T($size(grid)-1)) || return CartesianIndices(nfill(1:0, Val(dim)))
     # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
@@ -330,9 +339,9 @@ CartesianIndex(2, 2)
 ```
 """
 @inline function whichcell(grid::Grid{dim}, x::Vec{dim}) where {dim}
-    dx = gridsteps(grid)
+    dx⁻¹ = gridsteps_inv(grid)
     xmin = gridorigin(grid)
-    ξ = Tuple((x - xmin) ./ dx)
+    ξ = Tuple((x - xmin) .* dx⁻¹)
     all(@. 0 ≤ ξ ≤ $size(grid)-1) || return nothing
     CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
 end

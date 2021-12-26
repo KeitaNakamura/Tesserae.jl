@@ -54,7 +54,7 @@ function _update!(mpvalues::WLSValues{<: Any, <: Any, dim}, F, grid::Grid{dim}, 
     M = zero(mpvalues.M⁻¹[])
     mpvalues.x[] = x
     update_gridindices!(mpvalues, grid, x, spat)
-    dx⁻¹ = 1 ./ gridsteps(grid)
+    dx⁻¹ = gridsteps_inv(grid)
     @inbounds @simd for i in 1:length(mpvalues)
         I = mpvalues.gridindices[i]
         xᵢ = grid[I]
@@ -84,7 +84,7 @@ function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: Any, dim}, F, grid:
     M = zero(mpvalues.M⁻¹[])
     mpvalues.x[] = x
     update_gridindices!(mpvalues, grid, x, spat)
-    dx⁻¹ = 1 ./ gridsteps(grid)
+    dx⁻¹ = gridsteps_inv(grid)
     @inbounds @simd for i in 1:length(mpvalues)
         I = mpvalues.gridindices[i]
         xᵢ = grid[I]
@@ -113,7 +113,7 @@ end
 
 function update!(mpvalues::WLSValues{<: Any, GIMP, dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
     F = weight_function(mpvalues)
-    dx⁻¹ = 1 ./ gridsteps(grid)
+    dx⁻¹ = gridsteps_inv(grid)
     _update!(mpvalues, ξ -> value(F, ξ, r.*dx⁻¹), grid, x, spat)
 end
 
