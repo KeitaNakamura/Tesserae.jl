@@ -68,23 +68,22 @@ end
     x
 end
 
-@inline function applyat!(op, x::SpArray, i::Int, v)
+@inline function add!(x::SpArray, i, v)
     @boundscheck checkbounds(x, i)
     spat = x.spat
     @inbounds begin
         index = spat.indices[i]
-        index === -1 && return x
-        x.data[index] = op(x.data[index], v)
+        if index !== -1
+            x.data[index] += v
+        end
     end
     x
 end
-@inline function applyat!(op, x::AbstractArray, i::Int, v)
+@inline function add!(x::AbstractArray, i, v)
     @boundscheck checkbounds(x, i)
-    @inbounds x[i] = op(x[i], v)
+    @inbounds x[i] += v
     x
 end
-
-@inline add!(x::AbstractArray, i::Int, v) = (@_propagate_inbounds_meta; applyat!(+, x, i, v))
 
 zerovalue(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
 @generated function zerovalue(::Type{T}) where {T}

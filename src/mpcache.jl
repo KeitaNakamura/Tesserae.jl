@@ -142,7 +142,7 @@ function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, mpval
         mp = mpvalues[i]
         I = mp.index
         res = p2g(mp, p, I)
-        broadcast_tuple(add!, gridstates, I.i, res)
+        broadcast_tuple(add!, gridstates, I, res)
     end
 end
 
