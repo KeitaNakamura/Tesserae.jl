@@ -48,15 +48,16 @@ struct Contact
     cond::Symbol
     sep::Bool
     coef::Float64
-    construct_sticky(cond) = new(cond)
-    construct_slip(cond; sep = false) = new(cond, sep)
-    construct_friction(cond, coef; sep = false) = new(cond, sep, coef)
-    function Contact(cond::Symbol, args...; kwargs...)
-        cond == :sticky   && return construct_sticky(cond, args...; kwargs...)
-        cond == :slip     && return construct_slip(cond, args...; kwargs...)
-        cond == :friction && return construct_friction(cond, args...; kwargs...)
-        throw(ArgumentError("Contact condition `$(QuoteNode(cond))` is not supported"))
-    end
+end
+
+Contact_sticky(cond) = Contact(cond, false, Inf)
+Contact_slip(cond; sep = false) = Contact(cond, sep, 0.0)
+Contact_friction(cond, coef; sep = false) = Contact(cond, sep, coef)
+function Contact(cond::Symbol, args...; kwargs...)
+    cond == :sticky   && return Contact_sticky(cond, args...; kwargs...)
+    cond == :slip     && return Contact_slip(cond, args...; kwargs...)
+    cond == :friction && return Contact_friction(cond, args...; kwargs...)
+    throw(ArgumentError("Contact condition `$(QuoteNode(cond))` is not supported"))
 end
 
 iscondition(contact::Contact, cond::Symbol) = contact.cond === cond
