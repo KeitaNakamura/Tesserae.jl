@@ -42,5 +42,5 @@ function update_gridindices!(mpvalues::MPValues, grid::Grid{dim}, x::Vec{dim}, s
         end
     end
     mpvalues.len[] = count
-    mpvalues
+    count == length(gridindices) == length(mpvalues.N)
 end

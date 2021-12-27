@@ -33,6 +33,43 @@ active_length(bspline::BSpline) = support_length(bspline) # for sparsity pattern
 
 @pure nnodes(bspline::BSpline, ::Val{dim}) where {dim} = prod(nfill(Int(2*support_length(bspline)), Val(dim)))
 
+
+fract(x) = x - floor(x)
+
+# `x` must be normalized by `dx`
+function Base.values(::BSpline{1}, x::T) where {T <: Real}
+    ξ = fract(x)
+    Vec{2, T}(1-ξ, ξ)
+end
+
+function Base.values(::BSpline{2}, x::T) where {T <: Real}
+    V = Vec{3, T}
+    x′ = fract(x - T(0.5))
+    ξ = x′ .- V(-0.5, 0.5, 1.5)
+    @. $V(0.5, -1.0, 0.5) * ξ^2 +
+       $V(-1.5, 0.0, 1.5) * ξ +
+       $V(1.125, 0.75, 1.125)
+end
+
+function Base.values(::BSpline{3}, x::T) where {T <: Real}
+    V = Vec{4, T}
+    x′ = fract(x)
+    ξ = x′ .- V(-1, 0, 1, 2)
+    ξ² = ξ .* ξ
+    ξ³ = ξ² .* ξ
+    @. $V(-1/6, 0.5, -0.5, 1/6) * ξ³ +
+       $V(1, -1, -1, 1) * ξ² +
+       $V(-2, 0, 0, 2) * ξ +
+       $V(4/3, 2/3, 2/3, 4/3)
+end
+
+@generated function Base.values(bspline::BSpline, x::Vec{dim}) where {dim}
+    exps = [:(values(bspline, x[$i])) for i in 1:dim]
+    quote
+        otimes($(exps...))
+    end
+end
+
 function value(::BSpline{1}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
