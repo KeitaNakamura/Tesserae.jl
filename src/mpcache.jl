@@ -127,7 +127,7 @@ function update!(cache::MPCache{dim}, grid::Grid{dim}, pointstate) where {dim}
     end
 
     gridstate = grid.state
-    gridstate.spat .= spat
+    copyto!(gridstate.spat, spat)
     reinit!(gridstate)
 
     cache

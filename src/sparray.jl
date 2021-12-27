@@ -1,9 +1,9 @@
 struct SpPattern{dim} <: AbstractArray{Bool, dim}
     indices::Array{Int, dim}
-    mask::BitArray{dim}
+    mask::Array{Bool, dim}
 end
 
-SpPattern(dims::Tuple{Vararg{Int}}) = SpPattern(fill(-1, dims), falses(dims))
+SpPattern(dims::Tuple{Vararg{Int}}) = SpPattern(fill(-1, dims), fill(false, dims))
 SpPattern(dims::Int...) = SpPattern(dims)
 
 Base.size(spat::SpPattern) = size(spat.indices)
