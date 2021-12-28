@@ -303,7 +303,7 @@ function neighboring_cells(grid::Grid{dim}, cellindex::CartesianIndex{dim}, h::I
     inds ∩ (cellindex-h*u:cellindex+h*u)
 end
 
-@inline function neighboring_cells(grid::Grid{dim}, x::Vec{dim}, h::Int) where {dim}
+@inline function neighboring_cells(grid::Grid, x::Vec, h::Int)
     neighboring_cells(grid, whichcell(grid, x), h)
 end
 
@@ -314,7 +314,7 @@ function neighboring_blocks(grid::Grid{dim}, blockindex::CartesianIndex{dim}, h:
     inds ∩ (blockindex-h*u:blockindex+h*u)
 end
 
-@inline function neighboring_blocks(grid::Grid{dim}, x::Vec{dim}, h::Int) where {dim}
+@inline function neighboring_blocks(grid::Grid, x::Vec, h::Int)
     neighboring_blocks(grid, whichblock(grid, x), h)
 end
 

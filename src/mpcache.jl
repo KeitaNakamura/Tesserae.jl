@@ -6,7 +6,7 @@ struct MPCache{dim, T, Tmp <: MPValues{dim, T}}
     spat::Array{Bool, dim}
 end
 
-function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector{<: Vec}) where {dim, T}
+function MPCache(grid::Grid{dim, T}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
     check_interpolation(grid)
     npoints = length(xₚ)
     mpvalues = [MPValues{dim, T}(grid.interpolation) for _ in 1:npoints]
@@ -52,7 +52,7 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}, dim}, grid::Grid{dim}, xₚ::AbstractVector) where {dim}
+function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}}, grid::Grid, xₚ::AbstractVector)
     empty!.(ptsinblk)
     @inbounds for p in 1:length(xₚ)
         I = whichblock(grid, xₚ[p])
@@ -101,15 +101,15 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, <: Unio
     spat
 end
 
-function update_mpvalues!(mpvalues::Vector{<: MPValues}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
+function update_mpvalues!(mpvalues::Vector{<: MPValues}, grid::Grid, pointstate, spat::AbstractArray{Bool}, p::Int)
     update!(mpvalues[p], grid, pointstate.x[p], spat)
 end
 
-function update_mpvalues!(mpvalues::Vector{<: Union{GIMPValues, WLSValues{<: Any, GIMP}}}, grid::Grid, pointstate, spat::AbstractArray{Bool, dim}, p::Int) where {dim}
+function update_mpvalues!(mpvalues::Vector{<: Union{GIMPValues, WLSValues{<: Any, GIMP}}}, grid::Grid, pointstate, spat::AbstractArray{Bool}, p::Int)
     update!(mpvalues[p], grid, pointstate.x[p], pointstate.r[p], spat)
 end
 
-function update!(cache::MPCache{dim}, grid::Grid{dim}, pointstate) where {dim}
+function update!(cache::MPCache, grid::Grid, pointstate)
     @assert size(grid) == gridsize(cache)
 
     mpvalues = cache.mpvalues
@@ -137,7 +137,7 @@ end
 # point_to_grid! #
 ##################
 
-function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray, N}}, mpvalues::MPValues, p::Int) where {N}
+function _point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, mpvalues::MPValues, p::Int)
     @inbounds @simd for i in 1:length(mpvalues)
         mp = mpvalues[i]
         I = mp.index

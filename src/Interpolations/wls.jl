@@ -21,9 +21,9 @@ struct WLSValues{Basis, Weight, dim, T, nnodes, L, L²} <: MPValues{dim, T}
     N::MVector{nnodes, T}
     ∇N::MVector{nnodes, Vec{dim, T}}
     w::MVector{nnodes, T}
+    gridindices::MVector{nnodes, Index{dim}}
     M⁻¹::Base.RefValue{Mat{L, L, T, L²}}
     x::Base.RefValue{Vec{dim, T}}
-    gridindices::MVector{nnodes, Index{dim}}
     len::Base.RefValue{Int}
 end
 
@@ -37,7 +37,7 @@ function WLSValues{Basis, Weight, dim, T, nnodes, L, L²}() where {Basis, Weight
     M⁻¹ = zero(Mat{L, L, T, L²})
     gridindices = MVector{nnodes, Index{dim}}(undef)
     x = Ref(zero(Vec{dim, T}))
-    WLSValues(WLS{Basis, Weight}(), N, ∇N, w, Ref(M⁻¹), x, gridindices, Ref(0))
+    WLSValues(WLS{Basis, Weight}(), N, ∇N, w, gridindices, Ref(M⁻¹), x, Ref(0))
 end
 
 function MPValues{dim, T}(F::WLS{Basis, Weight}) where {Basis, Weight, dim, T}
@@ -145,12 +145,12 @@ struct WLSValue{dim, T, L, L²}
     N::T
     ∇N::Vec{dim, T}
     w::T
+    index::Index{dim}
     M⁻¹::Mat{L, L, T, L²}
     x::Vec{dim, T}
-    index::Index{dim}
 end
 
 @inline function Base.getindex(mpvalues::WLSValues, i::Int)
     @_propagate_inbounds_meta
-    WLSValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.w[i], mpvalues.M⁻¹[], mpvalues.x[], mpvalues.gridindices[i])
+    WLSValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.w[i], mpvalues.gridindices[i], mpvalues.M⁻¹[], mpvalues.x[])
 end
