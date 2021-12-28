@@ -52,7 +52,7 @@ function stripfooting(
     load = Float64[]
     while !isfinised(logger, t)
 
-        dt = Poingr.tmapreduce(min, pointstate) do p
+        dt = Poingr.vmapreduce(min, pointstate) do p
             ρ = p.m / p.V
             vc = matcalc(Val(:sound_speed), elastic.K, elastic.G, ρ)
             CFL * minimum(gridsteps(grid)) / vc

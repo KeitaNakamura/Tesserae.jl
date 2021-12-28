@@ -441,18 +441,3 @@ function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, grid::Gr
         mp.N * (P ⋅ grid.state.poly_coef[i])
     end
 end
-
-function tmapreduce(f, combine, iter)
-    xs = [f(first(iter)) for i in 1:Threads.nthreads()]
-    splits = [round(Int, s) for s in range(0, stop=size(iter,2), length=Threads.nthreads()+1)]
-    @inbounds Threads.@threads for _ in 1:Threads.nthreads()
-        id = Threads.threadid()
-        x = xs[id]
-        range = splits[id]+1:splits[id+1]
-        for i in range
-            x = combine(x, f(iter[i]))
-        end
-        xs[id] = x
-    end
-    reduce(combine, xs)
-end
