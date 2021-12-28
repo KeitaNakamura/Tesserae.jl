@@ -11,9 +11,6 @@ using Reexport
 using StaticArrays, StructArrays, FillArrays
 using Coordinates
 
-import LoopVectorization
-import LoopVectorization: vmapreduce
-
 const BLOCK_UNIT = unsigned(3) # 2^3
 
 export

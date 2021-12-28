@@ -45,7 +45,7 @@ function sandcolumn(
     t = 0.0
     while !isfinised(logger, t)
 
-        dt = Poingr.vmapreduce(min, pointstate) do p
+        dt = minimum(pointstate) do p
             ρ = p.m / p.V
             vc = matcalc(Val(:sound_speed), elastic.K, elastic.G, ρ)
             CFL * minimum(gridsteps(grid)) / vc
