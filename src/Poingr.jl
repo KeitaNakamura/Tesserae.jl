@@ -14,6 +14,9 @@ using Coordinates
 const BLOCK_UNIT = unsigned(3) # 2^3
 
 export
+# coordinate system
+    PlaneStrain,
+    Axisymmetric,
 # grid
     Grid,
     gridsteps,
@@ -80,6 +83,7 @@ export
 include("utils.jl")
 include("dotmacros.jl")
 
+include("coordinate_system.jl")
 include("sparray.jl")
 
 abstract type Interpolation end

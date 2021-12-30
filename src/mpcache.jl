@@ -196,14 +196,13 @@ function point_to_grid!(p2g, gridstate::AbstractArray, cache::MPCache, args...)
     end
 end
 
-@inline function stress_to_force(coordinate_system::Symbol, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
-    f = Tensor2D(σ) ⋅ ∇N
-    if coordinate_system == :axisymmetric
-        @inbounds f += Vec(1,0)*σ[3,3]*N/x[1]
-    end
-    f
+@inline function stress_to_force(::PlaneStrain, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
+    Tensor2D(σ) ⋅ ∇N
 end
-@inline function stress_to_force(::Symbol, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
+@inline function stress_to_force(::Axisymmetric, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
+    @inbounds Tensor2D(σ) ⋅ ∇N + Vec(1,0) * (σ[3,3] * N / x[1])
+end
+@inline function stress_to_force(::ThreeDimensional, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
     σ ⋅ ∇N
 end
 
@@ -343,14 +342,13 @@ function grid_to_point!(g2p, pointstate::AbstractVector, cache::MPCache)
     end
 end
 
-@inline function velocity_gradient(coordinate_system::Symbol, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    ∇v = Poingr.Tensor3D(∇v)
-    if coordinate_system == :axisymmetric
-        @inbounds ∇v += @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
-    end
-    ∇v
+@inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
+    Poingr.Tensor3D(∇v)
 end
-@inline function velocity_gradient(::Symbol, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
+@inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
+    @inbounds Poingr.Tensor3D(∇v) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
+end
+@inline function velocity_gradient(::ThreeDimensional, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
     ∇v
 end
 

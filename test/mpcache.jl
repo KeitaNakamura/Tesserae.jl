@@ -1,6 +1,6 @@
 @testset "P2G" begin
     for it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-        for coordinate_system in (:plane_strain, :axisymmetric)
+        for coordinate_system in (PlaneStrain(), Axisymmetric())
             # initialization
             grid = Grid(it, 0.0:2.0:10.0, 0.0:2.0:20.0; coordinate_system)
             pointstate = generate_pointstate((x,y) -> true, grid)
