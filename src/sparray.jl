@@ -68,18 +68,36 @@ end
     x
 end
 
-@inline function add!(x::SpArray, i, v)
+@generated function unsafe_add_tuple!(xs::Tuple{Vararg{SpArray, N}}, i, v::Tuple{Vararg{Any, N}}) where {N}
+    exps = [:(xs[$i].data[index] += v[$i]) for i in 1:N]
+    quote
+        @_inline_meta
+        spat = xs[1].spat
+        @inbounds begin
+            index = spat.indices[i]
+            $(exps...)
+        end
+        xs
+    end
+end
+
+# this function is also available for mixed use of `SpArray` and `AbstractArray`
+@inline function unsafe_add_tuple!(xs::Tuple{Vararg{AbstractArray, N}}, i, v::Tuple{Vararg{Any, N}}) where {N}
+    @_propagate_inbounds_meta
+    broadcast_tuple(unsafe_add!, xs, i, v)
+    xs
+end
+
+@inline function unsafe_add!(x::SpArray, i, v)
     @boundscheck checkbounds(x, i)
     spat = x.spat
     @inbounds begin
         index = spat.indices[i]
-        if index !== -1
-            x.data[index] += v
-        end
+        x.data[index] += v # don't check if `index == -1`
     end
     x
 end
-@inline function add!(x::AbstractArray, i, v)
+@inline function unsafe_add!(x::AbstractArray, i, v)
     @boundscheck checkbounds(x, i)
     @inbounds x[i] += v
     x
