@@ -9,10 +9,10 @@
             ρ0 = 1.2e3
             @. pointstate.m = ρ0 * pointstate.V
             @. pointstate.v = v0
-            @. pointstate.σ = one(SymmetricSecondOrderTensor{3})
+            @. pointstate.σ = zero(SymmetricSecondOrderTensor{3})
             # transfer
             update!(cache, grid, pointstate)
-            default_point_to_grid!(grid, pointstate, cache)
+            default_point_to_grid!(grid, pointstate, cache, 1)
             @test all(==(v0), pointstate.v)
         end
     end

@@ -59,8 +59,7 @@ function stripfooting(
         end
 
         update!(cache, grid, pointstate)
-        default_point_to_grid!(grid, pointstate, cache)
-        @. grid.state.v += (grid.state.f / grid.state.m) * dt
+        default_point_to_grid!(grid, pointstate, cache, dt)
 
         vertical_load = 0.0
         @inbounds for bound in eachboundary(grid)

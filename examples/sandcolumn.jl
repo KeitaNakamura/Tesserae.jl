@@ -53,14 +53,13 @@ function sandcolumn(
 
         update!(cache, grid, pointstate)
         if affine_transfer
-            default_affine_point_to_grid!(grid, pointstate, cache)
+            default_affine_point_to_grid!(grid, pointstate, cache, dt)
         else
             # use `normal` transfer function for testing purposes
             # since `default_point_to_grid!` calls `default_affine_point_to_grid!`
             # for `PolynomialBasis{1}` by default.
-            Poingr.default_normal_point_to_grid!(grid, pointstate, cache)
+            Poingr.default_normal_point_to_grid!(grid, pointstate, cache, dt)
         end
-        @. grid.state.v += (grid.state.f / grid.state.m) * dt
 
         @inbounds for bound in eachboundary(grid)
             v = grid.state.v[bound.I]

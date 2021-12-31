@@ -50,3 +50,10 @@ function Tensor2D(x::SymmetricFourthOrderTensor{3,T}) where {T}
 end
 
 isapproxzero(x::Number) = abs(x) <= sqrt(eps(typeof(x)))
+
+macro _inline_propagate_inbounds_meta()
+    quote
+        Base.@_inline_meta
+        Base.@_propagate_inbounds_meta
+    end
+end

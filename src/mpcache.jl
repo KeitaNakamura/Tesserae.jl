@@ -147,8 +147,8 @@ end
 # point_to_grid! #
 ##################
 
-@inline function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, mpvalues::MPValues)
-    @_propagate_inbounds_meta
+function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, mpvalues::MPValues)
+    @_inline_propagate_inbounds_meta
     @simd for i in 1:length(mpvalues)
         mp = mpvalues[i]
         I = mp.index
@@ -161,10 +161,9 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
     @assert all(==(gridsize(cache)), size.(gridstates))
     map(fillzero!, gridstates)
     eachpoint_blockwise_parallel(cache) do p
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         point_to_grid!(
-            (mp, I) -> (@_propagate_inbounds_meta; p2g(mp, p, I)),
+            (mp, I) -> (@_inline_propagate_inbounds_meta; p2g(mp, p, I)),
             gridstates,
             cache.mpvalues[p],
         )
@@ -177,10 +176,9 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
     @assert length(pointmask) == npoints(cache)
     map(fillzero!, gridstates)
     eachpoint_blockwise_parallel(cache) do p
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         pointmask[p] && point_to_grid!(
-            (mp, I) -> (@_propagate_inbounds_meta; p2g(mp, p, I)),
+            (mp, I) -> (@_inline_propagate_inbounds_meta; p2g(mp, p, I)),
             gridstates,
             cache.mpvalues[p],
         )
@@ -190,8 +188,7 @@ end
 
 function point_to_grid!(p2g, gridstate::AbstractArray, cache::MPCache, args...)
     point_to_grid!((gridstate,), cache, args...) do mp, p, I
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         (p2g(mp, p, I),)
     end
 end
@@ -211,11 +208,11 @@ for (InterpolationType, InterpolationValuesType) in ((BSpline, BSplineValues),
     @eval function default_normal_point_to_grid!(
             grid::Grid{<: Any, <: Any, <: $InterpolationType},
             pointstate,
-            cache::MPCache{<: Any, <: Any, <: $InterpolationValuesType}
+            cache::MPCache{<: Any, <: Any, <: $InterpolationValuesType},
+            dt::Real,
         )
-        point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do mp, p, i
-            @_inline_meta
-            @_propagate_inbounds_meta
+        point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
+            @_inline_propagate_inbounds_meta
             N = mp.N
             ∇N = mp.∇N
             xₚ = pointstate.x[p]
@@ -226,12 +223,12 @@ for (InterpolationType, InterpolationValuesType) in ((BSpline, BSplineValues),
             bₚ = pointstate.b[p]
             xᵢ = grid[i]
             m = mₚ * N
-            v = m * vₚ
+            mv = m * vₚ
             f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-            m, v, f
+            m, mv, mv + dt*f
         end
+        @dot_threads grid.state.v_n /= grid.state.m
         @dot_threads grid.state.v /= grid.state.m
-        @. grid.state.v_n = grid.state.v
         grid
     end
 end
@@ -239,12 +236,12 @@ end
 function default_normal_point_to_grid!(
         grid::Grid{<: Any, <: Any, <: WLS},
         pointstate,
-        cache::MPCache{<: Any, <: Any, <: WLSValues}
+        cache::MPCache{<: Any, <: Any, <: WLSValues},
+        dt::Real,
     )
     P = basis_function(grid.interpolation)
-    point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do mp, p, i
-        @_inline_meta
-        @_propagate_inbounds_meta
+    point_to_grid!((grid.state.m, grid.state.v), cache) do mp, p, i
+        @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
         xₚ = pointstate.x[p]
@@ -255,18 +252,17 @@ function default_normal_point_to_grid!(
         bₚ = pointstate.b[p]
         xᵢ = grid[i]
         m = mₚ * N
-        v = m * Cₚ ⋅ value(P, xᵢ - xₚ)
+        mv = m * Cₚ ⋅ value(P, xᵢ - xₚ)
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, v, f
+        m, mv + dt*f
     end
     @dot_threads grid.state.v /= grid.state.m
     grid
 end
 
-function default_affine_point_to_grid!(grid::Grid{dim}, pointstate, cache::MPCache{dim}) where {dim}
-    point_to_grid!((grid.state.m, grid.state.v, grid.state.f), cache) do mp, p, i
-        @_inline_meta
-        @_propagate_inbounds_meta
+function default_affine_point_to_grid!(grid::Grid{dim}, pointstate, cache::MPCache{dim}, dt::Real) where {dim}
+    point_to_grid!((grid.state.m, grid.state.v), cache) do mp, p, i
+        @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
         xₚ  = pointstate.x[p]
@@ -278,32 +274,33 @@ function default_affine_point_to_grid!(grid::Grid{dim}, pointstate, cache::MPCac
         bₚ  = pointstate.b[p]
         xᵢ  = grid[i]
         m = mₚ * N
-        v = m * (vₚ + @Tensor(∇vₚ[1:dim, 1:dim]) ⋅ (xᵢ - xₚ))
+        mv = m * (vₚ + @Tensor(∇vₚ[1:dim, 1:dim]) ⋅ (xᵢ - xₚ))
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, v, f
+        m, mv + dt*f
     end
     @dot_threads grid.state.v /= grid.state.m
     grid
 end
 
-function default_point_to_grid!( grid::Grid, pointstate, cache::MPCache)
-    default_normal_point_to_grid!(grid, pointstate, cache)
+function default_point_to_grid!(grid::Grid, pointstate, cache::MPCache, dt::Real)
+    default_normal_point_to_grid!(grid, pointstate, cache, dt)
 end
 
 function default_point_to_grid!(
         grid::Grid{<: Any, <: Any, <: WLS{PolynomialBasis{1}}},
         pointstate,
-        cache::MPCache{<: Any, <: Any, <: WLSValues{PolynomialBasis{1}}}
+        cache::MPCache{<: Any, <: Any, <: WLSValues{PolynomialBasis{1}}},
+        dt::Real,
     )
-    default_affine_point_to_grid!(grid, pointstate, cache)
+    default_affine_point_to_grid!(grid, pointstate, cache, dt)
 end
 
 ##################
 # grid_to_point! #
 ##################
 
-@inline function grid_to_point(g2p, mpvalues::MPValues)
-    @_propagate_inbounds_meta
+function grid_to_point(g2p, mpvalues::MPValues)
+    @_inline_propagate_inbounds_meta
     mp = mpvalues[1]
     vals = g2p(mp, mp.index)
     @simd for i in 2:length(mpvalues)
@@ -315,11 +312,11 @@ end
 end
 
 function grid_to_point(g2p, cache::MPCache)
+    @_inline_propagate_inbounds_meta
     LazyDotArray(1:npoints(cache)) do p
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         grid_to_point(
-            (mp, I) -> (@_propagate_inbounds_meta; g2p(mp, I, p)),
+            (mp, I) -> (@_inline_propagate_inbounds_meta; g2p(mp, I, p)),
             cache.mpvalues[p]
         )
     end
@@ -336,8 +333,7 @@ end
 
 function grid_to_point!(g2p, pointstate::AbstractVector, cache::MPCache)
     grid_to_point!((pointstate,), cache) do mp, I, p
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         (g2p(mp, I, p),)
     end
 end
@@ -361,8 +357,7 @@ for (InterpolationType, InterpolationValuesType) in ((BSpline, BSplineValues),
             dt::Real
         )
         pointvalues = grid_to_point(cache) do mp, i, p
-            @_inline_meta
-            @_propagate_inbounds_meta
+            @_inline_propagate_inbounds_meta
             N = mp.N
             ∇N = mp.∇N
             dvᵢ = grid.state.v[i] - grid.state.v_n[i]
@@ -389,8 +384,7 @@ function default_normal_grid_to_point!(
     p0 = value(P, zero(Vec{dim, Int}))
     ∇p0 = gradient(P, zero(Vec{dim, Int}))
     grid_to_point!(pointstate.C, cache) do mp, i, p
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         w = mp.w
         M⁻¹ = mp.M⁻¹
         grid.state.v[i] ⊗ (w * M⁻¹ ⋅ value(P, grid[i] - pointstate.x[p]))
@@ -408,8 +402,7 @@ end
 
 function default_affine_grid_to_point!(pointstate, grid::Grid, cache::MPCache, dt::Real)
     pointvalues = grid_to_point(cache) do mp, i, p
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
         vᵢ = grid.state.v[i]
@@ -452,16 +445,14 @@ function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, grid::Gr
     @assert length(vals) == length(Vₚ) == npoints(cache)
     basis = PolynomialBasis{1}()
     point_to_grid!((grid.state.poly_coef, grid.state.poly_mat), cache) do mp, p, i
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         P = value(basis, mp.x - grid[i])
         VP = (mp.N * Vₚ[p]) * P
         VP * vals[p], VP ⊗ P
     end
     @dot_threads grid.state.poly_coef = safe_inv(grid.state.poly_mat) ⋅ grid.state.poly_coef
     grid_to_point!(vals, cache) do mp, i, p
-        @_inline_meta
-        @_propagate_inbounds_meta
+        @_inline_propagate_inbounds_meta
         P = value(basis, mp.x - grid[i])
         mp.N * (P ⋅ grid.state.poly_coef[i])
     end
