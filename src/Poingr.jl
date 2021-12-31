@@ -8,7 +8,7 @@ using Base.Broadcast: Broadcasted, BroadcastStyle, AbstractArrayStyle, ArrayStyl
 using Reexport
 @reexport using Tensorial
 @reexport using WriteVTK
-using StaticArrays, StructArrays, FillArrays
+using StaticArrays, StructArrays
 using Coordinates
 
 const BLOCK_UNIT = unsigned(3) # 2^3

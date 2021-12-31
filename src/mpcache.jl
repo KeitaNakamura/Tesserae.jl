@@ -90,7 +90,7 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, 
 end
 
 function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate, ptsinblk::AbstractArray{Vector{Int}})
-    hₚ = Fill(active_length(grid.interpolation), length(pointstate))
+    hₚ = LazyDotArray(p -> active_length(grid.interpolation), 1:length(pointstate))
     sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk)
     spat
 end
