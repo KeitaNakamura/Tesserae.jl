@@ -16,15 +16,15 @@ support_length(wls::WLS, args...) = support_length(weight_function(wls), args...
 active_length(::WLS, args...) = 1.0 # for sparsity pattern
 
 
-struct WLSValues{Basis, Weight, dim, T, nnodes, L, L²} <: MPValues{dim, T}
+mutable struct WLSValues{Basis, Weight, dim, T, nnodes, L, L²} <: MPValues{dim, T}
     F::WLS{Basis, Weight}
     N::MVector{nnodes, T}
     ∇N::MVector{nnodes, Vec{dim, T}}
     w::MVector{nnodes, T}
     gridindices::MVector{nnodes, Index{dim}}
-    M⁻¹::Base.RefValue{Mat{L, L, T, L²}}
-    x::Base.RefValue{Vec{dim, T}}
-    len::Base.RefValue{Int}
+    M⁻¹::Mat{L, L, T, L²}
+    x::Vec{dim, T}
+    len::Int
 end
 
 basis_function(x::WLSValues) = basis_function(x.F)
@@ -36,8 +36,8 @@ function WLSValues{Basis, Weight, dim, T, nnodes, L, L²}() where {Basis, Weight
     w = MVector{nnodes, T}(undef)
     M⁻¹ = zero(Mat{L, L, T, L²})
     gridindices = MVector{nnodes, Index{dim}}(undef)
-    x = Ref(zero(Vec{dim, T}))
-    WLSValues(WLS{Basis, Weight}(), N, ∇N, w, gridindices, Ref(M⁻¹), x, Ref(0))
+    x = zero(Vec{dim, T})
+    WLSValues(WLS{Basis, Weight}(), N, ∇N, w, gridindices, M⁻¹, x, 0)
 end
 
 function MPValues{dim, T}(F::WLS{Basis, Weight}) where {Basis, Weight, dim, T}
@@ -51,8 +51,8 @@ function _update!(mpvalues::WLSValues, F, grid::Grid, x::Vec, spat::AbstractArra
     mpvalues.∇N .= zero(mpvalues.∇N)
     mpvalues.w .= zero(mpvalues.w)
     P = basis_function(mpvalues)
-    M = zero(mpvalues.M⁻¹[])
-    mpvalues.x[] = x
+    M = zero(mpvalues.M⁻¹)
+    mpvalues.x = x
     update_gridindices!(mpvalues, grid, x, spat)
     dx⁻¹ = gridsteps_inv(grid)
     @inbounds @simd for i in 1:length(mpvalues)
@@ -64,11 +64,11 @@ function _update!(mpvalues::WLSValues, F, grid::Grid, x::Vec, spat::AbstractArra
         M += w * p ⊗ p
         mpvalues.w[i] = w
     end
-    mpvalues.M⁻¹[] = inv(M)
+    mpvalues.M⁻¹ = inv(M)
     @inbounds @simd for i in 1:length(mpvalues)
         I = mpvalues.gridindices[i]
         xᵢ = grid[I]
-        q = mpvalues.M⁻¹[] ⋅ value(P, xᵢ - x)
+        q = mpvalues.M⁻¹ ⋅ value(P, xᵢ - x)
         wq = mpvalues.w[i] * q
         mpvalues.N[i] = wq ⋅ value(P, x - x)
         mpvalues.∇N[i] = wq ⋅ gradient(P, x - x)
@@ -81,7 +81,7 @@ function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F
     mpvalues.∇N .= zero(mpvalues.∇N)
     mpvalues.w .= zero(mpvalues.w)
     P = basis_function(mpvalues)
-    mpvalues.x[] = x
+    mpvalues.x = x
 
     iscompleted = update_gridindices!(mpvalues, grid, x, spat)
     dx⁻¹ = gridsteps_inv(grid)
@@ -104,7 +104,7 @@ function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F
         end
         M⁻¹ = diagm(vcat(1, D⁻¹))
     else
-        M = zero(mpvalues.M⁻¹[])
+        M = zero(mpvalues.M⁻¹)
         @inbounds @simd for i in 1:length(mpvalues)
             I = mpvalues.gridindices[i]
             xᵢ = grid[I]
@@ -124,7 +124,7 @@ function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F
             mpvalues.∇N[i] = @Tensor wq[2:end]
         end
     end
-    mpvalues.M⁻¹[] = M⁻¹
+    mpvalues.M⁻¹ = M⁻¹
 
     mpvalues
 end
@@ -145,12 +145,12 @@ struct WLSValue{dim, T, L, L²}
     N::T
     ∇N::Vec{dim, T}
     w::T
-    index::Index{dim}
+    I::Index{dim}
     M⁻¹::Mat{L, L, T, L²}
     x::Vec{dim, T}
 end
 
 @inline function Base.getindex(mpvalues::WLSValues, i::Int)
     @_propagate_inbounds_meta
-    WLSValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.w[i], mpvalues.gridindices[i], mpvalues.M⁻¹[], mpvalues.x[])
+    WLSValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.w[i], mpvalues.gridindices[i], mpvalues.M⁻¹, mpvalues.x)
 end

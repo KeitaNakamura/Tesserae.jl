@@ -151,7 +151,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, mpvalues:
     @_inline_propagate_inbounds_meta
     @simd for i in 1:length(mpvalues)
         mp = mpvalues[i]
-        I = mp.index
+        I = mp.I
         res = p2g(mp, I)
         unsafe_add_tuple!(gridstates, I, res)
     end
@@ -163,7 +163,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
     eachpoint_blockwise_parallel(cache) do p
         @_inline_propagate_inbounds_meta
         point_to_grid!(
-            (mp, I) -> (@_inline_propagate_inbounds_meta; p2g(mp, p, I)),
+            (mp, I) -> (@_inline_meta; @inbounds p2g(mp, p, I)),
             gridstates,
             cache.mpvalues[p],
         )
@@ -178,7 +178,7 @@ function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, cache::MP
     eachpoint_blockwise_parallel(cache) do p
         @_inline_propagate_inbounds_meta
         pointmask[p] && point_to_grid!(
-            (mp, I) -> (@_inline_propagate_inbounds_meta; p2g(mp, p, I)),
+            (mp, I) -> (@_inline_meta; @inbounds p2g(mp, p, I)),
             gridstates,
             cache.mpvalues[p],
         )
@@ -302,10 +302,10 @@ end
 function grid_to_point(g2p, mpvalues::MPValues)
     @_inline_propagate_inbounds_meta
     mp = mpvalues[1]
-    vals = g2p(mp, mp.index)
+    vals = g2p(mp, mp.I)
     @simd for i in 2:length(mpvalues)
         mp = mpvalues[i]
-        res = g2p(mp, mp.index)
+        res = g2p(mp, mp.I)
         vals = broadcast_tuple(+, vals, res)
     end
     vals
@@ -316,7 +316,7 @@ function grid_to_point(g2p, cache::MPCache)
     LazyDotArray(1:npoints(cache)) do p
         @_inline_propagate_inbounds_meta
         grid_to_point(
-            (mp, I) -> (@_inline_propagate_inbounds_meta; g2p(mp, I, p)),
+            (mp, I) -> (@_inline_meta; @inbounds g2p(mp, I, p)),
             cache.mpvalues[p]
         )
     end
@@ -339,10 +339,10 @@ function grid_to_point!(g2p, pointstate::AbstractVector, cache::MPCache)
 end
 
 @inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    Poingr.Tensor3D(∇v)
+    Tensor3D(∇v)
 end
 @inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    @inbounds Poingr.Tensor3D(∇v) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
+    @inbounds Tensor3D(∇v) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
 end
 @inline function velocity_gradient(::ThreeDimensional, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
     ∇v

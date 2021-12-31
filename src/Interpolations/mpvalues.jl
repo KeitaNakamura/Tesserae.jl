@@ -2,11 +2,11 @@ abstract type Kernel <: Interpolation end
 
 abstract type MPValues{dim, T} <: AbstractVector{T} end
 
-Base.size(x::MPValues) = (x.len[],)
+Base.size(x::MPValues) = (x.len,)
 
 """
-    Poingr.MPValues{dim}(::Interpolation)
-    Poingr.MPValues{dim, T}(::Interpolation)
+    MPValues{dim}(::Interpolation)
+    MPValues{dim, T}(::Interpolation)
 
 Construct object storing value of `Interpolation`.
 
@@ -41,6 +41,6 @@ function update_gridindices!(mpvalues::MPValues, grid::Grid{dim}, x::Vec{dim}, s
             mpvalues.gridindices[count+=1] = Index(i, I)
         end
     end
-    mpvalues.len[] = count
+    mpvalues.len = count
     count == length(gridindices) == length(mpvalues.N)
 end

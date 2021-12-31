@@ -153,21 +153,21 @@ end
 end
 
 
-struct BSplineValues{order, dim, T, L} <: MPValues{dim, T}
+mutable struct BSplineValues{order, dim, T, L} <: MPValues{dim, T}
     F::BSpline{order}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
-    x::Base.RefValue{Vec{dim, T}}
     gridindices::MVector{L, Index{dim}}
-    len::Base.RefValue{Int}
+    x::Vec{dim, T}
+    len::Int
 end
 
 function BSplineValues{order, dim, T, L}() where {order, dim, T, L}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
     gridindices = MVector{L, Index{dim}}(undef)
-    x = Ref(zero(Vec{dim, T}))
-    BSplineValues(BSpline{order}(), N, ∇N, x, gridindices, Ref(0))
+    x = zero(Vec{dim, T})
+    BSplineValues(BSpline{order}(), N, ∇N, gridindices, x, 0)
 end
 
 function MPValues{dim, T}(F::BSpline{order}) where {order, dim, T}
@@ -179,7 +179,7 @@ function update!(mpvalues::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{d
     F = mpvalues.F
     mpvalues.N .= zero(mpvalues.N)
     mpvalues.∇N .= zero(mpvalues.∇N)
-    mpvalues.x[] = x
+    mpvalues.x = x
     update_gridindices!(mpvalues, grid, x, spat)
     dx⁻¹ = gridsteps_inv(grid)
     @inbounds @simd for i in 1:length(mpvalues)
@@ -197,11 +197,11 @@ end
 struct BSplineValue{dim, T}
     N::T
     ∇N::Vec{dim, T}
+    I::Index{dim}
     x::Vec{dim, T}
-    index::Index{dim}
 end
 
 @inline function Base.getindex(mpvalues::BSplineValues, i::Int)
     @_propagate_inbounds_meta
-    BSplineValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.x[], mpvalues.gridindices[i])
+    BSplineValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.gridindices[i], mpvalues.x)
 end
