@@ -17,6 +17,7 @@ include("sparray.jl")
 include("grid.jl")
 include("interpolations.jl")
 
+include("pointstate.jl")
 include("mpcache.jl")
 
 include("MaterialModels/SoilHyperelastic.jl")

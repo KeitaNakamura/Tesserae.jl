@@ -56,7 +56,7 @@ function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int =
     end
     if :V in propertynames(pointstate)
         V = prod(h)
-        if dim == 2 && grid.coordinate_system == :axisymmetric
+        if dim == 2 && grid.coordinate_system isa Axisymmetric
             @. pointstate.V = getindex(pointstate.x, 1) * V
         else
             @. pointstate.V = V
