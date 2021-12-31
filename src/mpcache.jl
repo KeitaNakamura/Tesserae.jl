@@ -147,13 +147,16 @@ end
 # point_to_grid! #
 ##################
 
+function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, mp::MPValue)
+    @_inline_propagate_inbounds_meta
+    I = mp.I
+    unsafe_add_tuple!(gridstates, I, p2g(mp, I))
+end
+
 function point_to_grid!(p2g, gridstates::Tuple{Vararg{AbstractArray}}, mpvalues::MPValues)
     @_inline_propagate_inbounds_meta
-    @simd for i in 1:length(mpvalues)
-        mp = mpvalues[i]
-        I = mp.I
-        res = p2g(mp, I)
-        unsafe_add_tuple!(gridstates, I, res)
+    @simd for mp in mpvalues
+        point_to_grid!(p2g, gridstates, mp)
     end
 end
 
@@ -299,13 +302,16 @@ end
 # grid_to_point! #
 ##################
 
+function grid_to_point(g2p, mp::MPValue)
+    @_inline_propagate_inbounds_meta
+    g2p(mp, mp.I)
+end
+
 function grid_to_point(g2p, mpvalues::MPValues)
     @_inline_propagate_inbounds_meta
-    mp = mpvalues[1]
-    vals = g2p(mp, mp.I)
+    vals = grid_to_point(g2p, mpvalues[1])
     @simd for i in 2:length(mpvalues)
-        mp = mpvalues[i]
-        res = g2p(mp, mp.I)
+        res = grid_to_point(g2p, mpvalues[i])
         vals = broadcast_tuple(+, vals, res)
     end
     vals

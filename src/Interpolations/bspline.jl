@@ -194,7 +194,7 @@ function update!(mpvalues::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{d
     mpvalues
 end
 
-struct BSplineValue{dim, T}
+struct BSplineValue{dim, T} <: MPValue
     N::T
     ∇N::Vec{dim, T}
     I::Index{dim}

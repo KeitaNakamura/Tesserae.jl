@@ -62,7 +62,7 @@ function update!(mpvalues::GIMPValues{dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec
     mpvalues
 end
 
-struct GIMPValue{dim, T}
+struct GIMPValue{dim, T} <: MPValue
     N::T
     ∇N::Vec{dim, T}
     I::Index{dim}

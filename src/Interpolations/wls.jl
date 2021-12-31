@@ -141,7 +141,7 @@ function update!(mpvalues::WLSValues{<: Any, GIMP}, grid::Grid, x::Vec, r::Vec, 
 end
 
 
-struct WLSValue{dim, T, L, L²}
+struct WLSValue{dim, T, L, L²} <: MPValue
     N::T
     ∇N::Vec{dim, T}
     w::T
