@@ -60,3 +60,19 @@ end
 
 # elzero
 elzero(x) = zero(eltype(x))
+
+# zerorec: `zero` recursively
+zerorec(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
+@generated function zerorec(::Type{T}) where {T}
+    if Base._return_type(zero, (T,)) == Union{}
+        exps = [:(zerorec($t)) for t in fieldtypes(T)]
+        :(@_inline_meta; T($(exps...)))
+    else
+        :(@_inline_meta; zero(T))
+    end
+end
+@generated function zerorec(::Type{T}) where {T <: NamedTuple}
+    exps = [:(zero($t)) for t in fieldtypes(T)]
+    :(@_inline_meta; T(($(exps...),)))
+end
+zerorec(x) = zerorec(typeof(x))

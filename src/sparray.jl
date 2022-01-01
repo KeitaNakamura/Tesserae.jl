@@ -54,7 +54,7 @@ end
     @boundscheck checkbounds(x, i)
     spat = x.spat
     index = spat.indices[i]
-    @inbounds index !== -1 ? x.data[index] : zerovalue(eltype(x))
+    @inbounds index !== -1 ? x.data[index] : zerorec(eltype(x))
 end
 @inline function Base.setindex!(x::SpArray, v, i::Int)
     @boundscheck checkbounds(x, i)
@@ -103,30 +103,15 @@ end
     x
 end
 
-zerovalue(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
-@generated function zerovalue(::Type{T}) where {T}
-    if Base._return_type(zero, (T,)) == Union{}
-        exps = [:(zerovalue($t)) for t in fieldtypes(T)]
-        :(@_inline_meta; T($(exps...)))
-    else
-        :(@_inline_meta; zero(T))
-    end
-end
-@generated function zerovalue(::Type{T}) where {T <: NamedTuple}
-    exps = [:(zero($t)) for t in fieldtypes(T)]
-    :(@_inline_meta; T(($(exps...),)))
-end
-zerovalue(x) = zerovalue(typeof(x))
-
 function fillzero!(x::AbstractArray{T}) where {T}
-    for i in eachindex(x)
-        x[i] = zerovalue(T)
+    @simd for i in eachindex(x)
+        @inbounds x[i] = zerorec(T)
     end
     x
 end
 fillzero!(x::SpArray) = (fillzero!(x.data); x)
 
-function reinit!(x::SpArray{T}) where {T}
+function reinit!(x::SpArray)
     n = reinit!(x.spat)
     resize!(x.data, n)
     x
