@@ -177,8 +177,8 @@ end
 
 function update!(mpvalues::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim}
     F = mpvalues.F
-    mpvalues.N .= zero(mpvalues.N)
-    mpvalues.∇N .= zero(mpvalues.∇N)
+    mpvalues.N .= elzero(mpvalues.N)
+    mpvalues.∇N .= elzero(mpvalues.∇N)
     mpvalues.x = x
     update_gridindices!(mpvalues, grid, x, spat)
     dx⁻¹ = gridsteps_inv(grid)

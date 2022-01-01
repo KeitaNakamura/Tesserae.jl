@@ -57,3 +57,6 @@ macro _inline_propagate_inbounds_meta()
         Base.@_propagate_inbounds_meta
     end
 end
+
+# elzero
+elzero(x) = zero(eltype(x))

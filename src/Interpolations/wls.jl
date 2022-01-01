@@ -47,9 +47,9 @@ function MPValues{dim, T}(F::WLS{Basis, Weight}) where {Basis, Weight, dim, T}
 end
 
 function _update!(mpvalues::WLSValues, F, grid::Grid, x::Vec, spat::AbstractArray{Bool})
-    mpvalues.N .= zero(mpvalues.N)
-    mpvalues.∇N .= zero(mpvalues.∇N)
-    mpvalues.w .= zero(mpvalues.w)
+    mpvalues.N .= elzero(mpvalues.N)
+    mpvalues.∇N .= elzero(mpvalues.∇N)
+    mpvalues.w .= elzero(mpvalues.w)
     P = basis_function(mpvalues)
     M = zero(mpvalues.M⁻¹)
     mpvalues.x = x
@@ -77,9 +77,9 @@ function _update!(mpvalues::WLSValues, F, grid::Grid, x::Vec, spat::AbstractArra
 end
 
 function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim, T}
-    mpvalues.N .= zero(mpvalues.N)
-    mpvalues.∇N .= zero(mpvalues.∇N)
-    mpvalues.w .= zero(mpvalues.w)
+    mpvalues.N .= elzero(mpvalues.N)
+    mpvalues.∇N .= elzero(mpvalues.∇N)
+    mpvalues.w .= elzero(mpvalues.w)
     P = basis_function(mpvalues)
     mpvalues.x = x
 
