@@ -15,6 +15,7 @@ const BLOCK_UNIT = unsigned(3) # 2^3
 
 export
 # coordinate system
+    CoordinateSystem,
     PlaneStrain,
     Axisymmetric,
 # grid
