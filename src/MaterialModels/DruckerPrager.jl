@@ -6,12 +6,10 @@ struct DruckerPrager{T, Elastic <: Union{LinearElastic{T}, SoilHypoelastic{T}, S
     tension_cutoff::T
 end
 
-function DruckerPrager(elastic; A::Real, B::Real, b::Real = B, tension_cutoff::Real = 0)
-    DruckerPrager(elastic, promote(A, B, b, tension_cutoff)...)
-end
+DruckerPrager(args...; kwargs...) = DruckerPrager{Float64}(args...; kwargs...)
 
 # for Mohr-Coulomb criterion
-function DruckerPrager(elastic, mc_type; c::Real, ϕ::Real, ψ::Real = ϕ, tension_cutoff::Real = 0)
+function DruckerPrager{T}(elastic, mc_type; c::Real, ϕ::Real, ψ::Real = ϕ, tension_cutoff::Union{Real, Bool} = 0) where {T}
     ϕ = deg2rad(ϕ)
     ψ = deg2rad(ψ)
     mc_type = Symbol(mc_type)
@@ -30,7 +28,21 @@ function DruckerPrager(elastic, mc_type; c::Real, ϕ::Real, ψ::Real = ϕ, tensi
     else
         throw(ArgumentError("Choose Mohr-Coulomb type from :circumscribed, :inscribed and :plane_strain, got $mc_type"))
     end
-    DruckerPrager(elastic, promote(A, B, b, tension_cutoff)...)
+    tension_cutoff === true && throw(ArgumentError("Set value to enable `tension_cutoff`"))
+    if tension_cutoff === false
+        tension_cutoff = Inf
+    end
+    DruckerPrager(convert_type(T, elastic), map(T, (A, B, b, tension_cutoff))...)
+end
+
+function convert_type(::Type{T}, model::DruckerPrager) where {T}
+    DruckerPrager(
+        convert_type(T, model.elastic),
+        convert(T, model.A),
+        convert(T, model.B),
+        convert(T, model.b),
+        convert(T, model.tension_cutoff),
+    )
 end
 
 function tension_cutoff(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})

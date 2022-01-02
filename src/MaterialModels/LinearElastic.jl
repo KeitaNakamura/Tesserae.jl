@@ -8,7 +8,9 @@ struct LinearElastic{T} <: MaterialModel
     Dinv::SymmetricFourthOrderTensor{3, T, 36}
 end
 
-function LinearElastic(; kwargs...)
+LinearElastic(; kwargs...) = LinearElastic{Float64}(; kwargs...)
+
+function LinearElastic{T}(; kwargs...) where {T}
     params = values(kwargs)
     if haskey(params, :K)
         K = params.K
@@ -74,11 +76,22 @@ function LinearElastic(; kwargs...)
             λ = 2G*ν / (1-2ν)
         end
     end
-    T = promote_type(typeof.((G, ν, K, E, λ))...)
     δ = one(SymmetricSecondOrderTensor{3, T})
     I = one(SymmetricFourthOrderTensor{3, T})
     D = λ * δ ⊗ δ + 2G * I
-    LinearElastic(E, K, G, λ, ν, D, inv(D))
+    LinearElastic{T}(E, K, G, λ, ν, D, inv(D))
+end
+
+function convert_type(::Type{T}, model::LinearElastic) where {T}
+    LinearElastic{T}(
+        convert(T, model.E),
+        convert(T, model.K),
+        convert(T, model.G),
+        convert(T, model.λ),
+        convert(T, model.ν),
+        convert(SymmetricFourthOrderTensor{3, T}, model.D),
+        convert(SymmetricFourthOrderTensor{3, T}, model.Dinv),
+    )
 end
 
 function matcalc(::Val{:stress}, model::LinearElastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)

@@ -5,8 +5,19 @@ struct SoilHyperelastic{T} <: MaterialModel
     μ_ref::T
 end
 
-function SoilHyperelastic(; κ::Real, α::Real, p_ref::Real, μ_ref::Real)
-    SoilHyperelastic(κ, α, p_ref, μ_ref)
+SoilHyperelastic(; kwargs...) = SoilHyperelastic{Float64}(; kwargs...)
+
+function SoilHyperelastic{T}(; κ::Real, α::Real, p_ref::Real, μ_ref::Real) where {T}
+    SoilHyperelastic{T}(κ, α, p_ref, μ_ref)
+end
+
+function convert_type(::Type{T}, model::SoilHyperelastic) where {T}
+    SoilHyperelastic{T}(
+        convert(T, model.κ),
+        convert(T, model.α),
+        convert(T, model.p_ref),
+        convert(T, model.μ_ref),
+    )
 end
 
 function W(model::SoilHyperelastic, ϵᵉ::SymmetricSecondOrderTensor{3})

@@ -3,18 +3,27 @@ struct VonMises{T} <: MaterialModel
     q_y::T
 end
 
-function VonMises(elastic::LinearElastic; q_y::Real)
-    VonMises(elastic, q_y)
+VonMises(args...; kwargs...) = VonMises{Float64}(args...; kwargs...)
+
+function VonMises{T}(elastic::LinearElastic; q_y::Real) where {T}
+    VonMises(convert_type(T, elastic), convert(T, q_y))
 end
 
-function VonMises(elastic::LinearElastic, model_type; c::Real)
+function VonMises{T}(elastic::LinearElastic, model_type::Union{AbstractString, Symbol}; c::Real) where {T}
     model_type = Symbol(model_type)
     if model_type == :plane_strain
         q_y = √3c
     else
         throw(ArgumentError("Supported model type is :plane_strain, got $model_type"))
     end
-    VonMises(elastic, q_y)
+    VonMises(convert_type(T, elastic), convert(T, q_y))
+end
+
+function convert_type(::Type{T}, model::VonMises) where {T}
+    VonMises(
+        convert_type(T, model.elastic),
+        convert(T, model.q_y),
+    )
 end
 
 function matcalc(::Val{:stress}, model::VonMises, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)

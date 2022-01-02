@@ -20,6 +20,7 @@ include("interpolations.jl")
 include("pointstate.jl")
 include("mpcache.jl")
 
+include("MaterialModels/models.jl")
 include("MaterialModels/SoilHyperelastic.jl")
 include("MaterialModels/DruckerPrager.jl")
 

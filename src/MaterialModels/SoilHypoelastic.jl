@@ -7,15 +7,27 @@ struct SoilHypoelastic{T} <: MaterialModel
     D_p⁻¹::SymmetricFourthOrderTensor{3, T, 36}
 end
 
-function SoilHypoelastic(; κ::Real, ν::Real, e0::Real)
+SoilHypoelastic(; kwargs...) = SoilHypoelastic{Float64}(; kwargs...)
+
+function SoilHypoelastic{T}(; κ::Real, ν::Real, e0::Real) where {T}
     K = (1 + e0) / κ
     G = 3K * (1-2ν) / 2(1+ν)
     λ = 3K*ν / (1+ν)
-    T = promote_type(typeof.((κ, ν, e0, K, G, λ))...)
     δ = one(SymmetricSecondOrderTensor{3, T})
     I = one(SymmetricFourthOrderTensor{3, T})
     D = λ * δ ⊗ δ + 2G * I
-    SoilHypoelastic(κ, ν, e0, K, G, D)
+    SoilHypoelastic{T}(κ, ν, e0, K, G, D)
+end
+
+function convert_type(::Type{T}, model::SoilHypoelastic) where {T}
+    SoilHypoelastic(
+        convert(T, model.κ),
+        convert(T, model.ν),
+        convert(T, model.e0),
+        convert(T, model.K_p⁻¹),
+        convert(T, model.G_p⁻¹),
+        convert(SymmetricFourthOrderTensor{3, T}, model.D_p⁻¹),
+    )
 end
 
 function matcalc(::Val{:stress}, model::SoilHypoelastic, σ::SymmetricSecondOrderTensor{3}, dϵ::SymmetricSecondOrderTensor{3})::typeof(dϵ)
