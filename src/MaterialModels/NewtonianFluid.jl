@@ -1,4 +1,4 @@
-struct NewtonianFluid{T, Model <: WaterModel}
+struct NewtonianFluid{T, Model <: WaterModel} <: MaterialModel
     pressure_model::Model
     μ::T
 end
