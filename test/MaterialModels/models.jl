@@ -27,6 +27,6 @@
         @test DruckerPrager(elastic, :inscribed; c = 1, ϕ = 1, tension_cutoff = false).tension_cutoff == Inf
     end
     # NewtonianFluid
-    @test typeof(@inferred NewtonianFluid(; ρ0 = 1, P0 = 1, c = 1, μ = 1)) <: NewtonianFluid{Float64, Poingr.SimpleWaterModel{Float64}}
-    @test typeof(@inferred NewtonianFluid{Float32}(; ρ0 = 1, P0 = 1, c = 1, μ = 1)) <: NewtonianFluid{Float32, Poingr.SimpleWaterModel{Float32}}
+    @test typeof(@inferred NewtonianFluid(; ρ0 = 1, P0 = 1, c = 1, μ = 1)) <: NewtonianFluid{Float64, Poingr.MorrisWaterModel{Float64}}
+    @test typeof(@inferred NewtonianFluid{Float32}(; ρ0 = 1, P0 = 1, c = 1, μ = 1)) <: NewtonianFluid{Float32, Poingr.MorrisWaterModel{Float32}}
 end

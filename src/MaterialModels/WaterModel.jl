@@ -33,26 +33,26 @@ function matcalc(::Val{:jacobian}, model::MonaghanWaterModel, p::Real)
 end
 
 
-struct SimpleWaterModel{T} <: WaterModel
+struct MorrisWaterModel{T} <: WaterModel
     ρ0::T
     P0::T
     c::T # speed of sound
 end
 
-SimpleWaterModel(; kwargs...) = SimpleWaterModel{Float64}(; kwargs...)
-function SimpleWaterModel{T}(; ρ0::Real, P0::Real, c::Real) where {T}
-    SimpleWaterModel{T}(ρ0, P0, c)
+MorrisWaterModel(; kwargs...) = MorrisWaterModel{Float64}(; kwargs...)
+function MorrisWaterModel{T}(; ρ0::Real, P0::Real, c::Real) where {T}
+    MorrisWaterModel{T}(ρ0, P0, c)
 end
 
-function convert_type(::Type{T}, model::SimpleWaterModel) where {T}
-    SimpleWaterModel(
+function convert_type(::Type{T}, model::MorrisWaterModel) where {T}
+    MorrisWaterModel(
         convert(T, model.ρ0),
         convert(T, model.P0),
         convert(T, model.c),
     )
 end
 
-function matcalc(::Val{:pressure}, model::SimpleWaterModel, J::Real)
+function matcalc(::Val{:pressure}, model::MorrisWaterModel, J::Real)
     ρ0, P0, c = model.ρ0, model.P0, model.c
     ρ = ρ0 / J
     P0 + c^2*(ρ - ρ0)

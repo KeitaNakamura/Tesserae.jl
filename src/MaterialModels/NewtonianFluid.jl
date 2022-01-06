@@ -4,7 +4,7 @@ struct NewtonianFluid{T, Model <: WaterModel} <: MaterialModel
 end
 
 NewtonianFluid(; μ::Real, kwargs...) = NewtonianFluid{Float64}(; μ, kwargs...)
-NewtonianFluid{T}(; μ::Real, kwargs...) where {T} = NewtonianFluid(SimpleWaterModel{T}(; kwargs...), convert(T, μ))
+NewtonianFluid{T}(; μ::Real, kwargs...) where {T} = NewtonianFluid(MorrisWaterModel{T}(; kwargs...), convert(T, μ))
 
 function convert_type(::Type{T}, model::NewtonianFluid) where {T}
     NewtonianFluid(
