@@ -197,10 +197,10 @@ function point_to_grid!(p2g, gridstate::AbstractArray, cache::MPCache, args...)
 end
 
 @inline function stress_to_force(::PlaneStrain, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
-    Tensor2D(σ) ⋅ ∇N
+    Tensorial.resizedim(σ, Val(2)) ⋅ ∇N
 end
 @inline function stress_to_force(::Axisymmetric, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
-    @inbounds Tensor2D(σ) ⋅ ∇N + Vec(1,0) * (σ[3,3] * N / x[1])
+    @inbounds Tensorial.resizedim(σ, Val(2)) ⋅ ∇N + Vec(1,0) * (σ[3,3] * N / x[1])
 end
 @inline function stress_to_force(::ThreeDimensional, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
     σ ⋅ ∇N
@@ -353,10 +353,10 @@ function grid_to_point!(g2p, pointstate::AbstractVector, cache::MPCache, args...
 end
 
 @inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    Tensor3D(∇v)
+    Tensorial.resizedim(∇v, Val(3)) # expaned entries are filled with zero
 end
 @inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    @inbounds Tensor3D(∇v) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
+    @inbounds Tensorial.resizedim(∇v, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
 end
 @inline function velocity_gradient(::ThreeDimensional, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
     ∇v
