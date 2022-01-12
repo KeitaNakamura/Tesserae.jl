@@ -4,7 +4,6 @@ authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
 version = "0.18.4"
 
 [deps]
-Coordinates = "15ac8fbd-cb39-4be8-bb90-8f74d06af8f8"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
@@ -14,7 +13,6 @@ Tensorial = "98f94333-fa9f-48a9-ad80-1c66397b2b38"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
-Coordinates = "0.2"
 ProgressMeter = "1.5"
 Reexport = "1"
 StaticArrays = "1"

@@ -131,7 +131,7 @@ julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
 """
 struct Grid{dim, T, F <: Union{Nothing, Interpolation}, Node, State <: SpArray{Node, dim}, CS <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
     interpolation::F
-    coordinates::Coordinate{dim, NTuple{dim, T}, NTuple{dim, Vector{T}}}
+    axes::NTuple{dim, Vector{T}}
     gridsteps::NTuple{dim, T}
     gridsteps_inv::NTuple{dim, T}
     state::State
@@ -144,7 +144,7 @@ gridsteps(x::Grid) = x.gridsteps
 gridsteps(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps(x)[i])
 gridsteps_inv(x::Grid) = x.gridsteps_inv
 gridsteps_inv(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps_inv(x)[i])
-gridaxes(x::Grid) = coordinateaxes(x.coordinates)
+gridaxes(x::Grid) = x.axes
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 
@@ -159,9 +159,8 @@ setbounds!(grid::Grid, withinbounds::AbstractArray{Bool}) = setbounds!(grid.bc, 
 check_interpolation(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of interpolation, see help `?Grid` for more details."))
 check_interpolation(::Grid{<: Any, <: Any, <: Interpolation}) = nothing
 
-function Grid(::Type{Node}, interp, coordinates::Coordinate{dim}; coordinate_system = nothing, withinbounds = falses(size(coordinates))) where {Node, dim}
-    state = SpArray(StructVector{Node}(undef, 0), SpPattern(size(coordinates)))
-    axes = coordinateaxes(coordinates)
+function Grid(::Type{Node}, interp, axes::NTuple{dim, AbstractVector}; coordinate_system = nothing, withinbounds = falses(map(length, axes))) where {Node, dim}
+    state = SpArray(StructVector{Node}(undef, 0), SpPattern(map(length, axes)))
     dx = map(step, axes)
     dx⁻¹ = inv.(dx)
 
@@ -170,7 +169,7 @@ function Grid(::Type{Node}, interp, coordinates::Coordinate{dim}; coordinate_sys
 
     Grid(
         interp,
-        Coordinate(Array{T}.(axes)),
+        map(Array{T}, axes),
         T.(dx),
         T.(dx⁻¹),
         state,
@@ -178,16 +177,11 @@ function Grid(::Type{Node}, interp, coordinates::Coordinate{dim}; coordinate_sys
         BoundaryCondition(withinbounds)
     )
 end
-
-function Grid(interp::Interpolation, coordinates::Coordinate{dim, Tup}; kwargs...) where {dim, Tup}
-    T = promote_type(Tup.parameters...)
+function Grid(interp::Interpolation, axes::NTuple{dim, AbstractVector}; kwargs...) where {dim}
+    T = promote_type(map(eltype, axes)...)
     Node = default_nodestate_type(interp, Val(dim), Val(T))
-    Grid(Node, interp, coordinates; kwargs...)
+    Grid(Node, interp, axes; kwargs...)
 end
-
-# `interp` must be given if Node is given
-Grid(::Type{Node}, interp, axes::Tuple{Vararg{AbstractVector}}; kwargs...) where {Node} = Grid(Node, interp, Coordinate(axes); kwargs...)
-Grid(interp::Interpolation, axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(interp, Coordinate(axes); kwargs...)
 Grid(axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
 
 # `interp` must be given if Node is given
@@ -197,7 +191,7 @@ Grid(axes::AbstractVector...; kwargs...) = Grid(Nothing, nothing, axes; kwargs..
 
 @inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(grid, i...)
-    @inbounds Vec(grid.coordinates[i...])
+    @inbounds Vec(map(getindex, grid.axes, i))
 end
 
 """
@@ -370,16 +364,16 @@ blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT
 
 
 struct BlockStepIndices{N} <: AbstractArray{CartesianIndex{N}, N}
-    inds::Coordinate{N, NTuple{N, Int}, NTuple{N, StepRange{Int, Int}}}
+    inds::NTuple{N, StepRange{Int, Int}}
 end
-Base.size(x::BlockStepIndices) = size(x.inds)
-Base.getindex(x::BlockStepIndices{N}, i::Vararg{Int, N}) where {N} = (@_propagate_inbounds_meta; CartesianIndex(x.inds[i...]))
+Base.size(x::BlockStepIndices) = map(length, x.inds)
+Base.getindex(x::BlockStepIndices{N}, i::Vararg{Int, N}) where {N} = (@_propagate_inbounds_meta; CartesianIndex(map(getindex, x.inds, i)))
 
-function threadsafe_blocks(dims::NTuple{dim, Int}) where {dim}
-    ncells = dims .- 1
-    starts = SArray{NTuple{dim, 2}}(Coordinate(nfill((1,2), Val(dim)))...)
+function threadsafe_blocks(gridsize::NTuple{dim, Int}) where {dim}
+    ncells = gridsize .- 1
+    starts = SArray{NTuple{dim, 2}}(Iterators.product(nfill((1,2), Val(dim))...)...)
     nblocks = @. (ncells - 1) >> BLOCK_UNIT + 1
-    vec(map(st -> BlockStepIndices(Coordinate(StepRange.(st, 2, nblocks))), starts))
+    vec(map(st -> BlockStepIndices(StepRange.(st, 2, nblocks)), starts))
 end
 
 
