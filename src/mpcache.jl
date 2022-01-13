@@ -243,7 +243,7 @@ function default_normal_point_to_grid!(
         dt::Real,
     )
     P = basis_function(grid.interpolation)
-    point_to_grid!((grid.state.m, grid.state.v), cache) do mp, p, i
+    point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
@@ -257,14 +257,15 @@ function default_normal_point_to_grid!(
         m = mₚ * N
         mv = m * Cₚ ⋅ value(P, xᵢ - xₚ)
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, mv + dt*f
+        m, mv, mv + dt*f
     end
+    @dot_threads grid.state.v_n /= grid.state.m
     @dot_threads grid.state.v /= grid.state.m
     grid
 end
 
 function default_affine_point_to_grid!(grid::Grid{dim}, pointstate, cache::MPCache{dim}, dt::Real) where {dim}
-    point_to_grid!((grid.state.m, grid.state.v), cache) do mp, p, i
+    point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
@@ -279,8 +280,9 @@ function default_affine_point_to_grid!(grid::Grid{dim}, pointstate, cache::MPCac
         m = mₚ * N
         mv = m * (vₚ + @Tensor(∇vₚ[1:dim, 1:dim]) ⋅ (xᵢ - xₚ))
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, mv + dt*f
+        m, mv, mv + dt*f
     end
+    @dot_threads grid.state.v_n /= grid.state.m
     @dot_threads grid.state.v /= grid.state.m
     grid
 end
