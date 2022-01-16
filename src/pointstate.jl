@@ -86,8 +86,3 @@ function points_outside_domain(xₚ::AbstractVector, grid::Grid)
         end
     end
 end
-
-function Base.deleteat!(pointstate::StructVector, inds)
-    StructArrays.foreachfield(v -> deleteat!(v, inds), pointstate)
-    pointstate
-end
