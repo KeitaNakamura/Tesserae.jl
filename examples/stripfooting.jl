@@ -121,7 +121,15 @@ function stripfooting(
         push!(load, vertical_load)
 
         if islogpoint(logger)
-            Poingr.defalut_output_paraview_append(paraview_file, grid, pointstate, t, logindex(logger))
+            Poingr.defalut_output_paraview_append(
+                paraview_file,
+                grid,
+                pointstate,
+                t,
+                logindex(logger);
+                output_grid = true,
+                compress = true,
+            )
         end
     end
 

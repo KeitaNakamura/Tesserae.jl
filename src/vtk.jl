@@ -18,15 +18,15 @@ julia> vtk_save(vtkfile)
  "vtkfile.vtu"
 ```
 """
-function vtk_points(vtk, x::AbstractVector{<: Vec})
+function vtk_points(vtk, x::AbstractVector{<: Vec}; kwargs...)
     coords = vtk_format(x)
     npts = length(x)
     cells = [MeshCell(VTKCellTypes.VTK_VERTEX, [i]) for i in 1:npts]
-    vtk_grid(vtk, coords, cells)
+    vtk_grid(vtk, coords, cells; kwargs...)
 end
 
-function vtk_points(f::Function, vtk, x)
-    vtk = vtk_points(vtk, x)
+function vtk_points(f::Function, vtk, x; kwargs...)
+    vtk = vtk_points(vtk, x; kwargs...)
     local outfile::Vector{String}
     try
         f(vtk)
@@ -53,8 +53,8 @@ julia> vtk_save(vtkfile)
  "vtkfile.vtr"
 ```
 """
-function WriteVTK.vtk_grid(vtk::AbstractString, grid::Grid)
-    vtk_grid(vtk, map(collect, gridaxes(grid))...)
+function WriteVTK.vtk_grid(vtk::AbstractString, grid::Grid; kwargs...)
+    vtk_grid(vtk, map(collect, gridaxes(grid))...; kwargs...)
 end
 
 function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractVector{<: Tensor}, name::AbstractString, ::WriteVTK.VTKPointData)
@@ -77,10 +77,10 @@ end
 function defalut_output_paraview_initialize(file)
     paraview_collection(vtk_save, file)
 end
-function defalut_output_paraview_append(file, grid, pointstate, t, index; output_grid = false)
+function defalut_output_paraview_append(file, grid, pointstate, t, index; output_grid = false, compress = false)
     paraview_collection(file, append = true) do pvd
         vtk_multiblock(string(file, index)) do vtm
-            vtk_points(vtm, pointstate.x) do vtk
+            vtk_points(vtm, pointstate.x; compress) do vtk
                 ϵ = pointstate.ϵ
                 vtk["velocity"] = pointstate.v
                 vtk["mean stress"] = @dot_lazy mean(pointstate.σ)
@@ -93,7 +93,7 @@ function defalut_output_paraview_append(file, grid, pointstate, t, index; output
                 vtk["density"] = @dot_lazy pointstate.m / pointstate.V
             end
             if output_grid
-                vtk_grid(vtm, grid)
+                vtk_grid(vtm, grid; compress)
             end
             pvd[t] = vtm
         end
