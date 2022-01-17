@@ -46,7 +46,7 @@ zerorec(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
     end
 end
 @generated function zerorec(::Type{T}) where {T <: NamedTuple}
-    exps = [:(zero($t)) for t in fieldtypes(T)]
+    exps = [:(zerorec($t)) for t in fieldtypes(T)]
     :(@_inline_meta; T(($(exps...),)))
 end
 zerorec(x) = zerorec(typeof(x))
