@@ -60,9 +60,12 @@ function Contact(cond::Symbol, args...; kwargs...)
     throw(ArgumentError("Contact condition `$(QuoteNode(cond))` is not supported"))
 end
 
-iscondition(contact::Contact, cond::Symbol) = contact.cond === cond
-separation(contact::Contact) = (@assert !iscondition(contact, :sticky); contact.sep)
-getfriction(contact::Contact) = (@assert iscondition(contact, :friction); contact.coef)
+issticky(contact::Contact) = contact.cond === :sticky || (contact.cond === :friction && contact.coef === Inf) # Inf is a special for sticky
+isfriction(contact::Contact) = contact.cond === :friction
+isslip(contact::Contact) = contact.cond === :slip || (contact.cond === :friction && contact.coef === 0.0)
+
+separation(contact::Contact) = (@assert !issticky(contact); contact.sep)
+getfriction(contact::Contact) = (@assert isfriction(contact); contact.coef)
 
 function Base.show(io::IO, contact::Contact)
     contact.cond == :sticky   && return print(io, "Contact(:sticky)")
@@ -73,13 +76,12 @@ end
 
 function (contact::Contact)(v::Vec{dim, T}, n::Vec)::Vec{dim, T} where {dim, T}
     v_sticky = -v # contact force for sticky contact
-    iscondition(contact, :sticky) && return v_sticky
+    issticky(contact) && return v_sticky
     d = (v_sticky ⋅ n)
     vn = d * n
-    iscondition(contact, :slip) &&
-        return d < 0 || !separation(contact) ? vn : zero(vn)
+    isslip(contact) && return (d < 0 || !separation(contact)) ? vn : zero(vn)
     vt = v_sticky - vn
-    if iscondition(contact, :friction)
+    if isfriction(contact)
         if d < 0
             μ = T(getfriction(contact))
             iszero(μ) && return vn # this is necessary since `norm(vt)` can be zero
