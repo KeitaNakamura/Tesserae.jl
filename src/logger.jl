@@ -27,8 +27,8 @@ function Logger(logpoints::AbstractVector; show_progress::Bool = false)
     Logger(logpoints, -1, false, show_progress, pmeter)
 end
 
-Base.first(log::Logger) = first(logpoints(log))
-Base.last(log::Logger) = last(logpoints(log))
+t_start(log::Logger) = first(logpoints(log))
+t_stop(log::Logger) = last(logpoints(log))
 
 logpoints(logger::Logger) = logger.logpoints
 logindex(logger::Logger) = logger.i
@@ -51,8 +51,8 @@ function update!(logger::Logger, t::Real)
 end
 
 function getprogress(logger::Logger, t::Real)
-    t0 = first(logger)
-    t1 = last(logger)
+    t0 = t_start(logger)
+    t1 = t_stop(logger)
     floor(Int, PROGRESS_METER_MAX * ((t - t0) / (t1 - t0)))
 end
 
