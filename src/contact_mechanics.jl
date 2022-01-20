@@ -45,33 +45,32 @@ julia> v + contact(v, n)
 ```
 """
 struct Contact
-    cond::Symbol
-    sep::Bool
     coef::Float64
+    sep::Bool
 end
 
-Contact_sticky(cond) = Contact(cond, false, Inf)
-Contact_slip(cond; sep = false) = Contact(cond, sep, 0.0)
-Contact_friction(cond, coef; sep = false) = Contact(cond, sep, coef)
+Contact_sticky() = Contact(Inf, false)
+Contact_slip(; sep = false) = Contact(0.0, sep)
+Contact_friction(coef; sep = false) = Contact(coef, sep)
 function Contact(cond::Symbol, args...; kwargs...)
-    cond == :sticky   && return Contact_sticky(cond, args...; kwargs...)
-    cond == :slip     && return Contact_slip(cond, args...; kwargs...)
-    cond == :friction && return Contact_friction(cond, args...; kwargs...)
-    throw(ArgumentError("Contact condition `$(QuoteNode(cond))` is not supported"))
+    cond == :sticky   && return Contact_sticky(args...; kwargs...)
+    cond == :slip     && return Contact_slip(args...; kwargs...)
+    cond == :friction && return Contact_friction(args...; kwargs...)
+    throw(ArgumentError("Contact condition `:$cond` is not supported"))
 end
 
-issticky(contact::Contact) = contact.cond === :sticky || (contact.cond === :friction && contact.coef === Inf) # Inf is a special for sticky
-isfriction(contact::Contact) = contact.cond === :friction
-isslip(contact::Contact) = contact.cond === :slip || (contact.cond === :friction && contact.coef === 0.0)
+issticky(contact::Contact) = contact.coef === Inf # Inf is a special value for sticky
+isslip(contact::Contact) = contact.coef === 0.0
+isfriction(contact::Contact) = !issticky(contact) && !isslip(contact)
 
 separation(contact::Contact) = (@assert !issticky(contact); contact.sep)
 getfriction(contact::Contact) = (@assert isfriction(contact); contact.coef)
 
 function Base.show(io::IO, contact::Contact)
-    contact.cond == :sticky   && return print(io, "Contact(:sticky)")
-    contact.cond == :slip     && return print(io, "Contact(:slip; sep = $(contact.sep))")
-    contact.cond == :friction && return print(io, "Contact(:friction, $(contact.coef); sep = $(contact.sep))")
-    throw(ArgumentError("Contact condition `$(QuoteNode(contact.cond))` is not supported"))
+    issticky(contact)   && return print(io, "Contact(:sticky)")
+    isslip(contact)     && return print(io, "Contact(:slip; sep = $(contact.sep))")
+    isfriction(contact) && return print(io, "Contact(:friction, $(contact.coef); sep = $(contact.sep))")
+    error("unreachable")
 end
 
 function (contact::Contact)(v::Vec{dim, T}, n::Vec)::Vec{dim, T} where {dim, T}
@@ -79,7 +78,7 @@ function (contact::Contact)(v::Vec{dim, T}, n::Vec)::Vec{dim, T} where {dim, T}
     issticky(contact) && return v_sticky
     d = (v_sticky ⋅ n)
     vn = d * n
-    isslip(contact) && return (d < 0 || !separation(contact)) ? vn : zero(vn)
+    isslip(contact) && return ifelse(d < 0 || !separation(contact), vn, zero(vn))
     vt = v_sticky - vn
     if isfriction(contact)
         if d < 0
@@ -87,9 +86,7 @@ function (contact::Contact)(v::Vec{dim, T}, n::Vec)::Vec{dim, T} where {dim, T}
             iszero(μ) && return vn # this is necessary since `norm(vt)` can be zero
             return vn + min(1, μ * norm(vn)/norm(vt)) * vt # put `norm(vt)` inside of `min` to handle with deviding zero
         else
-            return !separation(contact) ? vn : zero(vn)
+            return ifelse(!separation(contact), vn, zero(vn))
         end
     end
 end
-
-(contact::Contact)(v, n) = lazy(contact, v, n)
