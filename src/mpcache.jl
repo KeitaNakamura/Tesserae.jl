@@ -70,7 +70,7 @@ function pointsinblock(grid::Grid, xₚ::AbstractVector)
     pointsinblock!(ptsinblk, grid, xₚ)
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, hₚ::AbstractVector, ptsinblk::AbstractArray{Vector{Int}})
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, hₚ::AbstractVector, ptsinblk::AbstractArray{Vector{Int}}; exclude)
     @assert size(spat) == size(grid)
     fill!(spat, false)
     for blocks in threadsafe_blocks(size(grid))
@@ -78,6 +78,17 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, 
             for p in ptsinblk[blockindex]
                 inds = neighboring_nodes(grid, xₚ[p], hₚ[p])
                 @inbounds spat[inds] .= true
+            end
+        end
+    end
+    if exclude !== nothing
+        @. spat &= !exclude
+        for blocks in threadsafe_blocks(size(grid))
+            Threads.@threads for blockindex in blocks
+                for p in ptsinblk[blockindex]
+                    inds = neighboring_nodes(grid, xₚ[p], 1)
+                    @inbounds spat[inds] .= true
+                end
             end
         end
     end
@@ -89,15 +100,15 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, 
     spat
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate, ptsinblk::AbstractArray{Vector{Int}})
-    hₚ = LazyDotArray(p -> active_length(grid.interpolation), 1:length(pointstate))
-    sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk)
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate, ptsinblk::AbstractArray{Vector{Int}}; exclude)
+    hₚ = LazyDotArray(p -> support_length(grid.interpolation), 1:length(pointstate))
+    sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk; exclude)
     spat
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, <: Union{GIMP, WLS{<: Any, GIMP}}}, pointstate, ptsinblk::AbstractArray{Vector{Int}})
-    hₚ = LazyDotArray(rₚ -> active_length(grid.interpolation, rₚ ./ gridsteps(grid)), pointstate.r)
-    sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk)
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, <: Union{GIMP, WLS{<: Any, GIMP}}}, pointstate, ptsinblk::AbstractArray{Vector{Int}}; exclude)
+    hₚ = LazyDotArray(rₚ -> support_length(grid.interpolation, rₚ ./ gridsteps(grid)), pointstate.r)
+    sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk; exclude)
     spat
 end
 
@@ -109,7 +120,7 @@ function update_mpvalues!(mpvalues::Vector{<: Union{GIMPValues, WLSValues{<: Any
     update!(mpvalues[p], grid, pointstate.x[p], pointstate.r[p], spat)
 end
 
-function update!(cache::MPCache, grid::Grid, pointstate)
+function update!(cache::MPCache, grid::Grid, pointstate; exclude = nothing)
     @assert size(grid) == gridsize(cache)
 
     mpvalues = cache.mpvalues
@@ -120,7 +131,7 @@ function update!(cache::MPCache, grid::Grid, pointstate)
     allocate!(i -> eltype(mpvalues)(), mpvalues, length(pointstate))
 
     pointsinblock!(pointsinblock, grid, pointstate.x)
-    sparsity_pattern!(spat, grid, pointstate, pointsinblock)
+    sparsity_pattern!(spat, grid, pointstate, pointsinblock; exclude)
 
     Threads.@threads for p in 1:length(pointstate)
         @inbounds update_mpvalues!(mpvalues, grid, pointstate, spat, p)

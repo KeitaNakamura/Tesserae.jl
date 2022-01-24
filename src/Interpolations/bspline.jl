@@ -29,7 +29,6 @@ support_length(::BSpline{1}) = 1.0
 support_length(::BSpline{2}) = 1.5
 support_length(::BSpline{3}) = 2.0
 support_length(::BSpline{4}) = 2.5
-active_length(bspline::BSpline) = support_length(bspline) # for sparsity pattern
 
 @pure nnodes(bspline::BSpline, ::Val{dim}) where {dim} = prod(nfill(Int(2*support_length(bspline)), Val(dim)))
 
@@ -180,8 +179,8 @@ function update!(mpvalues::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{d
     mpvalues.N .= elzero(mpvalues.N)
     mpvalues.∇N .= elzero(mpvalues.∇N)
     mpvalues.x = x
-    update_gridindices!(mpvalues, grid, x, spat)
     dx⁻¹ = gridsteps_inv(grid)
+    update_gridindices!(mpvalues, neighboring_nodes(grid, x, support_length(F)), spat)
     @inbounds @simd for i in 1:length(mpvalues)
         I = mpvalues.gridindices[i]
         xᵢ = grid[I]

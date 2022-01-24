@@ -13,7 +13,6 @@ basis_function(wls::WLS) = wls.basis
 weight_function(wls::WLS) = wls.weight
 
 support_length(wls::WLS, args...) = support_length(weight_function(wls), args...)
-active_length(::WLS, args...) = 1.0 # for sparsity pattern
 
 
 mutable struct WLSValues{Basis, Weight, dim, T, nnodes, L, L²} <: MPValues{dim, T}
@@ -46,14 +45,14 @@ function MPValues{dim, T}(F::WLS{Basis, Weight}) where {Basis, Weight, dim, T}
     WLSValues{Basis, Weight, dim, T, n, L, L^2}()
 end
 
-function _update!(mpvalues::WLSValues, F, grid::Grid, x::Vec, spat::AbstractArray{Bool})
+function _update!(mpvalues::WLSValues, F, grid::Grid, x::Vec, spat::AbstractArray{Bool}, inds)
     mpvalues.N .= elzero(mpvalues.N)
     mpvalues.∇N .= elzero(mpvalues.∇N)
     mpvalues.w .= elzero(mpvalues.w)
     P = basis_function(mpvalues)
     M = zero(mpvalues.M⁻¹)
     mpvalues.x = x
-    update_gridindices!(mpvalues, grid, x, spat)
+    update_gridindices!(mpvalues, inds, spat)
     dx⁻¹ = gridsteps_inv(grid)
     @inbounds @simd for i in 1:length(mpvalues)
         I = mpvalues.gridindices[i]
@@ -76,15 +75,15 @@ function _update!(mpvalues::WLSValues, F, grid::Grid, x::Vec, spat::AbstractArra
     mpvalues
 end
 
-function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}) where {dim, T}
+function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}, inds) where {dim, T}
     mpvalues.N .= elzero(mpvalues.N)
     mpvalues.∇N .= elzero(mpvalues.∇N)
     mpvalues.w .= elzero(mpvalues.w)
     P = basis_function(mpvalues)
     mpvalues.x = x
 
-    iscompleted = update_gridindices!(mpvalues, grid, x, spat)
     dx⁻¹ = gridsteps_inv(grid)
+    iscompleted = update_gridindices!(mpvalues, inds, spat)
     if iscompleted
         # fast version
         D = zero(Vec{dim, T}) # diagonal entries
@@ -131,13 +130,14 @@ end
 
 function update!(mpvalues::WLSValues, grid::Grid, x::Vec, spat::AbstractArray{Bool})
     F = weight_function(mpvalues)
-    _update!(mpvalues, ξ -> value(F, ξ), grid, x, spat)
+    _update!(mpvalues, ξ -> value(F, ξ), grid, x, spat, neighboring_nodes(grid, x, support_length(F)))
 end
 
 function update!(mpvalues::WLSValues{<: Any, GIMP}, grid::Grid, x::Vec, r::Vec, spat::AbstractArray{Bool})
     F = weight_function(mpvalues)
     dx⁻¹ = gridsteps_inv(grid)
-    _update!(mpvalues, ξ -> value(F, ξ, r.*dx⁻¹), grid, x, spat)
+    rdx⁻¹ = r.*dx⁻¹
+    _update!(mpvalues, ξ -> value(F, ξ, rdx⁻¹), grid, x, spat, neighboring_nodes(grid, x, support_length(F, rdx⁻¹)))
 end
 
 
