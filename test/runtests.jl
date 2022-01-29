@@ -58,7 +58,9 @@ end
     check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01)
     check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01, affine_transfer = true)
     check_example("sandcolumn", 3, BilinearWLS(QuadraticBSpline()); dx = 0.01)
+    check_example("sandcolumn", 4, KernelCorrection(QuadraticBSpline()); dx = 0.01)
     check_example("stripfooting", 1, LinearBSpline(); dx = 0.1)
     check_example("stripfooting", 2, GIMP(); dx = 0.1)
     check_example("stripfooting", 3, LinearWLS(QuadraticBSpline()); dx = 0.1)
+    check_example("stripfooting", 4, KernelCorrection(QuadraticBSpline()); dx = 0.1)
 end

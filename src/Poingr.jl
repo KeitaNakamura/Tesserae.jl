@@ -31,10 +31,11 @@ export
     LinearBSpline,
     QuadraticBSpline,
     CubicBSpline,
+    GIMP,
     LinearWLS,
     BilinearWLS,
+    KernelCorrection,
     polynomial,
-    GIMP,
     MPValues,
 # MPCache
     MPCache,
@@ -94,6 +95,7 @@ include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
 include("Interpolations/basis.jl")
 include("Interpolations/wls.jl")
+include("Interpolations/correction.jl")
 
 include("nodestate.jl")
 include("pointstate.jl")

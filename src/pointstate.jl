@@ -14,7 +14,7 @@ struct DefaultPointState{dim, T}
     index::Int
 end
 
-default_pointstate_type(::BSpline, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
+default_pointstate_type(::Union{BSpline, KernelCorrection}, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
 default_pointstate_type(::GIMP, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
 
 struct DefaultPointStateWLS{dim, T, L, dim_L}

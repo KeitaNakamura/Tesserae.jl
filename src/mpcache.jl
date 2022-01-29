@@ -106,7 +106,7 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate, ptsinblk::
     spat
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, <: Union{GIMP, WLS{<: Any, GIMP}}}, pointstate, ptsinblk::AbstractArray{Vector{Int}}; exclude)
+function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, <: Union{GIMP, WLS{<: Any, GIMP}, KernelCorrection{GIMP}}}, pointstate, ptsinblk::AbstractArray{Vector{Int}}; exclude)
     hₚ = LazyDotArray(rₚ -> support_length(grid.interpolation, rₚ ./ gridsteps(grid)), pointstate.r)
     sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk; exclude)
     spat
@@ -116,7 +116,7 @@ function update_mpvalues!(mpvalues::Vector{<: MPValues}, grid::Grid, pointstate,
     update!(mpvalues[p], grid, pointstate.x[p], spat)
 end
 
-function update_mpvalues!(mpvalues::Vector{<: Union{GIMPValues, WLSValues{<: Any, GIMP}}}, grid::Grid, pointstate, spat::AbstractArray{Bool}, p::Int)
+function update_mpvalues!(mpvalues::Vector{<: Union{GIMPValues, WLSValues{<: Any, GIMP}, KernelCorrectionValues{GIMP}}}, grid::Grid, pointstate, spat::AbstractArray{Bool}, p::Int)
     update!(mpvalues[p], grid, pointstate.x[p], pointstate.r[p], spat)
 end
 
@@ -218,7 +218,8 @@ end
 end
 
 for (InterpolationType, InterpolationValuesType) in ((BSpline, BSplineValues),
-                                             (GIMP, GIMPValues))
+                                                     (GIMP, GIMPValues),
+                                                     (KernelCorrection, KernelCorrectionValues),)
     @eval function default_normal_point_to_grid!(
             grid::Grid{<: Any, <: Any, <: $InterpolationType},
             pointstate,
@@ -376,7 +377,8 @@ end
 end
 
 for (InterpolationType, InterpolationValuesType) in ((BSpline, BSplineValues),
-                                             (GIMP, GIMPValues))
+                                                     (GIMP, GIMPValues),
+                                                     (KernelCorrection, KernelCorrectionValues),)
     @eval function default_normal_grid_to_point!(
             pointstate,
             grid::Grid{<: Any, <: Any, <: $InterpolationType},

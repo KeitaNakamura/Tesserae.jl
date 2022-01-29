@@ -51,3 +51,19 @@ end
         end
     end
 end
+
+@testset "KernelCorrectionValues" begin
+    for T in (Float32, Float64)
+        for dim in 1:2
+            grid = Grid(ntuple(i -> 0.0:0.1:5.0, Val(dim)))
+            for bspline in (QuadraticBSpline(), CubicBSpline(),)
+                mpvalues = MPValues{dim, T}(KernelCorrection(bspline))
+                for x in Iterators.product(ntuple(i -> 0.05:0.05:0.45, Val(dim))...) # failed on exactly boundary
+                    update!(mpvalues, grid, Vec(x))
+                    @test sum(mpvalues.N) ≈ 1
+                    @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol = sqrt(eps(T))
+                end
+            end
+        end
+    end
+end

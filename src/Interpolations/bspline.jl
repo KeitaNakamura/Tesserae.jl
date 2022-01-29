@@ -45,9 +45,7 @@ function Base.values(::BSpline{2}, x::T) where {T <: Real}
     V = Vec{3, T}
     x′ = fract(x - T(0.5))
     ξ = x′ .- V(-0.5, 0.5, 1.5)
-    @. $V(0.5, -1.0, 0.5) * ξ^2 +
-       $V(-1.5, 0.0, 1.5) * ξ +
-       $V(1.125, 0.75, 1.125)
+    @. $V(0.5,-1.0,0.5)*ξ^2 + $V(-1.5,0.0,1.5)*ξ + $V(1.125, 0.75, 1.125)
 end
 
 function Base.values(::BSpline{3}, x::T) where {T <: Real}
@@ -56,16 +54,56 @@ function Base.values(::BSpline{3}, x::T) where {T <: Real}
     ξ = x′ .- V(-1, 0, 1, 2)
     ξ² = ξ .* ξ
     ξ³ = ξ² .* ξ
-    @. $V(-1/6, 0.5, -0.5, 1/6) * ξ³ +
-       $V(1, -1, -1, 1) * ξ² +
-       $V(-2, 0, 0, 2) * ξ +
-       $V(4/3, 2/3, 2/3, 4/3)
+    @. $V(-1/6,0.5,-0.5,1/6)*ξ³ + $V(1,-1,-1,1)*ξ² + $V(-2,0,0,2)*ξ + $V(4/3,2/3,2/3,4/3)
 end
 
 @generated function Base.values(bspline::BSpline, x::Vec{dim}) where {dim}
     exps = [:(values(bspline, x[$i])) for i in 1:dim]
     quote
-        otimes($(exps...))
+        @_inline_meta
+        Tuple(otimes($(exps...)))
+    end
+end
+
+# `x` must be normalized by `dx`
+function values_gradients(::BSpline{1}, x::T) where {T <: Real}
+    V = Vec{2, T}
+    ξ = fract(x)
+    V(1-ξ, ξ), V(-1, 1)
+end
+
+function values_gradients(::BSpline{2}, x::T) where {T <: Real}
+    V = Vec{3, T}
+    x′ = fract(x - T(0.5))
+    ξ = x′ .- V(-0.5, 0.5, 1.5)
+    vals = @. $V(0.5,-1.0,0.5)*ξ^2 + $V(-1.5,0.0,1.5)*ξ + $V(1.125,0.75,1.125)
+    grads = @. $V(1.0,-2.0,1.0)*ξ + $V(-1.5,0.0,1.5)
+    vals, grads
+end
+
+function values_gradients(::BSpline{3}, x::T) where {T <: Real}
+    V = Vec{4, T}
+    x′ = fract(x)
+    ξ = x′ .- V(-1, 0, 1, 2)
+    ξ² = ξ .* ξ
+    ξ³ = ξ² .* ξ
+    vals = @. $V(-1/6,0.5,-0.5,1/6)*ξ³ + $V(1,-1,-1,1)*ξ² + $V(-2,0,0,2)*ξ + $V(4/3,2/3,2/3,4/3)
+    grads = @. $V(-0.5,1.5,-1.5,0.5)*ξ² + $V(2,-2,-2,2)*ξ + $V(-2,0,0,2)
+    vals, grads
+end
+
+@generated function values_gradients(bspline::BSpline, x::Vec{dim}) where {dim}
+    exps = [:(values_gradients(bspline, x[$i])) for i in 1:dim]
+    derivs = map(1:dim) do i
+        x = [d == i ? :(grads[$d]) : :(vals[$d]) for d in 1:dim]
+        :(Tuple(otimes($(x...))))
+    end
+    quote
+        @_inline_meta
+        vals_grads = tuple($(exps...))
+        vals = getindex.(vals_grads, 1)
+        grads = getindex.(vals_grads, 2)
+        Tuple(otimes(vals...)), Vec{dim}.($(derivs...))
     end
 end
 

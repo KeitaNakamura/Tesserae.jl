@@ -11,6 +11,43 @@ support_length(::GIMP, l) = 1.0 .+ l # `l` must be normalized by `dx`
     ξ < 1+l ? (1+l-ξ)^2 / 4l       : zero(ξ)
 end
 
+# `x` and `l` must be normalized by `dx`
+@inline function Base.values(::GIMP, x::T, l::T) where {T <: Real}
+    V = Vec{3, T}
+    x′ = fract(x - T(0.5))
+    ξ = x′ .- V(-0.5, 0.5, 1.5)
+    value.((GIMP(),), ξ, l)
+end
+
+# `x` and `l` must be normalized by `dx`
+_gradient_GIMP(x, l) = gradient(x -> value(GIMP(), x, l), x, :all)
+@generated function values_gradients(::GIMP, x::T, l::T) where {T <: Real}
+    exps = [:(_gradient_GIMP(ξ[$i], l)) for i in 1:3]
+    quote
+        @_inline_meta
+        V = Vec{3, T}
+        x′ = fract(x - T(0.5))
+        ξ = x′ .- V(-0.5, 0.5, 1.5)
+        vals_grads = tuple($(exps...))
+        Vec($([:(vals_grads[$i][2]) for i in 1:3]...)), Vec($([:(vals_grads[$i][1]) for i in 1:3]...))
+    end
+end
+
+@generated function values_gradients(::GIMP, x::Vec{dim}, l::Vec{dim}) where {dim}
+    exps = [:(values_gradients(GIMP(), x[$i], l[$i])) for i in 1:dim]
+    derivs = map(1:dim) do i
+        x = [d == i ? :(grads[$d]) : :(vals[$d]) for d in 1:dim]
+        :(Tuple(otimes($(x...))))
+    end
+    quote
+        @_inline_meta
+        vals_grads = tuple($(exps...))
+        vals = getindex.(vals_grads, 1)
+        grads = getindex.(vals_grads, 2)
+        Tuple(otimes(vals...)), Vec{dim}.($(derivs...))
+    end
+end
+
 @generated function value(f::GIMP, ξ::Vec{dim, T}, l::Vec{dim}) where {dim, T}
     exps = [:(value(f, ξ[$i], l[$i])) for i in 1:dim]
     quote
