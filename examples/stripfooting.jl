@@ -1,11 +1,14 @@
 using Poingr
 
 function stripfooting(
-        shape_function = LinearWLS(CubicBSpline());
-        handle_volumetric_locking = true,
-        CFL = 1.0,
-        show_progress::Bool = true,
+        shape_function = LinearWLS(QuadraticBSpline());
+        ν = 0.3,
         dx = 0.1,
+        CFL = 1.0,
+        handle_volumetric_locking::Bool = false,
+        affine_transfer::Bool = false,
+        show_progress::Bool = true,
+        outdir = joinpath(@__DIR__, "stripfooting.tmp"),
     )
     ρ₀ = 1.0e3
     g = 0.0
@@ -13,7 +16,6 @@ function stripfooting(
     c = 10e3
     ϕ = 0
     ψ = 0
-    ν = 0.49
     E = 1e9
     v_footing = Vec(0.0, -4.0e-3)
 
@@ -40,12 +42,11 @@ function stripfooting(
     @show length(pointstate)
 
     # Outputs
-    output_dir = joinpath(@__DIR__, "stripfooting.tmp")
-    paraview_file = joinpath(output_dir, "out")
-    mkpath(output_dir)
+    mkpath(outdir)
+    paraview_file = joinpath(outdir, "out")
     Poingr.defalut_output_paraview_initialize(paraview_file)
 
-    logger = Logger(0.0:0.01:0.1; show_progress)
+    logger = Logger(0.0:0.002:0.1; show_progress)
 
     t = 0.0
     disp = Float64[]
@@ -59,7 +60,12 @@ function stripfooting(
         end
 
         update!(cache, grid, pointstate)
-        default_point_to_grid!(grid, pointstate, cache, dt)
+
+        if affine_transfer
+            default_affine_point_to_grid!(grid, pointstate, cache, dt)
+        else
+            default_point_to_grid!(grid, pointstate, cache, dt)
+        end
 
         vertical_load = 0.0
         @inbounds for bound in eachboundary(grid)
@@ -77,7 +83,11 @@ function stripfooting(
             grid.state.v[bound.I] = v
         end
 
-        default_grid_to_point!(pointstate, grid, cache, dt)
+        if affine_transfer
+            default_affine_grid_to_point!(pointstate, grid, cache, dt)
+        else
+            default_grid_to_point!(pointstate, grid, cache, dt)
+        end
 
         @. tr∇v = tr(pointstate.∇v)
         if handle_volumetric_locking

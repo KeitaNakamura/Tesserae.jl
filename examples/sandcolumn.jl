@@ -1,11 +1,12 @@
 using Poingr
 
 function sandcolumn(
-        shape_function = LinearWLS(CubicBSpline());
-        CFL = 1.0,
-        show_progress::Bool = true,
-        affine_transfer = false,
+        shape_function = LinearWLS(QuadraticBSpline());
         dx = 0.01,
+        CFL = 1.0,
+        affine_transfer::Bool = false,
+        show_progress::Bool = true,
+        outdir = joinpath(@__DIR__, "sandcolumn.tmp"),
     )
     ρ₀ = 1.6e3
     g = 9.81
@@ -35,9 +36,8 @@ function sandcolumn(
     @show length(pointstate)
 
     # Outputs
-    output_dir = joinpath(@__DIR__, "sandcolumn.tmp")
-    paraview_file = joinpath(output_dir, "out")
-    mkpath(output_dir)
+    mkpath(outdir)
+    paraview_file = joinpath(outdir, "out")
     Poingr.defalut_output_paraview_initialize(paraview_file)
 
     logger = Logger(0.0:0.01:0.6; show_progress)

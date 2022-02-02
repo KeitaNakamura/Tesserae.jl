@@ -28,13 +28,15 @@ const fix_results = false
 
 function check_example(testname::String, case, interpolation; dx, kwargs...)
     @testset "$testname" begin
-        include(joinpath("../examples", "$testname.jl"))
-        @eval $(Symbol(testname))($interpolation; show_progress = false, $kwargs...)
+        outdir = joinpath("examples", "$testname.tmp")
+        rm(outdir; recursive = true, force = true)
 
-        output_dir = joinpath("../examples", "$testname.tmp")
+        include(joinpath("../examples", "$testname.jl"))
+        @eval $(Symbol(testname))($interpolation; show_progress = false, outdir = $outdir, $kwargs...)
+
         result_file = joinpath(
-            output_dir,
-            sort(filter(file -> endswith(file, ".vtu"), only(walkdir(output_dir))[3]), lt = natural)[end],
+            outdir,
+            sort(filter(file -> endswith(file, ".vtu"), only(walkdir(outdir))[3]), lt = natural)[end],
         )
 
         if fix_results
@@ -58,9 +60,9 @@ end
     check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01)
     check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01, affine_transfer = true)
     check_example("sandcolumn", 3, BilinearWLS(QuadraticBSpline()); dx = 0.01)
-    check_example("sandcolumn", 4, KernelCorrection(QuadraticBSpline()); dx = 0.01)
-    check_example("stripfooting", 1, LinearBSpline(); dx = 0.1)
-    check_example("stripfooting", 2, GIMP(); dx = 0.1)
-    check_example("stripfooting", 3, LinearWLS(QuadraticBSpline()); dx = 0.1)
-    check_example("stripfooting", 4, KernelCorrection(QuadraticBSpline()); dx = 0.1)
+    check_example("sandcolumn", 4, KernelCorrection(QuadraticBSpline()); dx = 0.01, affine_transfer = true)
+    check_example("stripfooting", 1, LinearBSpline(); dx = 0.1, ν = 0.49, handle_volumetric_locking = true)
+    check_example("stripfooting", 2, GIMP(); dx = 0.1, ν = 0.49, handle_volumetric_locking = true)
+    check_example("stripfooting", 3, LinearWLS(QuadraticBSpline()); dx = 0.1, ν = 0.49, handle_volumetric_locking = true)
+    check_example("stripfooting", 4, KernelCorrection(QuadraticBSpline()); dx = 0.1, ν = 0.49, handle_volumetric_locking = true, affine_transfer = true)
 end
