@@ -40,7 +40,7 @@ function sandcolumn(
     paraview_file = joinpath(outdir, "out")
     Poingr.defalut_output_paraview_initialize(paraview_file)
 
-    logger = Logger(0.0:0.01:0.6; show_progress)
+    logger = Logger(0.0, 0.6, 0.01; show_progress)
 
     t = 0.0
     while !isfinised(logger, t)

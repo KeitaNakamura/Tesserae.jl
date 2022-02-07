@@ -4,9 +4,9 @@ import ProgressMeter
 const PROGRESS_METER_MAX = 10000
 
 
-mutable struct Logger{V <: AbstractVector, P}
+mutable struct Logger{P}
     # log
-    logpoints::V
+    logpoints::Vector{Float64}
     i::Int
     islogpoint::Bool
     # progress
@@ -14,8 +14,9 @@ mutable struct Logger{V <: AbstractVector, P}
     pmeter::P
 end
 
-function Logger(logpoints::AbstractVector; show_progress::Bool = false)
-    @assert issorted(logpoints)
+function Logger(start::Real, stop::Real, step::Real; show_progress::Bool = false)
+    logpoints = collect(start:step:stop)
+    last(logpoints) < stop && push!(logpoints, stop)
     pmeter = ProgressMeter.Progress(
         PROGRESS_METER_MAX,
         barglyphs = ProgressMeter.BarGlyphs('|','█', ['▌'],' ','|',),
