@@ -15,6 +15,7 @@ mutable struct Logger{P}
 end
 
 function Logger(start::Real, stop::Real, step::Real; show_progress::Bool = false)
+    @assert start < stop
     logpoints = collect(start:step:stop)
     last(logpoints) < stop && push!(logpoints, stop)
     pmeter = ProgressMeter.Progress(
