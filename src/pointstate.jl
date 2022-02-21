@@ -1,23 +1,7 @@
 default_pointstate_type(::Nothing, ::Val{dim}, ::Val{T}) where {dim, T} =
     @NamedTuple{x::Vec{dim, T}, V::T, r::Vec{dim, T}, index::Int}
 
-struct DefaultPointState{dim, T}
-    m::T
-    V::T
-    x::Vec{dim, T}
-    v::Vec{dim, T}
-    r::Vec{dim, T}
-    b::Vec{dim, T}
-    σ::SymmetricSecondOrderTensor{3, T, 6}
-    ϵ::SymmetricSecondOrderTensor{3, T, 6}
-    ∇v::SecondOrderTensor{3, T, 9}
-    index::Int
-end
-
-default_pointstate_type(::Union{BSpline, KernelCorrection}, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
-default_pointstate_type(::GIMP, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T}
-
-struct DefaultPointStateWLS{dim, T, L, dim_L}
+struct DefaultPointState{dim, T, L, dim_L}
     m::T
     V::T
     x::Vec{dim, T}
@@ -31,8 +15,10 @@ struct DefaultPointStateWLS{dim, T, L, dim_L}
     index::Int
 end
 
-default_pointstate_type(::LinearWLS, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointStateWLS{dim, T, dim+1, dim*(dim+1)}
-default_pointstate_type(::BilinearWLS, ::Val{2}, ::Val{T}) where {T} = DefaultPointStateWLS{2, T, 4, 8}
+default_pointstate_type(::Union{BSpline, KernelCorrection}, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T, 0, 0}
+default_pointstate_type(::GIMP, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T, 0, 0}
+default_pointstate_type(::LinearWLS, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T, dim+1, dim*(dim+1)}
+default_pointstate_type(::BilinearWLS, ::Val{2}, ::Val{T}) where {T} = DefaultPointState{2, T, 4, 8}
 
 function generate_pointstate(indomain, Point::Type, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
     h = gridsteps(grid) ./ n # length per particle
