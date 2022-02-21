@@ -42,10 +42,8 @@ export
     point_to_grid!,
     grid_to_point!,
     grid_to_point,
-    default_point_to_grid!,
-    default_affine_point_to_grid!,
-    default_grid_to_point!,
-    default_affine_grid_to_point!,
+# Transfer
+    Transfer,
 # Contact
     Contact,
 # MaterialModel
@@ -101,6 +99,7 @@ include("nodestate.jl")
 include("pointstate.jl")
 
 include("mpcache.jl")
+include("transfer.jl")
 include("contact_mechanics.jl")
 
 abstract type MaterialModel end

@@ -1,10 +1,10 @@
 using Poingr
 
 function sandcolumn(
-        shape_function = LinearWLS(QuadraticBSpline());
+        interp = LinearWLS(QuadraticBSpline());
         dx = 0.01,
         CFL = 1.0,
-        affine_transfer::Bool = false,
+        transfer = Transfer(),
         show_progress::Bool = true,
         outdir = joinpath(@__DIR__, "sandcolumn.tmp"),
     )
@@ -16,7 +16,7 @@ function sandcolumn(
     ν = 0.333
     E = 1e6
 
-    grid = Grid(shape_function, 0:dx:1.0, 0:dx:1.0)
+    grid = Grid(interp, 0:dx:1.0, 0:dx:1.0)
     pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, grid)
     cache = MPCache(grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
@@ -52,14 +52,8 @@ function sandcolumn(
         end
 
         update!(cache, grid, pointstate)
-        if affine_transfer
-            default_affine_point_to_grid!(grid, pointstate, cache, dt)
-        else
-            # use `normal` transfer function for testing purposes
-            # since `default_point_to_grid!` calls `default_affine_point_to_grid!`
-            # for `PolynomialBasis{1}` by default.
-            Poingr.default_normal_point_to_grid!(grid, pointstate, cache, dt)
-        end
+
+        transfer.point_to_grid!(grid, pointstate, cache, dt)
 
         @inbounds for bound in eachboundary(grid)
             v = grid.state.v[bound.I]
@@ -72,14 +66,7 @@ function sandcolumn(
             grid.state.v[bound.I] = v
         end
 
-        if affine_transfer
-            default_affine_grid_to_point!(pointstate, grid, cache, dt)
-        else
-            # use `normal` transfer function for testing purposes
-            # since `default_grid_to_point!` calls `default_affine_grid_to_point!`
-            # for `PolynomialBasis{1}` by default.
-            Poingr.default_normal_grid_to_point!(pointstate, grid, cache, dt)
-        end
+        transfer.grid_to_point!(pointstate, grid, cache, dt)
         @inbounds Threads.@threads for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]

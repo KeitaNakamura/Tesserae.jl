@@ -19,6 +19,7 @@ include("interpolations.jl")
 
 include("pointstate.jl")
 include("mpcache.jl")
+include("transfer.jl")
 
 include("MaterialModels/models.jl")
 include("MaterialModels/SoilHyperelastic.jl")
@@ -58,11 +59,11 @@ end
 @testset "Check examples" begin
     check_example("sandcolumn", 1, QuadraticBSpline(); dx = 0.01)
     check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01)
-    check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01, affine_transfer = true)
+    check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx = 0.01, transfer = TransferTaylorPIC())
     check_example("sandcolumn", 3, BilinearWLS(QuadraticBSpline()); dx = 0.01)
-    check_example("sandcolumn", 4, KernelCorrection(QuadraticBSpline()); dx = 0.01, affine_transfer = true)
+    check_example("sandcolumn", 4, KernelCorrection(QuadraticBSpline()); dx = 0.01)
     check_example("stripfooting", 1, LinearBSpline(); dx = 0.1, ν = 0.49, handle_volumetric_locking = true)
     check_example("stripfooting", 2, GIMP(); dx = 0.1, ν = 0.49, handle_volumetric_locking = true)
     check_example("stripfooting", 3, LinearWLS(QuadraticBSpline()); dx = 0.1, ν = 0.49, handle_volumetric_locking = true)
-    check_example("stripfooting", 4, KernelCorrection(QuadraticBSpline()); dx = 0.1, ν = 0.49, handle_volumetric_locking = true, affine_transfer = true)
+    check_example("stripfooting", 4, KernelCorrection(QuadraticBSpline()); dx = 0.1, ν = 0.49, handle_volumetric_locking = true)
 end
