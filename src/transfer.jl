@@ -1,27 +1,30 @@
 struct P2G_Normal  end
-struct P2G_Affine  end
 struct P2G_Taylor  end
 struct P2G_Default end
 struct G2P_FLIP    end
 struct G2P_PIC     end
 struct G2P_Default end
+struct P2G_AffinePIC end
+struct G2P_AffinePIC end
 
 struct Transfer{P2G, G2P}
     point_to_grid!::P2G
     grid_to_point!::G2P
 end
-Transfer() = Transfer(P2G_Default(), G2P_Default())
 Transfer{P2G, G2P}() where {P2G, G2P} = Transfer(P2G(), G2P())
+Transfer() = Transfer{P2G_Default, G2P_Default}()
 
-for (P2G, G2P) in Iterators.product((:Normal, :Affine, :Taylor), (:FLIP, :PIC))
-    T = Symbol(:Transfer, P2G, G2P)
-    P2G = Symbol(:P2G_, P2G)
-    G2P = Symbol(:G2P_, G2P)
-    @eval begin
-        const $T = Transfer{$P2G, $G2P}
-        export $T
-    end
-end
+const TransferNormalFLIP = Transfer{P2G_Normal, G2P_FLIP}
+const TransferNormalPIC  = Transfer{P2G_Normal, G2P_PIC}
+const TransferTaylorFLIP = Transfer{P2G_Taylor, G2P_FLIP}
+const TransferTaylorPIC  = Transfer{P2G_Taylor, G2P_PIC}
+const TransferAffinePIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
+export
+    TransferNormalFLIP,
+    TransferNormalPIC,
+    TransferTaylorFLIP,
+    TransferTaylorPIC,
+    TransferAffinePIC
 
 default_p2g(::BSpline) = P2G_Normal()
 default_p2g(::GIMP) = P2G_Normal()
@@ -49,6 +52,37 @@ function (::P2G_Normal)(grid::Grid, pointstate, cache::MPCache, dt::Real)
         xᵢ = grid[i]
         m = mₚ * N
         mv = m * vₚ
+        f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
+        m, mv, mv + dt*f
+    end
+    @dot_threads grid.state.v_n /= grid.state.m
+    @dot_threads grid.state.v /= grid.state.m
+    grid
+end
+
+function (::P2G_AffinePIC)(grid::Grid, pointstate, cache::MPCache, dt::Real)
+    D = grid_to_point(cache) do mp, i, p
+        @_inline_propagate_inbounds_meta
+        N = mp.N
+        xᵢ = grid[i]
+        xₚ = pointstate.x[p]
+        N * (xᵢ - xₚ) ⊗ (xᵢ - xₚ)
+    end
+    point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
+        @_inline_propagate_inbounds_meta
+        N = mp.N
+        ∇N = mp.∇N
+        xₚ = pointstate.x[p]
+        mₚ = pointstate.m[p]
+        Vₚ = pointstate.V[p]
+        vₚ = pointstate.v[p]
+        Bₚ = pointstate.C[p]
+        σₚ = pointstate.σ[p]
+        bₚ = pointstate.b[p]
+        Cₚ = Bₚ ⋅ inv(D[p])
+        xᵢ  = grid[i]
+        m = mₚ * N
+        mv = m * (vₚ + Cₚ ⋅ (xᵢ - xₚ))
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, mv, mv + dt*f
     end
@@ -164,6 +198,29 @@ function (::G2P_PIC)(pointstate, grid::Grid, cache::MPCache, dt::Real)
         pointstate.v[p] = vₚ
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, xₚ, vₚ, ∇vₚ)
         pointstate.x[p] = xₚ + vₚ * dt
+    end
+    pointstate
+end
+
+function (::G2P_AffinePIC)(pointstate, grid::Grid, cache::MPCache, dt::Real)
+    pointvalues = grid_to_point(cache) do mp, i, p
+        @_inline_propagate_inbounds_meta
+        N = mp.N
+        ∇N = mp.∇N
+        vᵢ = grid.state.v[i]
+        xᵢ = grid[i]
+        xₚ = pointstate.x[p]
+        v = vᵢ * N
+        ∇v = vᵢ ⊗ ∇N
+        v, ∇v, v ⊗ (xᵢ - xₚ)
+    end
+    @inbounds Threads.@threads for p in 1:npoints(cache)
+        vₚ, ∇vₚ, Bₚ = pointvalues[p]
+        xₚ = pointstate.x[p]
+        pointstate.v[p] = vₚ
+        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, xₚ, vₚ, ∇vₚ)
+        pointstate.x[p] = xₚ + vₚ * dt
+        pointstate.C[p] = Bₚ
     end
     pointstate
 end

@@ -15,8 +15,7 @@ struct DefaultPointState{dim, T, L, dim_L}
     index::Int
 end
 
-default_pointstate_type(::Union{BSpline, KernelCorrection}, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T, 0, 0}
-default_pointstate_type(::GIMP, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T, 0, 0}
+default_pointstate_type(::Interpolation, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T, dim, dim*dim}
 default_pointstate_type(::LinearWLS, ::Val{dim}, ::Val{T}) where {dim, T} = DefaultPointState{dim, T, dim+1, dim*(dim+1)}
 default_pointstate_type(::BilinearWLS, ::Val{2}, ::Val{T}) where {T} = DefaultPointState{2, T, 4, 8}
 

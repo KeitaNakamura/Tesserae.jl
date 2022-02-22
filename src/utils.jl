@@ -9,17 +9,26 @@ end
 
 nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
 
+promote_tuple_length() = -1
 promote_tuple_length(xs::Type{<: NTuple{N, Any}}...) where {N} = N
 @generated function broadcast_tuple(f, xs::Vararg{Any, N}) where {N}
     L = promote_tuple_length([x for x in xs if x <: Tuple]...)
-    exps = map(1:L) do i
-        args = [xs[j] <: Tuple ? :(xs[$j][$i]) : :(xs[$j]) for j in 1:N]
-        :(f($(args...)))
-    end
-    quote
-        @_inline_meta
-        @_propagate_inbounds_meta
-        tuple($(exps...))
+    if L == -1 # no tuples
+        quote
+            @_inline_meta
+            @_propagate_inbounds_meta
+            f(xs...)
+        end
+    else
+        exps = map(1:L) do i
+            args = [xs[j] <: Tuple ? :(xs[$j][$i]) : :(xs[$j]) for j in 1:N]
+            :(f($(args...)))
+        end
+        quote
+            @_inline_meta
+            @_propagate_inbounds_meta
+            tuple($(exps...))
+        end
     end
 end
 
