@@ -7,7 +7,7 @@ function stripfooting(
         CFL = 1.0,
         handle_volumetric_locking::Bool = false,
         transfer = Transfer(),
-        show_progress::Bool = true,
+        showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "stripfooting.tmp"),
     )
     ρ₀ = 1.0e3
@@ -46,7 +46,7 @@ function stripfooting(
     paraview_file = joinpath(outdir, "out")
     Poingr.defalut_output_paraview_initialize(paraview_file)
 
-    logger = Logger(0.0, 0.1, 0.002; show_progress)
+    logger = Logger(0.0, 0.1, 0.002; showprogress)
 
     t = 0.0
     disp = Float64[]

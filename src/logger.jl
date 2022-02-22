@@ -1,32 +1,32 @@
 import Dates
 import ProgressMeter
+import ProgressMeter: Progress, BarGlyphs
 
 const PROGRESS_METER_MAX = 10000
 
-
-mutable struct Logger{P}
+mutable struct Logger
     # log
     logpoints::Vector{Float64}
     i::Int
     islogpoint::Bool
     # progress
-    show_progress::Bool
-    pmeter::P
+    prog::Progress
+    showprogress::Bool
+    color::Symbol
 end
 
-function Logger(start::Real, stop::Real, step::Real; show_progress::Bool = false)
+function Logger(start::Real, stop::Real, step::Real; showprogress::Bool=false, showspeed::Bool=true, color::Symbol=:yellow)
     @assert start < stop
     logpoints = collect(start:step:stop)
     last(logpoints) < stop && push!(logpoints, stop)
-    pmeter = ProgressMeter.Progress(
-        PROGRESS_METER_MAX,
-        barglyphs = ProgressMeter.BarGlyphs('|','█', ['▌'],' ','|',),
+    prog = Progress(
+        PROGRESS_METER_MAX;
+        barglyphs = BarGlyphs('|', '█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'], ' ', '|'),
         barlen = 20,
-        color = :yellow,
+        showspeed,
+        color,
     )
-    printstyled("Start: ", Dates.now(); color = :yellow)
-    println()
-    Logger(logpoints, -1, false, show_progress, pmeter)
+    Logger(logpoints, -1, false, prog, showprogress, color)
 end
 
 t_start(log::Logger) = first(logpoints(log))
@@ -34,35 +34,36 @@ t_stop(log::Logger) = last(logpoints(log))
 
 logpoints(logger::Logger) = logger.logpoints
 logindex(logger::Logger) = logger.i
+islogpoint(logger::Logger) = logger.islogpoint
 
 function isfinised(logger::Logger, t::Real)
-    getprogress(logger, t) ≥ PROGRESS_METER_MAX
+    progress_int(logger, t) ≥ PROGRESS_METER_MAX
 end
 
-islogpoint(logger) = logger.islogpoint
+function progress_int(logger::Logger, t::Real)
+    t0 = t_start(logger)
+    t1 = t_stop(logger)
+    floor(Int, PROGRESS_METER_MAX * ((t - t0) / (t1 - t0)))
+end
 
 function update!(logger::Logger, t::Real)
-    logger.show_progress && printprogress(logger, t)
+    if logger.showprogress
+        if logindex(logger) == -1 # time stamp for start
+            printstyled("Start: ", Dates.now(); logger.color)
+            println()
+        end
+        int = progress_int(logger, t)
+        if int >= PROGRESS_METER_MAX
+            ProgressMeter.finish!(logger.prog)
+        else
+            ProgressMeter.update!(logger.prog, int)
+        end
+    end
     i = searchsortedlast(logpoints(logger), t) - 1
     if logger.i < i # not yet logged
         logger.i = i
         logger.islogpoint = true
     else
         logger.islogpoint = false
-    end
-end
-
-function getprogress(logger::Logger, t::Real)
-    t0 = t_start(logger)
-    t1 = t_stop(logger)
-    floor(Int, PROGRESS_METER_MAX * ((t - t0) / (t1 - t0)))
-end
-
-function printprogress(logger::Logger, t::Real)
-    perc = getprogress(logger, t)
-    if perc >= PROGRESS_METER_MAX
-        ProgressMeter.finish!(logger.pmeter)
-    else
-        ProgressMeter.update!(logger.pmeter, perc)
     end
 end

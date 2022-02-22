@@ -5,7 +5,7 @@ function sandcolumn(
         dx = 0.01,
         CFL = 1.0,
         transfer = Transfer(),
-        show_progress::Bool = true,
+        showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "sandcolumn.tmp"),
     )
     ρ₀ = 1.6e3
@@ -40,7 +40,7 @@ function sandcolumn(
     paraview_file = joinpath(outdir, "out")
     Poingr.defalut_output_paraview_initialize(paraview_file)
 
-    logger = Logger(0.0, 0.6, 0.01; show_progress)
+    logger = Logger(0.0, 0.6, 0.01; showprogress)
 
     t = 0.0
     while !isfinised(logger, t)

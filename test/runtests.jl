@@ -33,7 +33,7 @@ function check_example(testname::String, case, interpolation; dx, kwargs...)
         rm(outdir; recursive = true, force = true)
 
         include(joinpath("../examples", "$testname.jl"))
-        @eval $(Symbol(testname))($interpolation; show_progress = false, outdir = $outdir, $kwargs...)
+        @eval $(Symbol(testname))($interpolation; showprogress = false, outdir = $outdir, $kwargs...)
 
         result_file = joinpath(
             outdir,
