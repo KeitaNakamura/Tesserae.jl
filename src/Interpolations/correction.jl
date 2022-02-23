@@ -1,8 +1,8 @@
 struct KernelCorrection{Weight <: Kernel} <: Interpolation
-    weight::Weight
 end
+@pure KernelCorrection(w::Kernel) = KernelCorrection{typeof(w)}()
 
-weight_function(c::KernelCorrection) = c.weight
+@pure weight_function(c::KernelCorrection{W}) where {W} = W()
 support_length(c::KernelCorrection, args...) = support_length(weight_function(c), args...)
 
 mutable struct KernelCorrectionValues{Weight, dim, T, nnodes} <: MPValues{dim, T}

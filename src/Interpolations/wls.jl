@@ -1,16 +1,13 @@
 struct WLS{Basis <: AbstractBasis, Weight <: Kernel} <: Interpolation
-    basis::Basis
-    weight::Weight
 end
 
 const LinearWLS = WLS{PolynomialBasis{1}}
 const BilinearWLS = WLS{BilinearBasis}
 
-WLS{Basis, Weight}() where {Basis, Weight} = WLS(Basis(), Weight())
-WLS{Basis}(weight::Kernel) where {Basis} = WLS(Basis(), weight)
+@pure WLS{B}(w::Kernel) where {B} = WLS{B, typeof(w)}()
 
-basis_function(wls::WLS) = wls.basis
-weight_function(wls::WLS) = wls.weight
+@pure basis_function(::WLS{B}) where {B} = B()
+@pure weight_function(::WLS{B, W}) where {B, W} = W()
 
 support_length(wls::WLS, args...) = support_length(weight_function(wls), args...)
 
