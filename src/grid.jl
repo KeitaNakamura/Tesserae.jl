@@ -237,7 +237,7 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
 end
 @inline function neighboring_nodes(grid::Grid, x::Vec)
     check_interpolation(grid)
-    neighboring_nodes(grid, x, support_length(grid.interpolation))
+    neighboring_nodes(grid, x, getsupportlength(grid.interpolation))
 end
 
 @inline function _neighboring_nodes(dims::Dims, ξ, h)

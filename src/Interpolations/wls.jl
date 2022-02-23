@@ -1,4 +1,4 @@
-struct WLS{Basis <: AbstractBasis, Weight <: Kernel} <: Interpolation
+struct WLS{B <: AbstractBasis, K <: Kernel} <: Interpolation
 end
 
 const LinearWLS = WLS{PolynomialBasis{1}}
@@ -6,14 +6,14 @@ const BilinearWLS = WLS{BilinearBasis}
 
 @pure WLS{B}(w::Kernel) where {B} = WLS{B, typeof(w)}()
 
-@pure basis_function(::WLS{B}) where {B} = B()
-@pure weight_function(::WLS{B, W}) where {B, W} = W()
+@pure getbasisfunction(::WLS{B}) where {B} = B()
+@pure getkernelfunction(::WLS{B, W}) where {B, W} = W()
 
-support_length(wls::WLS, args...) = support_length(weight_function(wls), args...)
+getsupportlength(wls::WLS, args...) = getsupportlength(getkernelfunction(wls), args...)
 
 
-mutable struct WLSValues{Basis, Weight, dim, T, nnodes, L, L²} <: MPValues{dim, T}
-    F::WLS{Basis, Weight}
+mutable struct WLSValues{B, K, dim, T, nnodes, L, L²} <: MPValues{dim, T}
+    F::WLS{B, K}
     N::MVector{nnodes, T}
     ∇N::MVector{nnodes, Vec{dim, T}}
     w::MVector{nnodes, T}
@@ -23,30 +23,30 @@ mutable struct WLSValues{Basis, Weight, dim, T, nnodes, L, L²} <: MPValues{dim,
     len::Int
 end
 
-basis_function(x::WLSValues) = basis_function(x.F)
-weight_function(x::WLSValues) = weight_function(x.F)
+getbasisfunction(x::WLSValues) = getbasisfunction(x.F)
+getkernelfunction(x::WLSValues) = getkernelfunction(x.F)
 
-function WLSValues{Basis, Weight, dim, T, nnodes, L, L²}() where {Basis, Weight, dim, T, nnodes, L, L²}
+function WLSValues{B, K, dim, T, nnodes, L, L²}() where {B, K, dim, T, nnodes, L, L²}
     N = MVector{nnodes, T}(undef)
     ∇N = MVector{nnodes, Vec{dim, T}}(undef)
     w = MVector{nnodes, T}(undef)
     M⁻¹ = zero(Mat{L, L, T, L²})
     gridindices = MVector{nnodes, Index{dim}}(undef)
     x = zero(Vec{dim, T})
-    WLSValues(WLS{Basis, Weight}(), N, ∇N, w, gridindices, M⁻¹, x, 0)
+    WLSValues(WLS{B, K}(), N, ∇N, w, gridindices, M⁻¹, x, 0)
 end
 
-function MPValues{dim, T}(F::WLS{Basis, Weight}) where {Basis, Weight, dim, T}
-    L = length(value(basis_function(F), zero(Vec{dim, T})))
-    n = nnodes(weight_function(F), Val(dim))
-    WLSValues{Basis, Weight, dim, T, n, L, L^2}()
+function MPValues{dim, T}(F::WLS{B, K}) where {B, K, dim, T}
+    L = length(value(getbasisfunction(F), zero(Vec{dim, T})))
+    n = nnodes(getkernelfunction(F), Val(dim))
+    WLSValues{B, K, dim, T, n, L, L^2}()
 end
 
 function _update!(mpvalues::WLSValues, F, grid::Grid, x::Vec, spat::AbstractArray{Bool}, inds)
     fillzero!(mpvalues.N)
     fillzero!(mpvalues.∇N)
     fillzero!(mpvalues.w)
-    P = basis_function(mpvalues)
+    P = getbasisfunction(mpvalues)
     M = zero(mpvalues.M⁻¹)
     mpvalues.x = x
     update_gridindices!(mpvalues, inds, spat)
@@ -76,7 +76,7 @@ function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F
     fillzero!(mpvalues.N)
     fillzero!(mpvalues.∇N)
     fillzero!(mpvalues.w)
-    P = basis_function(mpvalues)
+    P = getbasisfunction(mpvalues)
     mpvalues.x = x
 
     dx⁻¹ = gridsteps_inv(grid)
@@ -84,7 +84,7 @@ function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F
     if iscompleted
         # fast version
         D = zero(Vec{dim, T}) # diagonal entries
-        wᵢ = values(weight_function(mpvalues), x .* dx⁻¹)
+        wᵢ = values(getkernelfunction(mpvalues), x .* dx⁻¹)
         @inbounds @simd for i in 1:length(mpvalues)
             I = mpvalues.gridindices[i]
             xᵢ = grid[I]
@@ -126,15 +126,15 @@ function _update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, F
 end
 
 function update!(mpvalues::WLSValues, grid::Grid, x::Vec, spat::AbstractArray{Bool})
-    F = weight_function(mpvalues)
-    _update!(mpvalues, ξ -> value(F, ξ), grid, x, spat, neighboring_nodes(grid, x, support_length(F)))
+    F = getkernelfunction(mpvalues)
+    _update!(mpvalues, ξ -> value(F, ξ), grid, x, spat, neighboring_nodes(grid, x, getsupportlength(F)))
 end
 
 function update!(mpvalues::WLSValues{<: Any, GIMP}, grid::Grid, x::Vec, r::Vec, spat::AbstractArray{Bool})
-    F = weight_function(mpvalues)
+    F = getkernelfunction(mpvalues)
     dx⁻¹ = gridsteps_inv(grid)
     rdx⁻¹ = r.*dx⁻¹
-    _update!(mpvalues, ξ -> value(F, ξ, rdx⁻¹), grid, x, spat, neighboring_nodes(grid, x, support_length(F, rdx⁻¹)))
+    _update!(mpvalues, ξ -> value(F, ξ, rdx⁻¹), grid, x, spat, neighboring_nodes(grid, x, getsupportlength(F, rdx⁻¹)))
 end
 
 

@@ -1,6 +1,6 @@
 struct GIMP <: Kernel end
 
-support_length(::GIMP, l) = 1.0 .+ l # `l` must be normalized by `dx`
+getsupportlength(::GIMP, l) = 1.0 .+ l # `l` must be normalized by `dx`
 
 @pure nnodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
 
@@ -85,7 +85,7 @@ function update!(mpvalues::GIMPValues{dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec
     fillzero!(mpvalues.∇N)
     mpvalues.x = x
     dx⁻¹ = gridsteps_inv(grid)
-    update_gridindices!(mpvalues, neighboring_nodes(grid, x, support_length(F, r .* dx⁻¹)), spat)
+    update_gridindices!(mpvalues, neighboring_nodes(grid, x, getsupportlength(F, r .* dx⁻¹)), spat)
     @inbounds @simd for i in 1:length(mpvalues)
         I = mpvalues.gridindices[i]
         xᵢ = grid[I]

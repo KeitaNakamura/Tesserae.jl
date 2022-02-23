@@ -1,12 +1,12 @@
-struct KernelCorrection{Weight <: Kernel} <: Interpolation
+struct KernelCorrection{K <: Kernel} <: Interpolation
 end
-@pure KernelCorrection(w::Kernel) = KernelCorrection{typeof(w)}()
+@pure KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
 
-@pure weight_function(c::KernelCorrection{W}) where {W} = W()
-support_length(c::KernelCorrection, args...) = support_length(weight_function(c), args...)
+@pure getkernelfunction(::KernelCorrection{K}) where {K} = K()
+getsupportlength(c::KernelCorrection, args...) = getsupportlength(getkernelfunction(c), args...)
 
-mutable struct KernelCorrectionValues{Weight, dim, T, nnodes} <: MPValues{dim, T}
-    F::KernelCorrection{Weight}
+mutable struct KernelCorrectionValues{K, dim, T, nnodes} <: MPValues{dim, T}
+    F::KernelCorrection{K}
     N::MVector{nnodes, T}
     ∇N::MVector{nnodes, Vec{dim, T}}
     gridindices::MVector{nnodes, Index{dim}}
@@ -14,23 +14,23 @@ mutable struct KernelCorrectionValues{Weight, dim, T, nnodes} <: MPValues{dim, T
     len::Int
 end
 
-function KernelCorrectionValues{Weight, dim, T, nnodes}() where {Weight, dim, T, nnodes}
+function KernelCorrectionValues{K, dim, T, nnodes}() where {K, dim, T, nnodes}
     N = MVector{nnodes, T}(undef)
     ∇N = MVector{nnodes, Vec{dim, T}}(undef)
     gridindices = MVector{nnodes, Index{dim}}(undef)
     x = zero(Vec{dim, T})
-    KernelCorrectionValues(KernelCorrection(Weight()), N, ∇N, gridindices, x, 0)
+    KernelCorrectionValues(KernelCorrection(K()), N, ∇N, gridindices, x, 0)
 end
 
-function MPValues{dim, T}(c::KernelCorrection{Weight}) where {dim, T, Weight}
-    L = nnodes(Weight(), Val(dim))
-    KernelCorrectionValues{Weight, dim, T, L}()
+function MPValues{dim, T}(c::KernelCorrection{K}) where {dim, T, K}
+    L = nnodes(K(), Val(dim))
+    KernelCorrectionValues{K, dim, T, L}()
 end
 
-weight_function(c::KernelCorrectionValues) = weight_function(c.F)
+getkernelfunction(c::KernelCorrectionValues) = getkernelfunction(c.F)
 
 function _update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}, inds, args...) where {dim, T}
-    F = weight_function(mpvalues)
+    F = getkernelfunction(mpvalues)
     fillzero!(mpvalues.N)
     fillzero!(mpvalues.∇N)
     mpvalues.x = x
@@ -93,16 +93,16 @@ function _update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{d
 end
 
 function update!(mpvalues::KernelCorrectionValues, grid::Grid, x::Vec, spat::AbstractArray{Bool})
-    F = weight_function(mpvalues)
+    F = getkernelfunction(mpvalues)
     dx⁻¹ = gridsteps_inv(grid)
-    _update!(mpvalues, grid, x, spat, neighboring_nodes(grid, x, support_length(F)))
+    _update!(mpvalues, grid, x, spat, neighboring_nodes(grid, x, getsupportlength(F)))
 end
 
 function update!(mpvalues::KernelCorrectionValues{GIMP}, grid::Grid, x::Vec, r::Vec, spat::AbstractArray{Bool})
-    F = weight_function(mpvalues)
+    F = getkernelfunction(mpvalues)
     dx⁻¹ = gridsteps_inv(grid)
     rdx⁻¹ = r.*dx⁻¹
-    _update!(mpvalues, grid, x, spat, neighboring_nodes(grid, x, support_length(F, rdx⁻¹)), rdx⁻¹)
+    _update!(mpvalues, grid, x, spat, neighboring_nodes(grid, x, getsupportlength(F, rdx⁻¹)), rdx⁻¹)
 end
 
 

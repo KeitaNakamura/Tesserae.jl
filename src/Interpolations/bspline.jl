@@ -25,12 +25,14 @@ const LinearBSpline    = BSpline{1}
 const QuadraticBSpline = BSpline{2}
 const CubicBSpline     = BSpline{3}
 
-support_length(::BSpline{1}) = 1.0
-support_length(::BSpline{2}) = 1.5
-support_length(::BSpline{3}) = 2.0
-support_length(::BSpline{4}) = 2.5
+getsupportlength(::BSpline{1}) = 1.0
+getsupportlength(::BSpline{2}) = 1.5
+getsupportlength(::BSpline{3}) = 2.0
+getsupportlength(::BSpline{4}) = 2.5
 
-@pure nnodes(bspline::BSpline, ::Val{dim}) where {dim} = prod(nfill(Int(2*support_length(bspline)), Val(dim)))
+@pure function nnodes(bspline::BSpline, ::Val{dim})::Int where {dim}
+    (2*getsupportlength(bspline))^dim
+end
 
 
 fract(x) = x - floor(x)
@@ -208,7 +210,7 @@ function update!(mpvalues::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{d
     fillzero!(mpvalues.∇N)
     mpvalues.x = x
     dx⁻¹ = gridsteps_inv(grid)
-    update_gridindices!(mpvalues, neighboring_nodes(grid, x, support_length(F)), spat)
+    update_gridindices!(mpvalues, neighboring_nodes(grid, x, getsupportlength(F)), spat)
     @inbounds @simd for i in 1:length(mpvalues)
         I = mpvalues.gridindices[i]
         xᵢ = grid[I]

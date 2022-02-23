@@ -102,11 +102,11 @@ end
 const AbstractGIMP = Union{GIMP, WLS{<: Any, GIMP}, KernelCorrection{GIMP}}
 const AbstractGIMPValues = Union{GIMPValues, WLSValues{<: Any, GIMP}, KernelCorrectionValues{GIMP}}
 
-function support_length_pointstate(interp::Interpolation, grid, pointstate)
-    LazyDotArray(p -> support_length(interp), 1:length(pointstate))
+function supportlength_pointstate(interp::Interpolation, grid, pointstate)
+    LazyDotArray(p -> getsupportlength(interp), 1:length(pointstate))
 end
-function support_length_pointstate(interp::AbstractGIMP, grid, pointstate)
-    LazyDotArray(rₚ -> support_length(interp, rₚ .* gridsteps_inv(grid)), pointstate.r)
+function supportlength_pointstate(interp::AbstractGIMP, grid, pointstate)
+    LazyDotArray(rₚ -> getsupportlength(interp, rₚ .* gridsteps_inv(grid)), pointstate.r)
 end
 
 function update_mpvalues!(mpvalues::Vector{<: MPValues}, grid, pointstate, spat, p)
@@ -127,7 +127,7 @@ function update!(cache::MPCache, grid::Grid, pointstate; exclude::Union{Nothing,
     allocate!(i -> eltype(mpvalues)(), mpvalues, length(pointstate))
 
     pointsinblock!(pointsinblock, grid, pointstate.x)
-    sparsity_pattern!(spat, grid, pointstate.x, support_length_pointstate(grid.interpolation, grid, pointstate), pointsinblock; exclude)
+    sparsity_pattern!(spat, grid, pointstate.x, supportlength_pointstate(grid.interpolation, grid, pointstate), pointsinblock; exclude)
 
     Threads.@threads for p in 1:length(pointstate)
         @inbounds update_mpvalues!(mpvalues, grid, pointstate, spat, p)
