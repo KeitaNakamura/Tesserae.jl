@@ -117,21 +117,11 @@ function value(::BSpline{2}, ξ::Real)
     ξ < 0.5 ? (3 - 4ξ^2) / 4 :
     ξ < 1.5 ? (3 - 2ξ)^2 / 8 : zero(ξ)
 end
-@inline function value(::BSpline{2}, ξ::Float64)
-    ξ = abs(ξ)
-    ξ < 0.5 ? 0.75 - ξ^2         :
-    ξ < 1.5 ? 0.125 * (3 - 2ξ)^2 : zero(ξ)
-end
 
 function value(::BSpline{3}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
     ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
-end
-@inline function value(::BSpline{3}, ξ::Float64)
-    ξ = abs(ξ)
-    ξ < 1 ? ξ^3/2 - ξ^2 + 2/3 :
-    ξ < 2 ? (2 - ξ)^3 / 6     : zero(ξ)
 end
 
 function value(::BSpline{4}, ξ::Real)
