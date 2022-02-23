@@ -56,8 +56,7 @@ function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}}, grid::Grid, xₚ::
     empty!.(ptsinblk)
     @inbounds for p in 1:length(xₚ)
         I = whichblock(grid, xₚ[p])
-        I === nothing && continue
-        push!(ptsinblk[I], p)
+        I === nothing || push!(ptsinblk[I], p)
     end
     ptsinblk
 end
