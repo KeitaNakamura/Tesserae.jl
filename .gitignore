@@ -3,3 +3,5 @@
 /test/Manifest.toml
 /docs/Manifest.toml
 /docs/build
+/docs/*.vtr
+/docs/*.vtu
