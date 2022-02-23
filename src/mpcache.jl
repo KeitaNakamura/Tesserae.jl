@@ -100,27 +100,24 @@ function sparsity_pattern!(spat::Array{Bool}, grid::Grid, xₚ::AbstractVector, 
     spat
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid, pointstate, ptsinblk::AbstractArray{Vector{Int}}; exclude)
-    hₚ = LazyDotArray(p -> support_length(grid.interpolation), 1:length(pointstate))
-    sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk; exclude)
-    spat
+const AbstractGIMP = Union{GIMP, WLS{<: Any, GIMP}, KernelCorrection{GIMP}}
+const AbstractGIMPValues = Union{GIMPValues, WLSValues{<: Any, GIMP}, KernelCorrectionValues{GIMP}}
+
+function support_length_pointstate(interp::Interpolation, grid, pointstate)
+    LazyDotArray(p -> support_length(interp), 1:length(pointstate))
+end
+function support_length_pointstate(interp::AbstractGIMP, grid, pointstate)
+    LazyDotArray(rₚ -> support_length(interp, rₚ .* gridsteps_inv(grid)), pointstate.r)
 end
 
-function sparsity_pattern!(spat::Array{Bool}, grid::Grid{<: Any, <: Any, <: Union{GIMP, WLS{<: Any, GIMP}, KernelCorrection{GIMP}}}, pointstate, ptsinblk::AbstractArray{Vector{Int}}; exclude)
-    hₚ = LazyDotArray(rₚ -> support_length(grid.interpolation, rₚ ./ gridsteps(grid)), pointstate.r)
-    sparsity_pattern!(spat, grid, pointstate.x, hₚ, ptsinblk; exclude)
-    spat
-end
-
-function update_mpvalues!(mpvalues::Vector{<: MPValues}, grid::Grid, pointstate, spat::AbstractArray{Bool}, p::Int)
+function update_mpvalues!(mpvalues::Vector{<: MPValues}, grid, pointstate, spat, p)
     update!(mpvalues[p], grid, pointstate.x[p], spat)
 end
-
-function update_mpvalues!(mpvalues::Vector{<: Union{GIMPValues, WLSValues{<: Any, GIMP}, KernelCorrectionValues{GIMP}}}, grid::Grid, pointstate, spat::AbstractArray{Bool}, p::Int)
+function update_mpvalues!(mpvalues::Vector{<: AbstractGIMPValues}, grid, pointstate, spat, p)
     update!(mpvalues[p], grid, pointstate.x[p], pointstate.r[p], spat)
 end
 
-function update!(cache::MPCache, grid::Grid, pointstate; exclude = nothing)
+function update!(cache::MPCache, grid::Grid, pointstate; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
     @assert size(grid) == gridsize(cache)
 
     mpvalues = cache.mpvalues
@@ -131,7 +128,7 @@ function update!(cache::MPCache, grid::Grid, pointstate; exclude = nothing)
     allocate!(i -> eltype(mpvalues)(), mpvalues, length(pointstate))
 
     pointsinblock!(pointsinblock, grid, pointstate.x)
-    sparsity_pattern!(spat, grid, pointstate, pointsinblock; exclude)
+    sparsity_pattern!(spat, grid, pointstate.x, support_length_pointstate(grid.interpolation, grid, pointstate), pointsinblock; exclude)
 
     Threads.@threads for p in 1:length(pointstate)
         @inbounds update_mpvalues!(mpvalues, grid, pointstate, spat, p)
