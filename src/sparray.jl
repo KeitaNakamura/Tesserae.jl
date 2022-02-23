@@ -103,12 +103,6 @@ end
     x
 end
 
-function fillzero!(x::AbstractArray{T}) where {T}
-    @simd for i in eachindex(x)
-        @inbounds x[i] = recursive_zero(T)
-    end
-    x
-end
 fillzero!(x::SpArray) = (fillzero!(x.data); x)
 
 function reinit!(x::SpArray)

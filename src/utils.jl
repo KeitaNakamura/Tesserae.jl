@@ -41,9 +41,6 @@ macro _inline_propagate_inbounds_meta()
     end
 end
 
-# elzero
-elzero(x) = zero(eltype(x))
-
 # recursive_zero
 recursive_zero(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
 @generated function recursive_zero(::Type{T}) where {T}
@@ -59,3 +56,11 @@ end
     :(@_inline_meta; T(($(exps...),)))
 end
 recursive_zero(x) = recursive_zero(typeof(x))
+
+# fillzero!
+function fillzero!(x::AbstractArray)
+    @simd for i in eachindex(x)
+        @inbounds x[i] = recursive_zero(eltype(x))
+    end
+    x
+end

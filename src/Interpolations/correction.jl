@@ -31,8 +31,8 @@ weight_function(c::KernelCorrectionValues) = weight_function(c.F)
 
 function _update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}, inds, args...) where {dim, T}
     F = weight_function(mpvalues)
-    mpvalues.N .= elzero(mpvalues.N)
-    mpvalues.∇N .= elzero(mpvalues.∇N)
+    fillzero!(mpvalues.N)
+    fillzero!(mpvalues.∇N)
     mpvalues.x = x
 
     dx⁻¹ = gridsteps_inv(grid)
