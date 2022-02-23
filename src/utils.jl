@@ -32,7 +32,7 @@ promote_tuple_length(xs::Type{<: NTuple{N, Any}}...) where {N} = N
     end
 end
 
-isapproxzero(x::Number) = abs(x) <= sqrt(eps(typeof(x)))
+isapproxzero(x::Number) = abs(x) < sqrt(eps(typeof(x)))
 
 macro _inline_propagate_inbounds_meta()
     quote
