@@ -15,7 +15,7 @@ mutable struct Logger
     color::Symbol
 end
 
-function Logger(start::Real, stop::Real, step::Real; showprogress::Bool=false, showspeed::Bool=true, color::Symbol=:yellow)
+function Logger(start::Real, stop::Real, step::Real; showprogress::Bool=false, color::Symbol=:yellow)
     @assert start < stop
     logpoints = collect(start:step:stop)
     last(logpoints) < stop && push!(logpoints, stop)
@@ -23,7 +23,6 @@ function Logger(start::Real, stop::Real, step::Real; showprogress::Bool=false, s
         PROGRESS_METER_MAX;
         barglyphs = BarGlyphs('|', '█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'], ' ', '|'),
         barlen = 20,
-        showspeed,
         color,
     )
     Logger(logpoints, -1, false, prog, showprogress, color)
