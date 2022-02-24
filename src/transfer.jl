@@ -1,11 +1,15 @@
-struct P2G_Normal  end
-struct P2G_Taylor  end
-struct P2G_Default end
-struct G2P_FLIP    end
-struct G2P_PIC     end
-struct G2P_Default end
+# P2G
+struct P2G_Normal    end
+struct P2G_Taylor    end
+struct P2G_WLS       end
 struct P2G_AffinePIC end
+struct P2G_Default   end
+# G2P
+struct G2P_FLIP      end
+struct G2P_PIC       end
+struct G2P_WLS       end
 struct G2P_AffinePIC end
+struct G2P_Default   end
 
 struct Transfer{P2G, G2P}
     point_to_grid!::P2G
@@ -26,13 +30,17 @@ export
     TransferTaylorPIC,
     TransferAffinePIC
 
-default_p2g(::BSpline) = P2G_Normal()
-default_p2g(::GIMP) = P2G_Normal()
-default_p2g(::KernelCorrection) = P2G_Taylor()
+P2G_default(::BSpline) = P2G_Normal()
+P2G_default(::GIMP) = P2G_Normal()
+P2G_default(::LinearWLS) = P2G_Taylor()
+P2G_default(::WLS) = P2G_WLS()
+P2G_default(::KernelCorrection) = P2G_Taylor()
 
-default_g2p(::BSpline) = G2P_FLIP()
-default_g2p(::GIMP) = G2P_FLIP()
-default_g2p(::KernelCorrection) = G2P_PIC()
+G2P_default(::BSpline) = G2P_FLIP()
+G2P_default(::GIMP) = G2P_FLIP()
+G2P_default(::LinearWLS) = G2P_PIC()
+G2P_default(::WLS) = G2P_WLS()
+G2P_default(::KernelCorrection) = G2P_PIC()
 
 ################
 # P2G transfer #
@@ -114,7 +122,7 @@ function (::P2G_Taylor)(grid::Grid{dim}, pointstate, cache::MPCache{dim}, dt::Re
     grid
 end
 
-function (::P2G_Default)(grid::Grid{<: Any, <: Any, <: WLS}, pointstate, cache::MPCache{<: Any, <: Any, <: WLSValues}, dt::Real)
+function (::P2G_WLS)(grid::Grid, pointstate, cache::MPCache, dt::Real)
     P = getbasisfunction(grid.interpolation)
     point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
         @_inline_propagate_inbounds_meta
@@ -138,7 +146,7 @@ function (::P2G_Default)(grid::Grid{<: Any, <: Any, <: WLS}, pointstate, cache::
 end
 
 function (::P2G_Default)(grid::Grid, pointstate, cache::MPCache, dt::Real)
-    P2G! = default_p2g(grid.interpolation)
+    P2G! = P2G_default(grid.interpolation)
     P2G!(grid, pointstate, cache, dt)
 end
 
@@ -225,7 +233,7 @@ function (::G2P_AffinePIC)(pointstate, grid::Grid, cache::MPCache, dt::Real)
     pointstate
 end
 
-function (::G2P_Default)(pointstate, grid::Grid{dim, <: Any, <: WLS}, cache::MPCache{dim, <: Any, <: WLSValues}, dt::Real) where {dim}
+function (::G2P_WLS)(pointstate, grid::Grid{dim}, cache::MPCache, dt::Real) where {dim}
     P = getbasisfunction(grid.interpolation)
     p0 = value(P, zero(Vec{dim, Int}))
     ∇p0 = gradient(P, zero(Vec{dim, Int}))
@@ -247,6 +255,6 @@ function (::G2P_Default)(pointstate, grid::Grid{dim, <: Any, <: WLS}, cache::MPC
 end
 
 function (::G2P_Default)(pointstate, grid::Grid, cache::MPCache, dt::Real)
-    G2P! = default_g2p(grid.interpolation)
+    G2P! = G2P_default(grid.interpolation)
     G2P!(pointstate, grid, cache, dt)
 end
