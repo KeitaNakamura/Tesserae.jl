@@ -13,6 +13,9 @@ mutable struct Logger
     prog::Progress
     showprogress::Bool
     color::Symbol
+    tlast::Float64
+    # print
+    nlines::Int
 end
 
 function Logger(start::Real, stop::Real, step::Real; showprogress::Bool=false, color::Symbol=:yellow)
@@ -25,7 +28,7 @@ function Logger(start::Real, stop::Real, step::Real; showprogress::Bool=false, c
         barlen = 20,
         color,
     )
-    Logger(logpoints, -1, false, prog, showprogress, color)
+    Logger(logpoints, -1, false, prog, showprogress, color, time(), 0)
 end
 
 t_start(log::Logger) = first(logpoints(log))
@@ -45,19 +48,48 @@ function progress_int(logger::Logger, t::Real)
     floor(Int, PROGRESS_METER_MAX * ((t - t0) / (t1 - t0)))
 end
 
-function update!(logger::Logger, t::Real)
+function update!(logger::Logger, t::Real; print = nothing)
     if logger.showprogress
         if logindex(logger) == -1 # time stamp for start
             printstyled("Start: ", Dates.now(); logger.color)
             println()
         end
+
+        ansi_moveup(n::Int) = string("\e[", n, "A")
+        ansi_movecol1 = "\e[1G"
+        ansi_cleartoend = "\e[0J"
+
         int = progress_int(logger, t)
-        if int >= PROGRESS_METER_MAX
-            ProgressMeter.finish!(logger.prog)
-        else
-            ProgressMeter.update!(logger.prog, int)
+        isdone = int >= PROGRESS_METER_MAX
+
+        # use own threshold for printing to match timing of printing progress bar and given `print`
+        T = time()
+        if T > logger.tlast + logger.prog.dt || isdone
+            if logger.nlines > 0
+                Base.print(ansi_moveup(logger.nlines), ansi_movecol1, ansi_cleartoend)
+            end
+
+            if isdone
+                ProgressMeter.finish!(logger.prog)
+            else
+                ProgressMeter.update!(logger.prog, int)
+            end
+
+            if print !== nothing
+                str = sprint() do iostr
+                    !isdone && println(iostr)
+                    show(iostr, "text/plain", print)
+                end
+                logger.nlines = count("\n", str)
+                Base.print(str)
+                isdone && println()
+            end
+
+            # Compensate for any overhead of printing (see ProgressMeter.jl).
+            logger.tlast = T + 2*(time()-T)
         end
     end
+
     i = searchsortedlast(logpoints(logger), t) - 1
     if logger.i < i # not yet logged
         logger.i = i
@@ -65,4 +97,6 @@ function update!(logger::Logger, t::Real)
     else
         logger.islogpoint = false
     end
+
+    nothing
 end
