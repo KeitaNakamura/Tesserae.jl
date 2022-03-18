@@ -5,7 +5,15 @@ end
 @pure getkernelfunction(::KernelCorrection{K}) where {K} = K()
 getsupportlength(c::KernelCorrection, args...) = getsupportlength(getkernelfunction(c), args...)
 
-mutable struct KernelCorrectionValues{K, dim, T, nnodes} <: MPValues{dim, T}
+
+struct KernelCorrectionValue{dim, T} <: MPValue
+    N::T
+    ∇N::Vec{dim, T}
+    I::Index{dim}
+    x::Vec{dim, T}
+end
+
+mutable struct KernelCorrectionValues{K, dim, T, nnodes} <: MPValues{dim, T, KernelCorrectionValue{dim, T}}
     F::KernelCorrection{K}
     N::MVector{nnodes, T}
     ∇N::MVector{nnodes, Vec{dim, T}}
@@ -103,14 +111,6 @@ function update!(mpvalues::KernelCorrectionValues{GIMP}, grid::Grid, x::Vec, r::
     dx⁻¹ = gridsteps_inv(grid)
     rdx⁻¹ = r.*dx⁻¹
     _update!(mpvalues, grid, x, spat, neighboring_nodes(grid, x, getsupportlength(F, rdx⁻¹)), rdx⁻¹)
-end
-
-
-struct KernelCorrectionValue{dim, T} <: MPValue
-    N::T
-    ∇N::Vec{dim, T}
-    I::Index{dim}
-    x::Vec{dim, T}
 end
 
 @inline function Base.getindex(mpvalues::KernelCorrectionValues, i::Int)

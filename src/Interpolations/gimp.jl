@@ -57,7 +57,14 @@ end
 end
 
 
-mutable struct GIMPValues{dim, T, L} <: MPValues{dim, T}
+struct GIMPValue{dim, T} <: MPValue
+    N::T
+    ∇N::Vec{dim, T}
+    I::Index{dim}
+    x::Vec{dim, T}
+end
+
+mutable struct GIMPValues{dim, T, L} <: MPValues{dim, T, GIMPValue{dim, T}}
     F::GIMP
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
@@ -96,13 +103,6 @@ function update!(mpvalues::GIMPValues{dim}, grid::Grid{dim}, x::Vec{dim}, r::Vec
         end
     end
     mpvalues
-end
-
-struct GIMPValue{dim, T} <: MPValue
-    N::T
-    ∇N::Vec{dim, T}
-    I::Index{dim}
-    x::Vec{dim, T}
 end
 
 @inline function Base.getindex(mpvalues::GIMPValues, i::Int)

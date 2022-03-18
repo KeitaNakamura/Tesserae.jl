@@ -212,10 +212,12 @@ function grid_to_point(g2p, mp::MPValue)
     g2p(mp, mp.I)
 end
 
+@inline g2p_return_type(g2p, mpvalues) = Base._return_type(grid_to_point, Tuple{typeof(g2p), eltype(mpvalues)})
 function grid_to_point(g2p, mpvalues::MPValues)
     @_inline_propagate_inbounds_meta
-    vals = grid_to_point(g2p, mpvalues[1])
-    @simd for i in 2:length(mpvalues)
+    T = g2p_return_type(g2p, mpvalues)
+    vals = recursive_zero(T)
+    @simd for i in 1:length(mpvalues)
         res = grid_to_point(g2p, mpvalues[i])
         vals = broadcast_tuple(+, vals, res)
     end

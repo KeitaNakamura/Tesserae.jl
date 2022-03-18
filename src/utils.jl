@@ -51,7 +51,7 @@ recursive_zero(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, V
         :(@_inline_meta; zero(T))
     end
 end
-@generated function recursive_zero(::Type{T}) where {T <: NamedTuple}
+@generated function recursive_zero(::Type{T}) where {T <: Union{Tuple, NamedTuple}}
     exps = [:(recursive_zero($t)) for t in fieldtypes(T)]
     :(@_inline_meta; T(($(exps...),)))
 end

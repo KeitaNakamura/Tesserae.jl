@@ -182,7 +182,14 @@ end
 end
 
 
-mutable struct BSplineValues{order, dim, T, L} <: MPValues{dim, T}
+struct BSplineValue{dim, T} <: MPValue
+    N::T
+    ∇N::Vec{dim, T}
+    I::Index{dim}
+    x::Vec{dim, T}
+end
+
+mutable struct BSplineValues{order, dim, T, L} <: MPValues{dim, T, BSplineValue{dim, T}}
     F::BSpline{order}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
@@ -221,13 +228,6 @@ function update!(mpvalues::BSplineValues{<: Any, dim}, grid::Grid{dim}, x::Vec{d
         end
     end
     mpvalues
-end
-
-struct BSplineValue{dim, T} <: MPValue
-    N::T
-    ∇N::Vec{dim, T}
-    I::Index{dim}
-    x::Vec{dim, T}
 end
 
 @inline function Base.getindex(mpvalues::BSplineValues, i::Int)

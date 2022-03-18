@@ -12,7 +12,16 @@ const BilinearWLS = WLS{BilinearBasis}
 getsupportlength(wls::WLS, args...) = getsupportlength(getkernelfunction(wls), args...)
 
 
-mutable struct WLSValues{B, K, dim, T, nnodes, L, L²} <: MPValues{dim, T}
+struct WLSValue{dim, T, L, L²} <: MPValue
+    N::T
+    ∇N::Vec{dim, T}
+    w::T
+    I::Index{dim}
+    M⁻¹::Mat{L, L, T, L²}
+    x::Vec{dim, T}
+end
+
+mutable struct WLSValues{B, K, dim, T, nnodes, L, L²} <: MPValues{dim, T, WLSValue{dim, T, L, L²}}
     F::WLS{B, K}
     N::MVector{nnodes, T}
     ∇N::MVector{nnodes, Vec{dim, T}}
@@ -135,16 +144,6 @@ function update!(mpvalues::WLSValues{<: Any, GIMP}, grid::Grid, x::Vec, r::Vec, 
     dx⁻¹ = gridsteps_inv(grid)
     rdx⁻¹ = r.*dx⁻¹
     _update!(mpvalues, ξ -> value(F, ξ, rdx⁻¹), grid, x, spat, neighboring_nodes(grid, x, getsupportlength(F, rdx⁻¹)))
-end
-
-
-struct WLSValue{dim, T, L, L²} <: MPValue
-    N::T
-    ∇N::Vec{dim, T}
-    w::T
-    I::Index{dim}
-    M⁻¹::Mat{L, L, T, L²}
-    x::Vec{dim, T}
 end
 
 @inline function Base.getindex(mpvalues::WLSValues, i::Int)

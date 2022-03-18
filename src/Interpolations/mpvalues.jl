@@ -1,7 +1,7 @@
 abstract type Kernel <: Interpolation end
 
-abstract type MPValues{dim, T} <: AbstractVector{T} end
 abstract type MPValue end
+abstract type MPValues{dim, T, V <: MPValue} <: AbstractVector{V} end
 
 Base.size(x::MPValues) = (x.len,)
 
