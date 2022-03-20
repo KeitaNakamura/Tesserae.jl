@@ -54,7 +54,7 @@ end
     @boundscheck checkbounds(x, i)
     spat = x.spat
     index = spat.indices[i]
-    @inbounds index !== -1 ? x.data[index] : recursive_zero(eltype(x))
+    @inbounds index !== -1 ? x.data[index] : zero_recursive(eltype(x))
 end
 @inline function Base.setindex!(x::SpArray, v, i::Int)
     @boundscheck checkbounds(x, i)

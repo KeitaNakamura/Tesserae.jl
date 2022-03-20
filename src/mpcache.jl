@@ -216,7 +216,7 @@ end
 function grid_to_point(g2p, mpvalues::MPValues)
     @_inline_propagate_inbounds_meta
     T = g2p_return_type(g2p, mpvalues)
-    vals = recursive_zero(T)
+    vals = zero_recursive(T)
     @simd for i in 1:length(mpvalues)
         res = grid_to_point(g2p, mpvalues[i])
         vals = broadcast_tuple(+, vals, res)

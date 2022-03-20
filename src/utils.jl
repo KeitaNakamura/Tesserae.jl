@@ -41,26 +41,26 @@ macro _inline_propagate_inbounds_meta()
     end
 end
 
-# recursive_zero
-recursive_zero(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
-@generated function recursive_zero(::Type{T}) where {T}
+# zero_recursive
+zero_recursive(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
+@generated function zero_recursive(::Type{T}) where {T}
     if Base._return_type(zero, Tuple{T}) == Union{}
-        exps = [:(recursive_zero($t)) for t in fieldtypes(T)]
+        exps = [:(zero_recursive($t)) for t in fieldtypes(T)]
         :(@_inline_meta; T($(exps...)))
     else
         :(@_inline_meta; zero(T))
     end
 end
-@generated function recursive_zero(::Type{T}) where {T <: Union{Tuple, NamedTuple}}
-    exps = [:(recursive_zero($t)) for t in fieldtypes(T)]
+@generated function zero_recursive(::Type{T}) where {T <: Union{Tuple, NamedTuple}}
+    exps = [:(zero_recursive($t)) for t in fieldtypes(T)]
     :(@_inline_meta; T(($(exps...),)))
 end
-recursive_zero(x) = recursive_zero(typeof(x))
+zero_recursive(x) = zero_recursive(typeof(x))
 
 # fillzero!
 function fillzero!(x::AbstractArray)
     @simd for i in eachindex(x)
-        @inbounds x[i] = recursive_zero(eltype(x))
+        @inbounds x[i] = zero_recursive(eltype(x))
     end
     x
 end
