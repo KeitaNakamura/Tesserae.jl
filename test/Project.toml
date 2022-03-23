@@ -1,8 +1,12 @@
 [deps]
-Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MaterialModels = "a94b3f18-6cb1-4ab4-af29-8dac6ebab634"
 NaturalSort = "c020b1a1-e9b0-503a-9c33-f039bfc54a85"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ReadVTK = "dc215faf-f008-4882-a9f7-a79a826fadc3"
-Tensorial = "98f94333-fa9f-48a9-ad80-1c66397b2b38"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+MaterialModels = "0.6"
+NaturalSort = "1"
+ReadVTK = "0.1"

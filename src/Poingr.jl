@@ -46,20 +46,6 @@ export
     Transfer,
 # Contact
     Contact,
-# MaterialModel
-    MaterialModel,
-    LinearElastic,
-    SoilHypoelastic,
-    SoilHyperelastic,
-    VonMises,
-    DruckerPrager,
-    MonaghanWaterModel,
-    NewtonianFluid,
-    matcalc,
-    volumetric_stress,
-    deviatoric_stress,
-    volumetric_strain,
-    deviatoric_strain,
 # Logger
     Logger,
     isfinised,
@@ -101,17 +87,6 @@ include("pointstate.jl")
 include("mpcache.jl")
 include("transfer.jl")
 include("contact_mechanics.jl")
-
-abstract type MaterialModel end
-Broadcast.broadcastable(x::MaterialModel) = (x,)
-include("MaterialModels/utils.jl")
-include("MaterialModels/LinearElastic.jl")
-include("MaterialModels/SoilHypoelastic.jl")
-include("MaterialModels/SoilHyperelastic.jl")
-include("MaterialModels/VonMises.jl")
-include("MaterialModels/DruckerPrager.jl")
-include("MaterialModels/WaterModel.jl")
-include("MaterialModels/NewtonianFluid.jl")
 
 include("async.jl")
 

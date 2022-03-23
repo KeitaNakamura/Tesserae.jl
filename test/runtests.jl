@@ -21,10 +21,6 @@ include("pointstate.jl")
 include("mpcache.jl")
 include("transfer.jl")
 
-include("MaterialModels/models.jl")
-include("MaterialModels/SoilHyperelastic.jl")
-include("MaterialModels/DruckerPrager.jl")
-
 const fix_results = false
 
 function check_example(testname::String, case, interpolation; dx, kwargs...)

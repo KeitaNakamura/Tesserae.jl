@@ -41,6 +41,9 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
+      - name: Add custom registry
+        run: julia --proj=@. -e 'using Pkg; Pkg.Registry.add(RegistrySpec(url = "https://github.com/KeitaNakamura/KeitaNakamuraRegistry.git"))'
+        shell: bash
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1

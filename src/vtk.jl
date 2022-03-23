@@ -81,14 +81,15 @@ function defalut_output_paraview_append(file, grid, pointstate, t, index; output
     paraview_collection(file, append = true) do pvd
         vtk_multiblock(string(file, index)) do vtm
             vtk_points(vtm, pointstate.x; compress) do vtk
+                σ = pointstate.σ
                 ϵ = pointstate.ϵ
                 vtk["velocity"] = pointstate.v
-                vtk["mean stress"] = @dot_lazy mean(pointstate.σ)
-                vtk["pressure"] = @dot_lazy -mean(pointstate.σ)
-                vtk["deviatoric stress"] = @dot_lazy deviatoric_stress(pointstate.σ)
-                vtk["volumetric strain"] = @dot_lazy volumetric_strain(ϵ)
-                vtk["deviatoric strain"] = @dot_lazy deviatoric_strain(ϵ)
-                vtk["stress"] = pointstate.σ
+                vtk["mean stress"] = @dot_lazy mean(σ)
+                vtk["pressure"] = @dot_lazy -mean(σ)
+                vtk["von mises stress"] = @dot_lazy sqrt(3/2 * dev(σ) ⊡ dev(σ))
+                vtk["volumetric strain"] = @dot_lazy tr(ϵ)
+                vtk["deviatoric strain"] = @dot_lazy sqrt(2/3 * dev(ϵ) ⊡ dev(ϵ))
+                vtk["stress"] = σ
                 vtk["strain"] = ϵ
                 vtk["density"] = @dot_lazy pointstate.m / pointstate.V
             end

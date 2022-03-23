@@ -1,4 +1,5 @@
 using Poingr
+using MaterialModels
 
 function sandcolumn(
         interp = LinearWLS(QuadraticBSpline());
@@ -11,8 +12,8 @@ function sandcolumn(
     ρ₀ = 1.6e3
     g = 9.81
     h = 0.3
-    ϕ = 38
-    ψ = 0
+    ϕ = deg2rad(38)
+    ψ = deg2rad(0)
     ν = 0.333
     E = 1e6
 
@@ -20,7 +21,7 @@ function sandcolumn(
     pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, grid)
     cache = MPCache(grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
-    model = DruckerPrager(elastic, :plane_strain; c = 0, ϕ, ψ)
+    model = DruckerPrager(elastic, :planestrain; c=0, ϕ, ψ, tensioncutoff=0)
 
     for p in 1:length(pointstate)
         y = pointstate.x[p][2]
@@ -47,7 +48,7 @@ function sandcolumn(
 
         dt = minimum(pointstate) do p
             ρ = p.m / p.V
-            vc = matcalc(Val(:sound_speed), elastic.K, elastic.G, ρ)
+            vc = @matcalc(:soundspeed; elastic.K, elastic.G, ρ)
             CFL * minimum(gridsteps(grid)) / vc
         end
 
@@ -70,10 +71,11 @@ function sandcolumn(
         @inbounds Threads.@threads for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]
-            dϵ = symmetric(∇v) * dt
-            σ = matcalc(Val(:stress), model, σ_n, dϵ)
-            σ = matcalc(Val(:jaumann_stress), σ, σ_n, ∇v, dt)
-            if mean(σ) > model.tension_cutoff
+            dϵ = symmetric(∇v*dt)
+            ret = @matcalc(:stressall, model; σ = σ_n, dϵ)
+            dσᴶ = ret.σ - σ_n
+            σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann = dσᴶ, σ = σ_n, W = skew(∇v*dt))
+            if ret.status.tensioncutoff
                 # In this case, since the soil particles are not contacted with
                 # each other, soils should not act as continuum.
                 # This means that the deformation based on the contitutitive model
@@ -83,9 +85,7 @@ function sandcolumn(
                 # function, and ignore the plastic strain to prevent excessive generation.
                 # If we include this plastic strain, the volume of the material points
                 # will continue to increase unexpectedly.
-                σ_tr = matcalc(Val(:stress), model.elastic, σ_n, dϵ)
-                σ = Poingr.tension_cutoff(model, σ_tr)
-                dϵ = elastic.Dinv ⊡ (σ - σ_n)
+                dϵ = @matcalc(:strain, model.elastic; σ = σ - σ_n)
             end
             pointstate.σ[p] = σ
             pointstate.ϵ[p] += dϵ
