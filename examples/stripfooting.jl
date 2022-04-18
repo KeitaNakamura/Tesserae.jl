@@ -69,13 +69,13 @@ function stripfooting(
             v = grid.state.v[bound.I]
             n = bound.n
             x = grid[bound.I]
-            if isfooting[bound.I] && n == Vec(0, 1)
+            if isfooting[bound.I] && n == Vec(0, -1)
                 vertical_load += grid.state.m[bound.I] * ((v-v_footing)[2] / dt)
                 v = v_footing
-            elseif n == Vec(0, -1) # bottom
-                v += Contact(:sticky)(v, n)
+            elseif n == Vec(0, 1) # bottom
+                v += contacted(ContactMohrCoulomb(:sticky), v, n)
             else
-                v += Contact(:slip)(v, n)
+                v += contacted(ContactMohrCoulomb(:slip), v, n)
             end
             grid.state.v[bound.I] = v
         end
@@ -100,7 +100,7 @@ function stripfooting(
             ret = @matcalc(:stressall, model; σ = σ_n, dϵ)
             dσᴶ = ret.σ - σ_n
             σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann = dσᴶ, σ = σ_n, W = skew(∇v*dt))
-            if ret.status.tensioncutoff # if cutted off
+            if ret.status.tensioncutoff
                 # In this case, since the soil particles are not contacted with
                 # each other, soils should not act as continuum.
                 # This means that the deformation based on the contitutitive model

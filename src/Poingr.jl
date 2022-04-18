@@ -44,8 +44,9 @@ export
     grid_to_point,
 # Transfer
     Transfer,
-# Contact
-    Contact,
+# Frictional contact
+    ContactMohrCoulomb,
+    contacted,
 # Logger
     Logger,
     isfinised,

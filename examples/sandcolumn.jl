@@ -59,10 +59,10 @@ function sandcolumn(
         @inbounds for bound in eachboundary(grid)
             v = grid.state.v[bound.I]
             n = bound.n
-            if n == Vec(0, -1) # bottom
-                v += Contact(:friction, 0.2)(v, n)
+            if n == Vec(0, 1) # bottom
+                v += contacted(ContactMohrCoulomb(μ = 0.2), v, n)
             else
-                v += Contact(:slip)(v, n)
+                v += contacted(ContactMohrCoulomb(μ = 0), v, n)
             end
             grid.state.v[bound.I] = v
         end

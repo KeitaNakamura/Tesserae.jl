@@ -383,7 +383,7 @@ struct Boundary{dim}
 end
 
 function eachboundary(grid::Grid{dim, T}) where {dim, T}
-    _dir(pos::NodePosition, d::Int) = Vec{dim}(i -> ifelse(i === d, -pos.dir, 0))
+    _dir(pos::NodePosition, d::Int) = Vec{dim}(i -> ifelse(i === d, pos.dir, 0))
     function getbound(grid, I, d)
         @inbounds begin
             pos = node_position(grid, I, d)
