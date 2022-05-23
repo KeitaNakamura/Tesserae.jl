@@ -1,14 +1,19 @@
 @testset "BSplineValues" begin
     for T in (Float32, Float64)
-        for dim in 1:2
-            grid = Grid(ntuple(i -> 0.0:0.1:5.0, Val(dim)))
+        TOL = sqrt(eps(T))
+        for dim in 1:3
+            grid = Grid(ntuple(i -> 0:0.1:1, Val(dim)))
             for bspline in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),)
                 mpvalues = MPValues{dim, T}(bspline)
-                for x in Iterators.product(ntuple(i -> 0.0:0.05:5.0, Val(dim))...)
-                    update!(mpvalues, grid, Vec(x))
+                for _ in 1:2000
+                    x = rand(Vec{dim, T})
+                    update!(mpvalues, grid, x)
                     @test sum(mpvalues.N) ≈ 1
-                    if !isa(bspline, LinearBSpline)
-                        @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol = sqrt(eps(T))
+                    @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol=TOL
+                    l = Poingr.getsupportlength(bspline)
+                    if all(a->l<a<1-l, x)
+                        @test grid_to_point((mp,i) -> mp.N*grid[i], mpvalues) ≈ x atol=TOL
+                        @test grid_to_point((mp,i) -> grid[i]⊗mp.∇N, mpvalues) ≈ I atol=TOL
                     end
                 end
             end
@@ -18,14 +23,18 @@ end
 
 @testset "WLSValues" begin
     for T in (Float32, Float64)
-        for dim in 1:2
-            grid = Grid(ntuple(i -> 0.0:0.1:5.0, Val(dim)))
+        TOL = sqrt(eps(T))
+        for dim in 1:3
+            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim)))
             for bspline in (QuadraticBSpline(), CubicBSpline(),)
                 mpvalues = MPValues{dim, T}(LinearWLS(bspline))
-                for x in Iterators.product(ntuple(i -> 0.0:0.05:5.0, Val(dim))...)
-                    update!(mpvalues, grid, Vec(x))
+                for _ in 1:2000
+                    x = rand(Vec{dim, T})
+                    update!(mpvalues, grid, x)
                     @test sum(mpvalues.N) ≈ 1
-                    @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol = sqrt(eps(T))
+                    @test grid_to_point((mp,i) -> mp.N*grid[i], mpvalues) ≈ x atol=TOL
+                    @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol=TOL
+                    @test grid_to_point((mp,i) -> grid[i]⊗mp.∇N, mpvalues) ≈ I atol=TOL
                 end
             end
         end
@@ -34,18 +43,24 @@ end
 
 @testset "GIMPValues" begin
     for T in (Float32, Float64)
-        for dim in 1:2
-            grid = Grid(ntuple(i -> 0.0:0.1:5.0, Val(dim)))
+        TOL = sqrt(eps(T))
+        for dim in 1:3
+            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim)))
             for gimp in (GIMP(),)
                 mpvalues = MPValues{dim, T}(gimp)
+                side_length = gridsteps(grid) ./ 2
+                r = Vec(side_length ./ 2)
                 # GIMP doesn't have pertition of unity when closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
-                for x in Iterators.product(ntuple(i -> 1.0:0.05:4.0, Val(dim))...)
-                    side_length = gridsteps(grid) ./ 2
-                    r = Vec(side_length ./ 2)
-                    update!(mpvalues, grid, Vec(x), r)
-                    @test sum(mpvalues.N) ≈ 1
-                    @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol = sqrt(eps(T))
+                for _ in 1:2000
+                    x = rand(Vec{dim, T})
+                    if all(a->a[2]<a[1]<1-a[2], zip(x,r))
+                        update!(mpvalues, grid, x, r)
+                        @test sum(mpvalues.N) ≈ 1
+                        @test grid_to_point((mp,i) -> mp.N*grid[i], mpvalues) ≈ x atol=TOL
+                        @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol=TOL
+                        @test grid_to_point((mp,i) -> grid[i]⊗mp.∇N, mpvalues) ≈ I atol=TOL
+                    end
                 end
             end
         end
@@ -54,14 +69,24 @@ end
 
 @testset "KernelCorrectionValues" begin
     for T in (Float32, Float64)
-        for dim in 1:2
-            grid = Grid(ntuple(i -> 0.0:0.1:5.0, Val(dim)))
-            for bspline in (QuadraticBSpline(), CubicBSpline(),)
-                mpvalues = MPValues{dim, T}(KernelCorrection(bspline))
-                for x in Iterators.product(ntuple(i -> 0.05:0.05:0.45, Val(dim))...) # failed on exactly boundary
-                    update!(mpvalues, grid, Vec(x))
+        TOL = sqrt(eps(T))
+        for dim in 1:3
+            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim)))
+            side_length = gridsteps(grid) ./ 2
+            r = Vec(side_length ./ 2)
+            for kernel in (QuadraticBSpline(), CubicBSpline(), GIMP())
+                mpvalues = MPValues{dim, T}(KernelCorrection(kernel))
+                for _ in 1:2000
+                    x = rand(Vec{dim, T}) # failed on exactly boundary
+                    if kernel isa GIMP
+                        update!(mpvalues, grid, x, r)
+                    else
+                        update!(mpvalues, grid, x)
+                    end
                     @test sum(mpvalues.N) ≈ 1
-                    @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol = sqrt(eps(T))
+                    @test grid_to_point((mp,i) -> mp.N*grid[i], mpvalues) ≈ x atol=TOL
+                    @test sum(mpvalues.∇N) ≈ zero(Vec{dim}) atol=TOL
+                    @test grid_to_point((mp,i) -> grid[i]⊗mp.∇N, mpvalues) ≈ I atol=TOL
                 end
             end
         end
