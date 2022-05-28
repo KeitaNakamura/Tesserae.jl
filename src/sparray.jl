@@ -28,6 +28,114 @@ Broadcast.BroadcastStyle(::Type{<: SpPattern}) = ArrayStyle{SpPattern}()
 Base.similar(bc::Broadcasted{ArrayStyle{SpPattern}}, ::Type{Bool}) = SpPattern(size(bc))
 
 
+"""
+    SpArray{T}(dims...)
+
+`SpArray` is a kind of sparse array, but it is not allowed to freely change the value like `Array`:
+
+For example, trying to `setindex!` doesn't change anything without any errors as
+```jldoctest sparray
+julia> A = Marble.SpArray{Float64}(5,5)
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+
+julia> A[1,1]
+0.0
+
+julia> A[1,1] = 2
+2
+
+julia> A[1,1]
+0.0
+```
+
+This is because the index `(1,1)` is not activated yet.
+To activate the index, modify sparsity pattern `A.spat` and do `Metal.reinit!(A)`.
+
+```jldoctest sparray
+julia> A.spat[1,1] = true
+true
+
+julia> A[1,1] = 2; A[1,1] # still can't change anything before doing `reinit!`
+0.0
+
+julia> Marble.reinit!(A)
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+ 2.17321e-314  ⋅  ⋅  ⋅  ⋅
+  ⋅            ⋅  ⋅  ⋅  ⋅
+  ⋅            ⋅  ⋅  ⋅  ⋅
+  ⋅            ⋅  ⋅  ⋅  ⋅
+  ⋅            ⋅  ⋅  ⋅  ⋅
+
+julia> A[1,1] = 2; A[1,1] # finally can change the value
+2.0
+```
+
+Although the inactive indices return zero value when using `getindex`,
+the behaviors in array calculation is similar to `missing` value rather than zero value:
+
+```jldoctest sparray
+julia> A
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+ 2.0  ⋅  ⋅  ⋅  ⋅
+  ⋅   ⋅  ⋅  ⋅  ⋅
+  ⋅   ⋅  ⋅  ⋅  ⋅
+  ⋅   ⋅  ⋅  ⋅  ⋅
+  ⋅   ⋅  ⋅  ⋅  ⋅
+
+julia> C = rand(5,5)
+5×5 Matrix{Float64}:
+ 0.579862   0.639562  0.566704  0.870539  0.526344
+ 0.411294   0.839622  0.536369  0.962715  0.0779683
+ 0.972136   0.967143  0.711389  0.15118   0.966197
+ 0.0149088  0.789764  0.103929  0.715355  0.666558
+ 0.520355   0.696041  0.806704  0.939548  0.131026
+
+julia> A + C
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+
+julia> 3A
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+```
+
+Thus, inactive indices are propagated as
+
+```jldoctest sparray
+julia> B = Marble.SpArray{Float64}(5,5);
+
+julia> B.spat[3,3] = true; Marble.reinit!(B); B[3,3] = 8.0;
+
+julia> B
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+ ⋅  ⋅   ⋅   ⋅  ⋅
+ ⋅  ⋅   ⋅   ⋅  ⋅
+ ⋅  ⋅  8.0  ⋅  ⋅
+ ⋅  ⋅   ⋅   ⋅  ⋅
+ ⋅  ⋅   ⋅   ⋅  ⋅
+
+julia> A + B
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+```
+"""
 struct SpArray{T, dim, V <: AbstractVector{T}} <: AbstractArray{T, dim}
     data::V
     spat::SpPattern{dim}
@@ -43,6 +151,7 @@ SpArray{T}(dims::Int...) where {T} = SpArray{T}(dims)
 Base.IndexStyle(::Type{<: SpArray}) = IndexLinear()
 Base.size(x::SpArray) = size(x.spat)
 
+# handle `StructVector`
 Base.propertynames(x::SpArray{<: Any, <: Any, <: StructVector}) = (:data, :spat, propertynames(x.data)...)
 function Base.getproperty(x::SpArray{<: Any, <: Any, <: StructVector}, name::Symbol)
     name == :data && return getfield(x, :data)
@@ -50,17 +159,19 @@ function Base.getproperty(x::SpArray{<: Any, <: Any, <: StructVector}, name::Sym
     SpArray(getproperty(getfield(x, :data), name), getfield(x, :spat))
 end
 
+# return zero if the index is not active
 @inline function Base.getindex(x::SpArray, i::Int)
     @boundscheck checkbounds(x, i)
     spat = x.spat
     index = spat.indices[i]
     @inbounds index !== -1 ? x.data[index] : zero_recursive(eltype(x))
 end
+
+# do nothing if the index is not active (don't throw error!!)
 @inline function Base.setindex!(x::SpArray, v, i::Int)
     @boundscheck checkbounds(x, i)
     spat = x.spat
     @inbounds begin
-        # spat[i] || throw(UndefRefError()) # cannot use this because `@. A[indices] = A[indices]` doesn't work well yet
         index = spat.indices[i]
         index === -1 && return x
         x.data[index] = v
@@ -68,36 +179,19 @@ end
     x
 end
 
-@generated function unsafe_add_tuple!(xs::Tuple{Vararg{SpArray, N}}, i, v::Tuple{Vararg{Any, N}}) where {N}
-    exps = [:(xs[$i].data[index] += v[$i]) for i in 1:N]
-    quote
-        @_inline_propagate_inbounds_meta
-        spat = xs[1].spat
-        @inbounds begin
-            index = spat.indices[i]
-            $(exps...)
-        end
-        xs
-    end
-end
-
-# this function is also available for mixed use of `SpArray` and `AbstractArray`
-function unsafe_add_tuple!(xs::Tuple{Vararg{AbstractArray, N}}, i, v::Tuple{Vararg{Any, N}}) where {N}
-    @_inline_propagate_inbounds_meta
-    broadcast_tuple(unsafe_add!, xs, i, v)
-    xs
-end
-
-@inline function unsafe_add!(x::SpArray, i, v)
+# faster than using `setindex!(dest, dest + getindex(src, i))` when using `SpArray`
+# since the index is checked only once
+@inline function add!(x::SpArray, v, i)
     @boundscheck checkbounds(x, i)
     spat = x.spat
     @inbounds begin
         index = spat.indices[i]
-        x.data[index] += v # don't check if `index == -1`
+        index === -1 && return x
+        x.data[index] += v
     end
     x
 end
-@inline function unsafe_add!(x::AbstractArray, i, v)
+@inline function add!(x::AbstractArray, v, i)
     @boundscheck checkbounds(x, i)
     @inbounds x[i] += v
     x
@@ -115,32 +209,35 @@ reinit!(x::SpArray{Nothing}) = x # for Grid without NodeState type
 
 Broadcast.BroadcastStyle(::Type{<: SpArray}) = ArrayStyle{SpArray}()
 
-__extract_spats(spats::Tuple, x::Any) = spats
-__extract_spats(spats::Tuple, x::AbstractArray) = (spats..., nothing)
-_extract_spats(spats::Tuple, x::AbstractArray) = __extract_spats(spats, broadcastable(x)) # handle Tensor
-_extract_spats(spats::Tuple, x::SpArray) = (spats..., x.spat)
-_extract_spats(spats::Tuple, x::Any) = spats
-extract_spats(spats::Tuple, args::Tuple{}) = spats
-extract_spats(spats::Tuple, args::Tuple) = extract_spats(_extract_spats(spats, args[1]), Base.tail(args))
-identical_spat(args...) = (spats = extract_spats((), args); all(x -> x === spats[1], spats))
+@generated function extract_sparsity_patterns(args::Vararg{Any, N}) where {N}
+    exps = []
+    for i in 1:N
+        if args[i] <: SpArray
+            push!(exps, :(args[$i].spat))
+        elseif (args[i] <: AbstractArray) && !(args[i] <: AbstractTensor)
+            push!(exps, :nothing)
+        end
+    end
+    quote
+        tuple($(exps...))
+    end
+end
+identical(x, ys...) = all(y -> y === x, ys)
 
-getdata(x::SpArray) = x.data
-getdata(x::Any) = x
-
-getspat(x::SpArray) = x.spat
-getspat(x::AbstractArray) = ifelse(broadcastable(x) isa AbstractArray, true, false) # handle Tensor
-getspat(x::Any) = false
-
+_getspat(x::SpArray) = x.spat
+_getspat(x::Any) = false
 function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) where {ElType}
-    spat = broadcast(|, getspat.(bc.args)...)
+    spat = broadcast(&, map(_getspat, bc.args)...)
     reinit!(SpArray(Vector{ElType}(undef, length(bc)), spat))
 end
 
+_getdata(x::SpArray) = x.data
+_getdata(x::Any) = x
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.flatten(bc)
-    if identical_spat(dest, bc′.args...)
-        broadcast!(bc′.f, getdata(dest), map(getdata, bc′.args)...)
+    if identical(extract_sparsity_patterns(dest, bc′.args...)...)
+        broadcast!(bc′.f, _getdata(dest), map(_getdata, bc′.args)...)
     else
         copyto!(dest, convert(Broadcasted{Nothing}, bc′))
     end
@@ -150,8 +247,8 @@ end
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ThreadedStyle})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.flatten(bc.args[1])
-    if identical_spat(dest, bc′.args...)
-        _copyto!(getdata(dest), broadcasted(dot_threads, broadcasted(bc′.f, map(getdata, bc′.args)...)))
+    if identical(extract_sparsity_patterns(dest, bc′.args...)...)
+        _copyto!(_getdata(dest), broadcasted(dot_threads, broadcasted(bc′.f, map(_getdata, bc′.args)...)))
     else
         _copyto!(dest, broadcasted(dot_threads, bc′))
     end

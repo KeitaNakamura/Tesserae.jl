@@ -1,3 +1,4 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-Poingr = "573615e8-489b-4e48-952b-fc194aa7573b"
+Marble = "8a8a7a0b-5081-41d5-b488-cbbf872f9543"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"

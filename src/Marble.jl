@@ -1,9 +1,7 @@
-module Poingr
+module Marble
 
 using Base: @_inline_meta, @_propagate_inbounds_meta, @pure
-using Base.Cartesian: @ntuple, @nall
-
-using Base.Broadcast: Broadcasted, BroadcastStyle, AbstractArrayStyle, ArrayStyle, broadcasted, broadcastable, throwdm, preprocess
+using Base.Broadcast: Broadcasted, ArrayStyle, broadcasted
 
 using Reexport
 @reexport using Tensorial
@@ -13,6 +11,9 @@ using StaticArrays, StructArrays
 const BLOCK_UNIT = unsigned(3) # 2^3
 
 export
+# dot macros
+    @dot_threads,
+    @dot_lazy,
 # coordinate system
     CoordinateSystem,
     PlaneStrain,
@@ -22,9 +23,8 @@ export
     gridsteps,
     gridaxes,
     gridorigin,
+    boundaries,
     generate_pointstate,
-    setbounds!,
-    eachboundary,
 # interpolations
     update!,
     BSpline,
@@ -44,8 +44,13 @@ export
     grid_to_point,
 # Transfer
     Transfer,
+    TransferNormalFLIP,
+    TransferNormalPIC,
+    TransferTaylorFLIP,
+    TransferTaylorPIC,
+    TransferAffinePIC,
 # Frictional contact
-    ContactMohrCoulomb,
+    CoulombFriction,
     contacted,
 # Logger
     Logger,
@@ -53,24 +58,13 @@ export
     islogpoint,
     logindex,
 # VTK
-    vtk_points,
-# async
-    AsyncScheduler,
-    currenttime,
-    issynced,
-    synced_pointstate,
-    updatetimestep!,
-    asyncstep!,
-# dot macros
-    @dot_threads,
-    @dot_lazy
+    vtk_points
 
 
 include("utils.jl")
 include("dotmacros.jl")
-
-include("coordinate_system.jl")
 include("sparray.jl")
+include("misc.jl")
 
 abstract type Interpolation end
 include("grid.jl")
@@ -82,14 +76,10 @@ include("Interpolations/basis.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/correction.jl")
 
-include("nodestate.jl")
-include("pointstate.jl")
-
+include("states.jl")
 include("mpcache.jl")
 include("transfer.jl")
-include("contact_mechanics.jl")
-
-include("async.jl")
+include("contact.jl")
 
 include("logger.jl")
 include("vtk.jl")

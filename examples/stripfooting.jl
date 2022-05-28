@@ -1,4 +1,4 @@
-using Poingr
+using Marble
 using MaterialModels
 
 function stripfooting(
@@ -18,15 +18,15 @@ function stripfooting(
     ϕ = deg2rad(0)
     ψ = deg2rad(0)
     E = 1e9
-    v_footing = Vec(0.0, -4.0e-3)
 
     grid = Grid(interp, 0:dx:5.0, 0:dx:5.1)
-    isfooting = map(x -> x[1] ≤ 0.5 && 5.0 ≤ x[2] ≤ 5.1, grid)
-    setbounds!(grid, isfooting)
     pointstate = generate_pointstate((x,y) -> y < h, grid)
     cache = MPCache(grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c, ϕ, ψ, tensioncutoff=false)
+
+    v_footing = Vec(0.0, -4.0e-3)
+    footing_indices = findall(x -> x[1] ≤ 0.5 && x[2] == 5.0, grid)
 
     for p in 1:length(pointstate)
         y = pointstate.x[p][2]
@@ -45,7 +45,7 @@ function stripfooting(
     # Outputs
     mkpath(outdir)
     paraview_file = joinpath(outdir, "out")
-    Poingr.defalut_output_paraview_initialize(paraview_file)
+    Marble.defalut_output_paraview_initialize(paraview_file)
 
     logger = Logger(0.0, 0.1, 0.002; showprogress)
 
@@ -64,27 +64,26 @@ function stripfooting(
 
         transfer.point_to_grid!(grid, pointstate, cache, dt)
 
+        # boundary conditions
         vertical_load = 0.0
-        @inbounds for bound in eachboundary(grid)
-            v = grid.state.v[bound.I]
-            n = bound.n
-            x = grid[bound.I]
-            if isfooting[bound.I] && n == Vec(0, -1)
-                vertical_load += grid.state.m[bound.I] * ((v-v_footing)[2] / dt)
-                v = v_footing
-            elseif n == Vec(0, 1) # bottom
-                v += contacted(ContactMohrCoulomb(:sticky), v, n)
-            else
-                v += contacted(ContactMohrCoulomb(:slip), v, n)
-            end
-            grid.state.v[bound.I] = v
+        @inbounds for I in footing_indices
+            mᵢ = grid.state.m[I]
+            vᵢ = grid.state.v[I]
+            vertical_load += mᵢ * ((vᵢ-v_footing)[2] / dt)
+            grid.state.v[I] = v_footing
+        end
+        @inbounds for (I,n) in boundaries(grid, "-y") # bottom
+            grid.state.v[I] += contacted(CoulombFriction(:sticky), grid.state.v[I], n)
+        end
+        @inbounds for (I,n) in boundaries(grid, "-x", "+x") # left and right
+            grid.state.v[I] += contacted(CoulombFriction(:slip), grid.state.v[I], n)
         end
 
         transfer.grid_to_point!(pointstate, grid, cache, dt)
 
         @. tr∇v = tr(pointstate.∇v)
         if handle_volumetric_locking
-            Poingr.smooth_pointstate!(tr∇v, pointstate.V, grid, cache)
+            Marble.smooth_pointstate!(tr∇v, pointstate.V, grid, cache)
         end
 
         @inbounds Threads.@threads for p in eachindex(pointstate)
@@ -123,14 +122,13 @@ function stripfooting(
         push!(load, vertical_load)
 
         if islogpoint(logger)
-            Poingr.defalut_output_paraview_append(
+            Marble.defalut_output_paraview_append(
                 paraview_file,
                 grid,
                 pointstate,
                 t,
                 logindex(logger);
                 output_grid = true,
-                compress = true,
             )
         end
     end

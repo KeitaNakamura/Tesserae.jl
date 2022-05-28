@@ -1,12 +1,12 @@
 # https://discourse.julialang.org/t/multithreaded-broadcast/26786/6
-struct ThreadedStyle <: BroadcastStyle end
+struct ThreadedStyle <: Broadcast.BroadcastStyle end
 function dot_threads end
 @inline Broadcast.broadcasted(f::typeof(dot_threads), x) = Broadcasted{ThreadedStyle}(identity, (x,))
 
 @inline function _copyto!(dest::AbstractArray, bc::Broadcasted{ThreadedStyle})
     @assert bc.f === identity
     @assert bc.args isa Tuple{Any}
-    bc′ = preprocess(dest, bc.args[1])
+    bc′ = Broadcast.preprocess(dest, only(bc.args))
     Threads.@threads for I in eachindex(bc′)
         @inbounds dest[I] = bc′[I]
     end
@@ -14,11 +14,11 @@ function dot_threads end
 end
 
 function Base.similar(bc::Broadcasted{ThreadedStyle}, ::Type{ElType}) where {ElType}
-    similar(bc.args[1], ElType)
+    similar(only(bc.args), ElType)
 end
 
 @inline function Base.copyto!(dest::AbstractArray, bc::Broadcasted{ThreadedStyle})
-    axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
+    axes(dest) == axes(bc) || Broadcast.throwdm(axes(dest), axes(bc))
     _copyto!(dest, bc)
     dest
 end
@@ -31,9 +31,9 @@ macro dot_threads(ex)
         end
     end
     if Meta.isexpr(ex, :(=))
-        ex.args[2] = Expr(:call, :(Poingr.dot_threads), ex.args[2])
+        ex.args[2] = Expr(:call, :(Marble.dot_threads), ex.args[2])
     else
-        ex = Expr(:call, :(Poingr.dot_threads), ex)
+        ex = Expr(:call, :(Marble.dot_threads), ex)
     end
     esc(Broadcast.__dot__(ex))
 end
@@ -53,12 +53,12 @@ Base.size(A::LazyDotArray) = map(length, axes(A))
 @inline LazyDotArray(bc::Broadcasted) = _LazyDotArray(bc, axes(bc))
 @inline LazyDotArray(f, args...) = LazyDotArray(broadcasted(f, args...))
 
-struct LazyDotStyle <: BroadcastStyle end
+struct LazyDotStyle <: Broadcast.BroadcastStyle end
 function dot_lazy end
 @inline Broadcast.broadcasted(f::typeof(dot_lazy), x) = Broadcasted{LazyDotStyle}(identity, (x,))
-@inline Broadcast.materialize(bc::Broadcasted{LazyDotStyle}) = LazyDotArray(bc.args[1])
+@inline Broadcast.materialize(bc::Broadcasted{LazyDotStyle}) = LazyDotArray(only(bc.args))
 
 macro dot_lazy(ex)
-    ex = Expr(:call, :(Poingr.dot_lazy), ex)
+    ex = Expr(:call, :(Marble.dot_lazy), ex)
     esc(Broadcast.__dot__(ex))
 end

@@ -1,17 +1,10 @@
-struct Index{dim}
-    i::Int
-    I::CartesianIndex{dim}
-end
-@inline Base.checkindex(::Type{Bool}, inds::AbstractUnitRange, i::Index) = checkindex(Bool, inds, i.i)
-@inline _to_indices(::IndexLinear, A, inds, I::Tuple{Index, Vararg{Any}}) = to_indices(A, inds, (I[1].i, Base.tail(I)...))
-@inline _to_indices(::IndexCartesian, A, inds, I::Tuple{Index, Vararg{Any}}) = to_indices(A, inds, (Tuple(I[1].I)..., Base.tail(I)...))
-@inline Base.to_indices(A, inds, I::Tuple{Index, Vararg{Any}}) = _to_indices(IndexStyle(A), A, inds, I)
-
 nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
 
 promote_tuple_length() = -1
 promote_tuple_length(xs::Type{<: NTuple{N, Any}}...) where {N} = N
-@generated function broadcast_tuple(f, xs::Vararg{Any, N}) where {N}
+# apply map calculations only for tuples
+# if one of the argunents is not tuple, treat it as scalar
+@generated function maptuple(f, xs::Vararg{Any, N}) where {N}
     L = promote_tuple_length([x for x in xs if x <: Tuple]...)
     if L == -1 # no tuples
         quote

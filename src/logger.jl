@@ -1,13 +1,13 @@
 import Dates
 import ProgressMeter
-import ProgressMeter: Progress, BarGlyphs
+import ProgressMeter: Progress
 
 const PROGRESS_METER_MAX = 10000
 
 mutable struct Logger
     # log
     logpoints::Vector{Float64}
-    i::Int
+    index::Int
     islogpoint::Bool
     # progress
     prog::Progress
@@ -18,13 +18,12 @@ mutable struct Logger
     nlines::Int
 end
 
-function Logger(start::Real, stop::Real, step::Real; showprogress::Bool=false, color::Symbol=:yellow)
+function Logger(start::Real, stop::Real, step::Real; showprogress::Bool=true, color::Symbol=:yellow)
     @assert start < stop
     logpoints = collect(start:step:stop)
     last(logpoints) < stop && push!(logpoints, stop)
     prog = Progress(
         PROGRESS_METER_MAX;
-        barglyphs = BarGlyphs('|', '█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'], ' ', '|'),
         barlen = 20,
         color,
     )
@@ -35,7 +34,7 @@ t_start(log::Logger) = first(logpoints(log))
 t_stop(log::Logger) = last(logpoints(log))
 
 logpoints(logger::Logger) = logger.logpoints
-logindex(logger::Logger) = logger.i
+logindex(logger::Logger) = logger.index
 islogpoint(logger::Logger) = logger.islogpoint
 
 function isfinised(logger::Logger, t::Real)
@@ -48,6 +47,7 @@ function progress_int(logger::Logger, t::Real)
     floor(Int, PROGRESS_METER_MAX * ((t - t0) / (t1 - t0)))
 end
 
+# `showprogress` must be `true` to `print`
 function update!(logger::Logger, t::Real; print = nothing)
     if logger.showprogress
         if logindex(logger) == -1 # time stamp for start
@@ -91,8 +91,8 @@ function update!(logger::Logger, t::Real; print = nothing)
     end
 
     i = searchsortedlast(logpoints(logger), t) - 1
-    if logger.i < i # not yet logged
-        logger.i = i
+    if logger.index < i # not yet logged
+        logger.index = i
         logger.islogpoint = true
     else
         logger.islogpoint = false

@@ -1,5 +1,5 @@
 ```@meta
-DocTestSetup = :(using Poingr)
+DocTestSetup = :(using Marble)
 ```
 
 # Interpolations
@@ -10,7 +10,7 @@ Pages = ["interpolations.md"]
 ```
 
 ```@autodocs
-Modules = [Poingr]
+Modules = [Marble]
 Order   = [:type, :function]
 Pages   = ["Interpolations/mpvalues.jl",
            "Interpolations/bspline.jl",

@@ -3,14 +3,16 @@ end
 @pure KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
 
 @pure getkernelfunction(::KernelCorrection{K}) where {K} = K()
-getsupportlength(c::KernelCorrection, args...) = getsupportlength(getkernelfunction(c), args...)
+
+@inline function neighbornodes(x::KernelCorrection, grid::Grid, pt)
+    neighbornodes(getkernelfunction(x), grid, pt)
+end
 
 
 struct KernelCorrectionValue{dim, T} <: MPValue
     N::T
     ∇N::Vec{dim, T}
-    I::Index{dim}
-    x::Vec{dim, T}
+    xp::Vec{dim, T}
 end
 
 mutable struct KernelCorrectionValues{K, dim, T, nnodes} <: MPValues{dim, T, KernelCorrectionValue{dim, T}}
@@ -18,102 +20,76 @@ mutable struct KernelCorrectionValues{K, dim, T, nnodes} <: MPValues{dim, T, Ker
     N::MVector{nnodes, T}
     ∇N::MVector{nnodes, Vec{dim, T}}
     gridindices::MVector{nnodes, Index{dim}}
-    x::Vec{dim, T}
+    xp::Vec{dim, T}
     len::Int
 end
 
+# constructors
 function KernelCorrectionValues{K, dim, T, nnodes}() where {K, dim, T, nnodes}
     N = MVector{nnodes, T}(undef)
     ∇N = MVector{nnodes, Vec{dim, T}}(undef)
     gridindices = MVector{nnodes, Index{dim}}(undef)
-    x = zero(Vec{dim, T})
-    KernelCorrectionValues(KernelCorrection(K()), N, ∇N, gridindices, x, 0)
+    xp = zero(Vec{dim, T})
+    KernelCorrectionValues(KernelCorrection(K()), N, ∇N, gridindices, xp, 0)
 end
-
 function MPValues{dim, T}(c::KernelCorrection{K}) where {dim, T, K}
-    L = nnodes(K(), Val(dim))
+    L = getnnodes(K(), Val(dim))
     KernelCorrectionValues{K, dim, T, L}()
 end
 
 getkernelfunction(c::KernelCorrectionValues) = getkernelfunction(c.F)
 
-function _update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{dim}, x::Vec{dim}, spat::AbstractArray{Bool, dim}, inds, args...) where {dim, T}
-    F = getkernelfunction(mpvalues)
+function update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{<: Any, dim}, pt, spat::AbstractArray{Bool, dim}) where {dim, T}
+    # reset
     fillzero!(mpvalues.N)
     fillzero!(mpvalues.∇N)
-    mpvalues.x = x
 
-    dx⁻¹ = gridsteps_inv(grid)
-    iscompleted = update_gridindices!(mpvalues, inds, spat)
-    if iscompleted
-        wᵢ, ∇wᵢ = values_gradients(F, x .* dx⁻¹, args...)
-        @inbounds @simd for i in 1:length(mpvalues)
-            I = mpvalues.gridindices[i]
-            xᵢ = grid[I]
-            mpvalues.N[i] = wᵢ[i]
-            mpvalues.∇N[i] = ∇wᵢ[i] .* dx⁻¹
-        end
+    F = getkernelfunction(mpvalues)
+    xp = getx(pt) # defined in wls.jl
+
+    # update
+    mpvalues.xp = xp
+    allactive = update_active_gridindices!(mpvalues, neighbornodes(F, grid, pt), spat)
+    if allactive
+        wᵢ, ∇wᵢ = values_gradients(F, grid, pt)
+        mpvalues.N .= wᵢ
+        mpvalues.∇N .= ∇wᵢ
     else
         A = zero(Mat{dim, dim, T})
         β = zero(Vec{dim, T})
         A′ = zero(Mat{dim, dim, T})
         β′ = zero(Vec{dim, T})
         @inbounds @simd for i in 1:length(mpvalues)
-            I = mpvalues.gridindices[i]
-            xᵢ = grid[I]
-            ξ = (x - xᵢ) .* dx⁻¹
-            ∇w, w = gradient(ξ -> value(F, ξ, args...), ξ, :all)
-            ∇w = ∇w .* dx⁻¹
-            A += w * (xᵢ - x) ⊗ (xᵢ - x)
-            β += w * (xᵢ - x)
-            A′ += ∇w ⊗ (xᵢ - x)
+            I = gridindices(mpvalues, i)
+            xi = grid[I]
+            w, ∇w = value_gradient(F, grid, I, pt)
+            A += w * (xi - xp) ⊗ (xi - xp)
+            β += w * (xi - xp)
+            A′ += ∇w ⊗ (xi - xp)
             β′ += ∇w
             mpvalues.N[i] = w
             mpvalues.∇N[i] = ∇w
         end
-        A⁻¹ = inv(A)
-        β = -(A⁻¹ ⋅ β)
-        A′⁻¹ = inv(A′)
-        β′ = -(A′⁻¹ ⋅ β′)
+        β = inv(A) ⋅ β
+        β′ = inv(A′) ⋅ β′
         α = zero(T)
         α′ = zero(Mat{dim, dim, T})
         @inbounds @simd for i in 1:length(mpvalues)
-            I = mpvalues.gridindices[i]
-            xᵢ = grid[I]
-            w = mpvalues.N[i]
-            ∇w = mpvalues.∇N[i]
-            α += w * (1 + β ⋅ (xᵢ - x))
-            α′ += (xᵢ ⊗ ∇w) * (1 + β′ ⋅ (xᵢ - x))
+            I = gridindices(mpvalues, i)
+            xi = grid[I]
+            mpvalues.N[i] *= 1 + β ⋅ (xp - xi)
+            mpvalues.∇N[i] *= 1 + β′ ⋅ (xp - xi)
+            α += mpvalues.N[i]
+            α′ += xi ⊗ mpvalues.∇N[i]
         end
-        α = inv(α)
-        α′ = inv(α′)
-        @inbounds @simd for i in 1:length(mpvalues)
-            I = mpvalues.gridindices[i]
-            xᵢ = grid[I]
-            w = mpvalues.N[i]
-            ∇w = mpvalues.∇N[i]
-            mpvalues.N[i] = w * α * (1 + β ⋅ (xᵢ - x))
-            mpvalues.∇N[i] = ∇w ⋅ α′ * (1 + β′ ⋅ (xᵢ - x))
-        end
+        @. mpvalues.N = mpvalues.N * $inv(α)
+        @. mpvalues.∇N = mpvalues.∇N ⋅ $inv(α′)
     end
 
     mpvalues
 end
 
-function update!(mpvalues::KernelCorrectionValues, grid::Grid, x::Vec, spat::AbstractArray{Bool})
-    F = getkernelfunction(mpvalues)
-    dx⁻¹ = gridsteps_inv(grid)
-    _update!(mpvalues, grid, x, spat, neighboring_nodes(grid, x, getsupportlength(F)))
-end
-
-function update!(mpvalues::KernelCorrectionValues{GIMP}, grid::Grid, x::Vec, r::Vec, spat::AbstractArray{Bool})
-    F = getkernelfunction(mpvalues)
-    dx⁻¹ = gridsteps_inv(grid)
-    rdx⁻¹ = r.*dx⁻¹
-    _update!(mpvalues, grid, x, spat, neighboring_nodes(grid, x, getsupportlength(F, rdx⁻¹)), rdx⁻¹)
-end
-
 @inline function Base.getindex(mpvalues::KernelCorrectionValues, i::Int)
     @_propagate_inbounds_meta
-    KernelCorrectionValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.gridindices[i], mpvalues.x)
+    KernelCorrectionValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.xp)
 end

@@ -1,5 +1,5 @@
 ```@meta
-DocTestSetup = :(using Poingr)
+DocTestSetup = :(using Marble)
 ```
 
 # Contact mechanics
@@ -10,7 +10,7 @@ Pages = ["contact_mechanics.md"]
 ```
 
 ```@autodocs
-Modules = [Poingr]
+Modules = [Marble]
 Order   = [:type, :function]
-Pages   = ["contact_mechanics.jl"]
+Pages   = ["contact.jl"]
 ```

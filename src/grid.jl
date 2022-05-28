@@ -1,119 +1,3 @@
-struct NodePosition
-    nth::Int
-    dir::Int # 1 or -1
-end
-nthfrombound(pos::NodePosition) = pos.nth
-dirfrombound(pos::NodePosition) = pos.dir
-
-struct BoundaryCondition{dim}
-    boundcontours::NTuple{dim, Array{Int, dim}}
-    node_positions::NTuple{dim, Array{NodePosition, dim}}
-end
-
-node_position(bc::BoundaryCondition, I, d) = (@_propagate_inbounds_meta; bc.node_positions[d][I])
-node_position(bc::BoundaryCondition{dim}, I) where {dim} = (@_propagate_inbounds_meta; ntuple(d -> node_position(bc, I, d), Val(dim)))
-
-@inline function isonbound(bc::BoundaryCondition, I, d::Int)
-    @_propagate_inbounds_meta
-    pos = node_position(bc, I, d)
-    pos.nth === 0 && pos.dir !== 0
-end
-@inline function isonbound(bc::BoundaryCondition{dim}, I) where {dim}
-    @_propagate_inbounds_meta
-    |(ntuple(d -> isonbound(bc, I, d), Val(dim))...)
-end
-
-@inline function isinbound(bc::BoundaryCondition, I, d::Int)
-    @_propagate_inbounds_meta
-    pos = node_position(bc, I, d)
-    pos.nth === 0 && pos.dir === 0
-end
-@inline function isinbound(bc::BoundaryCondition{dim}, I) where {dim}
-    @_propagate_inbounds_meta
-    prod(ntuple(d -> isinbound(bc, I, d), Val(dim)))
-end
-
-function set_boundcontour!(boundcontour::AbstractVector{Int}, start::Int, dir::Int)
-    @boundscheck checkbounds(boundcontour, start)
-    @assert dir == 1 || dir == -1
-    nth = 0
-    for i in start:dir:ifelse(dir==1, lastindex(boundcontour), firstindex(boundcontour))
-        if nth < boundcontour[i]
-            boundcontour[i] = nth
-        end
-        nth += 1
-    end
-    boundcontour
-end
-
-function set_boundcontour!(boundcontour::AbstractVector{Int}, withinbounds::AbstractVector{Bool})
-    @assert size(boundcontour) == size(withinbounds)
-    set_boundcontour!(boundcontour, firstindex(boundcontour), 1)
-    set_boundcontour!(boundcontour, lastindex(boundcontour), -1)
-    for i in eachindex(withinbounds)
-        if withinbounds[i] == true
-            set_boundcontour!(boundcontour, i,  1)
-            set_boundcontour!(boundcontour, i, -1)
-        end
-    end
-    boundcontour
-end
-
-function eachaxis(x::AbstractArray{<: Any, dim}, d::Int) where {dim}
-    @assert d ≤ ndims(x)
-    _colon(x) = x:x
-    _eachindex(x, i) = 1:size(x, i)
-    axisindices(x, I) = ntuple(i -> i == d ? _eachindex(x, i) : _colon(I[i]), Val(dim))
-    slice = CartesianIndices(ntuple(i -> i == d ? _colon(1) : _eachindex(x, i), Val(dim)))
-    (vec(view(x, axisindices(x, I)...)) for I in slice)
-end
-
-function _direction(contour::AbstractVector{Int})
-    @inbounds begin
-        if length(contour) == 2
-            contour[1] < contour[2] && return 1
-            contour[1] > contour[2] && return -1
-            return 0
-        elseif length(contour) == 3
-            (contour[1] < contour[2] || contour[2] < contour[3]) && return 1
-            (contour[1] > contour[2] || contour[2] > contour[3]) && return -1
-            return 0
-        else
-            error("unreachable")
-        end
-    end
-end
-
-function BoundaryCondition(withinbounds::AbstractArray{Bool, dim}) where {dim}
-    boundcontours = ntuple(d -> Array{Int}(undef, size(withinbounds)), Val(dim))
-    node_positions = ntuple(d -> Array{NodePosition}(undef, size(withinbounds)), Val(dim))
-    bc = BoundaryCondition(boundcontours, node_positions)
-    setbounds!(bc, withinbounds)
-    bc
-end
-
-function setbounds!(bc::BoundaryCondition{dim}, withinbounds::AbstractArray{Bool, dim}) where {dim}
-    for d in 1:dim
-        # update boundcontours
-        boundcontour = bc.boundcontours[d]
-        @assert size(boundcontour) == size(withinbounds)
-        fill!(boundcontour, size(boundcontour, d) + 1) # set large value for initialization
-        for args in zip(eachaxis(boundcontour, d), eachaxis(withinbounds, d))
-            set_boundcontour!(args...)
-        end
-        # update node_positions
-        node_position = bc.node_positions[d]
-        for (axis, contour) in zip(eachaxis(node_position, d), eachaxis(boundcontour, d))
-            @assert length(axis) == length(contour)
-            @inbounds for i in eachindex(axis)
-                inds = intersect(i-1:i+1, eachindex(axis))
-                axis[i] = NodePosition(contour[i], _direction(@view contour[inds]))
-            end
-        end
-    end
-end
-
-
 """
     Grid([::Type{NodeState}], [::Interpolation], axes::AbstractVector...)
 
@@ -122,21 +6,20 @@ Construct `Grid` by `axes`.
 # Examples
 ```jldoctest
 julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
-4×4 Grid{2, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, PlaneStrain}:
+4×4 Grid{Float64, 2, Nothing, Nothing, Marble.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, PlaneStrain}:
  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Grid{dim, T, F <: Union{Nothing, Interpolation}, Node, State <: SpArray{Node, dim}, CS <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
+struct Grid{T, dim, F <: Union{Nothing, Interpolation}, Node, State <: SpArray{Node, dim}, CS <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
     interpolation::F
     axes::NTuple{dim, Vector{T}}
     gridsteps::NTuple{dim, T}
     gridsteps_inv::NTuple{dim, T}
     state::State
     coordinate_system::CS
-    bc::BoundaryCondition{dim}
 end
 
 Base.size(x::Grid) = map(length, gridaxes(x))
@@ -148,54 +31,45 @@ gridaxes(x::Grid) = x.axes
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 
-node_position(grid::Grid, I) = (@_propagate_inbounds_meta; node_position(grid.bc, I))
-node_position(grid::Grid, I, d) = (@_propagate_inbounds_meta; node_position(grid.bc, I, d))
-isonbound(grid::Grid, I) = (@_propagate_inbounds_meta; isonbound(grid.bc, I))
-isonbound(grid::Grid, I, d::Int) = (@_propagate_inbounds_meta; isonbound(grid.bc, I, d))
-isinbound(grid::Grid, I) = (@_propagate_inbounds_meta; isinbound(grid.bc, I))
-isinbound(grid::Grid, I, d::Int) = (@_propagate_inbounds_meta; isinbound(grid.bc, I, d))
-setbounds!(grid::Grid, withinbounds::AbstractArray{Bool}) = setbounds!(grid.bc, withinbounds)
-
-check_interpolation(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("`Grid` must include the information of interpolation, see help `?Grid` for more details."))
+check_interpolation(::Grid{<: Any, <: Any, Nothing}) = throw(ArgumentError("no interpolation information in `Grid`"))
 check_interpolation(::Grid{<: Any, <: Any, <: Interpolation}) = nothing
 
-function Grid(::Type{Node}, interp, axes::NTuple{dim, AbstractVector}; coordinate_system = nothing, withinbounds = falses(map(length, axes))) where {Node, dim}
+# `axes` isa `Tuple`
+function Grid{T}(::Type{Node}, interp, axes::NTuple{dim, AbstractVector}; coordinate_system = nothing) where {T, dim, Node}
     state = SpArray(StructVector{Node}(undef, 0), SpPattern(map(length, axes)))
     dx = map(step, axes)
-    dx⁻¹ = inv.(dx)
-
-    T = promote_type(eltype.(axes)...)
-    T = ifelse(T <: Integer, Float64, T) # use Float64 by default
+    dx⁻¹ = map(inv, dx)
 
     Grid(
         interp,
         map(Array{T}, axes),
-        T.(dx),
-        T.(dx⁻¹),
+        map(T, dx),
+        map(T, dx⁻¹),
         state,
         get_coordinate_system(coordinate_system, Val(dim)),
-        BoundaryCondition(withinbounds)
     )
 end
-function Grid(interp::Interpolation, axes::NTuple{dim, AbstractVector}; kwargs...) where {dim}
-    T = promote_type(map(eltype, axes)...)
+function Grid{T}(interp::Interpolation, axes::NTuple{dim, AbstractVector}; kwargs...) where {T, dim}
     Node = default_nodestate_type(interp, Val(dim), Val(T))
-    Grid(Node, interp, axes; kwargs...)
+    Grid{T}(Node, interp, axes; kwargs...)
 end
-Grid(axes::Tuple{Vararg{AbstractVector}}; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
+Grid{T}(axes::Tuple{Vararg{AbstractVector}}; kwargs...) where {T} = Grid{T}(Nothing, nothing, axes; kwargs...)
 
-# `interp` must be given if Node is given
-Grid(Node::Type, interp, axes::AbstractVector...; kwargs...) = Grid(Node, interp, axes; kwargs...)
-Grid(interp::Interpolation, axes::AbstractVector...; kwargs...) = Grid(interp, axes; kwargs...)
-Grid(axes::AbstractVector...; kwargs...) = Grid(Nothing, nothing, axes; kwargs...)
+# `axes` isa `Vararg`
+Grid{T}(Node::Type, interp, axes::AbstractVector...; kwargs...) where {T} = Grid{T}(Node, interp, axes; kwargs...)
+Grid{T}(interp::Interpolation, axes::AbstractVector...; kwargs...) where {T} = Grid{T}(interp, axes; kwargs...)
+Grid{T}(axes::AbstractVector...; kwargs...) where {T} = Grid{T}(Nothing, nothing, axes; kwargs...)
 
-@inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
+# `T == Float64` by default
+Grid(args...; kwargs...) = Grid{Float64}(args...; kwargs...)
+
+@inline function Base.getindex(grid::Grid{<: Any, dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(grid, i...)
     @inbounds Vec(map(getindex, grid.axes, i))
 end
 
 """
-    Poingr.neighboring_nodes(grid, x::Vec, h)
+    Marble.neighbornodes(grid, x::Vec, h)
 
 Return `CartesianIndices` storing neighboring node indices around `x`.
 `h` is a range for searching and its unit is `gridsteps` `dx`.
@@ -204,7 +78,7 @@ In 1D, for example, the searching range becomes `x ± h*dx`.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0)
-6-element Grid{1, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 1, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, Poingr.OneDimensional}:
+6-element Grid{Float64, 1, Nothing, Nothing, Marble.SpArray{Nothing, 1, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, Marble.OneDimensional}:
  [0.0]
  [1.0]
  [2.0]
@@ -212,12 +86,12 @@ julia> grid = Grid(0.0:1.0:5.0)
  [4.0]
  [5.0]
 
-julia> Poingr.neighboring_nodes(grid, Vec(1.5), 1)
+julia> Marble.neighbornodes(grid, Vec(1.5), 1)
 2-element CartesianIndices{1, Tuple{UnitRange{Int64}}}:
  CartesianIndex(2,)
  CartesianIndex(3,)
 
-julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
+julia> Marble.neighbornodes(grid, Vec(1.5), 2)
 4-element CartesianIndices{1, Tuple{UnitRange{Int64}}}:
  CartesianIndex(1,)
  CartesianIndex(2,)
@@ -225,90 +99,41 @@ julia> Poingr.neighboring_nodes(grid, Vec(1.5), 2)
  CartesianIndex(4,)
 ```
 """
-@inline function neighboring_nodes(grid::Grid{dim}, x::Vec{dim}, h) where {dim}
+@inline function neighbornodes(grid::Grid{<: Any, dim}, x::Vec{dim}, h) where {dim}
     dx⁻¹ = gridsteps_inv(grid)
     xmin = gridorigin(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
     T = eltype(ξ)
     all(@. zero(T) ≤ ξ ≤ T($size(grid)-1)) || return CartesianIndices(nfill(1:0, Val(dim)))
     # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
-    # This means `neighboring_nodes` doesn't include bounds of range.
-    _neighboring_nodes(size(grid), ξ, @. T(h) - sqrt(eps(T)))
+    # This means `neighbornodes` doesn't include bounds of range.
+    _neighbornodes(size(grid), ξ, @. T(h) - sqrt(eps(T)))
 end
-@inline function neighboring_nodes(grid::Grid, x::Vec)
-    check_interpolation(grid)
-    neighboring_nodes(grid, x, getsupportlength(grid.interpolation))
-end
-
-@inline function _neighboring_nodes(dims::Dims, ξ, h)
+@inline function _neighbornodes(dims::Dims, ξ, h)
     imin = Tuple(@. max(unsafe_trunc(Int,  ceil(ξ - h)) + 1, 1))
     imax = Tuple(@. min(unsafe_trunc(Int, floor(ξ + h)) + 1, dims))
     CartesianIndices(@. UnitRange(imin, imax))
 end
 
-
-"""
-    Poingr.neighboring_cells(grid, x::Vec, h::Int)
-    Poingr.neighboring_cells(grid, cellindex::CartesianIndex, h::Int)
-
-Return `CartesianIndices` storing neighboring cell indices around `x`.
-`h` is number of outer cells around cell where `x` locates.
-In 1D, for example, the searching range becomes `x ± h*dx`.
-
-# Examples
-```jldoctest
-julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
-6×6 Grid{2, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, PlaneStrain}:
- [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
- [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
- [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
- [3.0, 0.0]  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]  [3.0, 5.0]
- [4.0, 0.0]  [4.0, 1.0]  [4.0, 2.0]  [4.0, 3.0]  [4.0, 4.0]  [4.0, 5.0]
- [5.0, 0.0]  [5.0, 1.0]  [5.0, 2.0]  [5.0, 3.0]  [5.0, 4.0]  [5.0, 5.0]
-
-julia> x = Vec(1.5, 1.5);
-
-julia> Poingr.neighboring_cells(grid, x, 1)
-3×3 CartesianIndices{2, Tuple{UnitRange{Int64}, UnitRange{Int64}}}:
- CartesianIndex(1, 1)  CartesianIndex(1, 2)  CartesianIndex(1, 3)
- CartesianIndex(2, 1)  CartesianIndex(2, 2)  CartesianIndex(2, 3)
- CartesianIndex(3, 1)  CartesianIndex(3, 2)  CartesianIndex(3, 3)
-
-julia> Poingr.neighboring_cells(grid, Poingr.whichcell(grid, x), 1) == ans
-true
-```
-"""
-function neighboring_cells(grid::Grid{dim}, cellindex::CartesianIndex{dim}, h::Int) where {dim}
-    inds = CartesianIndices(size(grid) .- 1)
-    @boundscheck checkbounds(inds, cellindex)
-    u = oneunit(cellindex)
-    inds ∩ (cellindex-h*u:cellindex+h*u)
-end
-
-@inline function neighboring_cells(grid::Grid, x::Vec, h::Int)
-    neighboring_cells(grid, whichcell(grid, x), h)
-end
-
-function neighboring_blocks(grid::Grid{dim}, blockindex::CartesianIndex{dim}, h::Int) where {dim}
+function neighborblocks(grid::Grid{<: Any, dim}, blockindex::CartesianIndex{dim}, h::Int) where {dim}
     inds = CartesianIndices(blocksize(grid))
     @boundscheck checkbounds(inds, blockindex)
     u = oneunit(blockindex)
     inds ∩ (blockindex-h*u:blockindex+h*u)
 end
-
-@inline function neighboring_blocks(grid::Grid, x::Vec, h::Int)
-    neighboring_blocks(grid, whichblock(grid, x), h)
+@inline function neighborblocks(grid::Grid, x::Vec, h::Int)
+    neighborblocks(grid, whichblock(grid, x), h)
 end
 
 """
-    Poingr.whichcell(grid, x::Vec)
+    Marble.whichcell(grid, x::Vec)
 
 Return cell index where `x` locates.
 
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
-6×6 Grid{2, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, PlaneStrain}:
+6×6 Grid{Float64, 2, Nothing, Nothing, Marble.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, PlaneStrain}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -316,11 +141,11 @@ julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
  [4.0, 0.0]  [4.0, 1.0]  [4.0, 2.0]  [4.0, 3.0]  [4.0, 4.0]  [4.0, 5.0]
  [5.0, 0.0]  [5.0, 1.0]  [5.0, 2.0]  [5.0, 3.0]  [5.0, 4.0]  [5.0, 5.0]
 
-julia> Poingr.whichcell(grid, Vec(1.5, 1.5))
+julia> Marble.whichcell(grid, Vec(1.5, 1.5))
 CartesianIndex(2, 2)
 ```
 """
-@inline function whichcell(grid::Grid{dim}, x::Vec{dim}) where {dim}
+@inline function whichcell(grid::Grid{<: Any, dim}, x::Vec{dim}) where {dim}
     dx⁻¹ = gridsteps_inv(grid)
     xmin = gridorigin(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
@@ -329,7 +154,7 @@ CartesianIndex(2, 2)
 end
 
 """
-    Poingr.whichblock(grid, x::Vec)
+    Marble.whichblock(grid, x::Vec)
 
 Return block index where `x` locates.
 The unit block size is `2^$BLOCK_UNIT` cells.
@@ -337,7 +162,7 @@ The unit block size is `2^$BLOCK_UNIT` cells.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0)
-11×11 Grid{2, Float64, Nothing, Nothing, Poingr.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, PlaneStrain}:
+11×11 Grid{Float64, 2, Nothing, Nothing, Marble.SpArray{Nothing, 2, StructArrays.StructVector{Nothing, NamedTuple{(), Tuple{}}, Int64}}, PlaneStrain}:
  [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
  [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
  [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]
@@ -350,7 +175,7 @@ julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0)
  [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]      [9.0, 9.0]   [9.0, 10.0]
  [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
 
-julia> Poingr.whichblock(grid, Vec(8.5, 1.5))
+julia> Marble.whichblock(grid, Vec(8.5, 1.5))
 CartesianIndex(2, 1)
 ```
 """
@@ -361,7 +186,6 @@ CartesianIndex(2, 1)
 end
 
 blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
-
 
 struct BlockStepIndices{N} <: AbstractArray{CartesianIndex{N}, N}
     inds::NTuple{N, StepRange{Int, Int}}
@@ -377,20 +201,31 @@ function threadsafe_blocks(gridsize::NTuple{dim, Int}) where {dim}
 end
 
 
-struct Boundary{dim}
+struct Boundaries{dim} <: AbstractArray{Tuple{CartesianIndex{dim}, Vec{dim, Int}}, dim}
+    inds::CartesianIndices{dim}
     n::Vec{dim, Int}
-    I::CartesianIndex{dim}
 end
+Base.IndexStyle(::Type{<: Boundaries}) = IndexCartesian()
+Base.size(x::Boundaries) = size(x.inds)
+Base.getindex(x::Boundaries{dim}, I::Vararg{Int, dim}) where {dim} = (@_propagate_inbounds_meta; (x.inds[I...], x.n))
 
-function eachboundary(grid::Grid{dim, T}) where {dim, T}
-    _dir(pos::NodePosition, d::Int) = Vec{dim}(i -> ifelse(i === d, pos.dir, 0))
-    function getbound(grid, I, d)
-        @inbounds begin
-            pos = node_position(grid, I, d)
-            Boundary(_dir(pos, d), I)
-        end
+function _boundaries(grid::AbstractArray{<: Any, dim}, which::String) where {dim}
+    if     which[2] == 'x'; axis = 1
+    elseif which[2] == 'y'; axis = 2
+    elseif which[2] == 'z'; axis = 3
+    else error("invalid bound name")
     end
-    ntuple(Val(dim)) do d
-        (getbound(grid, I, d) for I in CartesianIndices(grid) if @inbounds(isonbound(grid, I, d)))
-    end |> Iterators.flatten
+
+    if     which[1] == '-'; index = firstindex(grid, axis); dir =  1
+    elseif which[1] == '+'; index =  lastindex(grid, axis); dir = -1
+    else error("invalid bound name")
+    end
+
+    inds = CartesianIndices(ntuple(d -> d==axis ? (index:index) : axes(grid, d), Val(dim)))
+    n = Vec(ntuple(d -> ifelse(d==axis, dir, 0), Val(dim)))
+
+    Boundaries(inds, n)
+end
+function boundaries(grid::AbstractArray, which::Vararg{String, N}) where {N}
+    Iterators.flatten(ntuple(i -> _boundaries(grid, which[i]), Val(N)))
 end

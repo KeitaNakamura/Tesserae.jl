@@ -1,8 +1,8 @@
 ```@meta
-DocTestSetup = :(using Poingr)
+DocTestSetup = :(using Marble)
 ```
 
-# Poingr.VTKOutputs
+# Marble.VTKOutputs
 
 ```@index
 Order = [:type, :function]
@@ -10,7 +10,7 @@ Pages = ["VTK_outputs.md"]
 ```
 
 ```@autodocs
-Modules = [Poingr]
+Modules = [Marble]
 Order   = [:type, :function]
 Pages   = ["vtk.jl"]
 ```

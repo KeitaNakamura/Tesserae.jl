@@ -14,33 +14,38 @@ struct G2P_Default   end
 struct Transfer{P2G, G2P}
     point_to_grid!::P2G
     grid_to_point!::G2P
+    Transfer{P2G, G2P}() where {P2G, G2P} = new(P2G(), G2P())
 end
-Transfer{P2G, G2P}() where {P2G, G2P} = Transfer(P2G(), G2P())
-Transfer() = Transfer{P2G_Default, G2P_Default}()
+# default
+@pure Transfer() = Transfer{P2G_Default, G2P_Default}()
 
+# supported transfer combinations
 const TransferNormalFLIP = Transfer{P2G_Normal, G2P_FLIP}
 const TransferNormalPIC  = Transfer{P2G_Normal, G2P_PIC}
 const TransferTaylorFLIP = Transfer{P2G_Taylor, G2P_FLIP}
 const TransferTaylorPIC  = Transfer{P2G_Taylor, G2P_PIC}
 const TransferAffinePIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
-export
-    TransferNormalFLIP,
-    TransferNormalPIC,
-    TransferTaylorFLIP,
-    TransferTaylorPIC,
-    TransferAffinePIC
 
-P2G_default(::BSpline) = P2G_Normal()
-P2G_default(::GIMP) = P2G_Normal()
-P2G_default(::LinearWLS) = P2G_Taylor()
-P2G_default(::WLS) = P2G_WLS()
-P2G_default(::KernelCorrection) = P2G_Taylor()
+########################
+# default combinations #
+########################
 
-G2P_default(::BSpline) = G2P_FLIP()
-G2P_default(::GIMP) = G2P_FLIP()
-G2P_default(::LinearWLS) = G2P_PIC()
-G2P_default(::WLS) = G2P_WLS()
-G2P_default(::KernelCorrection) = G2P_PIC()
+# original MPM
+@pure P2G_default(::Kernel) = P2G_Normal()
+@pure G2P_default(::Kernel) = G2P_FLIP()
+
+# WLS
+@pure P2G_default(::WLS) = P2G_WLS()
+@pure G2P_default(::WLS) = G2P_WLS()
+
+# linear WLS
+# use Taylor-PIC for performance
+@pure P2G_default(::LinearWLS) = P2G_Taylor()
+@pure G2P_default(::LinearWLS) = G2P_PIC()
+
+# kernel correction
+@pure P2G_default(::KernelCorrection) = P2G_Taylor()
+@pure G2P_default(::KernelCorrection) = G2P_PIC()
 
 ################
 # P2G transfer #
@@ -99,7 +104,7 @@ function (::P2G_AffinePIC)(grid::Grid, pointstate, cache::MPCache, dt::Real)
     grid
 end
 
-function (::P2G_Taylor)(grid::Grid{dim}, pointstate, cache::MPCache{dim}, dt::Real) where {dim}
+function (::P2G_Taylor)(grid::Grid{<: Any, dim}, pointstate, cache::MPCache{dim}, dt::Real) where {dim}
     point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
@@ -233,15 +238,15 @@ function (::G2P_AffinePIC)(pointstate, grid::Grid, cache::MPCache, dt::Real)
     pointstate
 end
 
-function (::G2P_WLS)(pointstate, grid::Grid{dim}, cache::MPCache, dt::Real) where {dim}
+function (::G2P_WLS)(pointstate, grid::Grid{<: Any, dim}, cache::MPCache, dt::Real) where {dim}
     P = getbasisfunction(grid.interpolation)
     p0 = value(P, zero(Vec{dim, Int}))
     ∇p0 = gradient(P, zero(Vec{dim, Int}))
     grid_to_point!(pointstate.C, cache) do mp, i, p
         @_inline_propagate_inbounds_meta
         w = mp.w
-        M⁻¹ = mp.M⁻¹
-        grid.state.v[i] ⊗ (w * M⁻¹ ⋅ value(P, grid[i] - pointstate.x[p]))
+        Minv = mp.Minv
+        grid.state.v[i] ⊗ (w * Minv ⋅ value(P, grid[i] - pointstate.x[p]))
     end
     @inbounds Threads.@threads for p in 1:length(pointstate)
         Cₚ = pointstate.C[p]

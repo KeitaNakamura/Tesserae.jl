@@ -1,4 +1,4 @@
-using Poingr
+using Marble
 using MaterialModels
 
 function sandcolumn(
@@ -39,7 +39,7 @@ function sandcolumn(
     # Outputs
     mkpath(outdir)
     paraview_file = joinpath(outdir, "out")
-    Poingr.defalut_output_paraview_initialize(paraview_file)
+    Marble.defalut_output_paraview_initialize(paraview_file)
 
     logger = Logger(0.0, 0.6, 0.01; showprogress)
 
@@ -56,15 +56,12 @@ function sandcolumn(
 
         transfer.point_to_grid!(grid, pointstate, cache, dt)
 
-        @inbounds for bound in eachboundary(grid)
-            v = grid.state.v[bound.I]
-            n = bound.n
-            if n == Vec(0, 1) # bottom
-                v += contacted(ContactMohrCoulomb(μ = 0.2), v, n)
-            else
-                v += contacted(ContactMohrCoulomb(μ = 0), v, n)
-            end
-            grid.state.v[bound.I] = v
+        # boundary conditions
+        @inbounds for (I,n) in boundaries(grid, "-y") # bottom
+            grid.state.v[I] += contacted(CoulombFriction(μ = 0.2), grid.state.v[I], n)
+        end
+        @inbounds for (I,n) in boundaries(grid, "-x", "+x") # left and right
+            grid.state.v[I] += contacted(CoulombFriction(μ = 0), grid.state.v[I], n)
         end
 
         transfer.grid_to_point!(pointstate, grid, cache, dt)
@@ -95,14 +92,13 @@ function sandcolumn(
         update!(logger, t += dt)
 
         if islogpoint(logger)
-            Poingr.defalut_output_paraview_append(
+            Marble.defalut_output_paraview_append(
                 paraview_file,
                 grid,
                 pointstate,
                 t,
                 logindex(logger);
                 output_grid = true,
-                compress = true,
             )
         end
     end
