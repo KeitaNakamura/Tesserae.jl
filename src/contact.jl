@@ -29,21 +29,29 @@ end
 """
     CoulombFriction(:sticky)
 
-This is the same as the `CoulombFriction(; μ = Inf, separation = false)`.
+This is the same as the `CoulombFriction(; μ = Inf)`.
 
 ---
 
     CoulombFriction(:slip; separation = false)
 
 This is the same as the `CoulombFriction(; μ = 0, separation = false)`.
+
+---
+
+    CoulombFriction(:free)
+
+No boundary condition. This is the same as the `CoulombFriction(; μ = NaN)`.
 """
 function CoulombFriction(cond::Symbol; separation = false)
     cond == :sticky && return CoulombFriction(; μ = Inf, separation = false)
     cond == :slip   && return CoulombFriction(; μ = 0, separation)
-    throw(ArgumentError("Use `:sticky` or `:slip` for contact condition"))
+    cond == :free   && return CoulombFriction(; μ = NaN, separation = false)
+    throw(ArgumentError("Use `:sticky`, `:slip` or `:free` for contact condition"))
 end
 
-issticky(cond::CoulombFriction) = isinf(cond.μ) && !cond.separation
+isfree(cond::CoulombFriction) = isnan(cond.μ)
+issticky(cond::CoulombFriction) = isinf(cond.μ)
 isslip(cond::CoulombFriction) = iszero(cond.μ) && iszero(cond.c)
 
 """
@@ -63,11 +71,17 @@ julia> v + contacted(cond, v, n)
 2-element Vec{2, Float64}:
  1.0
  0.0
+
+julia> v + contacted(CoulombFriction(:free), v, n) == v
+true
 ```
 """
 function contacted(cond::CoulombFriction, q::Vec{dim, T}, n::Vec{dim, T})::Vec{dim, T} where {dim, T}
     # `q` can be used as velocity `v` or force `f`
     # use the relative velocity when using `q` as velocity.
+
+    # Free: don't apply anything, just return zero value
+    isfree(cond) && return zero(Vec{dim, T})
 
     # Sticky: leaving is also not allowed like chewing gum
     # so just apply `q` with opposite direction
