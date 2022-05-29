@@ -56,7 +56,7 @@ julia> A[1,1]
 This is because the index `(1,1)` is not activated yet.
 To activate the index, modify sparsity pattern `A.spat` and do `Metal.reinit!(A)`.
 
-```jldoctest sparray
+```jl sparray
 julia> A.spat[1,1] = true
 true
 
@@ -78,7 +78,7 @@ julia> A[1,1] = 2; A[1,1] # finally can change the value
 Although the inactive indices return zero value when using `getindex`,
 the behaviors in array calculation is similar to `missing` value rather than zero value:
 
-```jldoctest sparray
+```jldoctest sparray; setup = :(A.spat[1,1]=true; Marble.reinit!(A); A[1,1]=2)
 julia> A
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
  2.0  ⋅  ⋅  ⋅  ⋅
