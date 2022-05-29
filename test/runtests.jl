@@ -48,10 +48,10 @@ end
 @testset "Check examples" begin
     dx = 0.01
     check_example("sandcolumn", 1, QuadraticBSpline(); dx)
-    check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx)
+    check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx, transfer = Marble.TransferWLS())
     check_example("sandcolumn", 2, LinearWLS(QuadraticBSpline()); dx, transfer = TransferTaylorPIC())
     check_example("sandcolumn", 3, BilinearWLS(QuadraticBSpline()); dx)
-    check_example("sandcolumn", 4, KernelCorrection(QuadraticBSpline()); dx)
+    check_example("sandcolumn", 4, KernelCorrection(QuadraticBSpline()); dx, transfer = TransferTaylorPIC())
     check_example("sandcolumn", 5, KernelCorrection(QuadraticBSpline()); dx, transfer = TransferAffinePIC())
     dx = 0.125
     ν = 0.3
@@ -59,6 +59,6 @@ end
     check_example("stripfooting", 1, LinearBSpline(); dx, ν, handle_volumetric_locking)
     check_example("stripfooting", 2, GIMP(); dx, ν, handle_volumetric_locking, CFL = 0.5)
     check_example("stripfooting", 3, LinearWLS(QuadraticBSpline()); dx, ν, handle_volumetric_locking)
-    check_example("stripfooting", 4, KernelCorrection(QuadraticBSpline()); dx, ν, handle_volumetric_locking)
+    check_example("stripfooting", 4, KernelCorrection(QuadraticBSpline()); dx, ν, handle_volumetric_locking, transfer = TransferTaylorPIC())
     check_example("stripfooting", 5, KernelCorrection(QuadraticBSpline()); dx, ν, handle_volumetric_locking, transfer = TransferAffinePIC())
 end

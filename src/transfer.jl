@@ -25,27 +25,22 @@ const TransferNormalPIC  = Transfer{P2G_Normal, G2P_PIC}
 const TransferTaylorFLIP = Transfer{P2G_Taylor, G2P_FLIP}
 const TransferTaylorPIC  = Transfer{P2G_Taylor, G2P_PIC}
 const TransferAffinePIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
+const TransferWLS        = Transfer{P2G_WLS, G2P_WLS}
 
 ########################
 # default combinations #
 ########################
 
 # original MPM
-@pure P2G_default(::Kernel) = P2G_Normal()
-@pure G2P_default(::Kernel) = G2P_FLIP()
+@pure P2G_default(::Union{Kernel, KernelCorrection}) = P2G_Normal()
+@pure G2P_default(::Union{Kernel, KernelCorrection}) = G2P_FLIP()
 
 # WLS
 @pure P2G_default(::WLS) = P2G_WLS()
 @pure G2P_default(::WLS) = G2P_WLS()
-
-# linear WLS
-# use Taylor-PIC for performance
+# using Taylor-PIC gives the same results with high performance
 @pure P2G_default(::LinearWLS) = P2G_Taylor()
 @pure G2P_default(::LinearWLS) = G2P_PIC()
-
-# kernel correction
-@pure P2G_default(::KernelCorrection) = P2G_Taylor()
-@pure G2P_default(::KernelCorrection) = G2P_PIC()
 
 ################
 # P2G transfer #
