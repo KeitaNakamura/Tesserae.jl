@@ -5,7 +5,7 @@ using Test
 using ReadVTK
 using NaturalSort
 
-include("utils.jl")
+include("misc.jl")
 include("sparray.jl")
 include("grid.jl")
 include("interpolations.jl")

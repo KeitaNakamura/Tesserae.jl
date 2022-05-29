@@ -1,4 +1,4 @@
-@testset "Marble.Index" begin
+@testset "Index" begin
     li = LinearIndices((10,10))
     ci = CartesianIndices((10,10))
     index = Marble.Index(13, CartesianIndex(3,2))
