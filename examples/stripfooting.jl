@@ -19,7 +19,7 @@ function stripfooting(
     ψ = deg2rad(0)
     E = 1e9
 
-    grid = Grid(interp, 0:dx:5.0, 0:dx:5.1)
+    grid = Grid(interp, 0:dx:5.0, 0:dx:5.0)
     pointstate = generate_pointstate((x,y) -> y < h, grid)
     cache = MPCache(grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
@@ -72,6 +72,7 @@ function stripfooting(
             vertical_load += mᵢ * ((vᵢ-v_footing)[2] / dt)
             grid.state.v[I] = v_footing
         end
+        # don't apply any condition (free condition) on top boundary to properly handle diriclet boundary condition
         @inbounds for (I,n) in boundaries(grid, "-y") # bottom
             grid.state.v[I] += contacted(CoulombFriction(:sticky), grid.state.v[I], n)
         end
