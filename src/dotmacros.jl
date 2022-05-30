@@ -39,19 +39,23 @@ macro dot_threads(ex)
 end
 
 
-struct LazyDotArray{T, N, F, Args} <: AbstractArray{T, N}
-    f::F
-    args::Args
+struct LazyDotArray{T, N, Style, Axes <: Tuple, F, Args <: Tuple} <: AbstractArray{T, N}
+    bc::Broadcasted{Style, Axes, F, Args}
 end
-Base.axes(A::LazyDotArray) = axes(broadcasted(A))
-Base.size(A::LazyDotArray) = map(length, axes(A))
-@inline Base.broadcasted(A::LazyDotArray) = broadcasted(A.f, A.args...)
-@inline Base.getindex(A::LazyDotArray{<: Any, N}, i::Vararg{Int, N}) where {N} = (@_propagate_inbounds_meta; broadcasted(A)[i...])
-
-@inline _LazyDotArray(bc::Broadcasted{<: Any, <: Any, F, Args}, axes::Tuple{Vararg{Any, N}}) where {N, F, Args} =
-    LazyDotArray{Broadcast.combine_eltypes(bc.f, bc.args), N, F, Args}(bc.f, bc.args)
-@inline LazyDotArray(bc::Broadcasted) = _LazyDotArray(bc, axes(bc))
+@inline function LazyDotArray(bc::Broadcasted{Style, Axes, F, Args}) where {N, Style, Axes <: Tuple{Vararg{Any, N}}, F, Args}
+    T = Broadcast.combine_eltypes(bc.f, bc.args)
+    LazyDotArray{T, N, Style, Axes, F, Args}(bc)
+end
+@inline LazyDotArray(bc::Broadcasted{<: Any, Nothing}) = LazyDotArray(Broadcast.instantiate(bc))
 @inline LazyDotArray(f, args...) = LazyDotArray(broadcasted(f, args...))
+
+Base.axes(A::LazyDotArray) = axes(A.bc)
+Base.size(A::LazyDotArray) = map(length, axes(A))
+@inline function Base.getindex(A::LazyDotArray{T, N}, i::Vararg{Int, N})::T where {T, N}
+    @_propagate_inbounds_meta
+    A.bc[i...]
+end
+
 
 struct LazyDotStyle <: Broadcast.BroadcastStyle end
 function dot_lazy end
