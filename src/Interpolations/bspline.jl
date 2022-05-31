@@ -118,7 +118,7 @@ function value(spline::BSpline{3}, ξ::Real, pos::Int)::typeof(ξ)
     end
 end
 @inline value(bspline::BSpline, ξ::Vec, pos::Tuple{Vararg{Int}}) = prod(maptuple(value, bspline, Tuple(ξ), pos))
-function value_gradient(bspline::BSpline, grid::Grid, I::Index, xp::Vec, ::Symbol) # last argument is pseudo argument `:open_knot`
+function value_gradient(bspline::BSpline, grid::Grid, I::Index, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
     @_inline_propagate_inbounds_meta
     xi = grid[I]
     dx⁻¹ = gridsteps_inv(grid)
@@ -253,7 +253,7 @@ function update!(mpvalues::BSplineValues, grid::Grid, xp::Vec, spat::AbstractArr
     update_active_gridindices!(mpvalues, neighbornodes(F, grid, xp), spat)
     @inbounds @simd for i in 1:length(mpvalues)
         I = gridindices(mpvalues, i)
-        mpvalues.N[i], mpvalues.∇N[i] = value_gradient(F, grid, I, xp, :open_knot)
+        mpvalues.N[i], mpvalues.∇N[i] = value_gradient(F, grid, I, xp, :steffen)
     end
     mpvalues
 end
