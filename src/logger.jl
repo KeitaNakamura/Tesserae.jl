@@ -49,6 +49,10 @@ end
 
 # `showprogress` must be `true` to `print`
 function update!(logger::Logger, t::Real; print = nothing)
+    if !isnothing(print) && !logger.showprogress
+        error("Logger: `showprogress` must be `true` when using `print` option in `update!`")
+    end
+
     if logger.showprogress
         if logindex(logger) == -1 # time stamp for start
             printstyled("Start: ", Dates.now(); logger.color)
