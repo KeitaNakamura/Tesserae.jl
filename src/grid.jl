@@ -115,16 +115,6 @@ end
     CartesianIndices(@. UnitRange(imin, imax))
 end
 
-function neighborblocks(grid::Grid{<: Any, dim}, blockindex::CartesianIndex{dim}, h::Int) where {dim}
-    inds = CartesianIndices(blocksize(grid))
-    @boundscheck checkbounds(inds, blockindex)
-    u = oneunit(blockindex)
-    inds ∩ (blockindex-h*u:blockindex+h*u)
-end
-@inline function neighborblocks(grid::Grid, x::Vec, h::Int)
-    neighborblocks(grid, whichblock(grid, x), h)
-end
-
 """
     Marble.whichcell(grid, x::Vec)
 

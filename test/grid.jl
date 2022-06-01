@@ -27,14 +27,11 @@ end
     @test @inferred(gridaxes(grid, 2)) == 1:2.0:20
     @test @inferred(gridorigin(grid))::Vec{2} == Vec(0,1)
 
-    # neighbornodes/neighborblocks/whichcell/whichblock
+    # neighbornodes/whichcell/whichblock
     @test @inferred(Marble.neighbornodes(grid, Vec(0.6, 8.8), 1))::CartesianIndices == CartesianIndices((1:2, 4:5))
     @test @inferred(Marble.neighbornodes(grid, Vec(0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:3, 3:6))
     @test @inferred(Marble.neighbornodes(grid, Vec(-0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:0, 1:0))
     @test @inferred(Marble.neighbornodes(grid, Vec(0.6, 8.8), Vec(1,2)))::CartesianIndices == CartesianIndices((1:2, 3:6))
-    @test @inferred(Marble.neighborblocks(grid, Vec(8.8, 4.6), 1))::CartesianIndices == CartesianIndices((1:2, 1:2))
-    @test @inferred(Marble.neighborblocks(grid, Vec(8.8, 4.6), 2))::CartesianIndices == CartesianIndices((1:2, 1:2))
-    @test_throws BoundsError Marble.neighborblocks(grid, CartesianIndex(3, 1), 1)
     @test (Marble.whichcell(grid, Vec(0.6, 8.8)))::CartesianIndex == CartesianIndex(1, 4)
     @test (Marble.whichcell(grid, Vec(-0.6, 8.8)))::Nothing == nothing
     @test (Marble.whichblock(grid, Vec(8.8, 4.6)))::CartesianIndex == CartesianIndex(2, 1)
