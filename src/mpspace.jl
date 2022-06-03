@@ -21,7 +21,7 @@ MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace
 gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = space.npts[]
 get_pointsinblock(space::MPSpace) = space.ptsinblk
-get_sparsitypattern(space::MPSpace) = space.spat
+get_sppattern(space::MPSpace) = space.spat
 get_interpolation(space::MPSpace) = space.interp
 get_stamp(space::MPSpace) = space.stamp[]
 
@@ -62,7 +62,7 @@ function pointsinblock(grid::Grid, xₚ::AbstractVector)
     pointsinblock!(ptsinblk, grid, xₚ)
 end
 
-function update_sparsitypattern!(spat::Array{Bool}, interp::Interpolation, grid::Grid, pointstate::AbstractVector, ptsinblk::AbstractArray{Vector{Int}}; exclude)
+function update_sppattern!(spat::Array{Bool}, interp::Interpolation, grid::Grid, pointstate::AbstractVector, ptsinblk::AbstractArray{Vector{Int}}; exclude)
     @assert size(spat) == size(grid)
     fill!(spat, false)
     for blocks in threadsafe_blocks(size(grid))
@@ -109,7 +109,7 @@ function update!(space::MPSpace, pointstate; exclude::Union{Nothing, AbstractArr
     allocate!(i -> eltype(mpvalues)(), mpvalues, length(pointstate))
 
     pointsinblock!(ptsinblk, grid, pointstate.x)
-    update_sparsitypattern!(spat, get_interpolation(space), grid, pointstate, ptsinblk; exclude)
+    update_sppattern!(spat, get_interpolation(space), grid, pointstate, ptsinblk; exclude)
 
     Threads.@threads for p in 1:length(pointstate)
         @inbounds update!(mpvalues[p], grid, LazyRow(pointstate, p), spat)
@@ -118,8 +118,8 @@ function update!(space::MPSpace, pointstate; exclude::Union{Nothing, AbstractArr
     space
 end
 
-function update_sparsitypattern!(spat::SpArray, MPSpace::MPSpace)
-    update_sparsitypattern!(spat, get_sparsitypattern(MPSpace))
+function update_sppattern!(spat::SpArray, MPSpace::MPSpace)
+    update_sppattern!(spat, get_sppattern(MPSpace))
     spat.stamp[] = get_stamp(MPSpace)
     spat
 end

@@ -10,7 +10,7 @@ Base.IndexStyle(::Type{<: SpPattern}) = IndexLinear()
 
 @inline Base.getindex(spat::SpPattern, i::Int) = (@_propagate_inbounds_meta; spat.indices[i] !== -1)
 
-function update_sparsitypattern!(spat::SpPattern, mask::AbstractArray{Bool})
+function update_sppattern!(spat::SpPattern, mask::AbstractArray{Bool})
     @assert size(spat) == size(mask)
     count = 0
     @inbounds for i in eachindex(spat)
@@ -23,9 +23,9 @@ end
 """
     SpArray{T}(dims...)
 
-`SpArray` is a kind of sparse array, but it is not allowed to freely change the value like `Array`:
-
+`SpArray` is a kind of sparse array, but it is not allowed to freely change the value like `Array`.
 For example, trying to `setindex!` doesn't change anything without any errors as
+
 ```jldoctest sparray
 julia> A = Marble.SpArray{Float64}(5,5)
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
@@ -46,7 +46,7 @@ julia> A[1,1]
 ```
 
 This is because the index `(1,1)` is not activated yet.
-To activate the index, update sparsity pattern by `update_sparsitypattern!(A, spat)`.
+To activate the index, update sparsity pattern by `update_sppattern!(A, spat)`.
 
 ```jl sparray
 julia> spat = falses(5,5); spat[1,1] = true; spat
@@ -57,7 +57,7 @@ julia> spat = falses(5,5); spat[1,1] = true; spat
  0  0  0  0  0
  0  0  0  0  0
 
-julia> update_sparsitypattern!(A, spat)
+julia> update_sppattern!(A, spat)
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
  2.17321e-314  ⋅  ⋅  ⋅  ⋅
   ⋅            ⋅  ⋅  ⋅  ⋅
@@ -70,9 +70,9 @@ julia> A[1,1] = 2; A[1,1]
 ```
 
 Although the inactive indices return zero value when using `getindex`,
-the behaviors in array calculation is similar to `missing` value rather than zero value:
+the behaviors in array calculation is similar to `missing` rather than zero:
 
-```jldoctest sparray; setup = :(spat=falses(5,5); spat[1,1]=true; update_sparsitypattern!(A, spat); A[1,1]=2)
+```jldoctest sparray; setup = :(spat=falses(5,5); spat[1,1]=true; update_sppattern!(A, spat); A[1,1]=2)
 julia> A
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
  2.0  ⋅  ⋅  ⋅  ⋅
@@ -111,7 +111,7 @@ Thus, inactive indices are propagated as
 ```jldoctest sparray
 julia> B = Marble.SpArray{Float64}(5,5);
 
-julia> fill!(spat, false); spat[3,3] = true; update_sparsitypattern!(B, spat); B[3,3] = 8.0;
+julia> fill!(spat, false); spat[3,3] = true; update_sppattern!(B, spat); B[3,3] = 8.0;
 
 julia> B
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
@@ -148,6 +148,7 @@ Base.IndexStyle(::Type{<: SpArray}) = IndexLinear()
 Base.size(x::SpArray) = size(x.spat)
 
 get_stamp(x::SpArray) = getfield(x, :stamp)[]
+get_sppattern(x::SpArray) = getfield(x, :spat)
 
 # handle `StructVector`
 Base.propertynames(x::SpArray{<: Any, <: Any, <: StructVector}) = (:data, :spat, :stamp, :parent, propertynames(x.data)...)
@@ -199,18 +200,22 @@ end
 
 fillzero!(x::SpArray) = (fillzero!(x.data); x)
 
-function update_sparsitypattern!(x::SpArray, spat::AbstractArray{Bool})
+function update_sppattern!(x::SpArray, spat::AbstractArray{Bool})
     @assert x.parent
     @assert size(x) == size(spat)
-    n = update_sparsitypattern!(x.spat, spat)
+    n = update_sppattern!(x.spat, spat)
     resize!(x.data, n)
     x.stamp[] = NaN
     x
 end
 
+#############
+# Broadcast #
+#############
+
 Broadcast.BroadcastStyle(::Type{<: SpArray}) = ArrayStyle{SpArray}()
 
-@generated function extract_sparsity_patterns(args::Vararg{Any, N}) where {N}
+@generated function extract_sppatterns(args::Vararg{Any, N}) where {N}
     exps = []
     for i in 1:N
         if args[i] <: SpArray
@@ -232,7 +237,7 @@ function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) wher
     spat = BitArray(undef, dims)
     broadcast!(&, spat, map(_getspat, bc.args)...)
     A = SpArray{ElType}(dims)
-    update_sparsitypattern!(A, spat)
+    update_sppattern!(A, spat)
     A
 end
 
@@ -241,7 +246,7 @@ _getdata(x::Any) = x
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.flatten(bc)
-    if identical(extract_sparsity_patterns(dest, bc′.args...)...)
+    if identical(extract_sppatterns(dest, bc′.args...)...)
         broadcast!(bc′.f, _getdata(dest), map(_getdata, bc′.args)...)
     else
         copyto!(dest, convert(Broadcasted{Nothing}, bc′))
@@ -251,8 +256,8 @@ end
 
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ThreadedStyle})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
-    bc′ = Broadcast.flatten(bc.args[1])
-    if identical(extract_sparsity_patterns(dest, bc′.args...)...)
+    bc′ = Broadcast.flatten(only(bc.args))
+    if identical(extract_sppatterns(dest, bc′.args...)...)
         _copyto!(_getdata(dest), broadcasted(dot_threads, broadcasted(bc′.f, map(_getdata, bc′.args)...)))
     else
         _copyto!(dest, broadcasted(dot_threads, bc′))
@@ -260,6 +265,9 @@ function Base.copyto!(dest::SpArray, bc::Broadcasted{ThreadedStyle})
     dest
 end
 
+###############
+# Custom show #
+###############
 
 struct CDot end
 Base.show(io::IO, x::CDot) = print(io, "⋅")

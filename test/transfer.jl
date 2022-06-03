@@ -14,7 +14,7 @@
             @. pointstate.σ = zero(SymmetricSecondOrderTensor{3})
             # transfer
             update!(space, pointstate)
-            update_sparsitypattern!(gridstate, space)
+            update_sppattern!(gridstate, space)
             transfer.point_to_grid!(gridstate, pointstate, space, 1)
             @test all(==(v0), pointstate.v)
         end

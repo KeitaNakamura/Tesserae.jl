@@ -62,7 +62,7 @@ function stripfooting(
         end
 
         update!(space, pointstate)
-        update_sparsitypattern!(gridstate, space)
+        update_sppattern!(gridstate, space)
 
         transfer.point_to_grid!(gridstate, pointstate, space, dt)
 
