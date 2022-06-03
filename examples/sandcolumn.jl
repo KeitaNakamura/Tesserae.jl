@@ -17,9 +17,10 @@ function sandcolumn(
     ν = 0.333
     E = 1e6
 
-    grid = Grid(interp, 0:dx:1.0, 0:dx:1.0)
-    pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, grid)
-    cache = MPCache(grid, pointstate.x)
+    grid = Grid(0:dx:1.0, 0:dx:1.0)
+    pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, interp, grid)
+    gridstate = generate_gridstate(interp, grid)
+    cache = MPCache(interp, grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c=0, ϕ, ψ, tensioncutoff=0)
 
@@ -52,19 +53,20 @@ function sandcolumn(
             CFL * minimum(gridsteps(grid)) / vc
         end
 
-        update!(cache, grid, pointstate)
+        update!(cache, pointstate)
+        update_sparsitypattern!(gridstate, cache)
 
-        transfer.point_to_grid!(grid, pointstate, cache, dt)
+        transfer.point_to_grid!(gridstate, pointstate, cache, dt)
 
         # boundary conditions
-        @inbounds for (I,n) in boundaries(grid, "-y") # bottom
-            grid.state.v[I] += contacted(CoulombFriction(μ = 0.2), grid.state.v[I], n)
+        @inbounds for (I,n) in gridbounds(grid, "-y") # bottom
+            gridstate.v[I] += contacted(CoulombFriction(μ = 0.2), gridstate.v[I], n)
         end
-        @inbounds for (I,n) in boundaries(grid, "-x", "+x") # left and right
-            grid.state.v[I] += contacted(CoulombFriction(μ = 0), grid.state.v[I], n)
+        @inbounds for (I,n) in gridbounds(grid, "-x", "+x") # left and right
+            gridstate.v[I] += contacted(CoulombFriction(μ = 0), gridstate.v[I], n)
         end
 
-        transfer.grid_to_point!(pointstate, grid, cache, dt)
+        transfer.grid_to_point!(pointstate, gridstate, cache, dt)
         @inbounds Threads.@threads for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]

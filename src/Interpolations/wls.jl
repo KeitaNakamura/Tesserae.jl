@@ -6,11 +6,11 @@ const BilinearWLS = WLS{BilinearBasis}
 
 @pure WLS{B}(w::Kernel) where {B} = WLS{B, typeof(w)}()
 
-@pure getbasisfunction(::WLS{B}) where {B} = B()
-@pure getkernelfunction(::WLS{B, W}) where {B, W} = W()
+@pure get_basis(::WLS{B}) where {B} = B()
+@pure get_kernel(::WLS{B, W}) where {B, W} = W()
 
 @inline function neighbornodes(wls::WLS, grid::Grid, pt)
-    neighbornodes(getkernelfunction(wls), grid, pt)
+    neighbornodes(get_kernel(wls), grid, pt)
 end
 
 
@@ -44,13 +44,13 @@ function WLSValues{B, K, dim, T, nnodes, L, L²}() where {B, K, dim, T, nnodes, 
     WLSValues(WLS{B, K}(), N, ∇N, w, gridindices, Minv, xp, 0)
 end
 function MPValues{dim, T}(F::WLS{B, K}) where {B, K, dim, T}
-    L = length(value(getbasisfunction(F), zero(Vec{dim, T})))
-    n = getnnodes(getkernelfunction(F), Val(dim))
+    L = length(value(get_basis(F), zero(Vec{dim, T})))
+    n = num_nodes(get_kernel(F), Val(dim))
     WLSValues{B, K, dim, T, n, L, L^2}()
 end
 
-getbasisfunction(x::WLSValues) = getbasisfunction(x.F)
-getkernelfunction(x::WLSValues) = getkernelfunction(x.F)
+get_basis(x::WLSValues) = get_basis(x.F)
+get_kernel(x::WLSValues) = get_kernel(x.F)
 
 @inline getx(x::Vec) = x
 @inline getx(pt) = pt.x
@@ -61,8 +61,8 @@ function update!(mpvalues::WLSValues, grid::Grid, pt, spat::AbstractArray{Bool})
     fillzero!(mpvalues.∇N)
     fillzero!(mpvalues.w)
 
-    F = getkernelfunction(mpvalues)
-    P = getbasisfunction(mpvalues)
+    F = get_kernel(mpvalues)
+    P = get_basis(mpvalues)
     M = zero(mpvalues.Minv)
     xp = getx(pt)
 
@@ -99,8 +99,8 @@ function update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, gr
     fillzero!(mpvalues.∇N)
     fillzero!(mpvalues.w)
 
-    F = getkernelfunction(mpvalues)
-    P = getbasisfunction(mpvalues)
+    F = get_kernel(mpvalues)
+    P = get_basis(mpvalues)
     xp = getx(pt)
 
     # update

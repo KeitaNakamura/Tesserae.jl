@@ -19,9 +19,10 @@ function stripfooting(
     ψ = deg2rad(0)
     E = 1e9
 
-    grid = Grid(interp, 0:dx:5.0, 0:dx:5.0)
-    pointstate = generate_pointstate((x,y) -> y < h, grid)
-    cache = MPCache(grid, pointstate.x)
+    grid = Grid(0:dx:5.0, 0:dx:5.0)
+    pointstate = generate_pointstate((x,y) -> y < h, interp, grid)
+    gridstate = generate_gridstate(interp, grid)
+    cache = MPCache(interp, grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c, ϕ, ψ, tensioncutoff=false)
 
@@ -60,31 +61,32 @@ function stripfooting(
             CFL * minimum(gridsteps(grid)) / vc
         end
 
-        update!(cache, grid, pointstate)
+        update!(cache, pointstate)
+        update_sparsitypattern!(gridstate, cache)
 
-        transfer.point_to_grid!(grid, pointstate, cache, dt)
+        transfer.point_to_grid!(gridstate, pointstate, cache, dt)
 
         # boundary conditions
         vertical_load = 0.0
         @inbounds for I in footing_indices
-            mᵢ = grid.state.m[I]
-            vᵢ = grid.state.v[I]
+            mᵢ = gridstate.m[I]
+            vᵢ = gridstate.v[I]
             vertical_load += mᵢ * ((vᵢ-v_footing)[2] / dt)
-            grid.state.v[I] = v_footing
+            gridstate.v[I] = v_footing
         end
         # don't apply any condition (free condition) on top boundary to properly handle diriclet boundary condition
-        @inbounds for (I,n) in boundaries(grid, "-y") # bottom
-            grid.state.v[I] += contacted(CoulombFriction(:sticky), grid.state.v[I], n)
+        @inbounds for (I,n) in gridbounds(grid, "-y") # bottom
+            gridstate.v[I] += contacted(CoulombFriction(:sticky), gridstate.v[I], n)
         end
-        @inbounds for (I,n) in boundaries(grid, "-x", "+x") # left and right
-            grid.state.v[I] += contacted(CoulombFriction(:slip), grid.state.v[I], n)
+        @inbounds for (I,n) in gridbounds(grid, "-x", "+x") # left and right
+            gridstate.v[I] += contacted(CoulombFriction(:slip), gridstate.v[I], n)
         end
 
-        transfer.grid_to_point!(pointstate, grid, cache, dt)
+        transfer.grid_to_point!(pointstate, gridstate, cache, dt)
 
         @. tr∇v = tr(pointstate.∇v)
         if handle_volumetric_locking
-            Marble.smooth_pointstate!(tr∇v, pointstate.V, grid, cache)
+            Marble.smooth_pointstate!(tr∇v, pointstate.V, gridstate, cache)
         end
 
         @inbounds Threads.@threads for p in eachindex(pointstate)

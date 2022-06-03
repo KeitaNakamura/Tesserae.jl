@@ -1,3 +1,4 @@
+abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
 abstract type MPValue end

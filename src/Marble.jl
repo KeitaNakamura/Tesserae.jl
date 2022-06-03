@@ -23,7 +23,8 @@ export
     gridsteps,
     gridaxes,
     gridorigin,
-    boundaries,
+    gridbounds,
+    generate_gridstate,
     generate_pointstate,
 # interpolations
     update!,
@@ -36,13 +37,13 @@ export
     LinearWLS,
     BilinearWLS,
     KernelCorrection,
-    polynomial,
     MPValues,
 # MPCache
     MPCache,
     point_to_grid!,
     grid_to_point!,
     grid_to_point,
+    update_sparsitypattern!,
 # Transfer
     Transfer,
     TransferNormalFLIP,
@@ -62,26 +63,26 @@ export
     vtk_points
 
 
+include("misc.jl")
 include("utils.jl")
 include("dotmacros.jl")
 include("sparray.jl")
-include("misc.jl")
 
-abstract type Interpolation end
+# core
 include("grid.jl")
-
 include("Interpolations/mpvalues.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
 include("Interpolations/basis.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/correction.jl")
+include("mpcache.jl")
 
 include("states.jl")
-include("mpcache.jl")
 include("transfer.jl")
 include("contact.jl")
 
+# io
 include("logger.jl")
 include("vtk.jl")
 

@@ -2,10 +2,10 @@ struct KernelCorrection{K <: Kernel} <: Interpolation
 end
 @pure KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
 
-@pure getkernelfunction(::KernelCorrection{K}) where {K} = K()
+@pure get_kernel(::KernelCorrection{K}) where {K} = K()
 
 @inline function neighbornodes(x::KernelCorrection, grid::Grid, pt)
-    neighbornodes(getkernelfunction(x), grid, pt)
+    neighbornodes(get_kernel(x), grid, pt)
 end
 
 
@@ -33,18 +33,18 @@ function KernelCorrectionValues{K, dim, T, nnodes}() where {K, dim, T, nnodes}
     KernelCorrectionValues(KernelCorrection(K()), N, ∇N, gridindices, xp, 0)
 end
 function MPValues{dim, T}(c::KernelCorrection{K}) where {dim, T, K}
-    L = getnnodes(K(), Val(dim))
+    L = num_nodes(K(), Val(dim))
     KernelCorrectionValues{K, dim, T, L}()
 end
 
-getkernelfunction(c::KernelCorrectionValues) = getkernelfunction(c.F)
+get_kernel(c::KernelCorrectionValues) = get_kernel(c.F)
 
 function update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{<: Any, dim}, pt, spat::AbstractArray{Bool, dim}) where {dim, T}
     # reset
     fillzero!(mpvalues.N)
     fillzero!(mpvalues.∇N)
 
-    F = getkernelfunction(mpvalues)
+    F = get_kernel(mpvalues)
     xp = getx(pt) # defined in wls.jl
 
     # update

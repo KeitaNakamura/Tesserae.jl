@@ -25,17 +25,17 @@ const LinearBSpline    = BSpline{1}
 const QuadraticBSpline = BSpline{2}
 const CubicBSpline     = BSpline{3}
 
-getsupportlength(::BSpline{1}) = 1.0
-getsupportlength(::BSpline{2}) = 1.5
-getsupportlength(::BSpline{3}) = 2.0
-getsupportlength(::BSpline{4}) = 2.5
+get_supportlength(::BSpline{1}) = 1.0
+get_supportlength(::BSpline{2}) = 1.5
+get_supportlength(::BSpline{3}) = 2.0
+get_supportlength(::BSpline{4}) = 2.5
 
-@pure function getnnodes(bspline::BSpline, ::Val{dim})::Int where {dim}
-    (2*getsupportlength(bspline))^dim
+@pure function num_nodes(bspline::BSpline, ::Val{dim})::Int where {dim}
+    (2*get_supportlength(bspline))^dim
 end
 
 @inline function neighbornodes(bsp::BSpline, grid::Grid, x::Vec)
-    neighbornodes(grid, x, getsupportlength(bsp))
+    neighbornodes(grid, x, get_supportlength(bsp))
 end
 @inline neighbornodes(bsp::BSpline, grid::Grid, pt) = neighbornodes(bsp, grid, pt.x)
 
@@ -60,7 +60,7 @@ function value(::BSpline{4}, ξ::Real)
     ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
     ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
-@inline value(bspline::BSpline, ξ::Vec) = prod(maptuple(value, bspline, Tuple(ξ)))
+@inline value(bspline::BSpline, ξ::Vec) = prod(map_tuple(value, bspline, Tuple(ξ)))
 # used in `WLS`
 function value(bspline::BSpline, grid::Grid, I::Index, xp::Vec)
     @_inline_propagate_inbounds_meta
@@ -117,7 +117,7 @@ function value(spline::BSpline{3}, ξ::Real, pos::Int)::typeof(ξ)
         value(spline, ξ)
     end
 end
-@inline value(bspline::BSpline, ξ::Vec, pos::Tuple{Vararg{Int}}) = prod(maptuple(value, bspline, Tuple(ξ), pos))
+@inline value(bspline::BSpline, ξ::Vec, pos::Tuple{Vararg{Int}}) = prod(map_tuple(value, bspline, Tuple(ξ), pos))
 function value_gradient(bspline::BSpline, grid::Grid, I::Index, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
     @_inline_propagate_inbounds_meta
     xi = grid[I]
@@ -150,7 +150,7 @@ function Base.values(::BSpline{3}, x::T) where {T <: Real}
     ξ³ = ξ² .* ξ
     @. $V(-1/6,0.5,-0.5,1/6)*ξ³ + $V(1,-1,-1,1)*ξ² + $V(-2,0,0,2)*ξ + $V(4/3,2/3,2/3,4/3)
 end
-@inline Base.values(bspline::BSpline, x::Vec) = Tuple(otimes(maptuple(values, bspline, Tuple(x))...))
+@inline Base.values(bspline::BSpline, x::Vec) = Tuple(otimes(map_tuple(values, bspline, Tuple(x))...))
 function Base.values(bspline::BSpline, grid::Grid, xp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
     values(bspline, xp .* dx⁻¹)
@@ -190,10 +190,10 @@ end
     end
     quote
         @_inline_meta
-        vals_grads = maptuple(values_gradients, bspline, Tuple(x))
-        vals  = maptuple(getindex, vals_grads, 1)
-        grads = maptuple(getindex, vals_grads, 2)
-        Tuple(otimes(vals...)), maptuple(Vec, $(exps...))
+        vals_grads = map_tuple(values_gradients, bspline, Tuple(x))
+        vals  = map_tuple(getindex, vals_grads, 1)
+        grads = map_tuple(getindex, vals_grads, 2)
+        Tuple(otimes(vals...)), map_tuple(Vec, $(exps...))
     end
 end
 function values_gradients(bspline::BSpline, grid::Grid, xp::Vec)
@@ -228,11 +228,11 @@ function BSplineValues{order, dim, T, L}() where {order, dim, T, L}
     BSplineValues(BSpline{order}(), N, ∇N, gridindices, xp, 0)
 end
 function MPValues{dim, T}(F::BSpline{order}) where {order, dim, T}
-    L = getnnodes(F, Val(dim))
+    L = num_nodes(F, Val(dim))
     BSplineValues{order, dim, T, L}()
 end
 
-getkernelfunction(x::BSplineValues) = x.F
+get_kernel(x::BSplineValues) = x.F
 
 @inline function node_position(ax::Vector, i::Int)
     left = i - firstindex(ax)
@@ -246,7 +246,7 @@ function update!(mpvalues::BSplineValues, grid::Grid, xp::Vec, spat::AbstractArr
     fillzero!(mpvalues.N)
     fillzero!(mpvalues.∇N)
 
-    F = getkernelfunction(mpvalues)
+    F = get_kernel(mpvalues)
 
     # update
     mpvalues.xp = xp

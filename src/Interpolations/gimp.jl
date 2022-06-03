@@ -1,6 +1,6 @@
 struct GIMP <: Kernel end
 
-@pure getnnodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
+@pure num_nodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
 
 @inline function neighbornodes(f::GIMP, grid::Grid, xp::Vec, rp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
@@ -20,7 +20,7 @@ function value(::GIMP, ξ::Real, l::Real) # `l` is normalized radius
     ξ < 1-l ? 1 - ξ                :
     ξ < 1+l ? (1+l-ξ)^2 / 4l       : zero(ξ)
 end
-@inline value(f::GIMP, ξ::Vec, l::Vec) = prod(maptuple(value, f, Tuple(ξ), Tuple(l)))
+@inline value(f::GIMP, ξ::Vec, l::Vec) = prod(map_tuple(value, f, Tuple(ξ), Tuple(l)))
 # used in `WLS`
 function value(f::GIMP, grid::Grid, I::Index, xp::Vec, rp::Vec)
     @_inline_propagate_inbounds_meta
@@ -47,9 +47,9 @@ end
     V = Vec{3, T}
     x′ = fract(x - T(0.5))
     ξ = x′ .- V(-0.5, 0.5, 1.5)
-    maptuple(value, GIMP(), Tuple(ξ), Tuple(l))
+    map_tuple(value, GIMP(), Tuple(ξ), Tuple(l))
 end
-@inline Base.values(f::GIMP, x::Vec, l::Vec) = Tuple(otimes(maptuple(values, f, Tuple(x), Tuple(l))...))
+@inline Base.values(f::GIMP, x::Vec, l::Vec) = Tuple(otimes(map_tuple(values, f, Tuple(x), Tuple(l))...))
 function Base.values(f::GIMP, grid::Grid, xp::Vec, lp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
     values(f, xp.*dx⁻¹, lp.*dx⁻¹)
@@ -63,9 +63,9 @@ function _values_gradients(::GIMP, x::T, l::T) where {T <: Real}
     V = Vec{3, T}
     x′ = fract(x - T(0.5))
     ξ = x′ .- V(-0.5, 0.5, 1.5)
-    vals_grads = maptuple(_gradient_GIMP, Tuple(ξ), l)
-    vals  = maptuple(getindex, vals_grads, 2)
-    grads = maptuple(getindex, vals_grads, 1)
+    vals_grads = map_tuple(_gradient_GIMP, Tuple(ξ), l)
+    vals  = map_tuple(getindex, vals_grads, 2)
+    grads = map_tuple(getindex, vals_grads, 1)
     Vec(vals), Vec(grads)
 end
 @generated function values_gradients(::GIMP, x::Vec{dim}, l::Vec{dim}) where {dim}
@@ -75,10 +75,10 @@ end
     end
     quote
         @_inline_meta
-        vals_grads = maptuple(_values_gradients, GIMP(), Tuple(x), Tuple(l))
-        vals  = maptuple(getindex, vals_grads, 1)
-        grads = maptuple(getindex, vals_grads, 2)
-        Tuple(otimes(vals...)), maptuple(Vec, $(exps...))
+        vals_grads = map_tuple(_values_gradients, GIMP(), Tuple(x), Tuple(l))
+        vals  = map_tuple(getindex, vals_grads, 1)
+        grads = map_tuple(getindex, vals_grads, 2)
+        Tuple(otimes(vals...)), map_tuple(Vec, $(exps...))
     end
 end
 function values_gradients(f::GIMP, grid::Grid, xp::Vec, lp::Vec)
@@ -113,18 +113,18 @@ function GIMPValues{dim, T, L}() where {dim, T, L}
     GIMPValues(GIMP(), N, ∇N, gridindices, xp, 0)
 end
 function MPValues{dim, T}(F::GIMP) where {dim, T}
-    L = getnnodes(F, Val(dim))
+    L = num_nodes(F, Val(dim))
     GIMPValues{dim, T, L}()
 end
 
-getkernelfunction(x::GIMPValues) = x.F
+get_kernel(x::GIMPValues) = x.F
 
 function update!(mpvalues::GIMPValues, grid::Grid, pt, spat::AbstractArray{Bool})
     # reset
     fillzero!(mpvalues.N)
     fillzero!(mpvalues.∇N)
 
-    F = getkernelfunction(mpvalues)
+    F = get_kernel(mpvalues)
     xp = pt.x
 
     # update

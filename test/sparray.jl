@@ -5,34 +5,13 @@ using Marble: SpPattern, SpArray
     @test @inferred(SpPattern(5,5)) == falses(5,5)
 
     spat = SpPattern(5,5)
+    mask = rand(Bool,5,5)
+    update_sparsitypattern!(spat, mask)
 
-    # getindex/setindex!
-    inds = fill(-1, size(spat))
-    true_inds = 1:2:length(spat)
-    for (i, I) in enumerate(true_inds)
-        spat[I] = true
-        @test spat[I] == true
-        inds[I] = i # for latter test
+    @test spat == mask
+    for (i,I) in enumerate(findall(mask))
+        @test spat.indices[I] == i
     end
-    for i in setdiff(1:length(spat), true_inds)
-        @test spat[i] == false
-    end
-
-    # reinit!
-    @test Marble.reinit!(spat) == count(spat)
-    @test spat.indices == inds
-
-    # broadcast
-    mask2 = SpPattern(size(spat))
-    mask2 .= rand(Bool, size(spat))
-    @test @inferred(spat .| mask2)::SpPattern == Array(spat) .| Array(mask2)
-    @test @inferred(spat .& mask2)::SpPattern == Array(spat) .& Array(mask2)
-    @test @inferred(spat .| Array(mask2))::SpPattern == Array(spat) .| Array(mask2)
-    @test @inferred(spat .& Array(mask2))::SpPattern == Array(spat) .& Array(mask2)
-
-    # fill!
-    fill!(spat, false)
-    @test all(==(false), spat)
 end
 
 @testset "SpArray" begin
@@ -49,8 +28,7 @@ end
     B_spat = rand(Bool, size(B))
 
     for (x, x_spat) in ((A, A_spat), (B, B_spat))
-        x.spat .= x_spat
-        Marble.reinit!(x)
+        update_sparsitypattern!(x, x_spat)
         @test x.spat == x_spat
         @test count(x.spat) == length(x.data)
         for i in eachindex(x)

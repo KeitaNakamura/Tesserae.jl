@@ -4,7 +4,7 @@ promote_tuple_length() = -1
 promote_tuple_length(xs::Type{<: NTuple{N, Any}}...) where {N} = N
 # apply map calculations only for tuples
 # if one of the argunents is not tuple, treat it as scalar
-@generated function maptuple(f, xs::Vararg{Any, N}) where {N}
+@generated function map_tuple(f, xs::Vararg{Any, N}) where {N}
     L = promote_tuple_length([x for x in xs if x <: Tuple]...)
     if L == -1 # no tuples
         quote

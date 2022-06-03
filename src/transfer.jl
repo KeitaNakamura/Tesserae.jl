@@ -46,8 +46,11 @@ const TransferWLS        = Transfer{P2G_WLS, G2P_WLS}
 # P2G transfer #
 ################
 
-function (::P2G_Normal)(grid::Grid, pointstate, cache::MPCache, dt::Real)
-    point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
+function (::P2G_Normal)(gridstate::AbstractArray, pointstate::AbstractVector, cache::MPCache, dt::Real)
+    @assert gridstate.spat == cache.spat
+
+    grid = cache.grid
+    point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), cache) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
@@ -63,12 +66,13 @@ function (::P2G_Normal)(grid::Grid, pointstate, cache::MPCache, dt::Real)
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, mv, mv + dt*f
     end
-    @dot_threads grid.state.v_n /= grid.state.m
-    @dot_threads grid.state.v /= grid.state.m
-    grid
+    @dot_threads gridstate.v_n /= gridstate.m
+    @dot_threads gridstate.v /= gridstate.m
+    gridstate
 end
 
-function (::P2G_AffinePIC)(grid::Grid, pointstate, cache::MPCache, dt::Real)
+function (::P2G_AffinePIC)(gridstate::AbstractArray, pointstate::AbstractVector, cache::MPCache, dt::Real)
+    grid = cache.grid
     D = grid_to_point(cache) do mp, i, p
         @_inline_propagate_inbounds_meta
         N = mp.N
@@ -76,7 +80,7 @@ function (::P2G_AffinePIC)(grid::Grid, pointstate, cache::MPCache, dt::Real)
         xₚ = pointstate.x[p]
         N * (xᵢ - xₚ) ⊗ (xᵢ - xₚ)
     end
-    point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
+    point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), cache) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
@@ -94,13 +98,14 @@ function (::P2G_AffinePIC)(grid::Grid, pointstate, cache::MPCache, dt::Real)
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, mv, mv + dt*f
     end
-    @dot_threads grid.state.v_n /= grid.state.m
-    @dot_threads grid.state.v /= grid.state.m
-    grid
+    @dot_threads gridstate.v_n /= gridstate.m
+    @dot_threads gridstate.v /= gridstate.m
+    gridstate
 end
 
-function (::P2G_Taylor)(grid::Grid{<: Any, dim}, pointstate, cache::MPCache{dim}, dt::Real) where {dim}
-    point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
+function (::P2G_Taylor)(gridstate::AbstractArray, pointstate::AbstractVector, cache::MPCache{<: Any, dim}, dt::Real) where {dim}
+    grid = cache.grid
+    point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), cache) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
@@ -117,14 +122,15 @@ function (::P2G_Taylor)(grid::Grid{<: Any, dim}, pointstate, cache::MPCache{dim}
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, mv, mv + dt*f
     end
-    @dot_threads grid.state.v_n /= grid.state.m
-    @dot_threads grid.state.v /= grid.state.m
-    grid
+    @dot_threads gridstate.v_n /= gridstate.m
+    @dot_threads gridstate.v /= gridstate.m
+    gridstate
 end
 
-function (::P2G_WLS)(grid::Grid, pointstate, cache::MPCache, dt::Real)
-    P = getbasisfunction(grid.interpolation)
-    point_to_grid!((grid.state.m, grid.state.v_n, grid.state.v), cache) do mp, p, i
+function (::P2G_WLS)(gridstate::AbstractArray, pointstate::AbstractVector, cache::MPCache, dt::Real)
+    grid = cache.grid
+    P = get_basis(get_interpolation(cache))
+    point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), cache) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
@@ -140,14 +146,15 @@ function (::P2G_WLS)(grid::Grid, pointstate, cache::MPCache, dt::Real)
         f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
         m, mv, mv + dt*f
     end
-    @dot_threads grid.state.v_n /= grid.state.m
-    @dot_threads grid.state.v /= grid.state.m
-    grid
+    @dot_threads gridstate.v_n /= gridstate.m
+    @dot_threads gridstate.v /= gridstate.m
+    gridstate
 end
 
-function (::P2G_Default)(grid::Grid, pointstate, cache::MPCache, dt::Real)
-    P2G! = P2G_default(grid.interpolation)
-    P2G!(grid, pointstate, cache, dt)
+function (::P2G_Default)(gridstate::AbstractArray, pointstate::AbstractVector, cache::MPCache, dt::Real)
+    grid = cache.grid
+    P2G! = P2G_default(get_interpolation(cache))
+    P2G!(gridstate, pointstate, cache, dt)
 end
 
 @inline function stress_to_force(::PlaneStrain, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
@@ -174,16 +181,17 @@ end
     ∇v
 end
 
-function (::G2P_FLIP)(pointstate, grid::Grid, cache::MPCache, dt::Real)
+function (::G2P_FLIP)(pointstate::AbstractVector, gridstate::AbstractArray, cache::MPCache, dt::Real)
+    grid = cache.grid
     pointvalues = grid_to_point(cache) do mp, i, p
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
-        dvᵢ = grid.state.v[i] - grid.state.v_n[i]
-        vᵢ = grid.state.v[i]
+        dvᵢ = gridstate.v[i] - gridstate.v_n[i]
+        vᵢ = gridstate.v[i]
         N*dvᵢ, N*vᵢ, vᵢ⊗∇N
     end
-    @inbounds Threads.@threads for p in 1:npoints(cache)
+    @inbounds Threads.@threads for p in 1:num_points(cache)
         dvₚ, vₚ, ∇vₚ = pointvalues[p]
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] += dvₚ
@@ -192,15 +200,16 @@ function (::G2P_FLIP)(pointstate, grid::Grid, cache::MPCache, dt::Real)
     pointstate
 end
 
-function (::G2P_PIC)(pointstate, grid::Grid, cache::MPCache, dt::Real)
+function (::G2P_PIC)(pointstate::AbstractVector, gridstate::AbstractArray, cache::MPCache, dt::Real)
+    grid = cache.grid
     pointvalues = grid_to_point(cache) do mp, i, p
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
-        vᵢ = grid.state.v[i]
+        vᵢ = gridstate.v[i]
         vᵢ*N, vᵢ⊗∇N
     end
-    @inbounds Threads.@threads for p in 1:npoints(cache)
+    @inbounds Threads.@threads for p in 1:num_points(cache)
         vₚ, ∇vₚ = pointvalues[p]
         xₚ = pointstate.x[p]
         pointstate.v[p] = vₚ
@@ -210,19 +219,20 @@ function (::G2P_PIC)(pointstate, grid::Grid, cache::MPCache, dt::Real)
     pointstate
 end
 
-function (::G2P_AffinePIC)(pointstate, grid::Grid, cache::MPCache, dt::Real)
+function (::G2P_AffinePIC)(pointstate::AbstractVector, gridstate::AbstractArray, cache::MPCache, dt::Real)
+    grid = cache.grid
     pointvalues = grid_to_point(cache) do mp, i, p
         @_inline_propagate_inbounds_meta
         N = mp.N
         ∇N = mp.∇N
-        vᵢ = grid.state.v[i]
+        vᵢ = gridstate.v[i]
         xᵢ = grid[i]
         xₚ = pointstate.x[p]
         v = vᵢ * N
         ∇v = vᵢ ⊗ ∇N
         v, ∇v, v ⊗ (xᵢ - xₚ)
     end
-    @inbounds Threads.@threads for p in 1:npoints(cache)
+    @inbounds Threads.@threads for p in 1:num_points(cache)
         vₚ, ∇vₚ, Bₚ = pointvalues[p]
         xₚ = pointstate.x[p]
         pointstate.v[p] = vₚ
@@ -233,15 +243,16 @@ function (::G2P_AffinePIC)(pointstate, grid::Grid, cache::MPCache, dt::Real)
     pointstate
 end
 
-function (::G2P_WLS)(pointstate, grid::Grid{<: Any, dim}, cache::MPCache, dt::Real) where {dim}
-    P = getbasisfunction(grid.interpolation)
+function (::G2P_WLS)(pointstate::AbstractVector, gridstate::AbstractArray, cache::MPCache{<: Any, dim}, dt::Real) where {dim}
+    grid = cache.grid
+    P = get_basis(get_interpolation(cache))
     p0 = value(P, zero(Vec{dim, Int}))
     ∇p0 = gradient(P, zero(Vec{dim, Int}))
     grid_to_point!(pointstate.C, cache) do mp, i, p
         @_inline_propagate_inbounds_meta
         w = mp.w
         Minv = mp.Minv
-        grid.state.v[i] ⊗ (w * Minv ⋅ value(P, grid[i] - pointstate.x[p]))
+        gridstate.v[i] ⊗ (w * Minv ⋅ value(P, grid[i] - pointstate.x[p]))
     end
     @inbounds Threads.@threads for p in 1:length(pointstate)
         Cₚ = pointstate.C[p]
@@ -254,7 +265,8 @@ function (::G2P_WLS)(pointstate, grid::Grid{<: Any, dim}, cache::MPCache, dt::Re
     pointstate
 end
 
-function (::G2P_Default)(pointstate, grid::Grid, cache::MPCache, dt::Real)
-    G2P! = G2P_default(grid.interpolation)
-    G2P!(pointstate, grid, cache, dt)
+function (::G2P_Default)(pointstate::AbstractVector, gridstate::AbstractArray, cache::MPCache, dt::Real)
+    grid = cache.grid
+    G2P! = G2P_default(get_interpolation(cache))
+    G2P!(pointstate, gridstate, cache, dt)
 end
