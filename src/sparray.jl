@@ -204,6 +204,7 @@ function update_sparsitypattern!(x::SpArray, spat::AbstractArray{Bool})
     @assert size(x) == size(spat)
     n = update_sparsitypattern!(x.spat, spat)
     resize!(x.data, n)
+    x.stamp[] = NaN
     x
 end
 
