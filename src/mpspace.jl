@@ -3,7 +3,7 @@ struct MPSpace{T, dim, F <: Interpolation, CS, MV <: MPValues{dim, T}}
     grid::Grid{T, dim, CS}
     spat::Array{Bool, dim}
     mpvalues::Vector{MV}
-    ptsinblk::Array{Vector{Int}, dim}
+    ptspblk::Array{Vector{Int}, dim}
     npts::Base.RefValue{Int}
     stamp::Base.RefValue{Float64}
 end
@@ -13,26 +13,26 @@ function MPSpace(interp::Interpolation, grid::Grid{T, dim}, xₚ::AbstractVector
     spat = fill(false, size(grid))
     npts = length(xₚ)
     mpvalues = [MPValues{dim, T}(interp) for _ in 1:npts]
-    MPSpace(interp, grid, spat, mpvalues, pointsinblock(grid, xₚ), Ref(npts), Ref(NaN))
+    MPSpace(interp, grid, spat, mpvalues, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
 end
 MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
 
 # helper functions
 gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = space.npts[]
-get_pointsinblock(space::MPSpace) = space.ptsinblk
+get_pointsperblock(space::MPSpace) = space.ptspblk
 get_sppattern(space::MPSpace) = space.spat
 get_interpolation(space::MPSpace) = space.interp
 get_stamp(space::MPSpace) = space.stamp[]
 
 # reorder_pointstate!
-function reorder_pointstate!(pointstate::AbstractVector, ptsinblk::Array)
-    @assert length(pointstate) == sum(length, ptsinblk)
+function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
+    @assert length(pointstate) == sum(length, ptspblk)
     inds = Vector{Int}(undef, length(pointstate))
     cnt = 1
-    for blocks in threadsafe_blocks(@. $size(ptsinblk) << BLOCK_UNIT + 1)
+    for blocks in threadsafe_blocks(@. $size(ptspblk) << BLOCK_UNIT + 1)
         @inbounds for blockindex in blocks
-            block = ptsinblk[blockindex]
+            block = ptspblk[blockindex]
             for i in eachindex(block)
                 inds[cnt] = block[i]
                 block[i] = cnt
@@ -43,31 +43,31 @@ function reorder_pointstate!(pointstate::AbstractVector, ptsinblk::Array)
     @inbounds @. pointstate = pointstate[inds]
     pointstate
 end
-reorder_pointstate!(pointstate::AbstractVector, space::MPSpace) = reorder_pointstate!(pointstate, get_pointsinblock(space))
+reorder_pointstate!(pointstate::AbstractVector, space::MPSpace) = reorder_pointstate!(pointstate, get_pointsperblock(space))
 
-# pointsinblock!
-function pointsinblock!(ptsinblk::AbstractArray{Vector{Int}}, grid::Grid, xₚ::AbstractVector)
-    empty!.(ptsinblk)
+# pointsperblock!
+function pointsperblock!(ptspblk::AbstractArray{Vector{Int}}, grid::Grid, xₚ::AbstractVector)
+    empty!.(ptspblk)
     @inbounds for p in 1:length(xₚ)
         I = whichblock(grid, xₚ[p])
-        I === nothing || push!(ptsinblk[I], p)
+        I === nothing || push!(ptspblk[I], p)
     end
-    ptsinblk
+    ptspblk
 end
-function pointsinblock(grid::Grid, xₚ::AbstractVector)
-    ptsinblk = Array{Vector{Int}}(undef, blocksize(grid))
-    @inbounds @simd for i in eachindex(ptsinblk)
-        ptsinblk[i] = Int[]
+function pointsperblock(grid::Grid, xₚ::AbstractVector)
+    ptspblk = Array{Vector{Int}}(undef, blocksize(grid))
+    @inbounds @simd for i in eachindex(ptspblk)
+        ptspblk[i] = Int[]
     end
-    pointsinblock!(ptsinblk, grid, xₚ)
+    pointsperblock!(ptspblk, grid, xₚ)
 end
 
-function update_sppattern!(spat::Array{Bool}, interp::Interpolation, grid::Grid, pointstate::AbstractVector, ptsinblk::AbstractArray{Vector{Int}}; exclude)
+function update_sppattern!(spat::Array{Bool}, interp::Interpolation, grid::Grid, pointstate::AbstractVector, ptspblk::AbstractArray{Vector{Int}}; exclude)
     @assert size(spat) == size(grid)
     fill!(spat, false)
     for blocks in threadsafe_blocks(size(grid))
         Threads.@threads for blockindex in blocks
-            for p in ptsinblk[blockindex]
+            for p in ptspblk[blockindex]
                 inds = neighbornodes(interp, grid, LazyRow(pointstate, p))
                 @inbounds spat[inds] .= true
             end
@@ -77,7 +77,7 @@ function update_sppattern!(spat::Array{Bool}, interp::Interpolation, grid::Grid,
         @. spat &= !exclude
         for blocks in threadsafe_blocks(size(grid))
             Threads.@threads for blockindex in blocks
-                for p in ptsinblk[blockindex]
+                for p in ptspblk[blockindex]
                     inds = neighbornodes(grid, pointstate.x[p], 1)
                     @inbounds spat[inds] .= true
                 end
@@ -101,15 +101,15 @@ end
 function update!(space::MPSpace, pointstate; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
     grid = space.grid
     mpvalues = space.mpvalues
-    ptsinblk = space.ptsinblk
+    ptspblk = space.ptspblk
     spat = space.spat
 
     space.npts[]  = length(pointstate)
     space.stamp[] = time()
     allocate!(i -> eltype(mpvalues)(), mpvalues, length(pointstate))
 
-    pointsinblock!(ptsinblk, grid, pointstate.x)
-    update_sppattern!(spat, get_interpolation(space), grid, pointstate, ptsinblk; exclude)
+    pointsperblock!(ptspblk, grid, pointstate.x)
+    update_sppattern!(spat, get_interpolation(space), grid, pointstate, ptspblk; exclude)
 
     Threads.@threads for p in 1:length(pointstate)
         @inbounds update!(mpvalues[p], grid, LazyRow(pointstate, p), spat)
@@ -127,7 +127,7 @@ end
 function eachpoint_blockwise_parallel(f, space::MPSpace)
     for blocks in threadsafe_blocks(gridsize(space))
         Threads.@threads for blockindex in blocks
-            @inbounds for p in get_pointsinblock(space)[blockindex]
+            @inbounds for p in get_pointsperblock(space)[blockindex]
                 f(p)
             end
         end
