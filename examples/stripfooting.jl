@@ -22,7 +22,7 @@ function stripfooting(
     grid = Grid(0:dx:5.0, 0:dx:5.0)
     pointstate = generate_pointstate((x,y) -> y < h, interp, grid)
     gridstate = generate_gridstate(interp, grid)
-    cache = MPCache(interp, grid, pointstate.x)
+    space = MPSpace(interp, grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c, ϕ, ψ, tensioncutoff=false)
 
@@ -61,10 +61,10 @@ function stripfooting(
             CFL * minimum(gridsteps(grid)) / vc
         end
 
-        update!(cache, pointstate)
-        update_sparsitypattern!(gridstate, cache)
+        update!(space, pointstate)
+        update_sparsitypattern!(gridstate, space)
 
-        transfer.point_to_grid!(gridstate, pointstate, cache, dt)
+        transfer.point_to_grid!(gridstate, pointstate, space, dt)
 
         # boundary conditions
         vertical_load = 0.0
@@ -82,11 +82,11 @@ function stripfooting(
             gridstate.v[I] += contacted(CoulombFriction(:slip), gridstate.v[I], n)
         end
 
-        transfer.grid_to_point!(pointstate, gridstate, cache, dt)
+        transfer.grid_to_point!(pointstate, gridstate, space, dt)
 
         @. tr∇v = tr(pointstate.∇v)
         if handle_volumetric_locking
-            Marble.smooth_pointstate!(tr∇v, pointstate.V, gridstate, cache)
+            Marble.smooth_pointstate!(tr∇v, pointstate.V, gridstate, space)
         end
 
         @inbounds Threads.@threads for p in eachindex(pointstate)

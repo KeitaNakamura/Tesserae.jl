@@ -38,8 +38,8 @@ export
     BilinearWLS,
     KernelCorrection,
     MPValues,
-# MPCache
-    MPCache,
+# MPSpace
+    MPSpace,
     point_to_grid!,
     grid_to_point!,
     grid_to_point,
@@ -76,7 +76,7 @@ include("Interpolations/gimp.jl")
 include("Interpolations/basis.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/correction.jl")
-include("mpcache.jl")
+include("mpspace.jl")
 
 include("states.jl")
 include("transfer.jl")
