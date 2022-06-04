@@ -41,7 +41,7 @@ function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
     @assert length(pointstate) == sum(length, ptspblk)
     inds = Vector{Int}(undef, length(pointstate))
     cnt = 1
-    for blocks in threadsafe_blocks(@. $size(ptspblk) << BLOCK_UNIT + 1)
+    for blocks in threadsafe_blocks(size(ptspblk))
         @inbounds for blockindex in blocks
             block = ptspblk[blockindex]
             for i in eachindex(block)
@@ -66,7 +66,7 @@ function pointsperblock!(ptspblk::AbstractArray{Vector{Int}}, grid::Grid, xₚ::
     ptspblk
 end
 function pointsperblock(grid::Grid, xₚ::AbstractVector)
-    ptspblk = Array{Vector{Int}}(undef, blocksize(grid))
+    ptspblk = Array{Vector{Int}}(undef, blocksize(size(grid)))
     @inbounds @simd for i in eachindex(ptspblk)
         ptspblk[i] = Int[]
     end
@@ -133,7 +133,7 @@ function update_sppattern!(gridstate::SpArray, space::MPSpace)
 end
 
 function eachpoint_blockwise_parallel(f, space::MPSpace)
-    for blocks in threadsafe_blocks(gridsize(space))
+    for blocks in threadsafe_blocks(blocksize(gridsize(space)))
         Threads.@threads for blockindex in blocks
             @inbounds for p in get_pointsperblock(space)[blockindex]
                 f(p)

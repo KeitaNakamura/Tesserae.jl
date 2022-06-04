@@ -159,7 +159,7 @@ CartesianIndex(2, 1)
     CartesianIndex(@. ($Tuple(I)-1) >> BLOCK_UNIT + 1)
 end
 
-blocksize(grid::Grid) = (ncells = size(grid) .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
+blocksize(gridsize::Tuple{Vararg{Int}}) = (ncells = gridsize .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
 
 struct BlockStepIndices{N} <: AbstractArray{CartesianIndex{N}, N}
     inds::NTuple{N, StepRange{Int, Int}}
@@ -167,11 +167,9 @@ end
 Base.size(x::BlockStepIndices) = map(length, x.inds)
 Base.getindex(x::BlockStepIndices{N}, i::Vararg{Int, N}) where {N} = (@_propagate_inbounds_meta; CartesianIndex(map(getindex, x.inds, i)))
 
-function threadsafe_blocks(gridsize::NTuple{dim, Int}) where {dim}
-    ncells = gridsize .- 1
+function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
     starts = SArray{NTuple{dim, 2}}(Iterators.product(nfill((1,2), Val(dim))...)...)
-    nblocks = @. (ncells - 1) >> BLOCK_UNIT + 1
-    vec(map(st -> BlockStepIndices(StepRange.(st, 2, nblocks)), starts))
+    vec(map(st -> BlockStepIndices(StepRange.(st, 2, blocksize)), starts))
 end
 
 
