@@ -1,6 +1,6 @@
 module Marble
 
-using Base: @_inline_meta, @_propagate_inbounds_meta, @pure
+using Base: RefValue, @_inline_meta, @_propagate_inbounds_meta, @pure
 using Base.Broadcast: Broadcasted, ArrayStyle, broadcasted
 
 using Reexport

@@ -15,11 +15,11 @@ julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Grid{T, dim, CS <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
+struct Grid{T, dim, C <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
     axes::NTuple{dim, Vector{T}}
     gridsteps::NTuple{dim, T}
     gridsteps_inv::NTuple{dim, T}
-    coordinate_system::CS
+    coordinate_system::C
 end
 
 Base.size(x::Grid) = map(length, gridaxes(x))

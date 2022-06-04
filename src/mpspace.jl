@@ -1,28 +1,31 @@
-struct MPSpace{T, dim, F <: Interpolation, CS, MV <: MPValues{dim, T}}
+struct MPSpace{T, dim, F <: Interpolation, C <: CoordinateSystem, V <: MPValues{dim, T}}
     interp::F
-    grid::Grid{T, dim, CS}
+    grid::Grid{T, dim, C}
     spat::Array{Bool, dim}
-    mpvalues::Vector{MV}
+    mpvals::Vector{V}
     ptspblk::Array{Vector{Int}, dim}
-    npts::Base.RefValue{Int}
-    stamp::Base.RefValue{Float64}
+    npts::RefValue{Int}
+    stamp::RefValue{Float64}
 end
 
 # constructors
 function MPSpace(interp::Interpolation, grid::Grid{T, dim}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
     spat = fill(false, size(grid))
     npts = length(xₚ)
-    mpvalues = [MPValues{dim, T}(interp) for _ in 1:npts]
-    MPSpace(interp, grid, spat, mpvalues, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
+    mpvals = [MPValues{dim, T}(interp) for _ in 1:npts]
+    MPSpace(interp, grid, spat, mpvals, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
 end
 MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
 
 # helper functions
 gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = space.npts[]
-get_pointsperblock(space::MPSpace) = space.ptspblk
-get_sppattern(space::MPSpace) = space.spat
 get_interpolation(space::MPSpace) = space.interp
+get_grid(space::MPSpace) = space.grid
+get_sppattern(space::MPSpace) = space.spat
+get_mpvalues(space::MPSpace) = space.mpvals
+get_mpvalues(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
+get_pointsperblock(space::MPSpace) = space.ptspblk
 get_stamp(space::MPSpace) = space.stamp[]
 
 # reorder_pointstate!
@@ -99,29 +102,31 @@ function allocate!(f, x::Vector, n::Integer)
 end
 
 function update!(space::MPSpace, pointstate; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
-    grid = space.grid
-    mpvalues = space.mpvalues
-    ptspblk = space.ptspblk
-    spat = space.spat
+    grid = get_grid(space)
+    mpvals = get_mpvalues(space)
+    ptspblk = get_pointsperblock(space)
+    spat = get_sppattern(space)
 
     space.npts[]  = length(pointstate)
     space.stamp[] = time()
-    allocate!(i -> eltype(mpvalues)(), mpvalues, length(pointstate))
+    allocate!(i -> eltype(mpvals)(), mpvals, length(pointstate))
 
     pointsperblock!(ptspblk, grid, pointstate.x)
     update_sppattern!(spat, get_interpolation(space), grid, pointstate, ptspblk; exclude)
 
     Threads.@threads for p in 1:length(pointstate)
-        @inbounds update!(mpvalues[p], grid, LazyRow(pointstate, p), spat)
+        @inbounds update!(mpvals[p], grid, LazyRow(pointstate, p), spat)
     end
 
     space
 end
 
-function update_sppattern!(spat::SpArray, MPSpace::MPSpace)
-    update_sppattern!(spat, get_sppattern(MPSpace))
-    spat.stamp[] = get_stamp(MPSpace)
-    spat
+function update_sppattern!(gridstate::SpArray, space::MPSpace)
+    @assert is_parent(gridstate)
+    @assert size(gridstate) == gridsize(space)
+    update_sppattern!(gridstate, get_sppattern(space))
+    set_stamp!(gridstate, get_stamp(space))
+    gridstate
 end
 
 function eachpoint_blockwise_parallel(f, space::MPSpace)
@@ -162,7 +167,7 @@ function point_to_grid!(p2g, gridstates, space::MPSpace; zeroinit::Bool = true)
         point_to_grid!(
             (mp, I) -> (@_inline_propagate_inbounds_meta; p2g(mp, p, I)),
             gridstates,
-            space.mpvalues[p],
+            get_mpvalues(space, p),
         )
     end
     gridstates
@@ -177,7 +182,7 @@ function point_to_grid!(p2g, gridstates, space::MPSpace, pointmask::AbstractVect
         pointmask[p] && point_to_grid!(
             (mp, I) -> (@_inline_propagate_inbounds_meta; p2g(mp, p, I)),
             gridstates,
-            space.mpvalues[p],
+            get_mpvalues(space, p),
         )
     end
     gridstates
@@ -206,7 +211,7 @@ function grid_to_point(g2p, space::MPSpace)
         @_inline_propagate_inbounds_meta
         grid_to_point(
             (mp, I) -> (@_inline_propagate_inbounds_meta; g2p(mp, I, p)),
-            space.mpvalues[p]
+            get_mpvalues(space, p)
         )
     end
 end
@@ -244,7 +249,7 @@ end
 
 function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, gridstate::AbstractArray, space::MPSpace)
     @assert length(vals) == length(Vₚ) == num_points(space)
-    grid = space.grid
+    grid = get_grid(space)
     basis = PolynomialBasis{1}()
     point_to_grid!((gridstate.poly_coef, gridstate.poly_mat), space) do mp, p, i
         @_inline_propagate_inbounds_meta

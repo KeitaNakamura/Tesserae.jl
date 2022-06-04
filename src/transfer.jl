@@ -47,7 +47,7 @@ const TransferWLS        = Transfer{P2G_WLS, G2P_WLS}
 ################
 
 function (::P2G_Normal)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
-    grid = space.grid
+    grid = get_grid(space)
     point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
@@ -70,7 +70,7 @@ function (::P2G_Normal)(gridstate::AbstractArray, pointstate::AbstractVector, sp
 end
 
 function (::P2G_AffinePIC)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
-    grid = space.grid
+    grid = get_grid(space)
     D = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
         N = mp.N
@@ -102,7 +102,7 @@ function (::P2G_AffinePIC)(gridstate::AbstractArray, pointstate::AbstractVector,
 end
 
 function (::P2G_Taylor)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace{<: Any, dim}, dt::Real) where {dim}
-    grid = space.grid
+    grid = get_grid(space)
     point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
         @_inline_propagate_inbounds_meta
         N = mp.N
@@ -126,7 +126,7 @@ function (::P2G_Taylor)(gridstate::AbstractArray, pointstate::AbstractVector, sp
 end
 
 function (::P2G_WLS)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
-    grid = space.grid
+    grid = get_grid(space)
     P = get_basis(get_interpolation(space))
     point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
         @_inline_propagate_inbounds_meta
@@ -150,7 +150,7 @@ function (::P2G_WLS)(gridstate::AbstractArray, pointstate::AbstractVector, space
 end
 
 function (::P2G_Default)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
-    grid = space.grid
+    grid = get_grid(space)
     P2G! = P2G_default(get_interpolation(space))
     P2G!(gridstate, pointstate, space, dt)
 end
@@ -180,7 +180,7 @@ end
 end
 
 function (::G2P_FLIP)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
-    grid = space.grid
+    grid = get_grid(space)
     pointvalues = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
         N = mp.N
@@ -199,7 +199,7 @@ function (::G2P_FLIP)(pointstate::AbstractVector, gridstate::AbstractArray, spac
 end
 
 function (::G2P_PIC)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
-    grid = space.grid
+    grid = get_grid(space)
     pointvalues = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
         N = mp.N
@@ -218,7 +218,7 @@ function (::G2P_PIC)(pointstate::AbstractVector, gridstate::AbstractArray, space
 end
 
 function (::G2P_AffinePIC)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
-    grid = space.grid
+    grid = get_grid(space)
     pointvalues = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
         N = mp.N
@@ -242,7 +242,7 @@ function (::G2P_AffinePIC)(pointstate::AbstractVector, gridstate::AbstractArray,
 end
 
 function (::G2P_WLS)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{<: Any, dim}, dt::Real) where {dim}
-    grid = space.grid
+    grid = get_grid(space)
     P = get_basis(get_interpolation(space))
     p0 = value(P, zero(Vec{dim, Int}))
     ∇p0 = gradient(P, zero(Vec{dim, Int}))
@@ -264,7 +264,7 @@ function (::G2P_WLS)(pointstate::AbstractVector, gridstate::AbstractArray, space
 end
 
 function (::G2P_Default)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
-    grid = space.grid
+    grid = get_grid(space)
     G2P! = G2P_default(get_interpolation(space))
     G2P!(pointstate, gridstate, space, dt)
 end

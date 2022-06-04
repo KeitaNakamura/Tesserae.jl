@@ -8,13 +8,15 @@ SpPattern(dims::Int...) = SpPattern(dims)
 Base.size(spat::SpPattern) = size(spat.indices)
 Base.IndexStyle(::Type{<: SpPattern}) = IndexLinear()
 
+@inline get_spindices(x::SpPattern) = x.indices
 @inline Base.getindex(spat::SpPattern, i::Int) = (@_propagate_inbounds_meta; spat.indices[i] !== -1)
 
 function update_sppattern!(spat::SpPattern, mask::AbstractArray{Bool})
     @assert size(spat) == size(mask)
+    inds = get_spindices(spat)
     count = 0
-    @inbounds for i in eachindex(spat)
-        spat.indices[i] = (mask[i] ? count += 1 : -1)
+    @inbounds for i in eachindex(spat, mask)
+        inds[i] = (mask[i] ? count += 1 : -1)
     end
     count
 end
@@ -134,7 +136,7 @@ struct SpArray{T, dim, V <: AbstractVector{T}} <: AbstractArray{T, dim}
     data::V
     spat::SpPattern{dim}
     parent::Bool
-    stamp::Base.RefValue{Float64} # only used when constructing `SpArray` by `generate_gridstate`
+    stamp::RefValue{Float64} # only used when constructing `SpArray` by `generate_gridstate`
 end
 
 function SpArray{T}(dims::Tuple{Vararg{Int}}) where {T}
@@ -145,68 +147,73 @@ end
 SpArray{T}(dims::Int...) where {T} = SpArray{T}(dims)
 
 Base.IndexStyle(::Type{<: SpArray}) = IndexLinear()
-Base.size(x::SpArray) = size(x.spat)
+Base.size(A::SpArray) = size(A.spat)
 
-get_stamp(x::SpArray) = getfield(x, :stamp)[]
-get_sppattern(x::SpArray) = getfield(x, :spat)
+get_data(A::SpArray) = getfield(A, :data)
+get_stamp(A::SpArray) = getfield(A, :stamp)[]
+set_stamp!(A::SpArray, v) = getfield(A, :stamp)[] = v
+get_sppattern(A::SpArray) = getfield(A, :spat)
+is_parent(A::SpArray) = getfield(A, :parent)
 
 # handle `StructVector`
-Base.propertynames(x::SpArray{<: Any, <: Any, <: StructVector}) = (:data, :spat, :stamp, :parent, propertynames(x.data)...)
-function Base.getproperty(x::SpArray{<: Any, <: Any, <: StructVector}, name::Symbol)
-    name == :data   && return getfield(x, :data)
-    name == :spat   && return getfield(x, :spat)
-    name == :stamp  && return getfield(x, :stamp)
-    name == :parent && return getfield(x, :parent)
-    SpArray(getproperty(getfield(x, :data), name), getfield(x, :spat), false, getfield(x, :stamp))
+Base.propertynames(A::SpArray{<: Any, <: Any, <: StructVector}) = (:data, :spat, :parent, :stamp, propertynames(A.data)...)
+function Base.getproperty(A::SpArray{<: Any, <: Any, <: StructVector}, name::Symbol)
+    name == :data   && return getfield(A, :data)
+    name == :spat   && return getfield(A, :spat)
+    name == :parent && return getfield(A, :parent)
+    name == :stamp  && return getfield(A, :stamp)
+    SpArray(getproperty(get_data(A), name), get_sppattern(A), false, getfield(A, :stamp))
 end
 
 # return zero if the index is not active
-@inline function Base.getindex(x::SpArray, i::Int)
-    @boundscheck checkbounds(x, i)
-    spat = x.spat
-    index = spat.indices[i]
-    @inbounds index !== -1 ? x.data[index] : zero_recursive(eltype(x))
+@inline function Base.getindex(A::SpArray, i::Int)
+    @boundscheck checkbounds(A, i)
+    spat = get_sppattern(A)
+    @inbounds begin
+        index = get_spindices(spat)[i]
+        index !== -1 ? get_data(A)[index] : zero_recursive(eltype(A))
+    end
 end
 
 # do nothing if the index is not active (don't throw error!!)
-@inline function Base.setindex!(x::SpArray, v, i::Int)
-    @boundscheck checkbounds(x, i)
-    spat = x.spat
+@inline function Base.setindex!(A::SpArray, v, i::Int)
+    @boundscheck checkbounds(A, i)
+    spat = get_sppattern(A)
     @inbounds begin
-        index = spat.indices[i]
-        index === -1 && return x
-        x.data[index] = v
+        index = get_spindices(spat)[i]
+        index === -1 && return A
+        get_data(A)[index] = v
     end
-    x
+    A
 end
 
 # faster than using `setindex!(dest, dest + getindex(src, i))` when using `SpArray`
 # since the index is checked only once
-@inline function add!(x::SpArray, v, i)
-    @boundscheck checkbounds(x, i)
-    spat = x.spat
+@inline function add!(A::SpArray, v, i)
+    @boundscheck checkbounds(A, i)
+    spat = get_sppattern(A)
     @inbounds begin
-        index = spat.indices[i]
-        index === -1 && return x
-        x.data[index] += v
+        index = get_spindices(spat)[i]
+        index === -1 && return A
+        get_data(A)[index] += v
     end
-    x
+    A
 end
-@inline function add!(x::AbstractArray, v, i)
-    @boundscheck checkbounds(x, i)
-    @inbounds x[i] += v
-    x
+@inline function add!(A::AbstractArray, v, i)
+    @boundscheck checkbounds(A, i)
+    @inbounds A[i] += v
+    A
 end
 
-fillzero!(x::SpArray) = (fillzero!(x.data); x)
+fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
-function update_sppattern!(x::SpArray, spat::AbstractArray{Bool})
-    @assert x.parent
-    @assert size(x) == size(spat)
-    n = update_sppattern!(x.spat, spat)
-    resize!(x.data, n)
-    x.stamp[] = NaN
-    x
+function update_sppattern!(A::SpArray, spat::AbstractArray{Bool})
+    @assert is_parent(A)
+    @assert size(A) == size(spat)
+    n = update_sppattern!(get_sppattern(A), spat)
+    resize!(get_data(A), n)
+    A.stamp[] = NaN
+    A
 end
 
 #############
@@ -219,7 +226,7 @@ Broadcast.BroadcastStyle(::Type{<: SpArray}) = ArrayStyle{SpArray}()
     exps = []
     for i in 1:N
         if args[i] <: SpArray
-            push!(exps, :(args[$i].spat))
+            push!(exps, :(get_sppattern(args[$i])))
         elseif (args[i] <: AbstractArray) && !(args[i] <: AbstractTensor)
             push!(exps, :nothing)
         end
@@ -230,7 +237,7 @@ Broadcast.BroadcastStyle(::Type{<: SpArray}) = ArrayStyle{SpArray}()
 end
 identical(x, ys...) = all(y -> y === x, ys)
 
-_getspat(x::SpArray) = x.spat
+_getspat(x::SpArray) = get_sppattern(x)
 _getspat(x::Any) = true
 function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) where {ElType}
     dims = size(bc)
@@ -241,7 +248,7 @@ function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) wher
     A
 end
 
-_getdata(x::SpArray) = x.data
+_getdata(x::SpArray) = get_data(x)
 _getdata(x::Any) = x
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
@@ -280,7 +287,7 @@ Base.axes(x::ShowSpArray) = axes(x.parent)
 @inline function Base.getindex(x::ShowSpArray, i::Int...)
     @_propagate_inbounds_meta
     p = x.parent
-    p.spat[i...] ? maybecustomshow(p[i...]) : CDot()
+    get_sppattern(p)[i...] ? maybecustomshow(p[i...]) : CDot()
 end
 maybecustomshow(x) = x
 maybecustomshow(x::SpArray) = ShowSpArray(x)
