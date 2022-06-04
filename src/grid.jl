@@ -1,7 +1,9 @@
 """
     Grid(axes::AbstractVector...)
+    Grid{T}(axes::AbstractVector...)
 
 Construct `Grid` by `axes`.
+`axes` must have `step` function, i.e., each axis should be linearly spaced.
 
 # Examples
 ```jldoctest
@@ -30,6 +32,7 @@ gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 
 function Grid{T}(axes::NTuple{dim, AbstractVector}; coordinate_system = nothing) where {T, dim}
+    @assert all(map(issorted, axes))
     dx = map(step, axes)
     dx⁻¹ = map(inv, dx)
     Grid(
@@ -44,7 +47,7 @@ Grid(args...; kwargs...) = Grid{Float64}(args...; kwargs...)
 
 @inline function Base.getindex(grid::Grid{<: Any, dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(grid, i...)
-    @inbounds Vec(map(getindex, grid.axes, i))
+    @inbounds Vec(map(getindex, gridaxes(grid), i))
 end
 
 isinside(x::Vec, grid::Grid) = all(first(grid) .≤ x .≤ last(grid))
