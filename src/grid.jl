@@ -47,6 +47,8 @@ Grid(args...; kwargs...) = Grid{Float64}(args...; kwargs...)
     @inbounds Vec(map(getindex, grid.axes, i))
 end
 
+isinside(x::Vec, grid::Grid) = all(first(grid) .≤ x .≤ last(grid))
+
 """
     Marble.neighbornodes(grid, x::Vec, h)
 

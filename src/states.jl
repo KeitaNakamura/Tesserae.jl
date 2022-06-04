@@ -98,12 +98,3 @@ function generate_pointstate(indomain, grid::Grid{T, dim}; kwargs...) where {dim
     PointState = default_pointstate_type(Val(dim), Val(T))
     generate_pointstate(indomain, PointState, grid; kwargs...)
 end
-
-function points_outside_domain(xₚ::AbstractVector, grid::Grid)
-    findall(xₚ) do x
-        @inbounds begin
-            !(grid[begin][1] ≤ x[1] ≤ grid[end][1] &&
-              grid[begin][2] ≤ x[2] ≤ grid[end][2])
-        end
-    end
-end

@@ -17,6 +17,12 @@
     @test @inferred(gridaxes(grid, 2)) == 1:2.0:20
     @test @inferred(gridorigin(grid))::Vec{2} == Vec(0,1)
 
+    # isinside
+    @test Marble.isinside(Vec(0,1), grid) == true
+    @test Marble.isinside(Vec(2,4), grid) == true
+    @test Marble.isinside(Vec(0,0), grid) == false
+    @test_throws Exception Marble.isinside(Vec(1), grid)
+
     # neighbornodes/whichcell/whichblock
     @test @inferred(Marble.neighbornodes(grid, Vec(0.6, 8.8), 1))::CartesianIndices == CartesianIndices((1:2, 4:5))
     @test @inferred(Marble.neighbornodes(grid, Vec(0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:3, 3:6))
