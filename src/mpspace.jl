@@ -28,6 +28,14 @@ get_mpvalues(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[
 get_pointsperblock(space::MPSpace) = space.ptspblk
 get_stamp(space::MPSpace) = space.stamp[]
 
+# neighbornodes
+@inline function neighbornodes(space::MPSpace, x)
+    neighbornodes(get_interpolation(space), get_grid(space), x)
+end
+@inline function neighbornodes(space::MPSpace, x, h)
+    neighbornodes(get_grid(space), x, h)
+end
+
 # reorder_pointstate!
 function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
     @assert length(pointstate) == sum(length, ptspblk)
@@ -65,31 +73,6 @@ function pointsperblock(grid::Grid, xₚ::AbstractVector)
     pointsperblock!(ptspblk, grid, xₚ)
 end
 
-function update_sppattern!(spat::Array{Bool}, interp::Interpolation, grid::Grid, pointstate::AbstractVector, ptspblk::AbstractArray{Vector{Int}}; exclude)
-    @assert size(spat) == size(grid)
-    fill!(spat, false)
-    for blocks in threadsafe_blocks(size(grid))
-        Threads.@threads for blockindex in blocks
-            for p in ptspblk[blockindex]
-                inds = neighbornodes(interp, grid, LazyRow(pointstate, p))
-                @inbounds spat[inds] .= true
-            end
-        end
-    end
-    if exclude !== nothing
-        @. spat &= !exclude
-        for blocks in threadsafe_blocks(size(grid))
-            Threads.@threads for blockindex in blocks
-                for p in ptspblk[blockindex]
-                    inds = neighbornodes(grid, pointstate.x[p], 1)
-                    @inbounds spat[inds] .= true
-                end
-            end
-        end
-    end
-    spat
-end
-
 function allocate!(f, x::Vector, n::Integer)
     len = length(x)
     if n > len # growend
@@ -101,24 +84,44 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function update!(space::MPSpace, pointstate; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
-    grid = get_grid(space)
-    mpvals = get_mpvalues(space)
-    ptspblk = get_pointsperblock(space)
-    spat = get_sppattern(space)
-
+function update!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
     space.npts[]  = length(pointstate)
     space.stamp[] = time()
+
+    mpvals = get_mpvalues(space)
     allocate!(i -> eltype(mpvals)(), mpvals, length(pointstate))
 
-    pointsperblock!(ptspblk, grid, pointstate.x)
-    update_sppattern!(spat, get_interpolation(space), grid, pointstate, ptspblk; exclude)
-
+    update_sppattern!(space, pointstate; exclude)
     Threads.@threads for p in 1:length(pointstate)
-        @inbounds update!(mpvals[p], grid, LazyRow(pointstate, p), spat)
+        @inbounds update!(mpvals[p], get_grid(space), LazyRow(pointstate, p), get_sppattern(space))
     end
 
     space
+end
+
+function update_sppattern!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
+    # update `pointsperblock`
+    pointsperblock!(get_pointsperblock(space), get_grid(space), pointstate.x)
+
+    # update sparsity pattern
+    spat = get_sppattern(space)
+    fill!(spat, false)
+    eachpoint_blockwise_parallel(space) do p
+        @_inline_propagate_inbounds_meta
+        inds = neighbornodes(space, LazyRow(pointstate, p))
+        spat[inds] .= true
+    end
+
+    # handle excluded domain
+    if exclude !== nothing
+        @. spat &= !exclude
+        eachpoint_blockwise_parallel(space) do p
+            @_inline_propagate_inbounds_meta
+            inds = neighbornodes(space, pointstate.x[p], 1)
+            spat[inds] .= true
+        end
+    end
+    spat
 end
 
 function update_sppattern!(gridstate::SpArray, space::MPSpace)
