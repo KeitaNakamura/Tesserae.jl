@@ -178,10 +178,9 @@ end
 
 
 struct Boundaries{dim} <: AbstractArray{Tuple{CartesianIndex{dim}, Vec{dim, Int}}, dim}
-    inds::CartesianIndices{dim}
+    inds::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
     n::Vec{dim, Int}
 end
-Base.IndexStyle(::Type{<: Boundaries}) = IndexCartesian()
 Base.size(x::Boundaries) = size(x.inds)
 Base.getindex(x::Boundaries{dim}, I::Vararg{Int, dim}) where {dim} = (@_propagate_inbounds_meta; (x.inds[I...], x.n))
 
@@ -197,11 +196,11 @@ function _boundaries(grid::AbstractArray{<: Any, dim}, which::String) where {dim
     else error("invalid bound name")
     end
 
-    inds = CartesianIndices(ntuple(d -> d==axis ? (index:index) : axes(grid, d), Val(dim)))
-    n = Vec(ntuple(d -> ifelse(d==axis, dir, 0), Val(dim)))
+    rngs = ntuple(d -> d==axis ? (index:index) : UnitRange(axes(grid, d)), Val(dim))
+    n = Vec{dim}(i-> ifelse(i==axis, dir, 0))
 
-    Boundaries(inds, n)
+    Boundaries(CartesianIndices(rngs), n)
 end
-function gridbounds(grid::AbstractArray, which::Vararg{String, N}) where {N}
-    Iterators.flatten(ntuple(i -> _boundaries(grid, which[i]), Val(N)))
+function gridbounds(grid::AbstractArray, which::String...)
+    Iterators.flatten(map_tuple(_boundaries, grid, which))
 end
