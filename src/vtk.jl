@@ -62,11 +62,7 @@ function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractVector
 end
 
 function vtk_format(x::AbstractVector{Vec{dim, T}}) where {dim, T}
-    n = length(x)
-    v = reinterpret(T, Array(x))
-    out = zeros(T, ifelse(dim==2, 3, dim), n)
-    out[1:dim, :] .= reshape(v, dim, n)
-    out
+    reshape(reinterpret(T, x), (dim, length(x)))
 end
 
 function vtk_format(data::AbstractVector{<: SymmetricSecondOrderTensor{3}})
