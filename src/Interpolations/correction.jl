@@ -4,8 +4,8 @@ end
 
 @pure get_kernel(::KernelCorrection{K}) where {K} = K()
 
-@inline function neighbornodes(x::KernelCorrection, grid::Grid, pt)
-    neighbornodes(get_kernel(x), grid, pt)
+@inline function gridindices(x::KernelCorrection, grid::Grid, pt)
+    gridindices(get_kernel(x), grid, pt)
 end
 
 
@@ -49,7 +49,7 @@ function update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{<:
 
     # update
     mpvalues.xp = xp
-    allactive = update_active_gridindices!(mpvalues, neighbornodes(F, grid, pt), spat)
+    allactive = update_active_gridindices!(mpvalues, gridindices(F, grid, pt), spat)
     if allactive
         wᵢ, ∇wᵢ = values_gradients(F, grid, pt)
         mpvalues.N .= wᵢ

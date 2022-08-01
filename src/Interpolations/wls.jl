@@ -9,8 +9,8 @@ const BilinearWLS = WLS{BilinearBasis}
 @pure get_basis(::WLS{B}) where {B} = B()
 @pure get_kernel(::WLS{B, W}) where {B, W} = W()
 
-@inline function neighbornodes(wls::WLS, grid::Grid, pt)
-    neighbornodes(get_kernel(wls), grid, pt)
+@inline function gridindices(wls::WLS, grid::Grid, pt)
+    gridindices(get_kernel(wls), grid, pt)
 end
 
 
@@ -68,7 +68,7 @@ function update!(mpvalues::WLSValues, grid::Grid, pt, spat::AbstractArray{Bool})
 
     # update
     mpvalues.xp = xp
-    update_active_gridindices!(mpvalues, neighbornodes(F, grid, pt), spat)
+    update_active_gridindices!(mpvalues, gridindices(F, grid, pt), spat)
     @inbounds @simd for i in 1:length(mpvalues)
         I = gridindices(mpvalues, i)
         xi = grid[I]
@@ -105,7 +105,7 @@ function update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, gr
 
     # update
     mpvalues.xp = xp
-    allactive = update_active_gridindices!(mpvalues, neighbornodes(F, grid, xp), spat)
+    allactive = update_active_gridindices!(mpvalues, gridindices(F, grid, xp), spat)
     if allactive
         # fast version
         D = zero(Vec{dim, T}) # diagonal entries

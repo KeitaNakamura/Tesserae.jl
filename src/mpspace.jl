@@ -28,14 +28,6 @@ get_mpvalues(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[
 get_pointsperblock(space::MPSpace) = space.ptspblk
 get_stamp(space::MPSpace) = space.stamp[]
 
-# neighbornodes
-@inline function neighbornodes(space::MPSpace, x)
-    neighbornodes(get_interpolation(space), get_grid(space), x)
-end
-@inline function neighbornodes(space::MPSpace, x, h)
-    neighbornodes(get_grid(space), x, h)
-end
-
 # reorder_pointstate!
 function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
     @assert length(pointstate) == sum(length, ptspblk)
@@ -108,7 +100,7 @@ function update_sppattern!(space::MPSpace, pointstate::AbstractVector; exclude::
     fill!(spat, false)
     eachpoint_blockwise_parallel(space) do p
         @_inline_propagate_inbounds_meta
-        inds = neighbornodes(space, LazyRow(pointstate, p))
+        inds = gridindices(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
         spat[inds] .= true
     end
 
@@ -117,7 +109,7 @@ function update_sppattern!(space::MPSpace, pointstate::AbstractVector; exclude::
         @. spat &= !exclude
         eachpoint_blockwise_parallel(space) do p
             @_inline_propagate_inbounds_meta
-            inds = neighbornodes(space, pointstate.x[p], 1)
+            inds = gridindices(get_grid(space), pointstate.x[p], 1)
             spat[inds] .= true
         end
     end

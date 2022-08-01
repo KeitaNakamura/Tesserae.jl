@@ -34,10 +34,10 @@ get_supportlength(::BSpline{4}) = 2.5
     (2*get_supportlength(bspline))^dim
 end
 
-@inline function neighbornodes(bsp::BSpline, grid::Grid, x::Vec)
-    neighbornodes(grid, x, get_supportlength(bsp))
+@inline function gridindices(bsp::BSpline, grid::Grid, x::Vec)
+    gridindices(grid, x, get_supportlength(bsp))
 end
-@inline neighbornodes(bsp::BSpline, grid::Grid, pt) = neighbornodes(bsp, grid, pt.x)
+@inline gridindices(bsp::BSpline, grid::Grid, pt) = gridindices(bsp, grid, pt.x)
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)
@@ -250,7 +250,7 @@ function update!(mpvalues::BSplineValues, grid::Grid, xp::Vec, spat::AbstractArr
 
     # update
     mpvalues.xp = xp
-    update_active_gridindices!(mpvalues, neighbornodes(F, grid, xp), spat)
+    update_active_gridindices!(mpvalues, gridindices(F, grid, xp), spat)
     @inbounds @simd for i in 1:length(mpvalues)
         I = gridindices(mpvalues, i)
         mpvalues.N[i], mpvalues.∇N[i] = value_gradient(F, grid, I, xp, :steffen)

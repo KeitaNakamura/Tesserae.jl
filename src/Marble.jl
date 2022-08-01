@@ -28,6 +28,7 @@ export
     generate_pointstate,
 # interpolations
     update!,
+    gridindices,
     Interpolation,
     BSpline,
     LinearBSpline,

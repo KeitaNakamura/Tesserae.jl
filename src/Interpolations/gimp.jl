@@ -2,11 +2,11 @@ struct GIMP <: Kernel end
 
 @pure num_nodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
 
-@inline function neighbornodes(f::GIMP, grid::Grid, xp::Vec, rp::Vec)
+@inline function gridindices(f::GIMP, grid::Grid, xp::Vec, rp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
-    neighbornodes(grid, xp, 1 .+ rp.*dx⁻¹)
+    gridindices(grid, xp, 1 .+ rp.*dx⁻¹)
 end
-@inline neighbornodes(f::GIMP, grid::Grid, pt) = neighbornodes(f, grid, pt.x, pt.r)
+@inline gridindices(f::GIMP, grid::Grid, pt) = gridindices(f, grid, pt.x, pt.r)
 
 # simple GIMP calculation
 # See Eq.(40) in
@@ -130,7 +130,7 @@ function update!(mpvalues::GIMPValues, grid::Grid, pt, spat::AbstractArray{Bool}
     # update
     mpvalues.xp = xp
     dx⁻¹ = gridsteps_inv(grid)
-    update_active_gridindices!(mpvalues, neighbornodes(F, grid, pt), spat)
+    update_active_gridindices!(mpvalues, gridindices(F, grid, pt), spat)
     @inbounds @simd for i in 1:length(mpvalues)
         I = gridindices(mpvalues, i)
         mpvalues.N[i], mpvalues.∇N[i] = value_gradient(F, grid, I, pt)

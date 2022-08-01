@@ -23,11 +23,11 @@
     @test Marble.isinside(Vec(0,0), grid) == false
     @test_throws Exception Marble.isinside(Vec(1), grid)
 
-    # neighbornodes/whichcell/whichblock
-    @test @inferred(Marble.neighbornodes(grid, Vec(0.6, 8.8), 1))::CartesianIndices == CartesianIndices((1:2, 4:5))
-    @test @inferred(Marble.neighbornodes(grid, Vec(0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:3, 3:6))
-    @test @inferred(Marble.neighbornodes(grid, Vec(-0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:0, 1:0))
-    @test @inferred(Marble.neighbornodes(grid, Vec(0.6, 8.8), Vec(1,2)))::CartesianIndices == CartesianIndices((1:2, 3:6))
+    # gridindices/whichcell/whichblock
+    @test @inferred(gridindices(grid, Vec(0.6, 8.8), 1))::CartesianIndices == CartesianIndices((1:2, 4:5))
+    @test @inferred(gridindices(grid, Vec(0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:3, 3:6))
+    @test @inferred(gridindices(grid, Vec(-0.6, 8.8), 2))::CartesianIndices == CartesianIndices((1:0, 1:0))
+    @test @inferred(gridindices(grid, Vec(0.6, 8.8), Vec(1,2)))::CartesianIndices == CartesianIndices((1:2, 3:6))
     @test (Marble.whichcell(grid, Vec(0.6, 8.8)))::CartesianIndex == CartesianIndex(1, 4)
     @test (Marble.whichcell(grid, Vec(-0.6, 8.8)))::Nothing == nothing
     @test (Marble.whichblock(grid, Vec(8.8, 4.6)))::CartesianIndex == CartesianIndex(2, 1)
