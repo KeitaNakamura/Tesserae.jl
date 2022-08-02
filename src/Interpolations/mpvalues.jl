@@ -5,7 +5,7 @@ abstract type MPValue end
 abstract type MPValues{dim, T, V <: MPValue} <: AbstractVector{V} end
 
 Base.size(x::MPValues) = (x.len,)
-gridindices(x::MPValues) = x.gridindices
+gridindices(x::MPValues) = (@_propagate_inbounds_meta; view(x.gridindices, 1:length(x)))
 gridindices(x::MPValues, i::Int) = (@_propagate_inbounds_meta; x.gridindices[i])
 
 """
