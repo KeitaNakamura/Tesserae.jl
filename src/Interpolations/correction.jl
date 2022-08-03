@@ -55,35 +55,26 @@ function update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{<:
         mpvalues.N .= wᵢ
         mpvalues.∇N .= ∇wᵢ
     else
-        A = zero(Mat{dim, dim, T})
-        β = zero(Vec{dim, T})
-        A′ = zero(Mat{dim, dim, T})
-        β′ = zero(Vec{dim, T})
+        M = zero(Mat{dim+1, dim+1, T})
         @inbounds @simd for i in 1:length(mpvalues)
             I = gridindices(mpvalues, i)
             xi = grid[I]
-            w, ∇w = value_gradient(F, grid, I, pt)
-            A += w * (xi - xp) ⊗ (xi - xp)
-            β += w * (xi - xp)
-            A′ += ∇w ⊗ (xi - xp)
-            β′ += ∇w
+            w = value(F, grid, I, pt)
+            P = [1; xi - xp]
+            M += w * P ⊗ P
             mpvalues.N[i] = w
-            mpvalues.∇N[i] = ∇w
         end
-        β = inv(A) ⋅ β
-        β′ = inv(A′) ⋅ β′
-        α = zero(T)
-        α′ = zero(Mat{dim, dim, T})
+        Minv = inv(M)
+        C1 = Minv[1,1]
+        C2 = @Tensor Minv[2:end,1]
+        C3 = @Tensor Minv[2:end,2:end]
         @inbounds @simd for i in 1:length(mpvalues)
             I = gridindices(mpvalues, i)
             xi = grid[I]
-            mpvalues.N[i] *= 1 + β ⋅ (xp - xi)
-            mpvalues.∇N[i] *= 1 + β′ ⋅ (xp - xi)
-            α += mpvalues.N[i]
-            α′ += xi ⊗ mpvalues.∇N[i]
+            w = mpvalues.N[i]
+            mpvalues.N[i] = (C1 + C2 ⋅ (xi - xp)) * w
+            mpvalues.∇N[i] = (C2 + C3 ⋅ (xi - xp)) * w
         end
-        @. mpvalues.N = mpvalues.N * $inv(α)
-        @. mpvalues.∇N = mpvalues.∇N ⋅ $inv(α′)
     end
 
     mpvalues
