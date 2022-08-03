@@ -102,7 +102,7 @@ function stripfooting(
             ret = @matcalc(:stressall, model; σ = σ_n, dϵ)
             dσᴶ = ret.σ - σ_n
             σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann = dσᴶ, σ = σ_n, W = skew(∇v*dt))
-            if ret.status.tensioncutoff
+            if ret.status.tensioncollapse
                 # In this case, since the soil particles are not contacted with
                 # each other, soils should not act as continuum.
                 # This means that the deformation based on the contitutitive model

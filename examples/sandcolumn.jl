@@ -12,7 +12,7 @@ function sandcolumn(
     ρ₀ = 1.6e3
     g = 9.81
     h = 0.3
-    ϕ = deg2rad(38)
+    ϕ = deg2rad(35)
     ψ = deg2rad(0)
     ν = 0.333
     E = 1e6
@@ -74,7 +74,7 @@ function sandcolumn(
             ret = @matcalc(:stressall, model; σ = σ_n, dϵ)
             dσᴶ = ret.σ - σ_n
             σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann = dσᴶ, σ = σ_n, W = skew(∇v*dt))
-            if ret.status.tensioncutoff
+            if ret.status.tensioncollapse
                 # In this case, since the soil particles are not contacted with
                 # each other, soils should not act as continuum.
                 # This means that the deformation based on the contitutitive model

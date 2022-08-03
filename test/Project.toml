@@ -7,6 +7,6 @@ ReadVTK = "dc215faf-f008-4882-a9f7-a79a826fadc3"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-MaterialModels = "0.6"
+MaterialModels = "0.7"
 NaturalSort = "1"
 ReadVTK = "0.1"
