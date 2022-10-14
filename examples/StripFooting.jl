@@ -1,7 +1,7 @@
 using Marble
 using MaterialModels
 
-function stripfooting(
+function StripFooting(
         interp = LinearWLS(QuadraticBSpline());
         ν = 0.3,
         dx = 0.1,
@@ -9,7 +9,7 @@ function stripfooting(
         handle_volumetric_locking::Bool = false,
         transfer = Transfer(),
         showprogress::Bool = true,
-        outdir = joinpath(@__DIR__, "stripfooting.tmp"),
+        outdir = joinpath(@__DIR__, "StripFooting.tmp"),
     )
     ρ₀ = 1.0e3
     g = 0.0
@@ -45,8 +45,8 @@ function stripfooting(
 
     # Outputs
     mkpath(outdir)
-    paraview_file = joinpath(outdir, "out")
-    Marble.defalut_output_paraview_initialize(paraview_file)
+    pvdfile = joinpath(outdir, "StripFooting")
+    closepvd(openpvd(pvdfile))
 
     logger = Logger(0.0, 0.1, 0.002; showprogress)
 
@@ -113,14 +113,21 @@ function stripfooting(
         push!(load, vertical_load)
 
         if islogpoint(logger)
-            Marble.defalut_output_paraview_append(
-                paraview_file,
-                grid,
-                pointstate,
-                t,
-                logindex(logger);
-                output_grid = true,
-            )
+            openpvd(pvdfile; append = true) do pvd
+                openvtm(string(pvdfile, logindex(logger))) do vtm
+                    openvtk(vtm, pointstate.x) do vtk
+                        σ = pointstate.σ
+                        ϵ = pointstate.ϵ
+                        vtk["mean stress"] = @dot_lazy mean(σ)
+                        vtk["von mises stress"] = @dot_lazy sqrt(3/2 * dev(σ) ⊡ dev(σ))
+                        vtk["volumetric strain"] = @dot_lazy tr(ϵ)
+                        vtk["deviatoric strain"] = @dot_lazy sqrt(2/3 * dev(ϵ) ⊡ dev(ϵ))
+                    end
+                    openvtk(vtm, grid) do vtk
+                    end
+                    pvd[t] = vtm
+                end
+            end
         end
     end
 

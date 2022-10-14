@@ -61,7 +61,12 @@ export
     islogpoint,
     logindex,
 # VTK
-    vtk_points
+    openvtk,
+    openvtm,
+    openpvd,
+    closevtk,
+    closevtm,
+    closepvd
 
 
 include("misc.jl")

@@ -1,13 +1,13 @@
 using Marble
 using MaterialModels
 
-function sandcolumn(
+function SandColumn(
         interp = LinearWLS(QuadraticBSpline());
         dx = 0.01,
         CFL = 1.0,
         transfer = Transfer(),
         showprogress::Bool = true,
-        outdir = joinpath(@__DIR__, "sandcolumn.tmp"),
+        outdir = joinpath(@__DIR__, "SandColumn.tmp"),
     )
     ρ₀ = 1.6e3
     g = 9.81
@@ -39,8 +39,8 @@ function sandcolumn(
 
     # Outputs
     mkpath(outdir)
-    paraview_file = joinpath(outdir, "out")
-    Marble.defalut_output_paraview_initialize(paraview_file)
+    pvdfile = joinpath(outdir, "SandColumn")
+    closepvd(openpvd(pvdfile))
 
     logger = Logger(0.0, 0.6, 0.01; showprogress)
 
@@ -86,14 +86,14 @@ function sandcolumn(
         update!(logger, t += dt)
 
         if islogpoint(logger)
-            Marble.defalut_output_paraview_append(
-                paraview_file,
-                grid,
-                pointstate,
-                t,
-                logindex(logger);
-                output_grid = true,
-            )
+            openpvd(pvdfile; append = true) do pvd
+                openvtm(string(pvdfile, logindex(logger))) do vtm
+                    openvtk(vtm, pointstate.x) do vtk
+                        vtk["velocity"] = pointstate.v
+                    end
+                    pvd[t] = vtm
+                end
+            end
         end
     end
 end
