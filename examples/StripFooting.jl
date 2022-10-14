@@ -7,7 +7,7 @@ function StripFooting(
         dx = 0.1,
         CFL = 1.0,
         handle_volumetric_locking::Bool = false,
-        transfer = Transfer(),
+        transfer = DefaultTransfer(),
         showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "StripFooting.tmp"),
     )
@@ -64,7 +64,7 @@ function StripFooting(
         update!(space, pointstate)
         update_sparsity_pattern!(gridstate, space)
 
-        transfer.point_to_grid!(gridstate, pointstate, space, dt)
+        point_to_grid!(transfer, gridstate, pointstate, space, dt)
 
         # boundary conditions
         vertical_load = 0.0
@@ -82,7 +82,7 @@ function StripFooting(
             gridstate.v[I] += contacted(CoulombFriction(:slip), gridstate.v[I], n)
         end
 
-        transfer.grid_to_point!(pointstate, gridstate, space, dt)
+        grid_to_point!(transfer, pointstate, gridstate, space, dt)
 
         @. tr∇v = tr(pointstate.∇v)
         if handle_volumetric_locking

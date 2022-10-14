@@ -47,8 +47,9 @@ export
     update_sparsity_pattern!,
 # Transfer
     Transfer,
-    TransferNormalFLIP,
-    TransferNormalPIC,
+    DefaultTransfer,
+    TransferFLIP,
+    TransferPIC,
     TransferTaylorFLIP,
     TransferTaylorPIC,
     TransferAffinePIC,

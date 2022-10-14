@@ -5,7 +5,7 @@ function SandColumn(
         interp = LinearWLS(QuadraticBSpline());
         dx = 0.01,
         CFL = 1.0,
-        transfer = Transfer(),
+        transfer = DefaultTransfer(),
         showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "SandColumn.tmp"),
     )
@@ -56,7 +56,7 @@ function SandColumn(
         update!(space, pointstate)
         update_sparsity_pattern!(gridstate, space)
 
-        transfer.point_to_grid!(gridstate, pointstate, space, dt)
+        point_to_grid!(transfer, gridstate, pointstate, space, dt)
 
         # boundary conditions
         @inbounds for (I,n) in gridbounds(grid, "-y") # bottom
@@ -66,7 +66,7 @@ function SandColumn(
             gridstate.v[I] += contacted(CoulombFriction(μ = 0), gridstate.v[I], n)
         end
 
-        transfer.grid_to_point!(pointstate, gridstate, space, dt)
+        grid_to_point!(transfer, pointstate, gridstate, space, dt)
         @inbounds Threads.@threads for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]

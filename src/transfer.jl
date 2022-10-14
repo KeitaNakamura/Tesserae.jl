@@ -12,16 +12,16 @@ struct G2P_AffinePIC end
 struct G2P_Default   end
 
 struct Transfer{P2G, G2P}
-    point_to_grid!::P2G
-    grid_to_point!::G2P
+    P2G::P2G
+    G2P::G2P
     Transfer{P2G, G2P}() where {P2G, G2P} = new(P2G(), G2P())
 end
 # default
-@pure Transfer() = Transfer{P2G_Default, G2P_Default}()
+@pure DefaultTransfer() = Transfer{P2G_Default, G2P_Default}()
 
 # supported transfer combinations
-const TransferNormalFLIP = Transfer{P2G_Normal, G2P_FLIP}
-const TransferNormalPIC  = Transfer{P2G_Normal, G2P_PIC}
+const TransferFLIP = Transfer{P2G_Normal, G2P_FLIP}
+const TransferPIC  = Transfer{P2G_Normal, G2P_PIC}
 const TransferTaylorFLIP = Transfer{P2G_Taylor, G2P_FLIP}
 const TransferTaylorPIC  = Transfer{P2G_Taylor, G2P_PIC}
 const TransferAffinePIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
@@ -46,7 +46,14 @@ const TransferWLS        = Transfer{P2G_WLS, G2P_WLS}
 # P2G transfer #
 ################
 
-function (::P2G_Normal)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
+point_to_grid!(t::Transfer, args...) = point_to_grid!(t.P2G, args...)
+
+function point_to_grid!(::P2G_Default, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
+    P2G = P2G_default(get_interpolation(space))
+    point_to_grid!(P2G, gridstate, pointstate, space, dt)
+end
+
+function point_to_grid!(::P2G_Normal, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
     grid = get_grid(space)
     point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
         @_inline_propagate_inbounds_meta
@@ -69,7 +76,7 @@ function (::P2G_Normal)(gridstate::AbstractArray, pointstate::AbstractVector, sp
     gridstate
 end
 
-function (::P2G_AffinePIC)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
+function point_to_grid!(::P2G_AffinePIC, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
     grid = get_grid(space)
     D = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
@@ -101,7 +108,7 @@ function (::P2G_AffinePIC)(gridstate::AbstractArray, pointstate::AbstractVector,
     gridstate
 end
 
-function (::P2G_Taylor)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace{<: Any, dim}, dt::Real) where {dim}
+function point_to_grid!(::P2G_Taylor, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace{<: Any, dim}, dt::Real) where {dim}
     grid = get_grid(space)
     point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
         @_inline_propagate_inbounds_meta
@@ -125,7 +132,7 @@ function (::P2G_Taylor)(gridstate::AbstractArray, pointstate::AbstractVector, sp
     gridstate
 end
 
-function (::P2G_WLS)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
+function point_to_grid!(::P2G_WLS, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
     grid = get_grid(space)
     P = get_basis(get_interpolation(space))
     point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
@@ -149,12 +156,6 @@ function (::P2G_WLS)(gridstate::AbstractArray, pointstate::AbstractVector, space
     gridstate
 end
 
-function (::P2G_Default)(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
-    grid = get_grid(space)
-    P2G! = P2G_default(get_interpolation(space))
-    P2G!(gridstate, pointstate, space, dt)
-end
-
 @inline function stress_to_force(::PlaneStrain, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
     Tensorial.resizedim(σ, Val(2)) ⋅ ∇N
 end
@@ -169,17 +170,14 @@ end
 # G2P transfer #
 ################
 
-@inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    Tensorial.resizedim(∇v, Val(3)) # expaned entries are filled with zero
-end
-@inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    @inbounds Tensorial.resizedim(∇v, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
-end
-@inline function velocity_gradient(::ThreeDimensional, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
-    ∇v
+grid_to_point!(t::Transfer, args...) = grid_to_point!(t.G2P, args...)
+
+function grid_to_point!(::G2P_Default, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+    G2P = G2P_default(get_interpolation(space))
+    grid_to_point!(G2P, pointstate, gridstate, space, dt)
 end
 
-function (::G2P_FLIP)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+function grid_to_point!(::G2P_FLIP, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
     grid = get_grid(space)
     pointvalues = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
@@ -198,7 +196,7 @@ function (::G2P_FLIP)(pointstate::AbstractVector, gridstate::AbstractArray, spac
     pointstate
 end
 
-function (::G2P_PIC)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
     grid = get_grid(space)
     pointvalues = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
@@ -217,7 +215,7 @@ function (::G2P_PIC)(pointstate::AbstractVector, gridstate::AbstractArray, space
     pointstate
 end
 
-function (::G2P_AffinePIC)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
     grid = get_grid(space)
     pointvalues = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
@@ -241,7 +239,7 @@ function (::G2P_AffinePIC)(pointstate::AbstractVector, gridstate::AbstractArray,
     pointstate
 end
 
-function (::G2P_WLS)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{<: Any, dim}, dt::Real) where {dim}
+function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{<: Any, dim}, dt::Real) where {dim}
     grid = get_grid(space)
     P = get_basis(get_interpolation(space))
     p0 = value(P, zero(Vec{dim, Int}))
@@ -263,8 +261,12 @@ function (::G2P_WLS)(pointstate::AbstractVector, gridstate::AbstractArray, space
     pointstate
 end
 
-function (::G2P_Default)(pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
-    grid = get_grid(space)
-    G2P! = G2P_default(get_interpolation(space))
-    G2P!(pointstate, gridstate, space, dt)
+@inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
+    Tensorial.resizedim(∇v, Val(3)) # expaned entries are filled with zero
+end
+@inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
+    @inbounds Tensorial.resizedim(∇v, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
+end
+@inline function velocity_gradient(::ThreeDimensional, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
+    ∇v
 end

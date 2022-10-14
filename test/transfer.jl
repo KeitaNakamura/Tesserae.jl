@@ -1,5 +1,5 @@
 @testset "P2G" begin
-    transfer = Transfer()
+    transfer = DefaultTransfer()
     for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
         for coordinate_system in (PlaneStrain(), Axisymmetric())
             # initialization
@@ -15,7 +15,7 @@
             # transfer
             update!(space, pointstate)
             update_sparsity_pattern!(gridstate, space)
-            transfer.point_to_grid!(gridstate, pointstate, space, 1)
+            point_to_grid!(transfer, gridstate, pointstate, space, 1)
             @test all(==(v0), pointstate.v)
         end
     end
