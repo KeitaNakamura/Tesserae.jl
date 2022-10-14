@@ -83,7 +83,7 @@ function update!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Noth
     mpvals = get_mpvalues(space)
     allocate!(i -> eltype(mpvals)(), mpvals, length(pointstate))
 
-    update_sppattern!(space, pointstate; exclude)
+    update_sparsity_pattern!(space, pointstate; exclude)
     Threads.@threads for p in 1:length(pointstate)
         @inbounds update!(mpvals[p], get_grid(space), LazyRow(pointstate, p), get_sppattern(space))
     end
@@ -91,7 +91,7 @@ function update!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Noth
     space
 end
 
-function update_sppattern!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
+function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
     # update `pointsperblock`
     pointsperblock!(get_pointsperblock(space), get_grid(space), pointstate.x)
 
@@ -116,10 +116,10 @@ function update_sppattern!(space::MPSpace, pointstate::AbstractVector; exclude::
     spat
 end
 
-function update_sppattern!(gridstate::SpArray, space::MPSpace)
+function update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)
     @assert is_parent(gridstate)
     @assert size(gridstate) == gridsize(space)
-    update_sppattern!(gridstate, get_sppattern(space))
+    update_sparsity_pattern!(gridstate, get_sppattern(space))
     set_stamp!(gridstate, get_stamp(space))
     gridstate
 end
@@ -143,7 +143,10 @@ function check_gridstate(gridstate::AbstractArray, space::MPSpace)
 end
 function check_gridstate(gridstate::SpArray, space::MPSpace)
     @assert size(gridstate) == gridsize(space)
-    @assert get_stamp(gridstate) == get_stamp(space)
+    if get_stamp(gridstate) != get_stamp(space)
+        # check to use @inbounds for `SpArray`
+        error("`update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)` must be executed before `point_to_grid!`")
+    end
 end
 
 function point_to_grid!(p2g, gridstates, mps::MPValues)

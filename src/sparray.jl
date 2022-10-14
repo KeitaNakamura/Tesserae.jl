@@ -11,7 +11,7 @@ Base.IndexStyle(::Type{<: SpPattern}) = IndexLinear()
 @inline get_spindices(x::SpPattern) = x.indices
 @inline Base.getindex(spat::SpPattern, i::Int) = (@_propagate_inbounds_meta; spat.indices[i] !== -1)
 
-function update_sppattern!(spat::SpPattern, mask::AbstractArray{Bool})
+function update_sparsity_pattern!(spat::SpPattern, mask::AbstractArray{Bool})
     @assert size(spat) == size(mask)
     inds = get_spindices(spat)
     count = 0
@@ -48,7 +48,7 @@ julia> A[1,1]
 ```
 
 This is because the index `(1,1)` is not activated yet.
-To activate the index, update sparsity pattern by `update_sppattern!(A, spat)`.
+To activate the index, update sparsity pattern by `update_sparsity_pattern!(A, spat)`.
 
 ```jl sparray
 julia> spat = falses(5,5); spat[1,1] = true; spat
@@ -59,7 +59,7 @@ julia> spat = falses(5,5); spat[1,1] = true; spat
  0  0  0  0  0
  0  0  0  0  0
 
-julia> update_sppattern!(A, spat)
+julia> update_sparsity_pattern!(A, spat)
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
  2.17321e-314  ⋅  ⋅  ⋅  ⋅
   ⋅            ⋅  ⋅  ⋅  ⋅
@@ -74,7 +74,7 @@ julia> A[1,1] = 2; A[1,1]
 Although the inactive indices return zero value when using `getindex`,
 the behaviors in array calculation is similar to `missing` rather than zero:
 
-```jldoctest sparray; setup = :(spat=falses(5,5); spat[1,1]=true; update_sppattern!(A, spat); A[1,1]=2)
+```jldoctest sparray; setup = :(spat=falses(5,5); spat[1,1]=true; update_sparsity_pattern!(A, spat); A[1,1]=2)
 julia> A
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
  2.0  ⋅  ⋅  ⋅  ⋅
@@ -113,7 +113,7 @@ Thus, inactive indices are propagated as
 ```jldoctest sparray
 julia> B = Marble.SpArray{Float64}(5,5);
 
-julia> fill!(spat, false); spat[3,3] = true; update_sppattern!(B, spat); B[3,3] = 8.0;
+julia> fill!(spat, false); spat[3,3] = true; update_sparsity_pattern!(B, spat); B[3,3] = 8.0;
 
 julia> B
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
@@ -207,10 +207,10 @@ end
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
-function update_sppattern!(A::SpArray, spat::AbstractArray{Bool})
+function update_sparsity_pattern!(A::SpArray, spat::AbstractArray{Bool})
     @assert is_parent(A)
     @assert size(A) == size(spat)
-    n = update_sppattern!(get_sppattern(A), spat)
+    n = update_sparsity_pattern!(get_sppattern(A), spat)
     resize!(get_data(A), n)
     A.stamp[] = NaN
     A
@@ -240,11 +240,9 @@ identical(x, ys...) = all(y -> y === x, ys)
 _getspat(x::SpArray) = get_sppattern(x)
 _getspat(x::Any) = true
 function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) where {ElType}
-    dims = size(bc)
-    spat = BitArray(undef, dims)
-    broadcast!(&, spat, map(_getspat, bc.args)...)
-    A = SpArray{ElType}(dims)
-    update_sppattern!(A, spat)
+    A = SpArray{ElType}(size(bc))
+    spat = broadcast(&, map(_getspat, bc.args)...)
+    update_sparsity_pattern!(A, spat)
     A
 end
 
