@@ -75,15 +75,7 @@ function sandcolumn(
             dσᴶ = ret.σ - σ_n
             σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann = dσᴶ, σ = σ_n, W = skew(∇v*dt))
             if ret.status.tensioncollapse
-                # In this case, since the soil particles are not contacted with
-                # each other, soils should not act as continuum.
-                # This means that the deformation based on the contitutitive model
-                # no longer occurs.
-                # So, in this process, we just calculate the elastic strain to keep
-                # the consistency with the stress which is on the edge of the yield
-                # function, and ignore the plastic strain to prevent excessive generation.
-                # If we include this plastic strain, the volume of the material points
-                # will continue to increase unexpectedly.
+                # recalculate strain to prevent excessive volume change
                 dϵ = @matcalc(:strain, model.elastic; σ = σ - σ_n)
             end
             pointstate.σ[p] = σ
