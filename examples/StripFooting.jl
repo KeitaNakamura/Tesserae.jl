@@ -118,10 +118,10 @@ function StripFooting(
                     openvtk(vtm, pointstate.x) do vtk
                         σ = pointstate.σ
                         ϵ = pointstate.ϵ
-                        vtk["mean stress"] = @dot_lazy mean(σ)
-                        vtk["von mises stress"] = @dot_lazy sqrt(3/2 * dev(σ) ⊡ dev(σ))
-                        vtk["volumetric strain"] = @dot_lazy tr(ϵ)
-                        vtk["deviatoric strain"] = @dot_lazy sqrt(2/3 * dev(ϵ) ⊡ dev(ϵ))
+                        vtk["mean stress"] = @. mean(σ)
+                        vtk["von mises stress"] = @. sqrt(3/2 * dev(σ) ⊡ dev(σ))
+                        vtk["volumetric strain"] = @. tr(ϵ)
+                        vtk["deviatoric strain"] = @. sqrt(2/3 * dev(ϵ) ⊡ dev(ϵ))
                     end
                     openvtk(vtm, grid) do vtk
                     end
