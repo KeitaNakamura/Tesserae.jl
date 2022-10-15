@@ -30,16 +30,13 @@ const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
 # default combinations #
 ########################
 
-# original MPM
-@pure P2G_default(::Union{Kernel, KernelCorrection}) = P2G_Normal()
-@pure G2P_default(::Union{Kernel, KernelCorrection}) = G2P_FLIP()
+# use FLIP by default
+@pure P2G_default(::Interpolation) = P2G_Normal()
+@pure G2P_default(::Interpolation) = G2P_FLIP()
 
 # WLS
 @pure P2G_default(::WLS) = P2G_WLS()
 @pure G2P_default(::WLS) = G2P_WLS()
-# using Taylor-PIC gives the same results with high performance
-@pure P2G_default(::LinearWLS) = P2G_Taylor()
-@pure G2P_default(::LinearWLS) = G2P_PIC()
 
 ################
 # P2G transfer #
