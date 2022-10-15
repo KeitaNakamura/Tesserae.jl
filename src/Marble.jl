@@ -8,6 +8,9 @@ using Reexport
 @reexport using WriteVTK
 using StaticArrays, StructArrays
 
+# reexport from StructArrays
+export LazyRow, LazyRows
+
 const BLOCK_UNIT = unsigned(3) # 2^3
 
 export
