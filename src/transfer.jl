@@ -20,12 +20,11 @@ end
 @pure DefaultTransfer() = Transfer{P2G_Default, G2P_Default}()
 
 # supported transfer combinations
-const TransferFLIP = Transfer{P2G_Normal, G2P_FLIP}
-const TransferPIC  = Transfer{P2G_Normal, G2P_PIC}
-const TransferTaylorFLIP = Transfer{P2G_Taylor, G2P_FLIP}
-const TransferTaylorPIC  = Transfer{P2G_Taylor, G2P_PIC}
-const TransferAffinePIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
-const TransferWLS        = Transfer{P2G_WLS, G2P_WLS}
+const FLIP = Transfer{P2G_Normal, G2P_FLIP}
+const PIC  = Transfer{P2G_Normal, G2P_PIC}
+const TFLIP = Transfer{P2G_Taylor, G2P_FLIP}
+const TPIC  = Transfer{P2G_Taylor, G2P_PIC}
+const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
 
 ########################
 # default combinations #

@@ -51,11 +51,11 @@ export
 # Transfer
     Transfer,
     DefaultTransfer,
-    TransferFLIP,
-    TransferPIC,
-    TransferTaylorFLIP,
-    TransferTaylorPIC,
-    TransferAffinePIC,
+    FLIP,
+    PIC,
+    TFLIP,
+    TPIC,
+    APIC,
 # Frictional contact
     CoulombFriction,
     contacted,
