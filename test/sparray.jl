@@ -4,13 +4,13 @@ using Marble: SpPattern, SpArray
     @test @inferred(SpPattern((5,5))) == falses(5,5)
     @test @inferred(SpPattern(5,5)) == falses(5,5)
 
-    spat = SpPattern(5,5)
+    sppat = SpPattern(5,5)
     mask = rand(Bool,5,5)
-    update_sparsity_pattern!(spat, mask)
+    update_sparsity_pattern!(sppat, mask)
 
-    @test spat == mask
+    @test sppat == mask
     for (i,I) in enumerate(findall(mask))
-        @test spat.indices[I] == i
+        @test sppat.indices[I] == i
     end
 end
 
@@ -24,15 +24,15 @@ end
     end
 
     B = SpArray{Int}(5,5)
-    A_spat = rand(Bool, size(A))
-    B_spat = rand(Bool, size(B))
+    A_sppat = rand(Bool, size(A))
+    B_sppat = rand(Bool, size(B))
 
-    for (x, x_spat) in ((A, A_spat), (B, B_spat))
-        update_sparsity_pattern!(x, x_spat)
-        @test x.spat == x_spat
-        @test count(x.spat) == length(x.data)
+    for (x, x_sppat) in ((A, A_sppat), (B, B_sppat))
+        update_sparsity_pattern!(x, x_sppat)
+        @test x.sppat == x_sppat
+        @test count(x.sppat) == length(x.data)
         for i in eachindex(x)
-            if x_spat[i]
+            if x_sppat[i]
                 x[i] = i
                 @test x[i] == i
             else
@@ -50,7 +50,7 @@ end
     @test @inferred(A .* B)::SpArray{Float64} == map((x,y) -> ifelse(x==0||y==0,0,x*y), AA, BB)
     @test @inferred(broadcast!(*, A, A, A))::SpArray{Float64} == broadcast!(*, AA, AA, AA)
     @test @inferred(broadcast!(*, A, A, B))::SpArray{Float64} == broadcast!(*, AA, AA, BB)
-    @test A.spat == A_spat # sparsity pattern is never changed in `broadcast`
+    @test A.sppat == A_sppat # sparsity pattern is never changed in `broadcast`
     @test @inferred(broadcast!(*, A, AA, B, 2))::SpArray{Float64} == broadcast!(*, AA, AA, BB, 2)
-    @test A.spat == A_spat # sparsity pattern is never changed in `broadcast`
+    @test A.sppat == A_sppat # sparsity pattern is never changed in `broadcast`
 end

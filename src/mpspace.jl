@@ -1,7 +1,7 @@
 struct MPSpace{T, dim, F <: Interpolation, C <: CoordinateSystem, V <: MPValues{dim, T}}
     interp::F
     grid::Grid{T, dim, C}
-    spat::Array{Bool, dim}
+    sppat::Array{Bool, dim}
     mpvals::Vector{V}
     ptspblk::Array{Vector{Int}, dim}
     npts::RefValue{Int}
@@ -10,10 +10,10 @@ end
 
 # constructors
 function MPSpace(interp::Interpolation, grid::Grid{T, dim}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
-    spat = fill(false, size(grid))
+    sppat = fill(false, size(grid))
     npts = length(xₚ)
     mpvals = [MPValues{dim, T}(interp) for _ in 1:npts]
-    MPSpace(interp, grid, spat, mpvals, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
+    MPSpace(interp, grid, sppat, mpvals, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
 end
 MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
 
@@ -22,7 +22,7 @@ gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = space.npts[]
 get_interpolation(space::MPSpace) = space.interp
 get_grid(space::MPSpace) = space.grid
-get_sppattern(space::MPSpace) = space.spat
+get_sppat(space::MPSpace) = space.sppat
 get_mpvalues(space::MPSpace) = space.mpvals
 get_mpvalues(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_pointsperblock(space::MPSpace) = space.ptspblk
@@ -85,7 +85,7 @@ function update!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Noth
 
     update_sparsity_pattern!(space, pointstate; exclude)
     Threads.@threads for p in 1:length(pointstate)
-        @inbounds update!(mpvals[p], get_grid(space), LazyRow(pointstate, p), get_sppattern(space))
+        @inbounds update!(mpvals[p], get_grid(space), LazyRow(pointstate, p), get_sppat(space))
     end
 
     space
@@ -96,30 +96,30 @@ function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; ex
     pointsperblock!(get_pointsperblock(space), get_grid(space), pointstate.x)
 
     # update sparsity pattern
-    spat = get_sppattern(space)
-    fill!(spat, false)
+    sppat = get_sppat(space)
+    fill!(sppat, false)
     eachpoint_blockwise_parallel(space) do p
         @_inline_propagate_inbounds_meta
         inds = gridindices(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
-        spat[inds] .= true
+        sppat[inds] .= true
     end
 
     # handle excluded domain
     if exclude !== nothing
-        @. spat &= !exclude
+        @. sppat &= !exclude
         eachpoint_blockwise_parallel(space) do p
             @_inline_propagate_inbounds_meta
             inds = gridindices(get_grid(space), pointstate.x[p], 1)
-            spat[inds] .= true
+            sppat[inds] .= true
         end
     end
-    spat
+    sppat
 end
 
 function update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)
     @assert is_parent(gridstate)
     @assert size(gridstate) == gridsize(space)
-    update_sparsity_pattern!(gridstate, get_sppattern(space))
+    update_sparsity_pattern!(gridstate, get_sppat(space))
     set_stamp!(gridstate, get_stamp(space))
     gridstate
 end
