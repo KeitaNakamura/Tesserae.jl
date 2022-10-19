@@ -126,8 +126,9 @@ end
 
 function eachpoint_blockwise_parallel(f, space::MPSpace)
     for blocks in threadsafe_blocks(blocksize(gridsize(space)))
-        Threads.@threads for blockindex in blocks
-            @inbounds for p in get_pointsperblock(space)[blockindex]
+        pointsperblock = collect(Iterators.filter(!isempty, Iterators.map(blkidx->get_pointsperblock(space)[blkidx], blocks)))
+        Threads.@threads for pointindices in pointsperblock
+            @inbounds for p in pointindices
                 f(p)
             end
         end
