@@ -89,7 +89,7 @@ function point_to_grid!(::P2G_AffinePIC, gridstate::AbstractArray, pointstate::A
         mₚ = pointstate.m[p]
         Vₚ = pointstate.V[p]
         vₚ = pointstate.v[p]
-        Bₚ = pointstate.C[p]
+        Bₚ = pointstate.B[p]
         σₚ = pointstate.σ[p]
         bₚ = pointstate.b[p]
         Cₚ = Bₚ ⋅ inv(D[p])
@@ -230,7 +230,7 @@ function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::
         pointstate.v[p] = vₚ
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, xₚ, vₚ, ∇vₚ)
         pointstate.x[p] = xₚ + vₚ * dt
-        pointstate.C[p] = Bₚ
+        pointstate.B[p] = Bₚ
     end
     pointstate
 end

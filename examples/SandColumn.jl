@@ -9,6 +9,26 @@ function SandColumn(
         showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "SandColumn.tmp"),
     )
+
+    GridState = @NamedTuple begin
+        m::Float64
+        v::Vec{2, Float64}
+        v_n::Vec{2, Float64}
+    end
+    PointState = @NamedTuple begin
+        m::Float64
+        V::Float64
+        x::Vec{2, Float64}
+        v::Vec{2, Float64}
+        r::Vec{2, Float64}
+        b::Vec{2, Float64}
+        σ::SymmetricSecondOrderTensor{3, Float64, 6}
+        ϵ::SymmetricSecondOrderTensor{3, Float64, 6}
+        ∇v::SecondOrderTensor{3, Float64, 9}
+        B::Mat{2, 2, Float64, 4} # for APIC
+        C::Mat{2, 3, Float64, 6} # for LinearWLS
+    end
+
     ρ₀ = 1.6e3
     g = 9.81
     h = 0.3
@@ -18,8 +38,8 @@ function SandColumn(
     E = 1e6
 
     grid = Grid(0:dx:1.0, 0:dx:1.0)
-    pointstate = generate_pointstate((x,y) -> 0.4 < x < 0.6 && y < h, interp, grid)
-    gridstate = generate_gridstate(interp, grid)
+    gridstate = generate_gridstate(GridState, grid)
+    pointstate = generate_pointstate((x,y) -> 0.4<x<0.6 && y<h, PointState, grid)
     space = MPSpace(interp, grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c=0, ϕ, ψ, tensioncutoff=0)

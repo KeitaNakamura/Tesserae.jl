@@ -33,8 +33,8 @@ end
             side_length = gridsteps(grid) ./ 2
             r = Vec(side_length ./ 2)
             for kernel in (QuadraticBSpline(), CubicBSpline(), GIMP())
-                for WLS in (LinearWLS, BilinearWLS)
-                    WLS == BilinearWLS && dim != 2 && continue
+                for WLS in (LinearWLS, Marble.BilinearWLS)
+                    WLS == Marble.BilinearWLS && dim != 2 && continue
                     mpvalues = MPValues{dim, T}(WLS(kernel))
                     for _ in 1:2000
                         x = rand(Vec{dim, T})

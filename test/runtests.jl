@@ -50,7 +50,6 @@ end
     check_example("SandColumn", 1, QuadraticBSpline(); dx)
     check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()); dx, transfer = DefaultTransfer())
     check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()); dx, transfer = TPIC())
-    check_example("SandColumn", 3, BilinearWLS(QuadraticBSpline()); dx)
     check_example("SandColumn", 4, KernelCorrection(QuadraticBSpline()); dx, transfer = TPIC())
     check_example("SandColumn", 5, KernelCorrection(QuadraticBSpline()); dx, transfer = APIC())
     dx = 0.125

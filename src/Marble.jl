@@ -39,7 +39,6 @@ export
     CubicBSpline,
     GIMP,
     LinearWLS,
-    BilinearWLS,
     KernelCorrection,
     MPValues,
 # MPSpace

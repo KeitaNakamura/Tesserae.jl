@@ -11,6 +11,29 @@ function StripFooting(
         showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "StripFooting.tmp"),
     )
+
+    GridState = @NamedTuple begin
+        m::Float64
+        v::Vec{2, Float64}
+        v_n::Vec{2, Float64}
+        # for smooth_pointstate!
+        poly_coef::Vec{3, Float64}
+        poly_mat::Mat{3, 3, Float64, 9}
+    end
+    PointState = @NamedTuple begin
+        m::Float64
+        V::Float64
+        x::Vec{2, Float64}
+        v::Vec{2, Float64}
+        r::Vec{2, Float64}
+        b::Vec{2, Float64}
+        σ::SymmetricSecondOrderTensor{3, Float64, 6}
+        ϵ::SymmetricSecondOrderTensor{3, Float64, 6}
+        ∇v::SecondOrderTensor{3, Float64, 9}
+        B::Mat{2, 2, Float64, 4} # for APIC
+        C::Mat{2, 3, Float64, 6} # for LinearWLS
+    end
+
     ρ₀ = 1.0e3
     g = 0.0
     h = 5.0
@@ -20,8 +43,8 @@ function StripFooting(
     E = 1e9
 
     grid = Grid(0:dx:5.0, 0:dx:5.0)
-    pointstate = generate_pointstate((x,y) -> y < h, interp, grid)
-    gridstate = generate_gridstate(interp, grid)
+    gridstate = generate_gridstate(GridState, grid)
+    pointstate = generate_pointstate((x,y) -> y < h, PointState, grid)
     space = MPSpace(interp, grid, pointstate.x)
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c, ϕ, ψ, tensioncutoff=false)
