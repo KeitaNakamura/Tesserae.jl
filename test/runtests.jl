@@ -51,6 +51,7 @@ end
     check_example("SandColumn", 1, QuadraticBSpline(); dx)
     check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()); dx)
     check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()), TPIC(); dx)
+    check_example("SandColumn", 3, LinearWLS(QuadraticBSpline()), APIC(); dx)
     check_example("SandColumn", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx)
     check_example("SandColumn", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx)
     # StripFooting
