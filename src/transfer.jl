@@ -1,27 +1,25 @@
 # P2G
-struct P2G_Normal    end
-struct P2G_Taylor    end
-struct P2G_WLS       end
-struct P2G_AffinePIC end
-struct P2G_Default   end
+abstract type P2G_Transfer end
+struct P2G_Normal    <: P2G_Transfer end
+struct P2G_Taylor    <: P2G_Transfer end
+struct P2G_WLS       <: P2G_Transfer end
+struct P2G_AffinePIC <: P2G_Transfer end
 # G2P
-struct G2P_FLIP      end
-struct G2P_PIC       end
-struct G2P_WLS       end
-struct G2P_AffinePIC end
-struct G2P_Default   end
+abstract type G2P_Transfer end
+struct G2P_FLIP       <: G2P_Transfer end
+struct G2P_PIC        <: G2P_Transfer end
+struct G2P_WLS        <: G2P_Transfer end
+struct G2P_AffinePIC  <: G2P_Transfer end
 
-struct Transfer{P2G, G2P}
+struct Transfer{P2G <: P2G_Transfer, G2P <: G2P_Transfer}
     P2G::P2G
     G2P::G2P
-    Transfer{P2G, G2P}() where {P2G, G2P} = new(P2G(), G2P())
 end
-# default
-@pure DefaultTransfer() = Transfer{P2G_Default, G2P_Default}()
+Transfer{P2G, G2P}() where {P2G, G2P} = Transfer(P2G(), G2P())
 
 # supported transfer combinations
-const FLIP = Transfer{P2G_Normal, G2P_FLIP}
-const PIC  = Transfer{P2G_Normal, G2P_PIC}
+const FLIP  = Transfer{P2G_Normal, G2P_FLIP}
+const PIC   = Transfer{P2G_Normal, G2P_PIC}
 const TFLIP = Transfer{P2G_Taylor, G2P_FLIP}
 const TPIC  = Transfer{P2G_Taylor, G2P_PIC}
 const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
@@ -29,6 +27,8 @@ const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
 ########################
 # default combinations #
 ########################
+
+@pure DefaultTransfer(interp::Interpolation) = Transfer(P2G_default(interp), G2P_default(interp))
 
 # use FLIP by default
 @pure P2G_default(::Interpolation) = P2G_Normal()
@@ -43,11 +43,6 @@ const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
 ################
 
 point_to_grid!(t::Transfer, args...) = point_to_grid!(t.P2G, args...)
-
-function point_to_grid!(::P2G_Default, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
-    P2G = P2G_default(get_interpolation(space))
-    point_to_grid!(P2G, gridstate, pointstate, space, dt)
-end
 
 function point_to_grid!(::P2G_Normal, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
     grid = get_grid(space)
@@ -167,11 +162,6 @@ end
 ################
 
 grid_to_point!(t::Transfer, args...) = grid_to_point!(t.G2P, args...)
-
-function grid_to_point!(::G2P_Default, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
-    G2P = G2P_default(get_interpolation(space))
-    grid_to_point!(G2P, pointstate, gridstate, space, dt)
-end
 
 function grid_to_point!(::G2P_FLIP, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
     grid = get_grid(space)

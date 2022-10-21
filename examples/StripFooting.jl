@@ -2,12 +2,12 @@ using Marble
 using MaterialModels
 
 function StripFooting(
-        interp = LinearWLS(QuadraticBSpline());
+        interp = LinearWLS(QuadraticBSpline()),
+        transfer = DefaultTransfer(interp);
         ν = 0.3,
         dx = 0.1,
         CFL = 1.0,
         handle_volumetric_locking::Bool = false,
-        transfer = DefaultTransfer(),
         showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "StripFooting.tmp"),
     )
@@ -50,7 +50,7 @@ function StripFooting(
     model = DruckerPrager(elastic, :planestrain; c, ϕ, ψ, tensioncutoff=false)
 
     v_footing = Vec(0.0, -4.0e-3)
-    footing_indices = findall(x -> x[1] ≤ 0.5 && x[2] == 5.0, grid)
+    footing_indices = findall(x -> x[1]≤0.5 && x[2]==5.0, grid)
 
     for p in 1:length(pointstate)
         y = pointstate.x[p][2]
@@ -122,9 +122,9 @@ function StripFooting(
                 ∇v = ∇v_vol + dev(∇v)
             end
             dϵ = symmetric(∇v*dt)
-            ret = @matcalc(:stressall, model; σ = σ_n, dϵ)
+            ret = @matcalc(:stressall, model; σ=σ_n, dϵ)
             dσᴶ = ret.σ - σ_n
-            σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann = dσᴶ, σ = σ_n, W = skew(∇v*dt))
+            σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann=dσᴶ, σ=σ_n, W=skew(∇v*dt))
             pointstate.σ[p] = σ
             pointstate.ϵ[p] += dϵ
             pointstate.V[p] *= exp(tr(dϵ))
@@ -136,7 +136,7 @@ function StripFooting(
         push!(load, vertical_load)
 
         if islogpoint(logger)
-            openpvd(pvdfile; append = true) do pvd
+            openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, logindex(logger))) do vtm
                     openvtk(vtm, pointstate.x) do vtk
                         σ = pointstate.σ

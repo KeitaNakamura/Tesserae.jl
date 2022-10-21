@@ -16,21 +16,21 @@ include("transfer.jl")
 
 const fix_results = false
 
-function check_example(testname::String, case, interpolation; dx, kwargs...)
+function check_example(testname::String, case, interp, transfer=DefaultTransfer(interp); dx, kwargs...)
     @testset "$testname" begin
         outdir = joinpath("examples", "$testname.tmp")
         rm(outdir; recursive = true, force = true)
 
         include(joinpath("../examples", "$testname.jl"))
-        @eval $(Symbol(testname))($interpolation; showprogress = false, outdir = $outdir, $kwargs...)
+        @eval $(Symbol(testname))($interp, $transfer; showprogress=false, outdir=$outdir, $kwargs...)
 
         result_file = joinpath(
             outdir,
-            sort(filter(file -> endswith(file, ".vtu"), only(walkdir(outdir))[3]), lt = natural)[end],
+            sort(filter(file -> endswith(file, ".vtu"), only(walkdir(outdir))[3]), lt=natural)[end],
         )
 
         if fix_results
-            mv(result_file, joinpath("examples", "$testname$case.vtu"); force = true)
+            mv(result_file, joinpath("examples", "$testname$case.vtu"); force=true)
         else
             # check results
             expected = VTKFile(joinpath("examples", "$testname$case.vtu")) # expected output
@@ -46,18 +46,20 @@ function check_example(testname::String, case, interpolation; dx, kwargs...)
 end
 
 @testset "Check examples" begin
+    # SandColumn
     dx = 0.01
     check_example("SandColumn", 1, QuadraticBSpline(); dx)
-    check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()); dx, transfer = DefaultTransfer())
-    check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()); dx, transfer = TPIC())
-    check_example("SandColumn", 4, KernelCorrection(QuadraticBSpline()); dx, transfer = TPIC())
-    check_example("SandColumn", 5, KernelCorrection(QuadraticBSpline()); dx, transfer = APIC())
+    check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()); dx)
+    check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()), TPIC(); dx)
+    check_example("SandColumn", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx)
+    check_example("SandColumn", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx)
+    # StripFooting
     dx = 0.125
     ν = 0.3
     handle_volumetric_locking = true
     check_example("StripFooting", 1, LinearBSpline(); dx, ν, handle_volumetric_locking)
-    check_example("StripFooting", 2, GIMP(); dx, ν, handle_volumetric_locking, CFL = 0.5)
+    check_example("StripFooting", 2, GIMP(); dx, ν, handle_volumetric_locking, CFL=0.5)
     check_example("StripFooting", 3, LinearWLS(QuadraticBSpline()); dx, ν, handle_volumetric_locking)
-    check_example("StripFooting", 4, KernelCorrection(QuadraticBSpline()); dx, ν, handle_volumetric_locking, transfer = TPIC())
-    check_example("StripFooting", 5, KernelCorrection(QuadraticBSpline()); dx, ν, handle_volumetric_locking, transfer = APIC())
+    check_example("StripFooting", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx, ν, handle_volumetric_locking)
+    check_example("StripFooting", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx, ν, handle_volumetric_locking)
 end

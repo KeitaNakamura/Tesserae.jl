@@ -14,7 +14,7 @@
             v_n::Vec{2, Float64}
         end
         for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-            transfer = DefaultTransfer()
+            transfer = DefaultTransfer(interp)
             for coordinate_system in (PlaneStrain(), Axisymmetric())
                 # initialization
                 grid = Grid(0.0:2.0:10.0, 0.0:2.0:20.0; coordinate_system)

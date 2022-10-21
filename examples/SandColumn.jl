@@ -2,10 +2,10 @@ using Marble
 using MaterialModels
 
 function SandColumn(
-        interp = LinearWLS(QuadraticBSpline());
+        interp = LinearWLS(QuadraticBSpline()),
+        transfer = DefaultTransfer(interp);
         dx = 0.01,
         CFL = 1.0,
-        transfer = DefaultTransfer(),
         showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "SandColumn.tmp"),
     )
@@ -80,10 +80,10 @@ function SandColumn(
 
         # boundary conditions
         @inbounds for (I,n) in gridbounds(grid, "-y") # bottom
-            gridstate.v[I] += contacted(CoulombFriction(μ = 0.2), gridstate.v[I], n)
+            gridstate.v[I] += contacted(CoulombFriction(μ=0.2), gridstate.v[I], n)
         end
         @inbounds for (I,n) in gridbounds(grid, "-x", "+x") # left and right
-            gridstate.v[I] += contacted(CoulombFriction(μ = 0), gridstate.v[I], n)
+            gridstate.v[I] += contacted(CoulombFriction(μ=0), gridstate.v[I], n)
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)
@@ -91,12 +91,12 @@ function SandColumn(
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]
             dϵ = symmetric(∇v*dt)
-            ret = @matcalc(:stressall, model; σ = σ_n, dϵ)
+            ret = @matcalc(:stressall, model; σ=σ_n, dϵ)
             dσᴶ = ret.σ - σ_n
-            σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann = dσᴶ, σ = σ_n, W = skew(∇v*dt))
+            σ = σ_n + @matcalc(:jaumann2caucy; dσ_jaumann=dσᴶ, σ=σ_n, W=skew(∇v*dt))
             if ret.status.tensioncollapse
                 # recalculate strain to prevent excessive volume change
-                dϵ = @matcalc(:strain, model.elastic; σ = σ - σ_n)
+                dϵ = @matcalc(:strain, model.elastic; σ=σ-σ_n)
             end
             pointstate.σ[p] = σ
             pointstate.ϵ[p] += dϵ
@@ -106,7 +106,7 @@ function SandColumn(
         update!(logger, t += dt)
 
         if islogpoint(logger)
-            openpvd(pvdfile; append = true) do pvd
+            openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, logindex(logger))) do vtm
                     openvtk(vtm, pointstate.x) do vtk
                         vtk["velocity"] = pointstate.v
