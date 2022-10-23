@@ -2,11 +2,11 @@ struct GIMP <: Kernel end
 
 @pure num_nodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
 
-@inline function gridindices(f::GIMP, grid::Grid, xp::Vec, rp::Vec)
+@inline function nodeindices(f::GIMP, grid::Grid, xp::Vec, rp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
-    gridindices(grid, xp, 1 .+ rp.*dx⁻¹)
+    nodeindices(grid, xp, 1 .+ rp.*dx⁻¹)
 end
-@inline gridindices(f::GIMP, grid::Grid, pt) = gridindices(f, grid, pt.x, pt.r)
+@inline nodeindices(f::GIMP, grid::Grid, pt) = nodeindices(f, grid, pt.x, pt.r)
 
 # simple GIMP calculation
 # See Eq.(40) in
@@ -89,56 +89,45 @@ end
 @inline values_gradients(f::GIMP, grid::Grid, pt) = values_gradients(f, grid, pt.x, pt.r)
 
 
-struct GIMPValue{dim, T} <: MPValue
-    N::T
-    ∇N::Vec{dim, T}
-    xp::Vec{dim, T}
-end
-
-mutable struct GIMPValues{dim, T, L} <: MPValues{dim, T, GIMPValue{dim, T}}
+mutable struct GIMPValue{dim, T, L} <: MPValue{dim, T}
     F::GIMP
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
-    gridindices::MVector{L, Index{dim}}
+    # necessary in MPValue
     xp::Vec{dim, T}
+    nodeindices::MVector{L, Index{dim}}
     len::Int
 end
 
 # constructors
-function GIMPValues{dim, T, L}() where {dim, T, L}
+function GIMPValue{dim, T, L}() where {dim, T, L}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
-    gridindices = MVector{L, Index{dim}}(undef)
     xp = zero(Vec{dim, T})
-    GIMPValues(GIMP(), N, ∇N, gridindices, xp, 0)
+    nodeindices = MVector{L, Index{dim}}(undef)
+    GIMPValue(GIMP(), N, ∇N, xp, nodeindices, 0)
 end
-function MPValues{dim, T}(F::GIMP) where {dim, T}
+function MPValue{dim, T}(F::GIMP) where {dim, T}
     L = num_nodes(F, Val(dim))
-    GIMPValues{dim, T, L}()
+    GIMPValue{dim, T, L}()
 end
 
-get_kernel(x::GIMPValues) = x.F
+get_kernel(mp::GIMPValue) = mp.F
+@inline function mpvalue(mp::GIMPValue, i::Int)
+    @boundscheck @assert 1 ≤ i ≤ num_nodes(mp)
+    (; N=mp.N[i], ∇N=mp.∇N[i], xp=mp.xp)
+end
 
-function update!(mpvalues::GIMPValues, grid::Grid, pt, spat::AbstractArray{Bool})
+function update_kernels!(mp::GIMPValue, grid::Grid, pt)
     # reset
-    fillzero!(mpvalues.N)
-    fillzero!(mpvalues.∇N)
-
-    F = get_kernel(mpvalues)
-    xp = pt.x
+    fillzero!(mp.N)
+    fillzero!(mp.∇N)
 
     # update
-    mpvalues.xp = xp
-    dx⁻¹ = gridsteps_inv(grid)
-    update_active_gridindices!(mpvalues, gridindices(F, grid, pt), spat)
-    @inbounds @simd for i in 1:length(mpvalues)
-        I = gridindices(mpvalues, i)
-        mpvalues.N[i], mpvalues.∇N[i] = value_gradient(F, grid, I, pt)
+    F = get_kernel(mp)
+    @inbounds @simd for i in 1:num_nodes(mp)
+        I = nodeindex(mp, i)
+        mp.N[i], mp.∇N[i] = value_gradient(F, grid, I, pt)
     end
-    mpvalues
-end
-
-@inline function Base.getindex(mpvalues::GIMPValues, i::Int)
-    @_propagate_inbounds_meta
-    BSplineValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.xp)
+    mp
 end

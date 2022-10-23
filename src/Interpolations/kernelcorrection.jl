@@ -4,83 +4,74 @@ end
 
 @pure get_kernel(::KernelCorrection{K}) where {K} = K()
 
-@inline function gridindices(x::KernelCorrection, grid::Grid, pt)
-    gridindices(get_kernel(x), grid, pt)
+@inline function nodeindices(x::KernelCorrection, grid::Grid, pt)
+    nodeindices(get_kernel(x), grid, pt)
 end
 
 
-struct KernelCorrectionValue{dim, T} <: MPValue
-    N::T
-    ∇N::Vec{dim, T}
-    xp::Vec{dim, T}
-end
-
-mutable struct KernelCorrectionValues{K, dim, T, nnodes} <: MPValues{dim, T, KernelCorrectionValue{dim, T}}
+mutable struct KernelCorrectionValue{K, dim, T, L} <: MPValue{dim, T}
     F::KernelCorrection{K}
-    N::MVector{nnodes, T}
-    ∇N::MVector{nnodes, Vec{dim, T}}
-    gridindices::MVector{nnodes, Index{dim}}
+    N::MVector{L, T}
+    ∇N::MVector{L, Vec{dim, T}}
+    # necessary in MPValue
     xp::Vec{dim, T}
+    nodeindices::MVector{L, Index{dim}}
     len::Int
 end
 
 # constructors
-function KernelCorrectionValues{K, dim, T, nnodes}() where {K, dim, T, nnodes}
-    N = MVector{nnodes, T}(undef)
-    ∇N = MVector{nnodes, Vec{dim, T}}(undef)
-    gridindices = MVector{nnodes, Index{dim}}(undef)
+function KernelCorrectionValue{K, dim, T, L}() where {K, dim, T, L}
+    N = MVector{L, T}(undef)
+    ∇N = MVector{L, Vec{dim, T}}(undef)
     xp = zero(Vec{dim, T})
-    KernelCorrectionValues(KernelCorrection(K()), N, ∇N, gridindices, xp, 0)
+    nodeindices = MVector{L, Index{dim}}(undef)
+    KernelCorrectionValue(KernelCorrection(K()), N, ∇N, xp, nodeindices, 0)
 end
-function MPValues{dim, T}(c::KernelCorrection{K}) where {dim, T, K}
+function MPValue{dim, T}(c::KernelCorrection{K}) where {dim, T, K}
     L = num_nodes(K(), Val(dim))
-    KernelCorrectionValues{K, dim, T, L}()
+    KernelCorrectionValue{K, dim, T, L}()
 end
 
-get_kernel(c::KernelCorrectionValues) = get_kernel(c.F)
+get_kernel(mp::KernelCorrectionValue) = get_kernel(mp.F)
+@inline function mpvalue(mp::KernelCorrectionValue, i::Int)
+    @boundscheck @assert 1 ≤ i ≤ num_nodes(mp)
+    (; N=mp.N[i], ∇N=mp.∇N[i], xp=mp.xp)
+end
 
-function update!(mpvalues::KernelCorrectionValues{<: Any, dim, T}, grid::Grid{<: Any, dim}, pt, spat::AbstractArray{Bool, dim}) where {dim, T}
+function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T, L}, grid::Grid{<: Any, dim}, pt) where {dim, T, L}
     # reset
-    fillzero!(mpvalues.N)
-    fillzero!(mpvalues.∇N)
-
-    F = get_kernel(mpvalues)
-    xp = getx(pt) # defined in wls.jl
+    fillzero!(mp.N)
+    fillzero!(mp.∇N)
 
     # update
-    mpvalues.xp = xp
-    allactive = update_active_gridindices!(mpvalues, gridindices(F, grid, pt), spat)
-    if allactive
+    F = get_kernel(mp)
+    xp = getx(pt)
+    if num_nodes(mp) == L # all active
         wᵢ, ∇wᵢ = values_gradients(F, grid, pt)
-        mpvalues.N .= wᵢ
-        mpvalues.∇N .= ∇wᵢ
+        mp.N .= wᵢ
+        mp.∇N .= ∇wᵢ
     else
         M = zero(Mat{dim+1, dim+1, T})
-        @inbounds @simd for i in 1:length(mpvalues)
-            I = gridindices(mpvalues, i)
+        @inbounds @simd for i in 1:num_nodes(mp)
+            I = nodeindex(mp, i)
             xi = grid[I]
             w = value(F, grid, I, pt)
             P = [1; xi - xp]
             M += w * P ⊗ P
-            mpvalues.N[i] = w
+            mp.N[i] = w
         end
         Minv = inv(M)
         C1 = Minv[1,1]
         C2 = @Tensor Minv[2:end,1]
         C3 = @Tensor Minv[2:end,2:end]
-        @inbounds @simd for i in 1:length(mpvalues)
-            I = gridindices(mpvalues, i)
+        @inbounds @simd for i in 1:num_nodes(mp)
+            I = nodeindex(mp, i)
             xi = grid[I]
-            w = mpvalues.N[i]
-            mpvalues.N[i] = (C1 + C2 ⋅ (xi - xp)) * w
-            mpvalues.∇N[i] = (C2 + C3 ⋅ (xi - xp)) * w
+            w = mp.N[i]
+            mp.N[i] = (C1 + C2 ⋅ (xi - xp)) * w
+            mp.∇N[i] = (C2 + C3 ⋅ (xi - xp)) * w
         end
     end
 
-    mpvalues
-end
-
-@inline function Base.getindex(mpvalues::KernelCorrectionValues, i::Int)
-    @_propagate_inbounds_meta
-    KernelCorrectionValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.xp)
+    mp
 end

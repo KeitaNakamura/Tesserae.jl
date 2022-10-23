@@ -31,7 +31,9 @@ export
     generate_pointstate,
 # interpolations
     update!,
-    gridindices,
+    num_nodes,
+    nodexindex,
+    mpvalue,
     Interpolation,
     BSpline,
     LinearBSpline,
@@ -40,7 +42,7 @@ export
     GIMP,
     LinearWLS,
     KernelCorrection,
-    MPValues,
+    MPValue,
 # MPSpace
     MPSpace,
     point_to_grid!,
@@ -79,7 +81,7 @@ include("sparray.jl")
 
 # core
 include("grid.jl")
-include("Interpolations/mpvalues.jl")
+include("Interpolations/mpvalue.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
 include("Interpolations/polybasis.jl")

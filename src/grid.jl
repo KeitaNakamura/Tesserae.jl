@@ -62,7 +62,7 @@ end
 isinside(x::Vec, grid::Grid) = all(first(grid) .≤ x .≤ last(grid))
 
 """
-    Marble.gridindices(grid, x::Vec, h)
+    Marble.nodeindices(grid, x::Vec, h)
 
 Return `CartesianIndices` storing neighboring node indices around `x`.
 `h` is a range for searching and its unit is `gridsteps` `dx`.
@@ -79,12 +79,12 @@ julia> grid = Grid(0.0:1.0:5.0)
  [4.0]
  [5.0]
 
-julia> Marble.gridindices(grid, Vec(1.5), 1)
+julia> Marble.nodeindices(grid, Vec(1.5), 1)
 2-element CartesianIndices{1, Tuple{UnitRange{Int64}}}:
  CartesianIndex(2,)
  CartesianIndex(3,)
 
-julia> Marble.gridindices(grid, Vec(1.5), 2)
+julia> Marble.nodeindices(grid, Vec(1.5), 2)
 4-element CartesianIndices{1, Tuple{UnitRange{Int64}}}:
  CartesianIndex(1,)
  CartesianIndex(2,)
@@ -92,14 +92,14 @@ julia> Marble.gridindices(grid, Vec(1.5), 2)
  CartesianIndex(4,)
 ```
 """
-@inline function gridindices(grid::Grid{<: Any, dim}, x::Vec{dim}, h) where {dim}
+@inline function nodeindices(grid::Grid{<: Any, dim}, x::Vec{dim}, h) where {dim}
     dx⁻¹ = gridsteps_inv(grid)
     xmin = gridorigin(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
     T = eltype(ξ)
     all(@. zero(T) ≤ ξ ≤ T($size(grid)-1)) || return CartesianIndices(nfill(1:0, Val(dim)))
     # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
-    # This means `gridindices` doesn't include bounds of range.
+    # This means `nodeindices` doesn't include bounds of range.
     _neighborindices(size(grid), ξ, @. T(h) - sqrt(eps(T)))
 end
 @inline function _neighborindices(dims::Dims, ξ, h)

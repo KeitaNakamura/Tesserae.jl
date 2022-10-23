@@ -9,147 +9,131 @@ const BilinearWLS = WLS{BilinearBasis}
 @pure get_basis(::WLS{B}) where {B} = B()
 @pure get_kernel(::WLS{B, W}) where {B, W} = W()
 
-@inline function gridindices(wls::WLS, grid::Grid, pt)
-    gridindices(get_kernel(wls), grid, pt)
+@inline function nodeindices(wls::WLS, grid::Grid, pt)
+    nodeindices(get_kernel(wls), grid, pt)
 end
 
 
-struct WLSValue{dim, T, L, L²} <: MPValue
-    N::T
-    ∇N::Vec{dim, T}
-    w::T
-    Minv::Mat{L, L, T, L²}
+mutable struct WLSValue{W <: WLS, dim, T, L, Minv_T <: Mat{<: Any, <: Any, T}} <: MPValue{dim, T}
+    F::W
+    N::MVector{L, T}
+    ∇N::MVector{L, Vec{dim, T}}
+    w::MVector{L, T}
+    Minv::Minv_T
+    # necessary in MPValue
     xp::Vec{dim, T}
-end
-
-mutable struct WLSValues{B, K, dim, T, nnodes, L, L²} <: MPValues{dim, T, WLSValue{dim, T, L, L²}}
-    F::WLS{B, K}
-    N::MVector{nnodes, T}
-    ∇N::MVector{nnodes, Vec{dim, T}}
-    w::MVector{nnodes, T}
-    gridindices::MVector{nnodes, Index{dim}}
-    Minv::Mat{L, L, T, L²}
-    xp::Vec{dim, T}
+    nodeindices::MVector{L, Index{dim}}
     len::Int
 end
 
 # constructors
-function WLSValues{B, K, dim, T, nnodes, L, L²}() where {B, K, dim, T, nnodes, L, L²}
-    N = MVector{nnodes, T}(undef)
-    ∇N = MVector{nnodes, Vec{dim, T}}(undef)
-    w = MVector{nnodes, T}(undef)
-    Minv = zero(Mat{L, L, T, L²})
-    gridindices = MVector{nnodes, Index{dim}}(undef)
+function WLSValue{W, dim, T, L, Minv_T}() where {W, dim, T, L, Minv_T}
+    N = MVector{L, T}(undef)
+    ∇N = MVector{L, Vec{dim, T}}(undef)
+    w = MVector{L, T}(undef)
+    Minv = zero(Minv_T)
     xp = zero(Vec{dim, T})
-    WLSValues(WLS{B, K}(), N, ∇N, w, gridindices, Minv, xp, 0)
+    nodeindices = MVector{L, Index{dim}}(undef)
+    WLSValue(W(), N, ∇N, w, Minv, xp, nodeindices, 0)
 end
-function MPValues{dim, T}(F::WLS{B, K}) where {B, K, dim, T}
+function MPValue{dim, T}(F::WLS) where {dim, T}
     L = length(value(get_basis(F), zero(Vec{dim, T})))
     n = num_nodes(get_kernel(F), Val(dim))
-    WLSValues{B, K, dim, T, n, L, L^2}()
+    WLSValue{typeof(F), dim, T, n, Mat{L, L, T, L^2}}()
 end
 
-get_basis(x::WLSValues) = get_basis(x.F)
-get_kernel(x::WLSValues) = get_kernel(x.F)
+get_kernel(mp::WLSValue) = get_kernel(mp.F)
+get_basis(mp::WLSValue) = get_basis(mp.F)
 
-@inline getx(x::Vec) = x
-@inline getx(pt) = pt.x
+@inline function mpvalue(mp::WLSValue, i::Int)
+    @boundscheck @assert 1 ≤ i ≤ num_nodes(mp)
+    (; N=mp.N[i], ∇N=mp.∇N[i], w=mp.w[i], Minv=mp.Minv, xp=mp.xp)
+end
+
 # general version
-function update!(mpvalues::WLSValues, grid::Grid, pt, spat::AbstractArray{Bool})
+function update_kernels!(mp::WLSValue, grid::Grid, pt)
     # reset
-    fillzero!(mpvalues.N)
-    fillzero!(mpvalues.∇N)
-    fillzero!(mpvalues.w)
-
-    F = get_kernel(mpvalues)
-    P = get_basis(mpvalues)
-    M = zero(mpvalues.Minv)
-    xp = getx(pt)
+    fillzero!(mp.N)
+    fillzero!(mp.∇N)
+    fillzero!(mp.w)
 
     # update
-    mpvalues.xp = xp
-    update_active_gridindices!(mpvalues, gridindices(F, grid, pt), spat)
-    @inbounds @simd for i in 1:length(mpvalues)
-        I = gridindices(mpvalues, i)
+    F = get_kernel(mp)
+    P = get_basis(mp)
+    M = zero(mp.Minv)
+    xp = getx(pt)
+    @inbounds @simd for i in 1:num_nodes(mp)
+        I = nodeindex(mp, i)
         xi = grid[I]
         w = value(F, grid, I, pt)
         p = value(P, xi - xp)
         M += w * p ⊗ p
-        mpvalues.w[i] = w
+        mp.w[i] = w
     end
     Minv = inv(M)
-    @inbounds @simd for i in 1:length(mpvalues)
-        I = gridindices(mpvalues, i)
+    @inbounds @simd for i in 1:num_nodes(mp)
+        I = nodeindex(mp, i)
         xi = grid[I]
         q = Minv ⋅ value(P, xi - xp)
-        wq = mpvalues.w[i] * q
-        mpvalues.N[i] = wq ⋅ value(P, xp - xp)
-        mpvalues.∇N[i] = wq ⋅ gradient(P, xp - xp)
+        wq = mp.w[i] * q
+        mp.N[i] = wq ⋅ value(P, xp - xp)
+        mp.∇N[i] = wq ⋅ gradient(P, xp - xp)
     end
-    mpvalues.Minv = Minv
+    mp.Minv = Minv
 
-    mpvalues
+    mp
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-# can't use `xp` as argument for correct dispatch
-function update!(mpvalues::WLSValues{PolynomialBasis{1}, <: BSpline, dim, T}, grid::Grid{<: Any, dim}, pt, spat::AbstractArray{Bool, dim}) where {dim, T}
+function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T, L}, grid::Grid{<: Any, dim}, pt) where {dim, T, L}
     # reset
-    fillzero!(mpvalues.N)
-    fillzero!(mpvalues.∇N)
-    fillzero!(mpvalues.w)
-
-    F = get_kernel(mpvalues)
-    P = get_basis(mpvalues)
-    xp = getx(pt)
+    fillzero!(mp.N)
+    fillzero!(mp.∇N)
+    fillzero!(mp.w)
 
     # update
-    mpvalues.xp = xp
-    allactive = update_active_gridindices!(mpvalues, gridindices(F, grid, xp), spat)
-    if allactive
+    F = get_kernel(mp)
+    P = get_basis(mp)
+    xp = getx(pt)
+    if num_nodes(mp) == L # all activate
         # fast version
         D = zero(Vec{dim, T}) # diagonal entries
         wᵢ = values(F, grid, xp)
-        @inbounds @simd for i in 1:length(mpvalues)
-            I = gridindices(mpvalues, i)
+        @inbounds @simd for i in 1:num_nodes(mp)
+            I = nodeindex(mp, i)
             xi = grid[I]
             w = wᵢ[i]
             D += w * (xi - xp) .* (xi - xp)
-            mpvalues.w[i] = w
-            mpvalues.∇N[i] = w * (xi - xp)
+            mp.w[i] = w
+            mp.∇N[i] = w * (xi - xp)
         end
         D⁻¹ = inv.(D)
-        @inbounds @simd for i in 1:length(mpvalues)
-            mpvalues.N[i] = wᵢ[i]
-            mpvalues.∇N[i] = mpvalues.∇N[i] .* D⁻¹
+        @inbounds @simd for i in 1:num_nodes(mp)
+            mp.N[i] = wᵢ[i]
+            mp.∇N[i] = mp.∇N[i] .* D⁻¹
         end
-        mpvalues.Minv = diagm(vcat(1, D⁻¹))
+        mp.Minv = diagm(vcat(1, D⁻¹))
     else
-        M = zero(mpvalues.Minv)
-        @inbounds @simd for i in 1:length(mpvalues)
-            I = gridindices(mpvalues, i)
+        M = zero(mp.Minv)
+        @inbounds @simd for i in 1:num_nodes(mp)
+            I = nodeindex(mp, i)
             xi = grid[I]
             w = value(F, grid, I, xp)
             p = value(P, xi - xp)
             M += w * p ⊗ p
-            mpvalues.w[i] = w
+            mp.w[i] = w
         end
         Minv = inv(M)
-        @inbounds @simd for i in 1:length(mpvalues)
-            I = gridindices(mpvalues, i)
+        @inbounds @simd for i in 1:num_nodes(mp)
+            I = nodeindex(mp, i)
             xi = grid[I]
             q = Minv ⋅ value(P, xi - xp)
-            wq = mpvalues.w[i] * q
-            mpvalues.N[i] = wq[1]
-            mpvalues.∇N[i] = @Tensor wq[2:end]
+            wq = mp.w[i] * q
+            mp.N[i] = wq[1]
+            mp.∇N[i] = @Tensor wq[2:end]
         end
-        mpvalues.Minv = Minv
+        mp.Minv = Minv
     end
 
-    mpvalues
-end
-
-@inline function Base.getindex(mpvalues::WLSValues, i::Int)
-    @_propagate_inbounds_meta
-    WLSValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.w[i], mpvalues.Minv, mpvalues.xp)
+    mp
 end

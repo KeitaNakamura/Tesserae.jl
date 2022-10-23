@@ -34,10 +34,10 @@ get_supportlength(::BSpline{4}) = 2.5
     (2*get_supportlength(bspline))^dim
 end
 
-@inline function gridindices(bsp::BSpline, grid::Grid, x::Vec)
-    gridindices(grid, x, get_supportlength(bsp))
+@inline function nodeindices(bsp::BSpline, grid::Grid, x::Vec)
+    nodeindices(grid, x, get_supportlength(bsp))
 end
-@inline gridindices(bsp::BSpline, grid::Grid, pt) = gridindices(bsp, grid, pt.x)
+@inline nodeindices(bsp::BSpline, grid::Grid, pt) = nodeindices(bsp, grid, pt.x)
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)
@@ -127,6 +127,13 @@ function value_gradient(bspline::BSpline, grid::Grid, I::Index, xp::Vec, ::Symbo
     w, ∇w.*dx⁻¹
 end
 
+@inline function node_position(ax::Vector, i::Int)
+    left = i - firstindex(ax)
+    right = lastindex(ax) - i
+    ifelse(left < right, left, -right)
+end
+node_position(grid::Grid, index::Index) = map(node_position, gridaxes(grid), Tuple(index.I))
+
 
 fract(x) = x - floor(x)
 # Fast calculations for values
@@ -204,61 +211,45 @@ end
 @inline values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
 
 
-struct BSplineValue{dim, T} <: MPValue
-    N::T
-    ∇N::Vec{dim, T}
-    xp::Vec{dim, T}
-end
-
-mutable struct BSplineValues{order, dim, T, L} <: MPValues{dim, T, BSplineValue{dim, T}}
+mutable struct BSplineValue{order, dim, T, L} <: MPValue{dim, T}
     F::BSpline{order}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
-    gridindices::MVector{L, Index{dim}}
+    # necessary in MPValue
     xp::Vec{dim, T}
+    nodeindices::MVector{L, Index{dim}}
     len::Int
 end
 
 # constructors
-function BSplineValues{order, dim, T, L}() where {order, dim, T, L}
+function BSplineValue{order, dim, T, L}() where {order, dim, T, L}
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
-    gridindices = MVector{L, Index{dim}}(undef)
     xp = zero(Vec{dim, T})
-    BSplineValues(BSpline{order}(), N, ∇N, gridindices, xp, 0)
+    nodeindices = MVector{L, Index{dim}}(undef)
+    BSplineValue(BSpline{order}(), N, ∇N, xp, nodeindices, 0)
 end
-function MPValues{dim, T}(F::BSpline{order}) where {order, dim, T}
+function MPValue{dim, T}(F::BSpline{order}) where {order, dim, T}
     L = num_nodes(F, Val(dim))
-    BSplineValues{order, dim, T, L}()
+    BSplineValue{order, dim, T, L}()
 end
 
-get_kernel(x::BSplineValues) = x.F
-
-@inline function node_position(ax::Vector, i::Int)
-    left = i - firstindex(ax)
-    right = lastindex(ax) - i
-    ifelse(left < right, left, -right)
+get_kernel(mp::BSplineValue) = mp.F
+@inline function mpvalue(mp::BSplineValue, i::Int)
+    @boundscheck @assert 1 ≤ i ≤ num_nodes(mp)
+    (; N=mp.N[i], ∇N=mp.∇N[i], xp=mp.xp)
 end
-node_position(grid::Grid, index::Index) = map(node_position, gridaxes(grid), Tuple(index.I))
 
-function update!(mpvalues::BSplineValues, grid::Grid, xp::Vec, spat::AbstractArray{Bool})
+function update_kernels!(mp::BSplineValue, grid::Grid, xp::Vec)
     # reset
-    fillzero!(mpvalues.N)
-    fillzero!(mpvalues.∇N)
-
-    F = get_kernel(mpvalues)
+    fillzero!(mp.N)
+    fillzero!(mp.∇N)
 
     # update
-    mpvalues.xp = xp
-    update_active_gridindices!(mpvalues, gridindices(F, grid, xp), spat)
-    @inbounds @simd for i in 1:length(mpvalues)
-        I = gridindices(mpvalues, i)
-        mpvalues.N[i], mpvalues.∇N[i] = value_gradient(F, grid, I, xp, :steffen)
+    F = get_kernel(mp)
+    @inbounds @simd for i in 1:num_nodes(mp)
+        I = nodeindex(mp, i)
+        mp.N[i], mp.∇N[i] = value_gradient(F, grid, I, xp, :steffen)
     end
-    mpvalues
-end
-
-@inline function Base.getindex(mpvalues::BSplineValues, i::Int)
-    @_propagate_inbounds_meta
-    BSplineValue(mpvalues.N[i], mpvalues.∇N[i], mpvalues.xp)
+    mp
 end

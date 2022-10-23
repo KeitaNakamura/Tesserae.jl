@@ -1,4 +1,4 @@
-struct MPSpace{T, dim, F <: Interpolation, C <: CoordinateSystem, V <: MPValues{dim, T}}
+struct MPSpace{T, dim, F <: Interpolation, C <: CoordinateSystem, V <: MPValue{dim, T}}
     interp::F
     grid::Grid{T, dim, C}
     sppat::Array{Bool, dim}
@@ -12,7 +12,7 @@ end
 function MPSpace(interp::Interpolation, grid::Grid{T, dim}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
     sppat = fill(false, size(grid))
     npts = length(xₚ)
-    mpvals = [MPValues{dim, T}(interp) for _ in 1:npts]
+    mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
     MPSpace(interp, grid, sppat, mpvals, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
 end
 MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
@@ -24,7 +24,7 @@ get_interpolation(space::MPSpace) = space.interp
 get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
 get_mpvalues(space::MPSpace) = space.mpvals
-get_mpvalues(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
+get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_pointsperblock(space::MPSpace) = space.ptspblk
 get_stamp(space::MPSpace) = space.stamp[]
 
@@ -100,7 +100,7 @@ function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; ex
     fill!(sppat, false)
     eachpoint_blockwise_parallel(space) do p
         @_inline_propagate_inbounds_meta
-        inds = gridindices(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
+        inds = nodeindices(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
         sppat[inds] .= true
     end
 
@@ -109,7 +109,7 @@ function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; ex
         @. sppat &= !exclude
         eachpoint_blockwise_parallel(space) do p
             @_inline_propagate_inbounds_meta
-            inds = gridindices(get_grid(space), pointstate.x[p], 1)
+            inds = nodeindices(get_grid(space), pointstate.x[p], 1)
             sppat[inds] .= true
         end
     end
@@ -150,11 +150,11 @@ function check_gridstate(gridstate::SpArray, space::MPSpace)
     end
 end
 
-function point_to_grid!(p2g, gridstates, mps::MPValues)
+function point_to_grid!(p2g, gridstates, mp::MPValue)
     @_inline_propagate_inbounds_meta
-    @simd for i in 1:length(mps)
-        I = gridindices(mps, i)
-        map_tuple(add!, gridstates, p2g(mps[i], I), I)
+    @simd for i in 1:num_nodes(mp)
+        I = nodeindex(mp, i)
+        map_tuple(add!, gridstates, p2g(mpvalue(mp, i), I), I)
     end
 end
 
@@ -166,7 +166,7 @@ function point_to_grid!(p2g, gridstates, space::MPSpace; zeroinit::Bool = true)
         point_to_grid!(
             (mp, I) -> (@_inline_propagate_inbounds_meta; p2g(mp, p, I)),
             gridstates,
-            get_mpvalues(space, p),
+            get_mpvalue(space, p),
         )
     end
     gridstates
@@ -181,7 +181,7 @@ function point_to_grid!(p2g, gridstates, space::MPSpace, pointmask::AbstractVect
         pointmask[p] && point_to_grid!(
             (mp, I) -> (@_inline_propagate_inbounds_meta; p2g(mp, p, I)),
             gridstates,
-            get_mpvalues(space, p),
+            get_mpvalue(space, p),
         )
     end
     gridstates
@@ -195,12 +195,12 @@ function check_pointstate(pointstate::AbstractVector, space::MPSpace)
     @assert length(pointstate) == num_points(space)
 end
 
-function grid_to_point(g2p, mps::MPValues)
+function grid_to_point(g2p, mp::MPValue)
     @_inline_propagate_inbounds_meta
-    vals = g2p(first(mps), gridindices(mps, 1))
-    @simd for i in 2:length(mps)
-        I = gridindices(mps, i)
-        vals = map_tuple(+, vals, g2p(mps[i], I))
+    vals = g2p(mpvalue(mp, 1), nodeindex(mp, 1))
+    @simd for i in 2:num_nodes(mp)
+        I = nodeindex(mp, i)
+        vals = map_tuple(+, vals, g2p(mpvalue(mp, i), I))
     end
     vals
 end
@@ -210,7 +210,7 @@ function grid_to_point(g2p, space::MPSpace)
         @_inline_propagate_inbounds_meta
         grid_to_point(
             (mp, I) -> (@_inline_propagate_inbounds_meta; g2p(mp, I, p)),
-            get_mpvalues(space, p)
+            get_mpvalue(space, p)
         )
     end
 end
