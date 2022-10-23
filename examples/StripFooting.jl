@@ -3,7 +3,7 @@ using MaterialModels
 
 function StripFooting(
         interp = LinearWLS(QuadraticBSpline()),
-        transfer = DefaultTransfer(interp);
+        transfer = Transfer(interp);
         ν = 0.3,
         dx = 0.1,
         CFL = 1.0,

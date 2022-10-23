@@ -14,7 +14,7 @@
             v_n::Vec{2, Float64}
         end
         for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-            transfer = DefaultTransfer(interp)
+            transfer = Transfer(interp)
             for coordinate_system in (PlaneStrain(), Axisymmetric())
                 # initialization
                 grid = Grid(0.0:2.0:10.0, 0.0:2.0:20.0; coordinate_system)
@@ -59,7 +59,7 @@
         for include_near_boundary in (true, false)
             for kernel in (QuadraticBSpline(), CubicBSpline())
                 interp = LinearWLS(kernel)
-                wls, apic, tpic = map((DefaultTransfer(interp), APIC(), TPIC())) do transfer
+                wls, apic, tpic = map((Transfer(interp), APIC(), TPIC())) do transfer
                     dt = 0.002
 
                     if include_near_boundary

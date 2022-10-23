@@ -16,7 +16,7 @@ include("transfer.jl")
 
 const fix_results = false
 
-function check_example(testname::String, case, interp, transfer=DefaultTransfer(interp); dx, kwargs...)
+function check_example(testname::String, case, interp, transfer=Transfer(interp); dx, kwargs...)
     @testset "$testname" begin
         outdir = joinpath("examples", "$testname.tmp")
         rm(outdir; recursive = true, force = true)

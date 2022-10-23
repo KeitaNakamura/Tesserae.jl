@@ -28,7 +28,7 @@ const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
 # default combinations #
 ########################
 
-@pure DefaultTransfer(interp::Interpolation) = Transfer(P2G_default(interp), G2P_default(interp))
+@pure Transfer(interp::Interpolation) = Transfer(P2G_default(interp), G2P_default(interp))
 
 # use FLIP by default
 @pure P2G_default(::Interpolation) = P2G_Normal()
