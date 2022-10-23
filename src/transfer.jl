@@ -99,7 +99,7 @@ function point_to_grid!(::P2G_AffinePIC, gridstate::AbstractArray, pointstate::A
     gridstate
 end
 
-function point_to_grid!(::P2G_Taylor, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace{<: Any, dim}, dt::Real) where {dim}
+function point_to_grid!(::P2G_Taylor, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace{dim}, dt::Real) where {dim}
     grid = get_grid(space)
     point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
         @_inline_propagate_inbounds_meta
@@ -225,7 +225,7 @@ function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::
     pointstate
 end
 
-function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{<: Any, dim}, dt::Real) where {dim}
+function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
     grid = get_grid(space)
     P = get_basis(get_interpolation(space))
     p0 = value(P, zero(Vec{dim, Int}))

@@ -85,7 +85,7 @@ function update_kernels!(mp::WLSValue, grid::Grid, pt)
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T, L}, grid::Grid{<: Any, dim}, pt) where {dim, T, L}
+function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T, L}, grid::Grid{dim}, pt) where {dim, T, L}
     # reset
     fillzero!(mp.N)
     fillzero!(mp.∇N)

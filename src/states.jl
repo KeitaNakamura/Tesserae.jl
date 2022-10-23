@@ -12,7 +12,7 @@ generate_gridstate(GridState::Type, grid::AbstractArray) = generate_gridstate(Gr
 # Point states #
 ################
 
-function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{T, dim}; n::Int = 2) where {dim, T}
+function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
     axes = gridaxes(grid)
     dims = size(grid)
     h = gridsteps(grid) ./ n # length per particle
@@ -52,7 +52,7 @@ function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{
     pointstate
 end
 
-function generate_pointstate(isindomain::Function, grid::Grid{T, dim}; kwargs...) where {T, dim}
+function generate_pointstate(isindomain::Function, grid::Grid{dim, T}; kwargs...) where {dim, T}
     PointState = @NamedTuple begin
         x::Vec{dim, T}
         V::T

@@ -7,7 +7,7 @@ Base.size(A::AxisArray) = map(length, A.axes)
 
 """
     Grid(axes::AbstractVector...)
-    Grid{T}(axes::AbstractVector...)
+    Grid(T, axes::AbstractVector...)
 
 Construct `Grid` by `axes`.
 `axes` must have `step` function, i.e., each axis should be linearly spaced.
@@ -15,14 +15,14 @@ Construct `Grid` by `axes`.
 # Examples
 ```jldoctest
 julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
-4×4 Grid{Float64, 2, PlaneStrain}:
+4×4 Grid{2, Float64, PlaneStrain}:
  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Grid{T, dim, C <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
+struct Grid{dim, T, C <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
     axisarray::AxisArray{dim, T, Vector{T}}
     gridsteps::NTuple{dim, T}
     gridsteps_inv::NTuple{dim, T}
@@ -40,7 +40,7 @@ gridaxes(x::Grid) = get_axes(x.axisarray)
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 
-function Grid{T}(axes::NTuple{dim, AbstractVector}; coordinate_system = nothing) where {T, dim}
+function Grid(::Type{T}, axes::NTuple{dim, AbstractVector}; coordinate_system = nothing) where {T, dim}
     @assert all(map(issorted, axes))
     dx = map(step, axes)
     dx⁻¹ = map(inv, dx)
@@ -51,10 +51,10 @@ function Grid{T}(axes::NTuple{dim, AbstractVector}; coordinate_system = nothing)
         get_coordinate_system(coordinate_system, Val(dim)),
     )
 end
-Grid{T}(axes::AbstractVector...; kwargs...) where {T} = Grid{T}(axes; kwargs...)
-Grid(args...; kwargs...) = Grid{Float64}(args...; kwargs...)
+Grid(::Type{T}, axes::AbstractVector...; kwargs...) where {T} = Grid(T, axes; kwargs...)
+Grid(args...; kwargs...) = Grid(Float64, args...; kwargs...)
 
-@inline function Base.getindex(grid::Grid{<: Any, dim}, i::Vararg{Int, dim}) where {dim}
+@inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(grid, i...)
     @inbounds Vec(get_axisarray(grid)[i...])
 end
@@ -71,7 +71,7 @@ In 1D, for example, the searching range becomes `x ± h*dx`.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0)
-6-element Grid{Float64, 1, Marble.OneDimensional}:
+6-element Grid{1, Float64, Marble.OneDimensional}:
  [0.0]
  [1.0]
  [2.0]
@@ -92,7 +92,7 @@ julia> Marble.nodeindices(grid, Vec(1.5), 2)
  CartesianIndex(4,)
 ```
 """
-@inline function nodeindices(grid::Grid{<: Any, dim}, x::Vec{dim}, h) where {dim}
+@inline function nodeindices(grid::Grid{dim}, x::Vec{dim}, h) where {dim}
     dx⁻¹ = gridsteps_inv(grid)
     xmin = gridorigin(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
@@ -116,7 +116,7 @@ Return cell index where `x` locates.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
-6×6 Grid{Float64, 2, PlaneStrain}:
+6×6 Grid{2, Float64, PlaneStrain}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -128,7 +128,7 @@ julia> Marble.whichcell(grid, Vec(1.5, 1.5))
 CartesianIndex(2, 2)
 ```
 """
-@inline function whichcell(grid::Grid{<: Any, dim}, x::Vec{dim}) where {dim}
+@inline function whichcell(grid::Grid{dim}, x::Vec{dim}) where {dim}
     dx⁻¹ = gridsteps_inv(grid)
     xmin = gridorigin(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
@@ -145,7 +145,7 @@ The unit block size is `2^$BLOCK_UNIT` cells.
 # Examples
 ```jldoctest
 julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0)
-11×11 Grid{Float64, 2, PlaneStrain}:
+11×11 Grid{2, Float64, PlaneStrain}:
  [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
  [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
  [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]

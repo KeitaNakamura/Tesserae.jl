@@ -38,7 +38,7 @@ get_kernel(mp::KernelCorrectionValue) = get_kernel(mp.F)
     (; N=mp.N[i], ∇N=mp.∇N[i], xp=mp.xp)
 end
 
-function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T, L}, grid::Grid{<: Any, dim}, pt) where {dim, T, L}
+function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T, L}, grid::Grid{dim}, pt) where {dim, T, L}
     # reset
     fillzero!(mp.N)
     fillzero!(mp.∇N)

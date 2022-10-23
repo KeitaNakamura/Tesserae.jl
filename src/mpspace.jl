@@ -1,6 +1,6 @@
-struct MPSpace{T, dim, F <: Interpolation, C <: CoordinateSystem, V <: MPValue{dim, T}}
+struct MPSpace{dim, T, F <: Interpolation, C <: CoordinateSystem, V <: MPValue{dim, T}}
     interp::F
-    grid::Grid{T, dim, C}
+    grid::Grid{dim, T, C}
     sppat::Array{Bool, dim}
     mpvals::Vector{V}
     ptspblk::Array{Vector{Int}, dim}
@@ -9,7 +9,7 @@ struct MPSpace{T, dim, F <: Interpolation, C <: CoordinateSystem, V <: MPValue{d
 end
 
 # constructors
-function MPSpace(interp::Interpolation, grid::Grid{T, dim}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
+function MPSpace(interp::Interpolation, grid::Grid{dim, T}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
     sppat = fill(false, size(grid))
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
@@ -23,7 +23,6 @@ num_points(space::MPSpace) = space.npts[]
 get_interpolation(space::MPSpace) = space.interp
 get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
-get_mpvalues(space::MPSpace) = space.mpvals
 get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_pointsperblock(space::MPSpace) = space.ptspblk
 get_stamp(space::MPSpace) = space.stamp[]
@@ -76,16 +75,19 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function update!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
+function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing) where {T, dim}
     space.npts[]  = length(pointstate)
     space.stamp[] = time()
 
-    mpvals = get_mpvalues(space)
-    allocate!(i -> eltype(mpvals)(), mpvals, length(pointstate))
+    allocate!(space.mpvals, length(pointstate)) do i
+        interp = get_interpolation(space)
+        MPValue{dim, T}(interp)
+    end
 
     update_sparsity_pattern!(space, pointstate; exclude)
-    Threads.@threads for p in 1:length(pointstate)
-        @inbounds update!(mpvals[p], get_grid(space), LazyRow(pointstate, p), get_sppat(space))
+    @inbounds Threads.@threads for p in 1:length(pointstate)
+        mp = get_mpvalue(space, p)
+        update!(mp, get_grid(space), LazyRow(pointstate, p), get_sppat(space))
     end
 
     space

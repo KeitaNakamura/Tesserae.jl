@@ -2,8 +2,8 @@
     # constructors
     for T in (Float32, Float64)
         for axs in ((0:10,), (0:10, 0:20), (0:10, 0:20, 0:30))
-            @test (@inferred Grid(axs...))::Grid{Float64, length(axs)} == Vec.(collect(Iterators.product(axs...)))
-            @test (@inferred Grid{T}(axs...))::Grid{T, length(axs)} == Vec.(collect(Iterators.product(axs...)))
+            @test (@inferred Grid(axs...))::Grid{length(axs), Float64} == Vec.(collect(Iterators.product(axs...)))
+            @test (@inferred Grid(T, axs...))::Grid{length(axs), T} == Vec.(collect(Iterators.product(axs...)))
         end
     end
 
