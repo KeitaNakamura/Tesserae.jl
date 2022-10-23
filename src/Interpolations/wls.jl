@@ -26,20 +26,16 @@ mutable struct WLSValue{W <: WLS, dim, T, L, Minv_T <: Mat{<: Any, <: Any, T}} <
     len::Int
 end
 
-# constructors
-function WLSValue{W, dim, T, L, Minv_T}() where {W, dim, T, L, Minv_T}
+function MPValue{dim, T}(F::WLS) where {dim, T}
+    L = num_nodes(get_kernel(F), Val(dim))
+    n = length(value(get_basis(F), zero(Vec{dim, T})))
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
     w = MVector{L, T}(undef)
-    Minv = zero(Minv_T)
+    Minv = zero(Mat{n,n,T,n^2})
     xp = zero(Vec{dim, T})
     nodeindices = MVector{L, Index{dim}}(undef)
-    WLSValue(W(), N, ∇N, w, Minv, xp, nodeindices, 0)
-end
-function MPValue{dim, T}(F::WLS) where {dim, T}
-    L = length(value(get_basis(F), zero(Vec{dim, T})))
-    n = num_nodes(get_kernel(F), Val(dim))
-    WLSValue{typeof(F), dim, T, n, Mat{L, L, T, L^2}}()
+    WLSValue(F, N, ∇N, w, Minv, xp, nodeindices, 0)
 end
 
 get_kernel(mp::WLSValue) = get_kernel(mp.F)

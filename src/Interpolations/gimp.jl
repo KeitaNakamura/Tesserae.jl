@@ -99,17 +99,13 @@ mutable struct GIMPValue{dim, T, L} <: MPValue{dim, T}
     len::Int
 end
 
-# constructors
-function GIMPValue{dim, T, L}() where {dim, T, L}
+function MPValue{dim, T}(F::GIMP) where {dim, T}
+    L = num_nodes(F, Val(dim))
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
     xp = zero(Vec{dim, T})
     nodeindices = MVector{L, Index{dim}}(undef)
-    GIMPValue(GIMP(), N, ∇N, xp, nodeindices, 0)
-end
-function MPValue{dim, T}(F::GIMP) where {dim, T}
-    L = num_nodes(F, Val(dim))
-    GIMPValue{dim, T, L}()
+    GIMPValue(F, N, ∇N, xp, nodeindices, 0)
 end
 
 get_kernel(mp::GIMPValue) = mp.F

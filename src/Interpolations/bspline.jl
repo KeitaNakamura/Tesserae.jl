@@ -221,17 +221,13 @@ mutable struct BSplineValue{order, dim, T, L} <: MPValue{dim, T}
     len::Int
 end
 
-# constructors
-function BSplineValue{order, dim, T, L}() where {order, dim, T, L}
+function MPValue{dim, T}(F::BSpline) where {dim, T}
+    L = num_nodes(F, Val(dim))
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
     xp = zero(Vec{dim, T})
     nodeindices = MVector{L, Index{dim}}(undef)
-    BSplineValue(BSpline{order}(), N, ∇N, xp, nodeindices, 0)
-end
-function MPValue{dim, T}(F::BSpline{order}) where {order, dim, T}
-    L = num_nodes(F, Val(dim))
-    BSplineValue{order, dim, T, L}()
+    BSplineValue(F, N, ∇N, xp, nodeindices, 0)
 end
 
 get_kernel(mp::BSplineValue) = mp.F
