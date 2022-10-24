@@ -24,6 +24,8 @@ const TFLIP = Transfer{P2G_Taylor, G2P_FLIP}
 const TPIC  = Transfer{P2G_Taylor, G2P_PIC}
 const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
 
+const WLSTransfer = Transfer{P2G_WLS, G2P_WLS}
+
 ########################
 # default combinations #
 ########################
