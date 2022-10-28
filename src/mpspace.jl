@@ -29,8 +29,7 @@ get_stamp(space::MPSpace) = space.stamp[]
 
 # reorder_pointstate!
 function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
-    @assert length(pointstate) == sum(length, ptspblk)
-    inds = Vector{Int}(undef, length(pointstate))
+    inds = Vector{Int}(undef, sum(length, ptspblk))
     cnt = 1
     for blocks in threadsafe_blocks(size(ptspblk))
         @inbounds for blockindex in blocks
@@ -42,7 +41,11 @@ function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
             end
         end
     end
-    @inbounds @. pointstate = pointstate[inds]
+    rest = pointstate[setdiff(1:length(pointstate), inds)]
+    @inbounds begin
+        pointstate[1:length(inds)] .= view(pointstate, inds)
+        pointstate[length(inds)+1:end] .= rest
+    end
     pointstate
 end
 reorder_pointstate!(pointstate::AbstractVector, space::MPSpace) = reorder_pointstate!(pointstate, get_pointsperblock(space))
