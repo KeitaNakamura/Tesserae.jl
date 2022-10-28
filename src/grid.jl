@@ -38,7 +38,6 @@ gridsteps_inv(x::Grid) = x.gridsteps_inv
 gridsteps_inv(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps_inv(x)[i])
 gridaxes(x::Grid) = get_axes(x.axisarray)
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
-gridorigin(x::Grid) = Vec(map(first, gridaxes(x)))
 
 function Grid(::Type{T}, axes::NTuple{dim, AbstractVector}; coordinate_system = nothing) where {T, dim}
     @assert all(map(issorted, axes))
@@ -94,7 +93,7 @@ julia> Marble.nodeindices(grid, Vec(1.5), 2)
 """
 @inline function nodeindices(grid::Grid{dim}, x::Vec{dim}, h) where {dim}
     dx⁻¹ = gridsteps_inv(grid)
-    xmin = gridorigin(grid)
+    xmin = first(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
     T = eltype(ξ)
     all(@. zero(T) ≤ ξ ≤ T($size(grid)-1)) || return CartesianIndices(nfill(1:0, Val(dim)))
@@ -130,9 +129,11 @@ CartesianIndex(2, 2)
 """
 @inline function whichcell(grid::Grid{dim}, x::Vec{dim}) where {dim}
     dx⁻¹ = gridsteps_inv(grid)
-    xmin = gridorigin(grid)
+    xmin = first(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
-    all(@. 0 ≤ ξ ≤ $size(grid)-1) || return nothing
+    ncells = size(grid) .- 1
+    all(@. ξ == ncells) && return CartesianIndex(ncells)
+    all(@. 0 ≤ ξ < ncells) || return nothing # use `<` because of `floor`
     CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
 end
 

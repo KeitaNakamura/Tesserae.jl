@@ -25,7 +25,6 @@ export
     Grid,
     gridsteps,
     gridaxes,
-    gridorigin,
     gridbounds,
     generate_gridstate,
     generate_pointstate,
