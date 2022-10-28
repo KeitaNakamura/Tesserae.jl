@@ -197,10 +197,14 @@ function check_pointstate(pointstate::AbstractVector, space::MPSpace)
     @assert length(pointstate) == num_points(space)
 end
 
+@pure function g2p_initval(g2p, ::Type{MV}) where {dim, MV <: MPValue{dim}}
+    T = mpvalue_type(MV)
+    Base._return_type(g2p, Tuple{T, Index{dim}})
+end
 function grid_to_point(g2p, mp::MPValue)
     @_inline_propagate_inbounds_meta
-    vals = g2p(mpvalue(mp, 1), nodeindex(mp, 1))
-    @simd for i in 2:num_nodes(mp)
+    vals = zero_recursive(g2p_initval(g2p, typeof(mp)))
+    @simd for i in 1:num_nodes(mp)
         I = nodeindex(mp, i)
         vals = map_tuple(+, vals, g2p(mpvalue(mp, i), I))
     end

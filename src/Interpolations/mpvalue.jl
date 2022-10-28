@@ -5,6 +5,7 @@ abstract type MPValue{dim, T} end
 
 num_nodes(mp::MPValue) = mp.len
 nodeindex(mp::MPValue, i::Int) = (@_propagate_inbounds_meta; mp.nodeindices[i])
+@pure mpvalue_type(::Type{MV}) where {MV <: MPValue} = Base._return_type(mpvalue, Tuple{MV, Int})
 
 """
     MPValue{dim}(::Interpolation)
