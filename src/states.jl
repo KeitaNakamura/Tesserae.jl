@@ -1,3 +1,5 @@
+using PoissonDiskSampling
+
 ###############
 # Grid states #
 ###############
@@ -12,11 +14,27 @@ generate_gridstate(GridState::Type, grid::AbstractArray) = generate_gridstate(Gr
 # Point states #
 ################
 
-function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{dim, T}; n::Int = 2) where {dim, T}
+function generate_points_regularly(grid::Grid{dim}, n::Int) where {dim}
     axes = gridaxes(grid)
     dims = size(grid)
-    h = gridsteps(grid) ./ n # length per particle
-    allpoints = Grid(@. LinRange(first(axes)+h/2, last(axes)-h/2, n*(dims-1)))
+    r = gridsteps(grid) ./ 2n
+    Grid(@. LinRange(first(axes)+r, last(axes)-r, n*(dims-1)))
+end
+
+function generate_points_randomly(grid::Grid{dim}, n::Int) where {dim}
+    d = gridsteps(grid) ./ n
+    minmaxes = map((min,max)->(min,max), Tuple(first(grid)), Tuple(last(grid)))
+    points = PoissonDiskSampling.generate(only(unique(d)), minmaxes...)
+    LazyDotArray(Vec{dim}, points)
+end
+
+function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{dim, T}; n::Int = 2, random::Bool = false) where {dim, T}
+    if random
+        allpoints = generate_points_randomly(grid, n)
+    else
+        allpoints = generate_points_regularly(grid, n)
+    end
+    V = prod(last(grid) - first(grid)) / length(allpoints)
 
     # find points `isindomain`
     mask = broadcast(x -> isindomain(x...), allpoints)
@@ -34,7 +52,6 @@ function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{
         end
     end
     if :V in propertynames(pointstate)
-        V = prod(h)
         if dim == 2 && grid.coordinate_system isa Axisymmetric
             @. pointstate.V = getindex(pointstate.x, 1) * V
         else
@@ -42,7 +59,12 @@ function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{
         end
     end
     if :r in propertynames(pointstate)
-        pointstate.r .= Vec(h) / 2
+        if random
+            h = ones(Vec{dim}) * V^(1/dim)
+        else
+            h = Vec(gridsteps(grid) ./ n)
+        end
+        pointstate.r .= h / 2
     end
     if :index in propertynames(pointstate)
         pointstate.index .= 1:npts

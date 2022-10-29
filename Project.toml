@@ -1,10 +1,11 @@
 name = "Marble"
 uuid = "8a8a7a0b-5081-41d5-b488-cbbf872f9543"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
-version = "1.1.1"
+version = "1.1.2"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
@@ -13,6 +14,7 @@ Tensorial = "98f94333-fa9f-48a9-ad80-1c66397b2b38"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
+PoissonDiskSampling = "0.1"
 ProgressMeter = "1.5"
 Reexport = "1"
 StaticArrays = "1"
