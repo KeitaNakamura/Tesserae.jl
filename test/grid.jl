@@ -16,6 +16,10 @@
     @test @inferred(gridaxes(grid, 1)) == 0:1.0:10
     @test @inferred(gridaxes(grid, 2)) == 1:2.0:20
 
+    # getindex
+    grid = Grid(0:1.0:10, 1:2.0:20)
+    @test grid[2:8, 5:9] == Array(grid[2:8, 5:9])
+
     # isinside
     @test Marble.isinside(Vec(0,1), grid) == true
     @test Marble.isinside(Vec(2,4), grid) == true

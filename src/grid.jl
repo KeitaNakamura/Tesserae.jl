@@ -1,9 +1,13 @@
-struct AxisArray{dim, T, V <: Union{AbstractVector{T}, Tuple{Vararg{T}}}} <: AbstractArray{NTuple{dim, T}, dim}
+struct AxisArray{dim, T, V <:AbstractVector{T}} <: AbstractArray{NTuple{dim, T}, dim}
     axes::NTuple{dim, V}
 end
 get_axes(A::AxisArray) = A.axes
 Base.size(A::AxisArray) = map(length, A.axes)
 @inline Base.getindex(A::AxisArray{dim}, i::Vararg{Int, dim}) where {dim} = (@_propagate_inbounds_meta; map(getindex, A.axes, i))
+@inline function Base.getindex(A::AxisArray{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
+    @_propagate_inbounds_meta
+    AxisArray(map(getindex, A.axes, ranges))
+end
 
 """
     Grid(axes::AbstractVector...)
@@ -56,6 +60,10 @@ Grid(args...; kwargs...) = Grid(Float64, args...; kwargs...)
 @inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(grid, i...)
     @inbounds Vec(get_axisarray(grid)[i...])
+end
+@inline function Base.getindex(grid::Grid{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
+    @boundscheck checkbounds(grid, ranges...)
+    @inbounds Grid(get_axisarray(grid)[ranges...], gridsteps(grid), gridsteps_inv(grid), grid.coordinate_system)
 end
 
 isinside(x::Vec, grid::Grid) = all(first(grid) .≤ x .≤ last(grid))
@@ -172,7 +180,7 @@ end
 blocksize(gridsize::Tuple{Vararg{Int}}) = (ncells = gridsize .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
 
 function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
-    starts = AxisArray(nfill((1,2), Val(dim)))
+    starts = AxisArray(nfill([1,2], Val(dim)))
     tuple2cartesian(x) = LazyDotArray(CartesianIndex{dim}, x)
     vec(map(st -> tuple2cartesian(AxisArray(StepRange.(st, 2, blocksize))), starts))
 end
