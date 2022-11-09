@@ -28,7 +28,7 @@ function generate_points_randomly(grid::Grid{dim}, n::Int) where {dim}
     LazyDotArray(Vec{dim}, points)
 end
 
-function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{dim, T}; n::Int = 2, random::Bool = false) where {dim, T}
+function generate_pointstate(isindomain::Function, ::Type{PointState}, grid::Grid{dim, T}; n::Int = 2, random::Bool = false) where {PointState, dim, T}
     if random
         allpoints = generate_points_randomly(grid, n)
     else
@@ -71,6 +71,26 @@ function generate_pointstate(isindomain::Function, PointState::Type, grid::Grid{
     end
 
     reorder_pointstate!(pointstate, pointsperblock(grid, pointstate.x))
+    pointstate
+end
+
+function generate_pointstate(::Type{PointState}, pointstate_old::StructVector) where {PointState}
+    pointstate = StructVector{PointState}(undef, length(pointstate_old))
+    fillzero!(pointstate)
+
+    if :x in propertynames(pointstate)
+        pointstate.x .= pointstate_old.x
+    end
+    if :V in propertynames(pointstate)
+        pointstate.V .= pointstate_old.V
+    end
+    if :r in propertynames(pointstate)
+        pointstate.r .= pointstate_old.r
+    end
+    if :index in propertynames(pointstate)
+        pointstate.index .= pointstate_old.index
+    end
+
     pointstate
 end
 
