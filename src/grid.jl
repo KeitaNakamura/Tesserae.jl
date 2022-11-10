@@ -140,7 +140,6 @@ CartesianIndex(2, 2)
     xmin = first(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
     ncells = size(grid) .- 1
-    all(@. ξ == ncells) && return CartesianIndex(ncells)
     all(@. 0 ≤ ξ < ncells) || return nothing # use `<` because of `floor`
     CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
 end
