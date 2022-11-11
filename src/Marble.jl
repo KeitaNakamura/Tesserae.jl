@@ -54,6 +54,7 @@ export
     PIC,
     TFLIP,
     TPIC,
+    AFLIP,
     APIC,
 # Frictional contact
     CoulombFriction,

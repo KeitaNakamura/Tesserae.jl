@@ -1,14 +1,16 @@
 # P2G
 abstract type P2G_Transfer end
-struct P2G_Normal    <: P2G_Transfer end
-struct P2G_Taylor    <: P2G_Transfer end
-struct P2G_WLS       <: P2G_Transfer end
-struct P2G_AffinePIC <: P2G_Transfer end
+struct P2G_Normal     <: P2G_Transfer end
+struct P2G_Taylor     <: P2G_Transfer end
+struct P2G_WLS        <: P2G_Transfer end
+struct P2G_AffineFLIP <: P2G_Transfer end
+struct P2G_AffinePIC  <: P2G_Transfer end
 # G2P
 abstract type G2P_Transfer end
 struct G2P_FLIP       <: G2P_Transfer end
 struct G2P_PIC        <: G2P_Transfer end
 struct G2P_WLS        <: G2P_Transfer end
+struct G2P_AffineFLIP <: G2P_Transfer end
 struct G2P_AffinePIC  <: G2P_Transfer end
 
 struct Transfer{P2G <: P2G_Transfer, G2P <: G2P_Transfer}
@@ -22,6 +24,7 @@ const FLIP  = Transfer{P2G_Normal, G2P_FLIP}
 const PIC   = Transfer{P2G_Normal, G2P_PIC}
 const TFLIP = Transfer{P2G_Taylor, G2P_FLIP}
 const TPIC  = Transfer{P2G_Taylor, G2P_PIC}
+const AFLIP = Transfer{P2G_AffineFLIP, G2P_AffineFLIP}
 const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
 
 const WLSTransfer = Transfer{P2G_WLS, G2P_WLS}
@@ -69,7 +72,7 @@ function point_to_grid!(::P2G_Normal, gridstate::AbstractArray, pointstate::Abst
     gridstate
 end
 
-function point_to_grid!(::P2G_AffinePIC, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
+function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
     grid = get_grid(space)
     D = grid_to_point(space) do mp, i, p
         @_inline_propagate_inbounds_meta
@@ -195,10 +198,32 @@ function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::Abstra
     end
     @inbounds Threads.@threads for p in 1:num_points(space)
         vₚ, ∇vₚ = pointvalues[p]
-        xₚ = pointstate.x[p]
+        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] = vₚ
-        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, xₚ, vₚ, ∇vₚ)
-        pointstate.x[p] = xₚ + vₚ * dt
+        pointstate.x[p] += vₚ * dt
+    end
+    pointstate
+end
+
+function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+    grid = get_grid(space)
+    pointvalues = grid_to_point(space) do mp, i, p
+        @_inline_propagate_inbounds_meta
+        N = mp.N
+        ∇N = mp.∇N
+        dvᵢ = gridstate.v[i] - gridstate.v_n[i]
+        vᵢ = gridstate.v[i]
+        xᵢ = grid[i]
+        xₚ = pointstate.x[p]
+        v = vᵢ * N
+        N*dvᵢ, v, vᵢ⊗∇N, v⊗(xᵢ - xₚ)
+    end
+    @inbounds Threads.@threads for p in 1:num_points(space)
+        dvₚ, vₚ, ∇vₚ, Bₚ = pointvalues[p]
+        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
+        pointstate.v[p] += dvₚ
+        pointstate.x[p] += vₚ * dt
+        pointstate.B[p] = Bₚ
     end
     pointstate
 end
@@ -218,10 +243,9 @@ function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::
     end
     @inbounds Threads.@threads for p in 1:num_points(space)
         vₚ, ∇vₚ, Bₚ = pointvalues[p]
-        xₚ = pointstate.x[p]
+        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] = vₚ
-        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, xₚ, vₚ, ∇vₚ)
-        pointstate.x[p] = xₚ + vₚ * dt
+        pointstate.x[p] += vₚ * dt
         pointstate.B[p] = Bₚ
     end
     pointstate
@@ -240,11 +264,10 @@ function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::Abstra
     end
     @inbounds Threads.@threads for p in 1:length(pointstate)
         Cₚ = pointstate.C[p]
-        xₚ = pointstate.x[p]
         vₚ = Cₚ ⋅ p0
+        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, Cₚ ⋅ ∇p0)
         pointstate.v[p] = vₚ
-        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, xₚ, vₚ, Cₚ ⋅ ∇p0)
-        pointstate.x[p] = xₚ + vₚ * dt
+        pointstate.x[p] += vₚ * dt
     end
     pointstate
 end

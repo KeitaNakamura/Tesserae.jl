@@ -54,6 +54,7 @@ end
     check_example("SandColumn", 3, LinearWLS(QuadraticBSpline()), APIC(); dx)
     check_example("SandColumn", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx)
     check_example("SandColumn", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx)
+    check_example("SandColumn", 6, KernelCorrection(QuadraticBSpline()), AFLIP(); dx)
     # StripFooting
     dx = 0.125
     ν = 0.3
