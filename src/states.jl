@@ -74,6 +74,11 @@ function generate_pointstate(isindomain::Function, ::Type{PointState}, grid::Gri
     pointstate
 end
 
+function generate_pointstate(isindomain::Function, grid::Grid{dim, T}; kwargs...) where {dim, T}
+    PointState = minimum_pointstate_type(Val(dim), T)
+    generate_pointstate(isindomain, PointState, grid; kwargs...)
+end
+
 function generate_pointstate(::Type{PointState}, pointstate_old::StructVector) where {PointState}
     pointstate = StructVector{PointState}(undef, length(pointstate_old))
     fillzero!(pointstate)
@@ -94,12 +99,17 @@ function generate_pointstate(::Type{PointState}, pointstate_old::StructVector) w
     pointstate
 end
 
-function generate_pointstate(isindomain::Function, grid::Grid{dim, T}; kwargs...) where {dim, T}
-    PointState = @NamedTuple begin
+function generate_pointstate(pointstate_old::StructVector)
+    T = eltype(pointstate_old.x)
+    PointState = minimum_pointstate_type(Val(length(T)), eltype(T))
+    generate_pointstate(PointState, pointstate_old)
+end
+
+function minimum_pointstate_type(::Val{dim}, ::Type{T}) where {dim, T}
+    @NamedTuple begin
         x::Vec{dim, T}
         V::T
         r::Vec{dim, T}
         index::Int
     end
-    generate_pointstate(isindomain, PointState, grid; kwargs...)
 end

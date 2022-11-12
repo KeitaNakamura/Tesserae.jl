@@ -21,15 +21,18 @@
     @testset "copied from existing pointstate" begin
         grid = Grid(0:0.1:10, 0:0.1:10)
         pointstate_old = generate_pointstate((x,y) -> true, grid; random=true)
-        pointstate_new = generate_pointstate(eltype(pointstate_old), pointstate_old)
-        @test pointstate_new !== pointstate_old
-        @test pointstate_new.x !== pointstate_old.x
-        @test pointstate_new.V !== pointstate_old.V
-        @test pointstate_new.r !== pointstate_old.r
-        @test pointstate_new == pointstate_old
-        @test pointstate_new.x == pointstate_old.x
-        @test pointstate_new.V == pointstate_old.V
-        @test pointstate_new.r == pointstate_old.r
-        @test pointstate_new.index == pointstate_old.index
+        check_pointstate = pointstate_new -> begin
+            @test pointstate_new !== pointstate_old
+            @test pointstate_new.x !== pointstate_old.x
+            @test pointstate_new.V !== pointstate_old.V
+            @test pointstate_new.r !== pointstate_old.r
+            @test pointstate_new == pointstate_old
+            @test pointstate_new.x == pointstate_old.x
+            @test pointstate_new.V == pointstate_old.V
+            @test pointstate_new.r == pointstate_old.r
+            @test pointstate_new.index == pointstate_old.index
+        end
+        check_pointstate(@inferred generate_pointstate(eltype(pointstate_old), pointstate_old))
+        check_pointstate(@inferred generate_pointstate(pointstate_old))
     end
 end
