@@ -24,7 +24,7 @@ end
 function generate_points_randomly(grid::Grid{dim}, n::Int) where {dim}
     d = gridsteps(grid) ./ n
     minmaxes = map((min,max)->(min,max), Tuple(first(grid)), Tuple(last(grid)))
-    points = PoissonDiskSampling.generate(only(unique(d)), minmaxes...)
+    points = PoissonDiskSampling.generate(minmaxes...; r = only(unique(d)))
     LazyDotArray(Vec{dim}, points)
 end
 
