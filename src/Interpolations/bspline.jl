@@ -160,7 +160,7 @@ end
 @inline Base.values(bspline::BSpline, x::Vec) = Tuple(otimes(map_tuple(values, bspline, Tuple(x))...))
 function Base.values(bspline::BSpline, grid::Grid, xp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
-    values(bspline, xp .* dx⁻¹)
+    values(bspline, (xp-first(grid)) .* dx⁻¹)
 end
 @inline Base.values(bspline::BSpline, grid::Grid, pt) = values(bspline, grid, pt.x)
 
@@ -205,7 +205,7 @@ end
 end
 function values_gradients(bspline::BSpline, grid::Grid, xp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
-    wᵢ, ∇wᵢ = values_gradients(bspline, xp .* dx⁻¹)
+    wᵢ, ∇wᵢ = values_gradients(bspline, (xp-first(grid)) .* dx⁻¹)
     wᵢ, broadcast(.*, ∇wᵢ, Ref(dx⁻¹))
 end
 @inline values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
