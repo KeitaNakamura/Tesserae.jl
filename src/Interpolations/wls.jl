@@ -21,8 +21,8 @@ mutable struct WLSValue{W <: WLS, dim, T, L, Minv_T <: Mat{<: Any, <: Any, T}} <
     w::MVector{L, T}
     Minv::Minv_T
     # necessary in MPValue
-    xp::Vec{dim, T}
     nodeindices::MVector{L, Index{dim}}
+    xp::Vec{dim, T}
     len::Int
 end
 
@@ -33,9 +33,9 @@ function MPValue{dim, T}(F::WLS) where {dim, T}
     ∇N = MVector{L, Vec{dim, T}}(undef)
     w = MVector{L, T}(undef)
     Minv = zero(Mat{n,n,T,n^2})
-    xp = zero(Vec{dim, T})
     nodeindices = MVector{L, Index{dim}}(undef)
-    WLSValue(F, N, ∇N, w, Minv, xp, nodeindices, 0)
+    xp = zero(Vec{dim, T})
+    WLSValue(F, N, ∇N, w, Minv, nodeindices, xp, 0)
 end
 
 get_kernel(mp::WLSValue) = get_kernel(mp.F)
@@ -94,7 +94,7 @@ function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T, L}, grid
     if num_nodes(mp) == L # all activate
         # fast version
         D = zero(Vec{dim, T}) # diagonal entries
-        wᵢ = values(F, grid, xp)
+        wᵢ = first(values_gradients(F, grid, xp))
         @inbounds @simd for i in 1:num_nodes(mp)
             I = nodeindex(mp, i)
             xi = grid[I]

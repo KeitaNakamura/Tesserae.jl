@@ -14,8 +14,8 @@ mutable struct KernelCorrectionValue{K, dim, T, L} <: MPValue{dim, T}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
     # necessary in MPValue
-    xp::Vec{dim, T}
     nodeindices::MVector{L, Index{dim}}
+    xp::Vec{dim, T}
     len::Int
 end
 
@@ -23,9 +23,9 @@ function MPValue{dim, T}(F::KernelCorrection) where {dim, T}
     L = num_nodes(get_kernel(F), Val(dim))
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
-    xp = zero(Vec{dim, T})
     nodeindices = MVector{L, Index{dim}}(undef)
-    KernelCorrectionValue(F, N, ∇N, xp, nodeindices, 0)
+    xp = zero(Vec{dim, T})
+    KernelCorrectionValue(F, N, ∇N, nodeindices, xp, 0)
 end
 
 get_kernel(mp::KernelCorrectionValue) = get_kernel(mp.F)

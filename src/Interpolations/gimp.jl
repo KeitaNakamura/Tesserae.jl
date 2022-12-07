@@ -21,7 +21,6 @@ function value(::GIMP, ξ::Real, l::Real) # `l` is normalized radius
     ξ < 1+l ? (1+l-ξ)^2 / 4l       : zero(ξ)
 end
 @inline value(f::GIMP, ξ::Vec, l::Vec) = prod(map_tuple(value, f, Tuple(ξ), Tuple(l)))
-# used in `WLS`
 function value(f::GIMP, grid::Grid, I::Index, xp::Vec, rp::Vec)
     @_inline_propagate_inbounds_meta
     xi = grid[I]
@@ -30,33 +29,7 @@ function value(f::GIMP, grid::Grid, I::Index, xp::Vec, rp::Vec)
     value(f, ξ, rp.*dx⁻¹)
 end
 @inline value(f::GIMP, grid::Grid, I::Index, pt) = value(f, grid, I, pt.x, pt.r)
-# used in `KernelCorrection`
-function value_gradient(f::GIMP, grid::Grid, I::Index, xp::Vec, rp::Vec)
-    @_inline_propagate_inbounds_meta
-    xi = grid[I]
-    dx⁻¹ = gridsteps_inv(grid)
-    ξ = (xp - xi) .* dx⁻¹
-    ∇w, w = gradient(ξ -> value(f, ξ, rp.*dx⁻¹), ξ, :all)
-    w, ∇w.*dx⁻¹
-end
-@inline value_gradient(f::GIMP, grid::Grid, I::Index, pt) = value_gradient(f, grid, I, pt.x, pt.r)
 
-# used in `WLS`
-# `x` and `l` must be normalized by `dx`
-@inline function Base.values(::GIMP, x::T, l::T) where {T <: Real}
-    V = Vec{3, T}
-    x′ = fract(x - T(0.5))
-    ξ = x′ .- V(-0.5, 0.5, 1.5)
-    map_tuple(value, GIMP(), Tuple(ξ), Tuple(l))
-end
-@inline Base.values(f::GIMP, x::Vec, l::Vec) = Tuple(otimes(map_tuple(values, f, Tuple(x), Tuple(l))...))
-function Base.values(f::GIMP, grid::Grid, xp::Vec, lp::Vec)
-    dx⁻¹ = gridsteps_inv(grid)
-    values(f, xp.*dx⁻¹, lp.*dx⁻¹)
-end
-@inline Base.values(f::GIMP, grid::Grid, pt) = values(f, grid, pt.x, pt.r)
-
-# used in `KernelCorrection`
 # `x` and `l` must be normalized by `dx`
 _gradient_GIMP(x, l) = gradient(x -> value(GIMP(), x, l), x, :all)
 function _values_gradients(::GIMP, x::T, l::T) where {T <: Real}
@@ -94,8 +67,8 @@ mutable struct GIMPValue{dim, T, L} <: MPValue{dim, T}
     N::MVector{L, T}
     ∇N::MVector{L, Vec{dim, T}}
     # necessary in MPValue
-    xp::Vec{dim, T}
     nodeindices::MVector{L, Index{dim}}
+    xp::Vec{dim, T}
     len::Int
 end
 
@@ -103,9 +76,9 @@ function MPValue{dim, T}(F::GIMP) where {dim, T}
     L = num_nodes(F, Val(dim))
     N = MVector{L, T}(undef)
     ∇N = MVector{L, Vec{dim, T}}(undef)
-    xp = zero(Vec{dim, T})
     nodeindices = MVector{L, Index{dim}}(undef)
-    GIMPValue(F, N, ∇N, xp, nodeindices, 0)
+    xp = zero(Vec{dim, T})
+    GIMPValue(F, N, ∇N, nodeindices, xp, 0)
 end
 
 get_kernel(mp::GIMPValue) = mp.F
@@ -118,12 +91,11 @@ function update_kernels!(mp::GIMPValue, grid::Grid, pt)
     # reset
     fillzero!(mp.N)
     fillzero!(mp.∇N)
-
     # update
     F = get_kernel(mp)
     @inbounds @simd for i in 1:num_nodes(mp)
         I = nodeindex(mp, i)
-        mp.N[i], mp.∇N[i] = value_gradient(F, grid, I, pt)
+        mp.∇N[i], mp.N[i] = gradient(x->value(F,grid,I,x,pt.r), pt.x, :all)
     end
     mp
 end
