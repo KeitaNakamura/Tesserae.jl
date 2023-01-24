@@ -32,8 +32,6 @@ export
 # interpolations
     update!,
     num_nodes,
-    nodeindex,
-    mpvalue,
     Interpolation,
     BSpline,
     LinearBSpline,

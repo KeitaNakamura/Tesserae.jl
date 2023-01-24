@@ -29,10 +29,6 @@ function MPValue{dim, T}(F::KernelCorrection) where {dim, T}
 end
 
 get_kernel(mp::KernelCorrectionValue) = get_kernel(mp.F)
-@inline function mpvalue(mp::KernelCorrectionValue, i::Int)
-    @boundscheck @assert 1 ≤ i ≤ num_nodes(mp)
-    (; N=mp.N[i], ∇N=mp.∇N[i], xp=mp.xp)
-end
 
 function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T, L}, grid::Grid{dim}, pt) where {dim, T, L}
     # reset
@@ -48,24 +44,24 @@ function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T, L}, grid::Gri
         mp.∇N .= ∇wᵢ
     else
         M = zero(Mat{dim+1, dim+1, T})
-        @inbounds @simd for i in 1:num_nodes(mp)
-            I = nodeindex(mp, i)
-            xi = grid[I]
-            w = value(F, grid, I, pt)
+        @inbounds @simd for j in 1:num_nodes(mp)
+            i = mp.nodeindices[j]
+            xi = grid[i]
+            w = value(F, grid, i, pt)
             P = [1; xi - xp]
             M += w * P ⊗ P
-            mp.N[i] = w
+            mp.N[j] = w
         end
         Minv = inv(M)
         C1 = Minv[1,1]
         C2 = @Tensor Minv[2:end,1]
         C3 = @Tensor Minv[2:end,2:end]
-        @inbounds @simd for i in 1:num_nodes(mp)
-            I = nodeindex(mp, i)
-            xi = grid[I]
-            w = mp.N[i]
-            mp.N[i] = (C1 + C2 ⋅ (xi - xp)) * w
-            mp.∇N[i] = (C2 + C3 ⋅ (xi - xp)) * w
+        @inbounds @simd for j in 1:num_nodes(mp)
+            i = mp.nodeindices[j]
+            xi = grid[i]
+            w = mp.N[j]
+            mp.N[j] = (C1 + C2 ⋅ (xi - xp)) * w
+            mp.∇N[j] = (C2 + C3 ⋅ (xi - xp)) * w
         end
     end
 

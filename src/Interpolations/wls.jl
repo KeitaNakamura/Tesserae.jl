@@ -41,11 +41,6 @@ end
 get_kernel(mp::WLSValue) = get_kernel(mp.F)
 get_basis(mp::WLSValue) = get_basis(mp.F)
 
-@inline function mpvalue(mp::WLSValue, i::Int)
-    @boundscheck @assert 1 ≤ i ≤ num_nodes(mp)
-    (; N=mp.N[i], ∇N=mp.∇N[i], w=mp.w[i], Minv=mp.Minv, xp=mp.xp)
-end
-
 # general version
 function update_kernels!(mp::WLSValue, grid::Grid, pt)
     # reset
@@ -58,22 +53,22 @@ function update_kernels!(mp::WLSValue, grid::Grid, pt)
     P = get_basis(mp)
     M = zero(mp.Minv)
     xp = getx(pt)
-    @inbounds @simd for i in 1:num_nodes(mp)
-        I = nodeindex(mp, i)
-        xi = grid[I]
-        w = value(F, grid, I, pt)
+    @inbounds @simd for j in 1:num_nodes(mp)
+        i = mp.nodeindices[j]
+        xi = grid[i]
+        w = value(F, grid, i, pt)
         p = value(P, xi - xp)
         M += w * p ⊗ p
-        mp.w[i] = w
+        mp.w[j] = w
     end
     Minv = inv(M)
-    @inbounds @simd for i in 1:num_nodes(mp)
-        I = nodeindex(mp, i)
-        xi = grid[I]
+    @inbounds @simd for j in 1:num_nodes(mp)
+        i = mp.nodeindices[j]
+        xi = grid[i]
         q = Minv ⋅ value(P, xi - xp)
-        wq = mp.w[i] * q
-        mp.N[i] = wq ⋅ value(P, xp - xp)
-        mp.∇N[i] = wq ⋅ gradient(P, xp - xp)
+        wq = mp.w[j] * q
+        mp.N[j] = wq ⋅ value(P, xp - xp)
+        mp.∇N[j] = wq ⋅ gradient(P, xp - xp)
     end
     mp.Minv = Minv
 
@@ -95,38 +90,38 @@ function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T, L}, grid
         # fast version
         D = zero(Vec{dim, T}) # diagonal entries
         wᵢ = first(values_gradients(F, grid, xp))
-        @inbounds @simd for i in 1:num_nodes(mp)
-            I = nodeindex(mp, i)
-            xi = grid[I]
-            w = wᵢ[i]
+        @inbounds @simd for j in 1:num_nodes(mp)
+            i = mp.nodeindices[j]
+            xi = grid[i]
+            w = wᵢ[j]
             D += w * (xi - xp) .* (xi - xp)
-            mp.w[i] = w
-            mp.∇N[i] = w * (xi - xp)
+            mp.w[j] = w
+            mp.∇N[j] = w * (xi - xp)
         end
         D⁻¹ = inv.(D)
-        @inbounds @simd for i in 1:num_nodes(mp)
-            mp.N[i] = wᵢ[i]
-            mp.∇N[i] = mp.∇N[i] .* D⁻¹
+        @inbounds @simd for j in 1:num_nodes(mp)
+            mp.N[j] = wᵢ[j]
+            mp.∇N[j] = mp.∇N[j] .* D⁻¹
         end
         mp.Minv = diagm(vcat(1, D⁻¹))
     else
         M = zero(mp.Minv)
-        @inbounds @simd for i in 1:num_nodes(mp)
-            I = nodeindex(mp, i)
-            xi = grid[I]
-            w = value(F, grid, I, xp)
+        @inbounds @simd for j in 1:num_nodes(mp)
+            i = mp.nodeindices[j]
+            xi = grid[i]
+            w = value(F, grid, i, xp)
             p = value(P, xi - xp)
             M += w * p ⊗ p
-            mp.w[i] = w
+            mp.w[j] = w
         end
         Minv = inv(M)
-        @inbounds @simd for i in 1:num_nodes(mp)
-            I = nodeindex(mp, i)
-            xi = grid[I]
+        @inbounds @simd for j in 1:num_nodes(mp)
+            i = mp.nodeindices[j]
+            xi = grid[i]
             q = Minv ⋅ value(P, xi - xp)
-            wq = mp.w[i] * q
-            mp.N[i] = wq[1]
-            mp.∇N[i] = @Tensor wq[2:end]
+            wq = mp.w[j] * q
+            mp.N[j] = wq[1]
+            mp.∇N[j] = @Tensor wq[2:end]
         end
         mp.Minv = Minv
     end

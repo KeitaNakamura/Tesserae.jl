@@ -20,7 +20,7 @@ MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace
 # helper functions
 gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = space.npts[]
-mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
+get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_interpolation(space::MPSpace) = space.interp
 get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
@@ -89,7 +89,7 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Un
 
     update_sparsity_pattern!(space, pointstate; exclude)
     @inbounds Threads.@threads for p in 1:length(pointstate)
-        mp = mpvalue(space, p)
+        mp = get_mpvalue(space, p)
         update!(mp, get_grid(space), LazyRow(pointstate, p), get_sppat(space))
     end
 

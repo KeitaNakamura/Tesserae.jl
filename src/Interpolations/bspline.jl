@@ -186,10 +186,6 @@ function MPValue{dim, T}(F::BSpline) where {dim, T}
 end
 
 get_kernel(mp::BSplineValue) = mp.F
-@inline function mpvalue(mp::BSplineValue, i::Int)
-    @boundscheck @assert 1 ≤ i ≤ num_nodes(mp)
-    (; N=mp.N[i], ∇N=mp.∇N[i], xp=mp.xp)
-end
 
 function update_kernels!(mp::BSplineValue, grid::Grid, xp::Vec)
     # reset
@@ -197,9 +193,9 @@ function update_kernels!(mp::BSplineValue, grid::Grid, xp::Vec)
     fillzero!(mp.∇N)
     # update
     F = get_kernel(mp)
-    @inbounds @simd for i in 1:num_nodes(mp)
-        I = nodeindex(mp, i)
-        mp.∇N[i], mp.N[i] = gradient(x->value(F,grid,I,x,:steffen), xp, :all)
+    @inbounds @simd for j in 1:num_nodes(mp)
+        i = mp.nodeindices[j]
+        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all)
     end
     mp
 end

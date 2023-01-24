@@ -79,10 +79,6 @@ function MPValue{dim, T}(F::GIMP) where {dim, T}
 end
 
 get_kernel(mp::GIMPValue) = mp.F
-@inline function mpvalue(mp::GIMPValue, i::Int)
-    @boundscheck @assert 1 ≤ i ≤ num_nodes(mp)
-    (; N=mp.N[i], ∇N=mp.∇N[i], xp=mp.xp)
-end
 
 function update_kernels!(mp::GIMPValue, grid::Grid, pt)
     # reset
@@ -90,9 +86,9 @@ function update_kernels!(mp::GIMPValue, grid::Grid, pt)
     fillzero!(mp.∇N)
     # update
     F = get_kernel(mp)
-    @inbounds @simd for i in 1:num_nodes(mp)
-        I = nodeindex(mp, i)
-        mp.∇N[i], mp.N[i] = gradient(x->value(F,grid,I,x,pt.r), pt.x, :all)
+    @inbounds @simd for j in 1:num_nodes(mp)
+        i = mp.nodeindices[j]
+        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,pt.r), pt.x, :all)
     end
     mp
 end
