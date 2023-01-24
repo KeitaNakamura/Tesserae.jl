@@ -16,7 +16,7 @@ function StripFooting(
     GridState = @NamedTuple begin
         m::Float64
         v::Vec{2, Float64}
-        v_n::Vec{2, Float64}
+        vⁿ::Vec{2, Float64}
         # for smooth_pointstate!
         poly_coef::Vec{3, Float64}
         poly_mat::Mat{3, 3, Float64, 9}

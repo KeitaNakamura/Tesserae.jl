@@ -14,7 +14,7 @@ function SandColumn(
     GridState = @NamedTuple begin
         m::Float64
         v::Vec{2, Float64}
-        v_n::Vec{2, Float64}
+        vⁿ::Vec{2, Float64}
     end
     PointState = @NamedTuple begin
         m::Float64

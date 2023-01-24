@@ -31,7 +31,7 @@ export
 # interpolations
     update!,
     num_nodes,
-    nodexindex,
+    nodeindex,
     mpvalue,
     Interpolation,
     BSpline,
@@ -46,7 +46,6 @@ export
     MPSpace,
     point_to_grid!,
     grid_to_point!,
-    grid_to_point,
     update_sparsity_pattern!,
 # Transfer
     Transfer,

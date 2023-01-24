@@ -1,3 +1,9 @@
+function local_G2P(f, mp)
+    sum(1:num_nodes(mp)) do j
+        f(mpvalue(mp, j), nodeindex(mp, j))
+    end
+end
+
 @testset "BSplineValue" begin
     for T in (Float32, Float64)
         Random.seed!(1234)
@@ -13,8 +19,8 @@
                     @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
                     l = Marble.get_supportlength(bspline)
                     if all(a->l<a<1-l, x)
-                        @test grid_to_point((mp,i) -> mp.N*grid[i], mp) ≈ x atol=TOL
-                        @test grid_to_point((mp,i) -> grid[i]⊗mp.∇N, mp) ≈ I atol=TOL
+                        @test local_G2P((mp,i) -> mp.N*grid[i], mp) ≈ x atol=TOL
+                        @test local_G2P((mp,i) -> grid[i]⊗mp.∇N, mp) ≈ I atol=TOL
                     end
                 end
             end
@@ -43,8 +49,8 @@ end
                         end
                         @test sum(mp.N) ≈ 1
                         @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                        @test grid_to_point((mp,i) -> mp.N*grid[i], mp) ≈ x atol=TOL
-                        @test grid_to_point((mp,i) -> grid[i]⊗mp.∇N, mp) ≈ I atol=TOL
+                        @test local_G2P((mp,i) -> mp.N*grid[i], mp) ≈ x atol=TOL
+                        @test local_G2P((mp,i) -> grid[i]⊗mp.∇N, mp) ≈ I atol=TOL
                     end
                 end
             end
@@ -70,8 +76,8 @@ end
                         update!(mp, grid, (;x,r))
                         @test sum(mp.N) ≈ 1
                         @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                        @test grid_to_point((mp,i) -> mp.N*grid[i], mp) ≈ x atol=TOL
-                        @test grid_to_point((mp,i) -> grid[i]⊗mp.∇N, mp) ≈ I atol=TOL
+                        @test local_G2P((mp,i) -> mp.N*grid[i], mp) ≈ x atol=TOL
+                        @test local_G2P((mp,i) -> grid[i]⊗mp.∇N, mp) ≈ I atol=TOL
                     end
                 end
             end
@@ -98,8 +104,8 @@ end
                     end
                     @test sum(mp.N) ≈ 1
                     @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                    @test grid_to_point((mp,i) -> mp.N*grid[i], mp) ≈ x atol=TOL
-                    @test grid_to_point((mp,i) -> grid[i]⊗mp.∇N, mp) ≈ I atol=TOL
+                    @test local_G2P((mp,i) -> mp.N*grid[i], mp) ≈ x atol=TOL
+                    @test local_G2P((mp,i) -> grid[i]⊗mp.∇N, mp) ≈ I atol=TOL
                 end
             end
         end

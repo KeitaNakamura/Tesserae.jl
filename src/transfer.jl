@@ -47,108 +47,177 @@ const WLSTransfer = Transfer{P2G_WLS, G2P_WLS}
 # P2G transfer #
 ################
 
+function check_gridstate(gridstate::StructArray, space::MPSpace)
+end
+function check_gridstate(gridstate::SpArray, space::MPSpace)
+    if get_stamp(gridstate) != get_stamp(space)
+        # check to use @inbounds for `SpArray`
+        error("`update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)` must be executed before `point_to_grid!`")
+    end
+end
+
 point_to_grid!(t::Transfer, args...) = point_to_grid!(t.P2G, args...)
 
-function point_to_grid!(::P2G_Normal, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
+function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace, dt::Real)
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
-    point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        ∇N = mp.∇N
-        xₚ = pointstate.x[p]
-        mₚ = pointstate.m[p]
-        Vₚ = pointstate.V[p]
-        vₚ = pointstate.v[p]
-        σₚ = pointstate.σ[p]
-        bₚ = pointstate.b[p]
-        xᵢ = grid[i]
-        m = mₚ * N
-        mv = m * vₚ
-        f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, mv, mv + dt*f
+    fillzero!(gridstate.m)
+    fillzero!(gridstate.vⁿ)
+    fillzero!(gridstate.v)
+
+    eachpoint_blockwise_parallel(space) do p
+        @inbounds begin
+            xₚ = pointstate.x[p]
+            mₚ = pointstate.m[p]
+            Vₚ = pointstate.V[p]
+            vₚ = pointstate.v[p]
+            σₚ = pointstate.σ[p]
+            bₚ = pointstate.b[p]
+            mpp = mpvalue(space, p)
+            @simd for j in 1:num_nodes(mpp)
+                mp = mpvalue(mpp, j)
+                i = nodeindex(mpp, j)
+                N = mp.N
+                f = -Vₚ*stress_to_force(grid.coordinate_system, N, mp.∇N, xₚ, σₚ) + N*mₚ*bₚ
+                gridstate.m[i]  += N*mₚ
+                gridstate.vⁿ[i] += N*mₚ*vₚ
+                gridstate.v[i]  += dt*f
+            end
+        end
     end
-    @dot_threads gridstate.v_n /= gridstate.m
-    @dot_threads gridstate.v /= gridstate.m
+
+    @dot_threads gridstate.v = (gridstate.vⁿ + gridstate.v) / gridstate.m
+    @dot_threads gridstate.vⁿ /= gridstate.m
+
     gridstate
 end
 
-function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
+function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
-    D = grid_to_point(space) do mp, i, p
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        xᵢ = grid[i]
-        xₚ = pointstate.x[p]
-        N * (xᵢ - xₚ) ⊗ (xᵢ - xₚ)
+    fillzero!(gridstate.m)
+    fillzero!(gridstate.vⁿ)
+    fillzero!(gridstate.v)
+
+    eachpoint_blockwise_parallel(space) do p
+        @inbounds begin
+            mpp = mpvalue(space, p)
+            Dₚ = zero(Mat{dim, dim, T})
+            xₚ = pointstate.x[p]
+            @simd for j in 1:num_nodes(mpp)
+                mp = mpvalue(mpp, j)
+                i = nodeindex(mpp, j)
+                xᵢ = grid[i]
+                N = mp.N
+                Dₚ += N * (xᵢ - xₚ) ⊗ (xᵢ - xₚ)
+            end
+            mₚ = pointstate.m[p]
+            Vₚ = pointstate.V[p]
+            vₚ = pointstate.v[p]
+            Bₚ = pointstate.B[p]
+            σₚ = pointstate.σ[p]
+            bₚ = pointstate.b[p]
+            Cₚ = Bₚ ⋅ inv(Dₚ)
+            @simd for j in 1:num_nodes(mpp)
+                mp = mpvalue(mpp, j)
+                i = nodeindex(mpp, j)
+                N = mp.N
+                xᵢ  = grid[i]
+                f = -Vₚ*stress_to_force(grid.coordinate_system, N, mp.∇N, xₚ, σₚ) + N*mₚ*bₚ
+                gridstate.m[i]  += N*mₚ
+                gridstate.vⁿ[i] += N*mₚ*(vₚ + Cₚ⋅(xᵢ - xₚ))
+                gridstate.v[i]  += dt*f
+            end
+        end
     end
-    point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        ∇N = mp.∇N
-        xₚ = pointstate.x[p]
-        mₚ = pointstate.m[p]
-        Vₚ = pointstate.V[p]
-        vₚ = pointstate.v[p]
-        Bₚ = pointstate.B[p]
-        σₚ = pointstate.σ[p]
-        bₚ = pointstate.b[p]
-        Cₚ = Bₚ ⋅ inv(D[p])
-        xᵢ  = grid[i]
-        m = mₚ * N
-        mv = m * (vₚ + Cₚ ⋅ (xᵢ - xₚ))
-        f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, mv, mv + dt*f
-    end
-    @dot_threads gridstate.v_n /= gridstate.m
-    @dot_threads gridstate.v /= gridstate.m
+
+    @dot_threads gridstate.v = (gridstate.vⁿ + gridstate.v) / gridstate.m
+    @dot_threads gridstate.vⁿ /= gridstate.m
+
     gridstate
 end
 
-function point_to_grid!(::P2G_Taylor, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace{dim}, dt::Real) where {dim}
+function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace{dim}, dt::Real) where {dim}
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
-    point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        ∇N = mp.∇N
-        xₚ  = pointstate.x[p]
-        mₚ  = pointstate.m[p]
-        Vₚ  = pointstate.V[p]
-        vₚ  = pointstate.v[p]
-        ∇vₚ = pointstate.∇v[p]
-        σₚ  = pointstate.σ[p]
-        bₚ  = pointstate.b[p]
-        xᵢ  = grid[i]
-        m = mₚ * N
-        mv = m * (vₚ + @Tensor(∇vₚ[1:dim, 1:dim]) ⋅ (xᵢ - xₚ))
-        f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, mv, mv + dt*f
+    fillzero!(gridstate.m)
+    fillzero!(gridstate.vⁿ)
+    fillzero!(gridstate.v)
+
+    eachpoint_blockwise_parallel(space) do p
+        @inbounds begin
+            xₚ  = pointstate.x[p]
+            mₚ  = pointstate.m[p]
+            Vₚ  = pointstate.V[p]
+            vₚ  = pointstate.v[p]
+            ∇vₚ = pointstate.∇v[p]
+            σₚ  = pointstate.σ[p]
+            bₚ  = pointstate.b[p]
+            mpp = mpvalue(space, p)
+            @simd for j in 1:num_nodes(mpp)
+                mp = mpvalue(mpp, j)
+                i = nodeindex(mpp, j)
+                N = mp.N
+                xᵢ = grid[i]
+                f = -Vₚ*stress_to_force(grid.coordinate_system, N, mp.∇N, xₚ, σₚ) + N*mₚ*bₚ
+                gridstate.m[i]  += N*mₚ
+                gridstate.vⁿ[i] += N*mₚ*(vₚ + @Tensor(∇vₚ[1:dim, 1:dim]) ⋅ (xᵢ - xₚ))
+                gridstate.v[i]  += dt*f
+            end
+        end
     end
-    @dot_threads gridstate.v_n /= gridstate.m
-    @dot_threads gridstate.v /= gridstate.m
+
+    @dot_threads gridstate.v = (gridstate.vⁿ + gridstate.v) / gridstate.m
+    @dot_threads gridstate.vⁿ /= gridstate.m
+
     gridstate
 end
 
-function point_to_grid!(::P2G_WLS, gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace, dt::Real)
+function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace, dt::Real)
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
     P = get_basis(get_interpolation(space))
-    point_to_grid!((gridstate.m, gridstate.v_n, gridstate.v), space) do mp, p, i
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        ∇N = mp.∇N
-        xₚ = pointstate.x[p]
-        mₚ = pointstate.m[p]
-        Vₚ = pointstate.V[p]
-        Cₚ = pointstate.C[p]
-        σₚ = pointstate.σ[p]
-        bₚ = pointstate.b[p]
-        xᵢ = grid[i]
-        m = mₚ * N
-        mv = m * Cₚ ⋅ value(P, xᵢ - xₚ)
-        f = -Vₚ * stress_to_force(grid.coordinate_system, N, ∇N, xₚ, σₚ) + m * bₚ
-        m, mv, mv + dt*f
+    fillzero!(gridstate.m)
+    fillzero!(gridstate.vⁿ)
+    fillzero!(gridstate.v)
+
+    eachpoint_blockwise_parallel(space) do p
+        @inbounds begin
+            xₚ = pointstate.x[p]
+            mₚ = pointstate.m[p]
+            Vₚ = pointstate.V[p]
+            Cₚ = pointstate.C[p]
+            σₚ = pointstate.σ[p]
+            bₚ = pointstate.b[p]
+            mpp = mpvalue(space, p)
+            @simd for j in 1:num_nodes(mpp)
+                mp = mpvalue(mpp, j)
+                i = nodeindex(mpp, j)
+                N = mp.N
+                xᵢ = grid[i]
+                f = -Vₚ*stress_to_force(grid.coordinate_system, N, mp.∇N, xₚ, σₚ) + N*mₚ*bₚ
+                gridstate.m[i] += N*mₚ
+                gridstate.vⁿ[i] += N*mₚ*Cₚ⋅value(P, xᵢ-xₚ)
+                gridstate.v[i] += dt*f
+            end
+        end
     end
-    @dot_threads gridstate.v_n /= gridstate.m
-    @dot_threads gridstate.v /= gridstate.m
+
+    @dot_threads gridstate.v = (gridstate.vⁿ + gridstate.v) / gridstate.m
+    @dot_threads gridstate.vⁿ /= gridstate.m
+
     gridstate
 end
 
@@ -168,107 +237,161 @@ end
 
 grid_to_point!(t::Transfer, args...) = grid_to_point!(t.G2P, args...)
 
-function grid_to_point!(::G2P_FLIP, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+function grid_to_point!(::G2P_FLIP, pointstate::PointStateVector, gridstate::GridStateArray, space::MPSpace{dim}, dt::Real) where {dim}
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
-    pointvalues = grid_to_point(space) do mp, i, p
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        ∇N = mp.∇N
-        dvᵢ = gridstate.v[i] - gridstate.v_n[i]
-        vᵢ = gridstate.v[i]
-        N*dvᵢ, N*vᵢ, vᵢ⊗∇N
-    end
+
     @inbounds Threads.@threads for p in 1:num_points(space)
-        dvₚ, vₚ, ∇vₚ = pointvalues[p]
+        dvₚ = zero(eltype(pointstate.v))
+        vₚ  = zero(eltype(pointstate.v))
+        ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
+        mpp = mpvalue(space, p)
+        @simd for j in 1:num_nodes(mpp)
+            mp = mpvalue(mpp, j)
+            i = nodeindex(mpp, j)
+            N = mp.N
+            ∇N = mp.∇N
+            dvᵢ = gridstate.v[i] - gridstate.vⁿ[i]
+            vᵢ = gridstate.v[i]
+            dvₚ += N * dvᵢ
+            vₚ  += N * vᵢ
+            ∇vₚ += vᵢ ⊗ ∇N
+        end
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] += dvₚ
         pointstate.x[p] += vₚ * dt
     end
+
     pointstate
 end
 
-function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
-    pointvalues = grid_to_point(space) do mp, i, p
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        ∇N = mp.∇N
-        vᵢ = gridstate.v[i]
-        vᵢ*N, vᵢ⊗∇N
-    end
+
     @inbounds Threads.@threads for p in 1:num_points(space)
-        vₚ, ∇vₚ = pointvalues[p]
+        vₚ  = zero(eltype(pointstate.v))
+        ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
+        mpp = mpvalue(space, p)
+        @simd for j in 1:num_nodes(mpp)
+            mp = mpvalue(mpp, j)
+            i = nodeindex(mpp, j)
+            N = mp.N
+            ∇N = mp.∇N
+            vᵢ = gridstate.v[i]
+            vₚ  += vᵢ * N
+            ∇vₚ += vᵢ ⊗ ∇N
+        end
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] = vₚ
         pointstate.x[p] += vₚ * dt
     end
+
     pointstate
 end
 
-function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
-    pointvalues = grid_to_point(space) do mp, i, p
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        ∇N = mp.∇N
-        dvᵢ = gridstate.v[i] - gridstate.v_n[i]
-        vᵢ = gridstate.v[i]
-        xᵢ = grid[i]
-        xₚ = pointstate.x[p]
-        v = vᵢ * N
-        N*dvᵢ, v, vᵢ⊗∇N, v⊗(xᵢ - xₚ)
-    end
+
     @inbounds Threads.@threads for p in 1:num_points(space)
-        dvₚ, vₚ, ∇vₚ, Bₚ = pointvalues[p]
+        dvₚ = zero(eltype(pointstate.v))
+        vₚ  = zero(eltype(pointstate.v))
+        ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
+        Bₚ  = zero(eltype(pointstate.B))
+        mpp = mpvalue(space, p)
+        @simd for j in 1:num_nodes(mpp)
+            mp = mpvalue(mpp, j)
+            i = nodeindex(mpp, j)
+            N = mp.N
+            ∇N = mp.∇N
+            dvᵢ = gridstate.v[i] - gridstate.vⁿ[i]
+            vᵢ = gridstate.v[i]
+            xᵢ = grid[i]
+            xₚ = pointstate.x[p]
+            dvₚ += N * dvᵢ
+            vₚ  += N * vᵢ
+            ∇vₚ += vᵢ ⊗ ∇N
+            Bₚ  += N * vᵢ ⊗ (xᵢ - xₚ)
+        end
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] += dvₚ
         pointstate.x[p] += vₚ * dt
         pointstate.B[p] = Bₚ
     end
+
     pointstate
 end
 
-function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace, dt::Real)
+function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
-    pointvalues = grid_to_point(space) do mp, i, p
-        @_inline_propagate_inbounds_meta
-        N = mp.N
-        ∇N = mp.∇N
-        vᵢ = gridstate.v[i]
-        xᵢ = grid[i]
-        xₚ = pointstate.x[p]
-        v = vᵢ * N
-        ∇v = vᵢ ⊗ ∇N
-        v, ∇v, v ⊗ (xᵢ - xₚ)
-    end
+
     @inbounds Threads.@threads for p in 1:num_points(space)
-        vₚ, ∇vₚ, Bₚ = pointvalues[p]
+        vₚ  = zero(eltype(pointstate.v))
+        ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
+        Bₚ = zero(eltype(pointstate.B))
+        mpp = mpvalue(space, p)
+        @simd for j in 1:num_nodes(mpp)
+            mp = mpvalue(mpp, j)
+            i = nodeindex(mpp, j)
+            N = mp.N
+            ∇N = mp.∇N
+            vᵢ = gridstate.v[i]
+            xᵢ = grid[i]
+            xₚ = pointstate.x[p]
+            vₚ  += N * vᵢ
+            ∇vₚ += vᵢ ⊗ ∇N
+            Bₚ  += N * vᵢ ⊗ (xᵢ - xₚ)
+        end
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] = vₚ
         pointstate.x[p] += vₚ * dt
         pointstate.B[p] = Bₚ
     end
+
     pointstate
 end
 
 function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
     grid = get_grid(space)
     P = get_basis(get_interpolation(space))
     p0 = value(P, zero(Vec{dim, Int}))
     ∇p0 = gradient(P, zero(Vec{dim, Int}))
-    grid_to_point!(pointstate.C, space) do mp, i, p
-        @_inline_propagate_inbounds_meta
-        w = mp.w
-        Minv = mp.Minv
-        gridstate.v[i] ⊗ (w * Minv ⋅ value(P, grid[i] - pointstate.x[p]))
-    end
-    @inbounds Threads.@threads for p in 1:length(pointstate)
-        Cₚ = pointstate.C[p]
+
+    @inbounds Threads.@threads for p in 1:num_points(space)
+        Cₚ = zero(eltype(pointstate.C))
+        mpp = mpvalue(space, p)
+        @simd for j in 1:num_nodes(mpp)
+            mp = mpvalue(mpp, j)
+            i = nodeindex(mpp, j)
+            w = mp.w
+            Minv = mp.Minv
+            Cₚ += gridstate.v[i] ⊗ (w * Minv ⋅ value(P, grid[i] - pointstate.x[p]))
+        end
         vₚ = Cₚ ⋅ p0
+        pointstate.C[p] = Cₚ
         pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, Cₚ ⋅ ∇p0)
         pointstate.v[p] = vₚ
         pointstate.x[p] += vₚ * dt
     end
+
     pointstate
 end
 
@@ -280,4 +403,60 @@ end
 end
 @inline function velocity_gradient(::ThreeDimensional, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
     ∇v
+end
+
+######################
+# smooth_pointstate! #
+######################
+
+@generated function safe_inv(x::Mat{dim, dim, T, L}) where {dim, T, L}
+    exps = fill(:z, L-1)
+    quote
+        @_inline_meta
+        z = zero(T)
+        isapproxzero(det(x)) ? Mat{dim, dim}(inv(x[1]), $(exps...)) : inv(x)
+        # Tensorial.rank(x) != dim ? Mat{dim, dim}(inv(x[1]), $(exps...)) : inv(x) # this is very slow but stable
+    end
+end
+
+function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, gridstate::AbstractArray, space::MPSpace)
+    @assert length(vals) == length(Vₚ) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+
+    grid = get_grid(space)
+    basis = PolynomialBasis{1}()
+    fillzero!(gridstate.poly_coef)
+    fillzero!(gridstate.poly_mat)
+
+    eachpoint_blockwise_parallel(space) do p
+        @inbounds begin
+            mpp = mpvalue(space, p)
+            @simd for j in 1:num_nodes(mpp)
+                mp = mpvalue(mpp, j)
+                i = nodeindex(mpp, j)
+                N = mp.N
+                P = value(basis, mp.xp - grid[i])
+                VP = (mp.N * Vₚ[p]) * P
+                gridstate.poly_coef[i] += VP * vals[p]
+                gridstate.poly_mat[i]  += VP ⊗ P
+            end
+        end
+    end
+
+    @dot_threads gridstate.poly_coef = safe_inv(gridstate.poly_mat) ⋅ gridstate.poly_coef
+
+    @inbounds Threads.@threads for p in 1:num_points(space)
+        val = zero(eltype(vals))
+        mpp = mpvalue(space, p)
+        @simd for j in 1:num_nodes(mpp)
+            mp = mpvalue(mpp, j)
+            i = nodeindex(mpp, j)
+            P = value(basis, mp.xp - grid[i])
+            val += mp.N * (P ⋅ gridstate.poly_coef[i])
+        end
+        vals[p] = val
+    end
+
+    vals
 end
