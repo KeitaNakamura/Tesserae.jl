@@ -8,6 +8,7 @@ function SandColumn(
         CFL = 1.0,
         showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "SandColumn.tmp"),
+        output = true,
     )
 
     GridState = @NamedTuple begin
@@ -105,7 +106,7 @@ function SandColumn(
 
         update!(logger, t += dt)
 
-        if islogpoint(logger)
+        if output && islogpoint(logger)
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, logindex(logger))) do vtm
                     openvtk(vtm, pointstate.x) do vtk

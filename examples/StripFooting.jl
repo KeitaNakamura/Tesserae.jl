@@ -10,6 +10,7 @@ function StripFooting(
         handle_volumetric_locking::Bool = false,
         showprogress::Bool = true,
         outdir = joinpath(@__DIR__, "StripFooting.tmp"),
+        output = true,
     )
 
     GridState = @NamedTuple begin
@@ -135,7 +136,7 @@ function StripFooting(
         push!(disp, -v_footing[2] * t)
         push!(load, vertical_load)
 
-        if islogpoint(logger)
+        if output && islogpoint(logger)
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, logindex(logger))) do vtm
                     openvtk(vtm, pointstate.x) do vtk
