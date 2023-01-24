@@ -2,13 +2,6 @@ nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
 
 isapproxzero(x::Number) = abs(x) < sqrt(eps(typeof(x)))
 
-macro _inline_propagate_inbounds_meta()
-    quote
-        Base.@_inline_meta
-        Base.@_propagate_inbounds_meta
-    end
-end
-
 # zero_recursive
 zero_recursive(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
 @generated function zero_recursive(::Type{T}) where {T}

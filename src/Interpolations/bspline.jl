@@ -62,7 +62,7 @@ function value(::BSpline{4}, ξ::Real)
 end
 @inline value(bspline::BSpline, ξ::Vec) = prod(value.(bspline, ξ))
 function value(bspline::BSpline, grid::Grid, I::Index, xp::Vec)
-    @_inline_propagate_inbounds_meta
+    @_propagate_inbounds_meta
     xi = grid[I]
     dx⁻¹ = gridsteps_inv(grid)
     ξ = (xp - xi) .* dx⁻¹

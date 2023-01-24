@@ -97,6 +97,8 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Un
 end
 
 function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
+    @assert length(pointstate) == num_points(space)
+
     # update `pointsperblock`
     pointsperblock!(get_pointsperblock(space), get_grid(space), pointstate.x)
 
@@ -104,18 +106,20 @@ function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; ex
     sppat = get_sppat(space)
     fill!(sppat, false)
     eachpoint_blockwise_parallel(space) do p
-        @_inline_propagate_inbounds_meta
-        inds = nodeindices(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
-        sppat[inds] .= true
+        @inbounds begin
+            inds = nodeindices(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
+            sppat[inds] .= true
+        end
     end
 
     # handle excluded domain
     if exclude !== nothing
         @. sppat &= !exclude
         eachpoint_blockwise_parallel(space) do p
-            @_inline_propagate_inbounds_meta
-            inds = nodeindices(get_grid(space), pointstate.x[p], 1)
-            sppat[inds] .= true
+            @inbounds begin
+                inds = nodeindices(get_grid(space), pointstate.x[p], 1)
+                sppat[inds] .= true
+            end
         end
     end
     sppat

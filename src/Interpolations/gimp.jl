@@ -22,7 +22,7 @@ function value(::GIMP, ξ::Real, l::Real) # `l` is normalized radius
 end
 @inline value(f::GIMP, ξ::Vec, l::Vec) = prod(value.(f, ξ, l))
 function value(f::GIMP, grid::Grid, I::Index, xp::Vec, rp::Vec)
-    @_inline_propagate_inbounds_meta
+    @_propagate_inbounds_meta
     xi = grid[I]
     dx⁻¹ = gridsteps_inv(grid)
     ξ = (xp - xi) .* dx⁻¹
