@@ -20,7 +20,7 @@ function value(::GIMP, ξ::Real, l::Real) # `l` is normalized radius
     ξ < 1-l ? 1 - ξ                :
     ξ < 1+l ? (1+l-ξ)^2 / 4l       : zero(ξ)
 end
-@inline value(f::GIMP, ξ::Vec, l::Vec) = prod(map_tuple(value, f, Tuple(ξ), Tuple(l)))
+@inline value(f::GIMP, ξ::Vec, l::Vec) = prod(value.(f, ξ, l))
 function value(f::GIMP, grid::Grid, I::Index, xp::Vec, rp::Vec)
     @_inline_propagate_inbounds_meta
     xi = grid[I]
@@ -36,22 +36,19 @@ function _values_gradients(::GIMP, x::T, l::T) where {T <: Real}
     V = Vec{3, T}
     x′ = fract(x - T(0.5))
     ξ = x′ .- V(-0.5, 0.5, 1.5)
-    vals_grads = map_tuple(_gradient_GIMP, Tuple(ξ), l)
-    vals  = map_tuple(getindex, vals_grads, 2)
-    grads = map_tuple(getindex, vals_grads, 1)
+    vals_grads = _gradient_GIMP.(Tuple(ξ), Tuple(l))
+    vals  = getindex.(vals_grads, 2)
+    grads = getindex.(vals_grads, 1)
     Vec(vals), Vec(grads)
 end
 @generated function values_gradients(::GIMP, x::Vec{dim}, l::Vec{dim}) where {dim}
-    exps = map(1:dim) do i
-        x = [d == i ? :(grads[$d]) : :(vals[$d]) for d in 1:dim]
-        :(Tuple(otimes($(x...))))
-    end
     quote
-        @_inline_meta
-        vals_grads = map_tuple(_values_gradients, GIMP(), Tuple(x), Tuple(l))
-        vals  = map_tuple(getindex, vals_grads, 1)
-        grads = map_tuple(getindex, vals_grads, 2)
-        Tuple(otimes(vals...)), map_tuple(Vec, $(exps...))
+        vals_grads = @ntuple $dim d -> _values_gradients(GIMP(), x[d], l[d])
+        vals  = getindex.(vals_grads, 1)
+        grads = getindex.(vals_grads, 2)
+        Tuple(otimes(vals...)), Vec.((@ntuple $dim i -> begin
+                                          Tuple(otimes((@ntuple $dim d -> d==i ? grads[d] : vals[d])...))
+                                      end)...)
     end
 end
 function values_gradients(f::GIMP, grid::Grid, xp::Vec, lp::Vec)
@@ -59,7 +56,7 @@ function values_gradients(f::GIMP, grid::Grid, xp::Vec, lp::Vec)
     wᵢ, ∇wᵢ = values_gradients(f, xp.*dx⁻¹, lp.*dx⁻¹)
     wᵢ, broadcast(.*, ∇wᵢ, Ref(dx⁻¹))
 end
-@inline values_gradients(f::GIMP, grid::Grid, pt) = values_gradients(f, grid, pt.x, pt.r)
+values_gradients(f::GIMP, grid::Grid, pt) = values_gradients(f, grid, pt.x, pt.r)
 
 
 mutable struct GIMPValue{dim, T, L} <: MPValue{dim, T}

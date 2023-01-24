@@ -210,5 +210,5 @@ function _boundaries(grid::AbstractArray{<: Any, dim}, which::String) where {dim
     Boundaries(CartesianIndices(rngs), n)
 end
 function gridbounds(grid::AbstractArray, which::String...)
-    Iterators.flatten(map_tuple(_boundaries, grid, which))
+    Iterators.flatten(broadcast(_boundaries, Ref(grid), which))
 end

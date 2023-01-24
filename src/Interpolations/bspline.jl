@@ -60,7 +60,7 @@ function value(::BSpline{4}, ξ::Real)
     ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
     ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
-@inline value(bspline::BSpline, ξ::Vec) = prod(map_tuple(value, bspline, Tuple(ξ)))
+@inline value(bspline::BSpline, ξ::Vec) = prod(value.(bspline, ξ))
 function value(bspline::BSpline, grid::Grid, I::Index, xp::Vec)
     @_inline_propagate_inbounds_meta
     xi = grid[I]
@@ -106,7 +106,7 @@ function value(spline::BSpline{3}, ξ::Real, pos::Int)::typeof(ξ)
         value(spline, ξ)
     end
 end
-@inline value(bspline::BSpline, ξ::Vec, pos::Tuple{Vararg{Int}}) = prod(map_tuple(value, bspline, Tuple(ξ), pos))
+@inline value(bspline::BSpline, ξ::Vec, pos::Tuple{Vararg{Int}}) = prod(value.(bspline, ξ, pos))
 function value(bspline::BSpline, grid::Grid, I::Index, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
     xi = grid[I]
     dx⁻¹ = gridsteps_inv(grid)
@@ -149,16 +149,13 @@ function values_gradients(::BSpline{3}, x::T) where {T <: Real}
     vals, grads
 end
 @generated function values_gradients(bspline::BSpline, x::Vec{dim}) where {dim}
-    exps = map(1:dim) do i
-        x = [d == i ? :(grads[$d]) : :(vals[$d]) for d in 1:dim]
-        :(Tuple(otimes($(x...))))
-    end
     quote
-        @_inline_meta
-        vals_grads = map_tuple(values_gradients, bspline, Tuple(x))
-        vals  = map_tuple(getindex, vals_grads, 1)
-        grads = map_tuple(getindex, vals_grads, 2)
-        Tuple(otimes(vals...)), map_tuple(Vec, $(exps...))
+        vals_grads = @ntuple $dim d -> values_gradients(bspline, x[d])
+        vals  = getindex.(vals_grads, 1)
+        grads = getindex.(vals_grads, 2)
+        Tuple(otimes(vals...)), Vec.((@ntuple $dim i -> begin
+                                          Tuple(otimes((@ntuple $dim d -> d==i ? grads[d] : vals[d])...))
+                                      end)...)
     end
 end
 function values_gradients(bspline::BSpline, grid::Grid, xp::Vec)
@@ -166,7 +163,7 @@ function values_gradients(bspline::BSpline, grid::Grid, xp::Vec)
     wᵢ, ∇wᵢ = values_gradients(bspline, (xp-first(grid)) .* dx⁻¹)
     wᵢ, broadcast(.*, ∇wᵢ, Ref(dx⁻¹))
 end
-@inline values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
+values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
 
 
 mutable struct BSplineValue{order, dim, T, L} <: MPValue{dim, T}

@@ -1,6 +1,8 @@
 abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
+Broadcast.broadcastable(interp::Interpolation) = (interp,)
+
 abstract type MPValue{dim, T} end
 
 num_nodes(mp::MPValue) = mp.len
