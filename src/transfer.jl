@@ -399,7 +399,7 @@ end
     end
 end
 
-function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, gridstate::AbstractArray, space::MPSpace)
+function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::AbstractVector, gridstate::AbstractArray, space::MPSpace)
     @assert length(vals) == length(Vₚ) == num_points(space)
     @assert size(gridstate) == gridsize(space)
     check_gridstate(gridstate, space)
@@ -414,7 +414,7 @@ function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, gridstat
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(mp.nodeindices)
                 N = mp.N[j]
-                P = value(basis, mp.xp - grid[i])
+                P = value(basis, xₚ[p] - grid[i])
                 VP = (mp.N[j] * Vₚ[p]) * P
                 gridstate.poly_coef[i] += VP * vals[p]
                 gridstate.poly_mat[i]  += VP ⊗ P
@@ -428,7 +428,7 @@ function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, gridstat
         val = zero(eltype(vals))
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(mp.nodeindices)
-            P = value(basis, mp.xp - grid[i])
+            P = value(basis, xₚ[p] - grid[i])
             val += mp.N[j] * (P ⋅ gridstate.poly_coef[i])
         end
         vals[p] = val

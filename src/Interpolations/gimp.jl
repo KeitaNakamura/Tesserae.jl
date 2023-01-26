@@ -63,17 +63,14 @@ mutable struct GIMPValue{dim, T} <: MPValue{dim, T}
     F::GIMP
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
-    # necessary in MPValue
-    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
-    xp::Vec{dim, T}
+    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}} # necessary in MPValue
 end
 
 function MPValue{dim, T}(F::GIMP) where {dim, T}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
     nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
-    xp = zero(Vec{dim, T})
-    GIMPValue(F, N, ∇N, nodeindices, xp)
+    GIMPValue(F, N, ∇N, nodeindices)
 end
 
 get_kernel(mp::GIMPValue) = mp.F

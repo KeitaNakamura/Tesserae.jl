@@ -13,17 +13,14 @@ mutable struct KernelCorrectionValue{K, dim, T} <: MPValue{dim, T}
     F::KernelCorrection{K}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
-    # necessary in MPValue
-    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
-    xp::Vec{dim, T}
+    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}} # necessary in MPValue
 end
 
 function MPValue{dim, T}(F::KernelCorrection) where {dim, T}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
     nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
-    xp = zero(Vec{dim, T})
-    KernelCorrectionValue(F, N, ∇N, nodeindices, xp)
+    KernelCorrectionValue(F, N, ∇N, nodeindices)
 end
 
 get_kernel(mp::KernelCorrectionValue) = get_kernel(mp.F)

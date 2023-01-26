@@ -35,7 +35,6 @@ MPValue{dim}(F::Interpolation) where {dim} = MPValue{dim, Float64}(F)
 update!(mp::MPValue, grid::Grid, pt) = update!(mp, grid, trues(size(grid)), pt)
 function update!(mp::MPValue, grid::Grid, sppat::AbstractArray{Bool}, pt)
     @assert size(grid) == size(sppat)
-    mp.xp = getx(pt)
     mp.nodeindices = nodeindices(get_kernel(mp), grid, pt)
     update_kernels!(mp, grid, sppat, pt)
     mp

@@ -20,9 +20,7 @@ mutable struct WLSValue{W <: WLS, dim, T, Minv_T <: Mat{<: Any, <: Any, T}} <: M
     ∇N::Vector{Vec{dim, T}}
     w::Vector{T}
     Minv::Minv_T
-    # necessary in MPValue
-    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
-    xp::Vec{dim, T}
+    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}} # necessary in MPValue
 end
 
 function MPValue{dim, T}(F::WLS) where {dim, T}
@@ -32,8 +30,7 @@ function MPValue{dim, T}(F::WLS) where {dim, T}
     w = Vector{T}(undef, 0)
     Minv = zero(Mat{n,n,T,n^2})
     nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
-    xp = zero(Vec{dim, T})
-    WLSValue(F, N, ∇N, w, Minv, nodeindices, xp)
+    WLSValue(F, N, ∇N, w, Minv, nodeindices)
 end
 
 get_kernel(mp::WLSValue) = get_kernel(mp.F)

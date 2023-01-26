@@ -110,7 +110,7 @@ function StripFooting(
 
         @. tr∇v = tr(pointstate.∇v)
         if handle_volumetric_locking
-            Marble.smooth_pointstate!(tr∇v, pointstate.V, gridstate, space)
+            Marble.smooth_pointstate!(tr∇v, pointstate.x, pointstate.V, gridstate, space)
         end
 
         @inbounds Threads.@threads for p in eachindex(pointstate)

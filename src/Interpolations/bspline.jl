@@ -170,17 +170,14 @@ mutable struct BSplineValue{order, dim, T} <: MPValue{dim, T}
     F::BSpline{order}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
-    # necessary in MPValue
-    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
-    xp::Vec{dim, T}
+    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}} # necessary in MPValue
 end
 
 function MPValue{dim, T}(F::BSpline) where {dim, T}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
     nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
-    xp = zero(Vec{dim, T})
-    BSplineValue(F, N, ∇N, nodeindices, xp)
+    BSplineValue(F, N, ∇N, nodeindices)
 end
 
 get_kernel(mp::BSplineValue) = mp.F
