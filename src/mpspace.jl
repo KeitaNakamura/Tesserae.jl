@@ -93,12 +93,12 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Un
 
     update_sparsity_pattern!(space, pointstate; exclude)
     @inbounds Threads.@threads for p in 1:length(pointstate)
-        mp = get_mpvalue(space, p)
-        grid = get_grid(space)
-        pt = LazyRow(pointstate, p)
-        inds = neighbornodes(mp, grid, pt)
-        update!(mp, grid, get_sppat(space), inds, pt)
-        space.nodeinds[p] = inds
+        # `space.nodeinds` had been updated in `update_sparsity_pattern`
+        update!(get_mpvalue(space, p),
+                get_grid(space),
+                get_sppat(space),
+                get_nodeindices(space, p),
+                LazyRow(pointstate, p))
     end
 
     space
@@ -111,11 +111,12 @@ function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; ex
     pointsperblock!(get_pointsperblock(space), get_grid(space), pointstate.x)
 
     # update sparsity pattern
-    sppat = get_sppat(space)
-    fillzero!(sppat)
+    # `space.nodeinds` is also updated
+    sppat = fillzero!(get_sppat(space))
     eachpoint_blockwise_parallel(space) do p
         @inbounds begin
             inds = neighbornodes(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
+            space.nodeinds[p] = inds
             sppat[inds] .= true
         end
     end
