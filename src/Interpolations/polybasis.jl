@@ -7,20 +7,23 @@ struct PolynomialBasis{order} <: AbstractBasis
 end
 
 value(poly::PolynomialBasis{1}, x::Vec) = vcat(one(eltype(x)), x)
-function Tensorial.gradient(poly::PolynomialBasis{1}, x::Vec{1, T}) where {T}
+function Tensorial.gradient(poly::PolynomialBasis{1}, x::Vec{1})
+    T = eltype(x)
     z = zero(T)
     o = one(T)
     @Mat [z
           o]
 end
-function Tensorial.gradient(poly::PolynomialBasis{1}, x::Vec{2, T}) where {T}
+function Tensorial.gradient(poly::PolynomialBasis{1}, x::Vec{2})
+    T = eltype(x)
     z = zero(T)
     o = one(T)
     @Mat [z z
           o z
           z o]
 end
-function Tensorial.gradient(poly::PolynomialBasis{1}, x::Vec{3, T}) where {T}
+function Tensorial.gradient(poly::PolynomialBasis{1}, x::Vec{3})
+    T = eltype(x)
     z = zero(T)
     o = one(T)
     @Mat [z z z
@@ -32,8 +35,9 @@ end
 
 struct BilinearBasis <: AbstractBasis end
 
-value(poly::BilinearBasis, x::Vec{2, T}) where {T} = @inbounds Vec(one(T), x[1], x[2], x[1]*x[2])
-function Tensorial.gradient(poly::BilinearBasis, x::Vec{2, T}) where {T}
+value(poly::BilinearBasis, x::Vec{2}) = @inbounds Vec(one(eltype(x)), x[1], x[2], x[1]*x[2])
+function Tensorial.gradient(poly::BilinearBasis, x::Vec{2})
+    T = eltype(x)
     z = zero(T)
     o = one(T)
     @Mat [z    z

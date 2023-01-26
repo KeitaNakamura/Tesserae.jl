@@ -10,7 +10,7 @@ struct MPSpace{dim, T, F <: Interpolation, C <: CoordinateSystem, V <: MPValue{d
 end
 
 # constructors
-function MPSpace(interp::Interpolation, grid::Grid{dim, T}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
+function MPSpace(interp::Interpolation, grid::Grid{dim, T}, xₚ::AbstractVector{<: Vec}) where {dim, T}
     sppat = fill(false, size(grid))
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
@@ -81,7 +81,7 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing) where {T, dim}
+function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
     space.npts[]  = length(pointstate)
     space.stamp[] = time()
 

@@ -18,21 +18,21 @@ generate_gridstate(GridState::Type, grid::AbstractArray) = generate_gridstate(Gr
 
 const PointStateVector = StructVector
 
-function generate_points_regularly(grid::Grid{dim}, n::Int) where {dim}
+function generate_points_regularly(grid::Grid, n::Int)
     axes = gridaxes(grid)
     dims = size(grid)
     r = gridsteps(grid) ./ 2n
     Grid(@. LinRange(first(axes)+r, last(axes)-r, n*(dims-1)))
 end
 
-function generate_points_randomly(grid::Grid{dim}, n::Int) where {dim}
+function generate_points_randomly(grid::Grid, n::Int)
     d = gridsteps(grid) ./ n
     minmaxes = map((min,max)->(min,max), Tuple(first(grid)), Tuple(last(grid)))
     points = PoissonDiskSampling.generate(minmaxes...; r = only(unique(d)))
-    LazyDotArray(Vec{dim}, points)
+    LazyDotArray(eltype(grid), points)
 end
 
-function generate_pointstate(isindomain::Function, ::Type{PointState}, grid::Grid{dim, T}; n::Int = 2, random::Bool = false) where {PointState, dim, T}
+function generate_pointstate(isindomain::Function, ::Type{PointState}, grid::Grid{dim}; n::Int = 2, random::Bool = false) where {PointState, dim}
     if random
         allpoints = generate_points_randomly(grid, n)
     else

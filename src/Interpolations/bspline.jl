@@ -125,12 +125,14 @@ node_position(grid::Grid, index::CartesianIndex) = map(node_position, gridaxes(g
 fract(x) = x - floor(x)
 # Fast calculations for values and gradients
 # `x` must be normalized by `dx`
-function values_gradients(::BSpline{1}, x::T) where {T <: Real}
+function values_gradients(::BSpline{1}, x::Real)
+    T = typeof(x)
     V = Vec{2, T}
     ξ = fract(x)
     V(1-ξ, ξ), V(-1, 1)
 end
-function values_gradients(::BSpline{2}, x::T) where {T <: Real}
+function values_gradients(::BSpline{2}, x::Real)
+    T = typeof(x)
     V = Vec{3, T}
     x′ = fract(x - T(0.5))
     ξ = x′ .- V(-0.5, 0.5, 1.5)
@@ -138,7 +140,8 @@ function values_gradients(::BSpline{2}, x::T) where {T <: Real}
     grads = @. $V(1.0,-2.0,1.0)*ξ + $V(-1.5,0.0,1.5)
     vals, grads
 end
-function values_gradients(::BSpline{3}, x::T) where {T <: Real}
+function values_gradients(::BSpline{3}, x::Real)
+    T = typeof(x)
     V = Vec{4, T}
     x′ = fract(x)
     ξ = x′ .- V(-1, 0, 1, 2)
