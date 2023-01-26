@@ -1,9 +1,3 @@
-function local_G2P(f, mp)
-    sum(1:num_nodes(mp)) do j
-        f(mp.N[j], mp.∇N[j], mp.nodeindices[j])
-    end
-end
-
 @testset "Interpolations" begin
 
 @testset "BSplineValue" begin
@@ -16,13 +10,15 @@ end
                 mp = MPValue{dim, T}(bspline)
                 for _ in 1:100
                     x = rand(Vec{dim, T})
-                    update!(mp, grid, x)
+                    inds = neighbornodes(mp, grid, x)
+                    update!(mp, grid, inds, x)
                     @test sum(mp.N) ≈ 1
                     @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
                     l = Marble.get_supportlength(bspline)
                     if all(a->l<a<1-l, x)
-                        @test local_G2P((N,∇N,i) -> N*grid[i], mp) ≈ x atol=TOL
-                        @test local_G2P((N,∇N,i) -> grid[i]⊗∇N, mp) ≈ I atol=TOL
+                        @test mapreduce((N,∇N,i) -> N*grid[i], +, mp.N, mp.∇N, inds) ≈ x atol=TOL
+                        @test mapreduce((N,∇N,i) -> N*grid[i], +, mp.N, mp.∇N, inds) ≈ x atol=TOL
+                        @test mapreduce((N,∇N,i) -> grid[i]⊗∇N, +, mp.N, mp.∇N, inds) ≈ I atol=TOL
                     end
                 end
             end
@@ -45,14 +41,16 @@ end
                     for _ in 1:100
                         x = rand(Vec{dim, T})
                         if kernel isa GIMP
-                            update!(mp, grid, (;x,r))
+                            pt = (;x,r)
                         else
-                            update!(mp, grid, x)
+                            pt = x
                         end
+                        inds = neighbornodes(mp, grid, pt)
+                        update!(mp, grid, inds, pt)
                         @test sum(mp.N) ≈ 1
                         @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                        @test local_G2P((N,∇N,i) -> N*grid[i], mp) ≈ x atol=TOL
-                        @test local_G2P((N,∇N,i) -> grid[i]⊗∇N, mp) ≈ I atol=TOL
+                        @test mapreduce((N,∇N,i) -> N*grid[i], +, mp.N, mp.∇N, inds) ≈ x atol=TOL
+                        @test mapreduce((N,∇N,i) -> grid[i]⊗∇N, +, mp.N, mp.∇N, inds) ≈ I atol=TOL
                     end
                 end
             end
@@ -75,11 +73,13 @@ end
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     if all(a->a[2]<a[1]<1-a[2], zip(x,r))
-                        update!(mp, grid, (;x,r))
+                        pt = (;x,r)
+                        inds = neighbornodes(mp, grid, pt)
+                        update!(mp, grid, inds, pt)
                         @test sum(mp.N) ≈ 1
                         @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                        @test local_G2P((N,∇N,i) -> N*grid[i], mp) ≈ x atol=TOL
-                        @test local_G2P((N,∇N,i) -> grid[i]⊗∇N, mp) ≈ I atol=TOL
+                        @test mapreduce((N,∇N,i) -> N*grid[i], +, mp.N, mp.∇N, inds) ≈ x atol=TOL
+                        @test mapreduce((N,∇N,i) -> grid[i]⊗∇N, +, mp.N, mp.∇N, inds) ≈ I atol=TOL
                     end
                 end
             end
@@ -100,14 +100,16 @@ end
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     if kernel isa GIMP
-                        update!(mp, grid, (;x,r))
+                        pt = (;x,r)
                     else
-                        update!(mp, grid, x)
+                        pt = x
                     end
+                    inds = neighbornodes(mp, grid, pt)
+                    update!(mp, grid, inds, pt)
                     @test sum(mp.N) ≈ 1
                     @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                    @test local_G2P((N,∇N,i) -> N*grid[i], mp) ≈ x atol=TOL
-                    @test local_G2P((N,∇N,i) -> grid[i]⊗∇N, mp) ≈ I atol=TOL
+                    @test mapreduce((N,∇N,i) -> N*grid[i], +, mp.N, mp.∇N, inds) ≈ x atol=TOL
+                    @test mapreduce((N,∇N,i) -> grid[i]⊗∇N, +, mp.N, mp.∇N, inds) ≈ I atol=TOL
                 end
             end
         end
@@ -123,9 +125,12 @@ end
             sppat = trues(size(grid))
             sppat[1:2, :] .= false
             sppat[:, 1:2] .= false
-            xp = Vec(0.12,0.13)
-            update!(mp1, grid, xp)
-            update!(mp2, grid, sppat, xp .+ 2)
+            xp1 = Vec(0.12,0.13)
+            xp2 = xp1 .+ 2
+            inds1 = neighbornodes(mp1, grid, xp1)
+            inds2 = neighbornodes(mp1, grid, xp2)
+            update!(mp1, grid, inds1, xp1)
+            update!(mp2, grid, sppat, inds2, xp2)
             @test mp1.N ≈ filter(!iszero, mp2.N)
             @test mp1.∇N ≈ filter(!iszero, mp2.∇N)
         end

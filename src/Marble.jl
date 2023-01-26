@@ -27,6 +27,7 @@ export
     gridsteps,
     gridaxes,
     gridbounds,
+    neighbornodes,
     generate_gridstate,
     generate_pointstate,
 # interpolations
@@ -43,6 +44,8 @@ export
     MPValue,
 # MPSpace
     MPSpace,
+    get_mpvalue,
+    get_nodeindices,
     point_to_grid!,
     grid_to_point!,
     update_sparsity_pattern!,

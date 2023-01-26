@@ -34,10 +34,10 @@ get_supportlength(::BSpline{4}) = 2.5
     (2*get_supportlength(bspline))^dim
 end
 
-@inline function nodeindices(bsp::BSpline, grid::Grid, x::Vec)
-    nodeindices(grid, x, get_supportlength(bsp))
+@inline function neighbornodes(bsp::BSpline, grid::Grid, x::Vec)
+    neighbornodes(grid, x, get_supportlength(bsp))
 end
-@inline nodeindices(bsp::BSpline, grid::Grid, pt) = nodeindices(bsp, grid, pt.x)
+@inline neighbornodes(bsp::BSpline, grid::Grid, pt) = neighbornodes(bsp, grid, pt.x)
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)
@@ -166,28 +166,26 @@ end
 values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
 
 
-mutable struct BSplineValue{order, dim, T} <: MPValue{dim, T}
+struct BSplineValue{order, dim, T} <: MPValue{dim, T}
     F::BSpline{order}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
-    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}} # necessary in MPValue
 end
 
 function MPValue{dim, T}(F::BSpline) where {dim, T}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
-    nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
-    BSplineValue(F, N, ∇N, nodeindices)
+    BSplineValue(F, N, ∇N)
 end
 
 get_kernel(mp::BSplineValue) = mp.F
 
-function update_kernels!(mp::BSplineValue, grid::Grid, sppat::AbstractArray, xp::Vec)
-    n = num_nodes(mp)
+function update_kernels!(mp::BSplineValue, grid::Grid, sppat::AbstractArray{Bool}, nodeinds::AbstractArray, xp::Vec)
+    n = length(nodeinds)
     F = get_kernel(mp)
     resize_fillzero!(mp.N, n)
     resize_fillzero!(mp.∇N, n)
-    @inbounds for (j, i) in enumerate(mp.nodeindices)
+    @inbounds for (j, i) in enumerate(nodeinds)
         mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all) .* sppat[i]
     end
     mp

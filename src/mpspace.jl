@@ -3,6 +3,7 @@ struct MPSpace{dim, T, F <: Interpolation, C <: CoordinateSystem, V <: MPValue{d
     grid::Grid{dim, T, C}
     sppat::Array{Bool, dim}
     mpvals::Vector{V}
+    nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
     ptspblk::Array{Vector{Int}, dim}
     npts::RefValue{Int}
     stamp::RefValue{Float64}
@@ -13,7 +14,8 @@ function MPSpace(interp::Interpolation, grid::Grid{dim, T}, xₚ::AbstractVector
     sppat = fill(false, size(grid))
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
-    MPSpace(interp, grid, sppat, mpvals, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
+    nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
+    MPSpace(interp, grid, sppat, mpvals, nodeinds, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
 end
 MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
 
@@ -21,6 +23,7 @@ MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace
 gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = space.npts[]
 get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
+get_nodeindices(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
 get_interpolation(space::MPSpace) = space.interp
 get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
@@ -90,7 +93,11 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Un
     update_sparsity_pattern!(space, pointstate; exclude)
     @inbounds Threads.@threads for p in 1:length(pointstate)
         mp = get_mpvalue(space, p)
-        update!(mp, get_grid(space), get_sppat(space), LazyRow(pointstate, p))
+        grid = get_grid(space)
+        pt = LazyRow(pointstate, p)
+        inds = neighbornodes(mp, grid, pt)
+        update!(mp, grid, get_sppat(space), inds, pt)
+        space.nodeinds[p] = inds
     end
 
     space
@@ -107,7 +114,7 @@ function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; ex
     fill!(sppat, false)
     eachpoint_blockwise_parallel(space) do p
         @inbounds begin
-            inds = nodeindices(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
+            inds = neighbornodes(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
             sppat[inds] .= true
         end
     end
@@ -117,7 +124,7 @@ function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; ex
         @. sppat &= !exclude
         eachpoint_blockwise_parallel(space) do p
             @inbounds begin
-                inds = nodeindices(get_grid(space), pointstate.x[p], 1)
+                inds = neighbornodes(get_grid(space), pointstate.x[p], 1)
                 sppat[inds] .= true
             end
         end

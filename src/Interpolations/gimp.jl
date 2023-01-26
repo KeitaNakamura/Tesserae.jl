@@ -2,11 +2,11 @@ struct GIMP <: Kernel end
 
 @pure maxnum_nodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
 
-@inline function nodeindices(f::GIMP, grid::Grid, xp::Vec, rp::Vec)
+@inline function neighbornodes(f::GIMP, grid::Grid, xp::Vec, rp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
-    nodeindices(grid, xp, 1 .+ rp.*dx⁻¹)
+    neighbornodes(grid, xp, 1 .+ rp.*dx⁻¹)
 end
-@inline nodeindices(f::GIMP, grid::Grid, pt) = nodeindices(f, grid, pt.x, pt.r)
+@inline neighbornodes(f::GIMP, grid::Grid, pt) = neighbornodes(f, grid, pt.x, pt.r)
 
 # simple GIMP calculation
 # See Eq.(40) in
@@ -59,28 +59,26 @@ end
 values_gradients(f::GIMP, grid::Grid, pt) = values_gradients(f, grid, pt.x, pt.r)
 
 
-mutable struct GIMPValue{dim, T} <: MPValue{dim, T}
+struct GIMPValue{dim, T} <: MPValue{dim, T}
     F::GIMP
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
-    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}} # necessary in MPValue
 end
 
 function MPValue{dim, T}(F::GIMP) where {dim, T}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
-    nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
-    GIMPValue(F, N, ∇N, nodeindices)
+    GIMPValue(F, N, ∇N)
 end
 
 get_kernel(mp::GIMPValue) = mp.F
 
-function update_kernels!(mp::GIMPValue, grid::Grid, sppat::AbstractArray, pt)
-    n = num_nodes(mp)
+function update_kernels!(mp::GIMPValue, grid::Grid, sppat::AbstractArray{Bool}, nodeinds::AbstractArray, pt)
+    n = length(nodeinds)
     F = get_kernel(mp)
     resize_fillzero!(mp.N, n)
     resize_fillzero!(mp.∇N, n)
-    @inbounds for (j, i) in enumerate(mp.nodeindices)
+    @inbounds for (j, i) in enumerate(nodeinds)
         mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,pt.r), pt.x, :all) .* sppat[i]
     end
     mp
