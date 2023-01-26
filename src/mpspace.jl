@@ -61,7 +61,7 @@ function pointsperblock!(ptspblk::AbstractArray{Vector{Int}}, grid::Grid, xₚ::
 end
 function pointsperblock(grid::Grid, xₚ::AbstractVector)
     ptspblk = Array{Vector{Int}}(undef, blocksize(size(grid)))
-    @inbounds @simd for i in eachindex(ptspblk)
+    @inbounds for i in eachindex(ptspblk)
         ptspblk[i] = Int[]
     end
     pointsperblock!(ptspblk, grid, xₚ)
@@ -71,7 +71,7 @@ function allocate!(f, x::Vector, n::Integer)
     len = length(x)
     if n > len # growend
         resize!(x, n)
-        @simd for i in len+1:n
+        for i in len+1:n
             @inbounds x[i] = f(i)
         end
     end
@@ -90,7 +90,7 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Un
     update_sparsity_pattern!(space, pointstate; exclude)
     @inbounds Threads.@threads for p in 1:length(pointstate)
         mp = get_mpvalue(space, p)
-        update!(mp, get_grid(space), LazyRow(pointstate, p), get_sppat(space))
+        update!(mp, get_grid(space), get_sppat(space), LazyRow(pointstate, p))
     end
 
     space

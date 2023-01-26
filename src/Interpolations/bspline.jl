@@ -30,7 +30,7 @@ get_supportlength(::BSpline{2}) = 1.5
 get_supportlength(::BSpline{3}) = 2.0
 get_supportlength(::BSpline{4}) = 2.5
 
-@pure function num_nodes(bspline::BSpline, ::Val{dim})::Int where {dim}
+@pure function maxnum_nodes(bspline::BSpline, ::Val{dim})::Int where {dim}
     (2*get_supportlength(bspline))^dim
 end
 
@@ -61,14 +61,14 @@ function value(::BSpline{4}, ξ::Real)
     ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
 @inline value(bspline::BSpline, ξ::Vec) = prod(value.(bspline, ξ))
-function value(bspline::BSpline, grid::Grid, I::Index, xp::Vec)
+function value(bspline::BSpline, grid::Grid, I::CartesianIndex, xp::Vec)
     @_propagate_inbounds_meta
     xi = grid[I]
     dx⁻¹ = gridsteps_inv(grid)
     ξ = (xp - xi) .* dx⁻¹
     value(bspline, ξ)
 end
-@inline value(bspline::BSpline, grid::Grid, I::Index, pt) = value(bspline::BSpline, grid::Grid, I::Index, pt.x)
+@inline value(bspline::BSpline, grid::Grid, I::CartesianIndex, pt) = value(bspline, grid, I, pt.x)
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
@@ -107,7 +107,7 @@ function value(spline::BSpline{3}, ξ::Real, pos::Int)::typeof(ξ)
     end
 end
 @inline value(bspline::BSpline, ξ::Vec, pos::Tuple{Vararg{Int}}) = prod(value.(bspline, ξ, pos))
-function value(bspline::BSpline, grid::Grid, I::Index, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
+function value(bspline::BSpline, grid::Grid, I::CartesianIndex, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
     xi = grid[I]
     dx⁻¹ = gridsteps_inv(grid)
     ξ = (xp - xi) .* dx⁻¹
@@ -119,7 +119,7 @@ end
     right = lastindex(ax) - i
     ifelse(left < right, left, -right)
 end
-node_position(grid::Grid, index::Index) = map(node_position, gridaxes(grid), Tuple(index.I))
+node_position(grid::Grid, index::CartesianIndex) = map(node_position, gridaxes(grid), Tuple(index))
 
 
 fract(x) = x - floor(x)
@@ -166,36 +166,32 @@ end
 values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
 
 
-mutable struct BSplineValue{order, dim, T, L} <: MPValue{dim, T}
+mutable struct BSplineValue{order, dim, T} <: MPValue{dim, T}
     F::BSpline{order}
-    N::MVector{L, T}
-    ∇N::MVector{L, Vec{dim, T}}
+    N::Vector{T}
+    ∇N::Vector{Vec{dim, T}}
     # necessary in MPValue
-    nodeindices::MVector{L, Index{dim}}
+    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
     xp::Vec{dim, T}
-    len::Int
 end
 
 function MPValue{dim, T}(F::BSpline) where {dim, T}
-    L = num_nodes(F, Val(dim))
-    N = MVector{L, T}(undef)
-    ∇N = MVector{L, Vec{dim, T}}(undef)
-    nodeindices = MVector{L, Index{dim}}(undef)
+    N = Vector{T}(undef, 0)
+    ∇N = Vector{Vec{dim, T}}(undef, 0)
+    nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
     xp = zero(Vec{dim, T})
-    BSplineValue(F, N, ∇N, nodeindices, xp, 0)
+    BSplineValue(F, N, ∇N, nodeindices, xp)
 end
 
 get_kernel(mp::BSplineValue) = mp.F
 
-function update_kernels!(mp::BSplineValue, grid::Grid, xp::Vec)
-    # reset
-    fillzero!(mp.N)
-    fillzero!(mp.∇N)
-    # update
+function update_kernels!(mp::BSplineValue, grid::Grid, sppat::AbstractArray, xp::Vec)
+    n = num_nodes(mp)
     F = get_kernel(mp)
-    @inbounds @simd for j in 1:num_nodes(mp)
-        i = mp.nodeindices[j]
-        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all)
+    resize_fillzero!(mp.N, n)
+    resize_fillzero!(mp.∇N, n)
+    @inbounds for (j, i) in enumerate(mp.nodeindices)
+        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all) .* sppat[i]
     end
     mp
 end

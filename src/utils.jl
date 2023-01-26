@@ -26,6 +26,10 @@ function fillzero!(x::AbstractArray)
     x
 end
 
+function resize_fillzero!(x::AbstractVector, n::Int)
+    fillzero!(resize!(x, n))
+end
+
 # merge_namedtuple_type
 @pure function merge_namedtuple_type(::NamedTuple{names1, types1}, ::NamedTuple{names2, types2}) where {names1, types1, names2, types2}
     NamedTuple{(names1..., names2...), Tuple{types1.parameters..., types2.parameters...}}

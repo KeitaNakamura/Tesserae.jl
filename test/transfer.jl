@@ -1,4 +1,4 @@
-@testset "Transfer" begin
+@testset "Transfers between grid and particles" begin
     PointState = @NamedTuple begin
         m::Float64
         V::Float64

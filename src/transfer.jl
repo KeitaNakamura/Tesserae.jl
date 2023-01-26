@@ -52,7 +52,7 @@ end
 function check_gridstate(gridstate::SpArray, space::MPSpace)
     if get_stamp(gridstate) != get_stamp(space)
         # check to use @inbounds for `SpArray`
-        error("`update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)` must be executed before `point_to_grid!`")
+        error("`update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)` must be executed before `point_to_grid!` and `grid_to_point!`")
     end
 end
 
@@ -77,8 +77,7 @@ function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::Poi
             σₚ = pointstate.σ[p]
             bₚ = pointstate.b[p]
             mp = get_mpvalue(space, p)
-            @simd for j in 1:num_nodes(mp)
-                i = mp.nodeindices[j]
+            for (j, i) in enumerate(mp.nodeindices)
                 N = mp.N[j]
                 f = -Vₚ*stress_to_force(grid.coordinate_system, N, mp.∇N[j], xₚ, σₚ) + N*mₚ*bₚ
                 gridstate.m[i]  += N*mₚ
@@ -109,8 +108,7 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
             mp = get_mpvalue(space, p)
             Dₚ = zero(Mat{dim, dim, T})
             xₚ = pointstate.x[p]
-            @simd for j in 1:num_nodes(mp)
-                i = mp.nodeindices[j]
+            for (j, i) in enumerate(mp.nodeindices)
                 xᵢ = grid[i]
                 N = mp.N[j]
                 Dₚ += N * (xᵢ - xₚ) ⊗ (xᵢ - xₚ)
@@ -122,8 +120,7 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
             σₚ = pointstate.σ[p]
             bₚ = pointstate.b[p]
             Cₚ = Bₚ ⋅ inv(Dₚ)
-            @simd for j in 1:num_nodes(mp)
-                i = mp.nodeindices[j]
+            for (j, i) in enumerate(mp.nodeindices)
                 N = mp.N[j]
                 xᵢ  = grid[i]
                 f = -Vₚ*stress_to_force(grid.coordinate_system, N, mp.∇N[j], xₚ, σₚ) + N*mₚ*bₚ
@@ -160,8 +157,7 @@ function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::Poi
             σₚ  = pointstate.σ[p]
             bₚ  = pointstate.b[p]
             mp = get_mpvalue(space, p)
-            @simd for j in 1:num_nodes(mp)
-                i = mp.nodeindices[j]
+            for (j, i) in enumerate(mp.nodeindices)
                 N = mp.N[j]
                 xᵢ = grid[i]
                 f = -Vₚ*stress_to_force(grid.coordinate_system, N, mp.∇N[j], xₚ, σₚ) + N*mₚ*bₚ
@@ -198,8 +194,7 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
             σₚ = pointstate.σ[p]
             bₚ = pointstate.b[p]
             mp = get_mpvalue(space, p)
-            @simd for j in 1:num_nodes(mp)
-                i = mp.nodeindices[j]
+            for (j, i) in enumerate(mp.nodeindices)
                 N = mp.N[j]
                 xᵢ = grid[i]
                 f = -Vₚ*stress_to_force(grid.coordinate_system, N, mp.∇N[j], xₚ, σₚ) + N*mₚ*bₚ
@@ -244,8 +239,7 @@ function grid_to_point!(::G2P_FLIP, pointstate::PointStateVector, gridstate::Gri
         vₚ  = zero(eltype(pointstate.v))
         ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
         mp = get_mpvalue(space, p)
-        @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        for (j, i) in enumerate(mp.nodeindices)
             N = mp.N[j]
             ∇N = mp.∇N[j]
             dvᵢ = gridstate.v[i] - gridstate.vⁿ[i]
@@ -273,8 +267,7 @@ function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::Abstra
         vₚ  = zero(eltype(pointstate.v))
         ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
         mp = get_mpvalue(space, p)
-        @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        for (j, i) in enumerate(mp.nodeindices)
             N = mp.N[j]
             ∇N = mp.∇N[j]
             vᵢ = gridstate.v[i]
@@ -302,8 +295,7 @@ function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate:
         ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
         Bₚ  = zero(eltype(pointstate.B))
         mp = get_mpvalue(space, p)
-        @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        for (j, i) in enumerate(mp.nodeindices)
             N = mp.N[j]
             ∇N = mp.∇N[j]
             dvᵢ = gridstate.v[i] - gridstate.vⁿ[i]
@@ -336,8 +328,7 @@ function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::
         ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
         Bₚ = zero(eltype(pointstate.B))
         mp = get_mpvalue(space, p)
-        @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        for (j, i) in enumerate(mp.nodeindices)
             N = mp.N[j]
             ∇N = mp.∇N[j]
             vᵢ = gridstate.v[i]
@@ -369,8 +360,7 @@ function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::Abstra
     @inbounds Threads.@threads for p in 1:num_points(space)
         Cₚ = zero(eltype(pointstate.C))
         mp = get_mpvalue(space, p)
-        @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        for (j, i) in enumerate(mp.nodeindices)
             w = mp.w[j]
             Minv = mp.Minv
             Cₚ += gridstate.v[i] ⊗ (w * Minv ⋅ value(P, grid[i] - pointstate.x[p]))
@@ -422,8 +412,7 @@ function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, gridstat
     eachpoint_blockwise_parallel(space) do p
         @inbounds begin
             mp = get_mpvalue(space, p)
-            @simd for j in 1:num_nodes(mp)
-                i = mp.nodeindices[j]
+            for (j, i) in enumerate(mp.nodeindices)
                 N = mp.N[j]
                 P = value(basis, mp.xp - grid[i])
                 VP = (mp.N[j] * Vₚ[p]) * P
@@ -438,8 +427,7 @@ function smooth_pointstate!(vals::AbstractVector, Vₚ::AbstractVector, gridstat
     @inbounds Threads.@threads for p in 1:num_points(space)
         val = zero(eltype(vals))
         mp = get_mpvalue(space, p)
-        @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        for (j, i) in enumerate(mp.nodeindices)
             P = value(basis, mp.xp - grid[i])
             val += mp.N[j] * (P ⋅ gridstate.poly_coef[i])
         end

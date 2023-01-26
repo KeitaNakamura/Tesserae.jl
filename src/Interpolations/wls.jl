@@ -14,56 +14,54 @@ const BilinearWLS = WLS{BilinearBasis}
 end
 
 
-mutable struct WLSValue{W <: WLS, dim, T, L, Minv_T <: Mat{<: Any, <: Any, T}} <: MPValue{dim, T}
+mutable struct WLSValue{W <: WLS, dim, T, Minv_T <: Mat{<: Any, <: Any, T}} <: MPValue{dim, T}
     F::W
-    N::MVector{L, T}
-    ∇N::MVector{L, Vec{dim, T}}
-    w::MVector{L, T}
+    N::Vector{T}
+    ∇N::Vector{Vec{dim, T}}
+    w::Vector{T}
     Minv::Minv_T
     # necessary in MPValue
-    nodeindices::MVector{L, Index{dim}}
+    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
     xp::Vec{dim, T}
-    len::Int
 end
 
 function MPValue{dim, T}(F::WLS) where {dim, T}
-    L = num_nodes(get_kernel(F), Val(dim))
     n = length(value(get_basis(F), zero(Vec{dim, T})))
-    N = MVector{L, T}(undef)
-    ∇N = MVector{L, Vec{dim, T}}(undef)
-    w = MVector{L, T}(undef)
+    N = Vector{T}(undef, 0)
+    ∇N = Vector{Vec{dim, T}}(undef, 0)
+    w = Vector{T}(undef, 0)
     Minv = zero(Mat{n,n,T,n^2})
-    nodeindices = MVector{L, Index{dim}}(undef)
+    nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
     xp = zero(Vec{dim, T})
-    WLSValue(F, N, ∇N, w, Minv, nodeindices, xp, 0)
+    WLSValue(F, N, ∇N, w, Minv, nodeindices, xp)
 end
 
 get_kernel(mp::WLSValue) = get_kernel(mp.F)
 get_basis(mp::WLSValue) = get_basis(mp.F)
 
 # general version
-function update_kernels!(mp::WLSValue, grid::Grid, pt)
+function update_kernels!(mp::WLSValue, grid::Grid, sppat::AbstractArray, pt)
+    n = num_nodes(mp)
+
     # reset
-    fillzero!(mp.N)
-    fillzero!(mp.∇N)
-    fillzero!(mp.w)
+    resize_fillzero!(mp.N, n)
+    resize_fillzero!(mp.∇N, n)
+    resize_fillzero!(mp.w, n)
 
     # update
     F = get_kernel(mp)
     P = get_basis(mp)
     M = zero(mp.Minv)
     xp = getx(pt)
-    @inbounds @simd for j in 1:num_nodes(mp)
-        i = mp.nodeindices[j]
+    @inbounds for (j, i) in enumerate(mp.nodeindices)
         xi = grid[i]
-        w = value(F, grid, i, pt)
+        w = value(F, grid, i, pt) * sppat[i]
         p = value(P, xi - xp)
         M += w * p ⊗ p
         mp.w[j] = w
     end
     Minv = inv(M)
-    @inbounds @simd for j in 1:num_nodes(mp)
-        i = mp.nodeindices[j]
+    @inbounds for (j, i) in enumerate(mp.nodeindices)
         xi = grid[i]
         q = Minv ⋅ value(P, xi - xp)
         wq = mp.w[j] * q
@@ -76,47 +74,46 @@ function update_kernels!(mp::WLSValue, grid::Grid, pt)
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T, L}, grid::Grid{dim}, pt) where {dim, T, L}
+function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T}, grid::Grid{dim}, sppat::AbstractArray, pt) where {dim, T}
+    n = num_nodes(mp)
+
     # reset
-    fillzero!(mp.N)
-    fillzero!(mp.∇N)
-    fillzero!(mp.w)
+    resize_fillzero!(mp.N, n)
+    resize_fillzero!(mp.∇N, n)
+    resize_fillzero!(mp.w, n)
 
     # update
     F = get_kernel(mp)
     P = get_basis(mp)
     xp = getx(pt)
-    if num_nodes(mp) == L # all activate
+    if n == maxnum_nodes(F, Val(dim)) && all(@inbounds view(sppat, mp.nodeindices)) # all activate
         # fast version
         D = zero(Vec{dim, T}) # diagonal entries
         wᵢ = first(values_gradients(F, grid, xp))
-        @inbounds @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        @inbounds for (j, i) in enumerate(mp.nodeindices)
             xi = grid[i]
-            w = wᵢ[j]
+            w = wᵢ[j] * sppat[i]
             D += w * (xi - xp) .* (xi - xp)
             mp.w[j] = w
             mp.∇N[j] = w * (xi - xp)
         end
         D⁻¹ = inv.(D)
-        @inbounds @simd for j in 1:num_nodes(mp)
+        @inbounds for j in 1:n
             mp.N[j] = wᵢ[j]
             mp.∇N[j] = mp.∇N[j] .* D⁻¹
         end
         mp.Minv = diagm(vcat(1, D⁻¹))
     else
         M = zero(mp.Minv)
-        @inbounds @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        @inbounds for (j, i) in enumerate(mp.nodeindices)
             xi = grid[i]
-            w = value(F, grid, i, xp)
+            w = value(F, grid, i, xp) * sppat[i]
             p = value(P, xi - xp)
             M += w * p ⊗ p
             mp.w[j] = w
         end
         Minv = inv(M)
-        @inbounds @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        @inbounds for (j, i) in enumerate(mp.nodeindices)
             xi = grid[i]
             q = Minv ⋅ value(P, xi - xp)
             wq = mp.w[j] * q

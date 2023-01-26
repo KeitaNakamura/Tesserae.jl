@@ -1,6 +1,6 @@
 struct GIMP <: Kernel end
 
-@pure num_nodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
+@pure maxnum_nodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
 
 @inline function nodeindices(f::GIMP, grid::Grid, xp::Vec, rp::Vec)
     dx⁻¹ = gridsteps_inv(grid)
@@ -21,14 +21,14 @@ function value(::GIMP, ξ::Real, l::Real) # `l` is normalized radius
     ξ < 1+l ? (1+l-ξ)^2 / 4l       : zero(ξ)
 end
 @inline value(f::GIMP, ξ::Vec, l::Vec) = prod(value.(f, ξ, l))
-function value(f::GIMP, grid::Grid, I::Index, xp::Vec, rp::Vec)
+function value(f::GIMP, grid::Grid, I::CartesianIndex, xp::Vec, rp::Vec)
     @_propagate_inbounds_meta
     xi = grid[I]
     dx⁻¹ = gridsteps_inv(grid)
     ξ = (xp - xi) .* dx⁻¹
     value(f, ξ, rp.*dx⁻¹)
 end
-@inline value(f::GIMP, grid::Grid, I::Index, pt) = value(f, grid, I, pt.x, pt.r)
+@inline value(f::GIMP, grid::Grid, I::CartesianIndex, pt) = value(f, grid, I, pt.x, pt.r)
 
 # `x` and `l` must be normalized by `dx`
 _gradient_GIMP(x, l) = gradient(x -> value(GIMP(), x, l), x, :all)
@@ -59,36 +59,32 @@ end
 values_gradients(f::GIMP, grid::Grid, pt) = values_gradients(f, grid, pt.x, pt.r)
 
 
-mutable struct GIMPValue{dim, T, L} <: MPValue{dim, T}
+mutable struct GIMPValue{dim, T} <: MPValue{dim, T}
     F::GIMP
-    N::MVector{L, T}
-    ∇N::MVector{L, Vec{dim, T}}
+    N::Vector{T}
+    ∇N::Vector{Vec{dim, T}}
     # necessary in MPValue
-    nodeindices::MVector{L, Index{dim}}
+    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
     xp::Vec{dim, T}
-    len::Int
 end
 
 function MPValue{dim, T}(F::GIMP) where {dim, T}
-    L = num_nodes(F, Val(dim))
-    N = MVector{L, T}(undef)
-    ∇N = MVector{L, Vec{dim, T}}(undef)
-    nodeindices = MVector{L, Index{dim}}(undef)
+    N = Vector{T}(undef, 0)
+    ∇N = Vector{Vec{dim, T}}(undef, 0)
+    nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
     xp = zero(Vec{dim, T})
-    GIMPValue(F, N, ∇N, nodeindices, xp, 0)
+    GIMPValue(F, N, ∇N, nodeindices, xp)
 end
 
 get_kernel(mp::GIMPValue) = mp.F
 
-function update_kernels!(mp::GIMPValue, grid::Grid, pt)
-    # reset
-    fillzero!(mp.N)
-    fillzero!(mp.∇N)
-    # update
+function update_kernels!(mp::GIMPValue, grid::Grid, sppat::AbstractArray, pt)
+    n = num_nodes(mp)
     F = get_kernel(mp)
-    @inbounds @simd for j in 1:num_nodes(mp)
-        i = mp.nodeindices[j]
-        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,pt.r), pt.x, :all)
+    resize_fillzero!(mp.N, n)
+    resize_fillzero!(mp.∇N, n)
+    @inbounds for (j, i) in enumerate(mp.nodeindices)
+        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,pt.r), pt.x, :all) .* sppat[i]
     end
     mp
 end

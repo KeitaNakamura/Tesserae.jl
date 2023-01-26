@@ -5,7 +5,7 @@ Broadcast.broadcastable(interp::Interpolation) = (interp,)
 
 abstract type MPValue{dim, T} end
 
-num_nodes(mp::MPValue) = mp.len
+num_nodes(mp::MPValue) = length(mp.nodeindices)
 
 """
     MPValue{dim}(::Interpolation)
@@ -32,28 +32,13 @@ MPValue{dim}(F::Interpolation) where {dim} = MPValue{dim, Float64}(F)
 
 @inline getx(x::Vec) = x
 @inline getx(pt) = pt.x
-update!(mp::MPValue, grid::Grid, pt) = update!(mp, grid, pt, trues(size(grid)))
-function update!(mp::MPValue, grid::Grid, pt, sppat::AbstractArray{Bool})
+update!(mp::MPValue, grid::Grid, pt) = update!(mp, grid, trues(size(grid)), pt)
+function update!(mp::MPValue, grid::Grid, sppat::AbstractArray{Bool}, pt)
     @assert size(grid) == size(sppat)
     mp.xp = getx(pt)
-    ci = nodeindices(get_kernel(mp), grid, pt)
-    update_nodeindices!(mp, ci, sppat)
-    update_kernels!(mp, grid, pt)
+    mp.nodeindices = nodeindices(get_kernel(mp), grid, pt)
+    update_kernels!(mp, grid, sppat, pt)
     mp
 end
 
-update_kernels!(mp::MPValue, grid::Grid, pt) = update_kernels!(mp, grid, pt.x)
-
-# filtering by sppat
-function update_nodeindices!(mp::MPValue, nodeindices::CartesianIndices{dim}, sppat::AbstractArray{Bool, dim}) where {dim}
-    count = 0
-    @inbounds for I in nodeindices
-        i = LinearIndices(sppat)[I]
-        if sppat[i]
-            @assert count != length(mp.nodeindices)
-            mp.nodeindices[count+=1] = Index(i, I)
-        end
-    end
-    mp.len = count
-    mp
-end
+update_kernels!(mp::MPValue, grid::Grid, sppat, pt) = update_kernels!(mp, grid, sppat, pt.x)

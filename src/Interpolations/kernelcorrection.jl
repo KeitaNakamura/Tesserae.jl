@@ -9,45 +9,44 @@ end
 end
 
 
-mutable struct KernelCorrectionValue{K, dim, T, L} <: MPValue{dim, T}
+mutable struct KernelCorrectionValue{K, dim, T} <: MPValue{dim, T}
     F::KernelCorrection{K}
-    N::MVector{L, T}
-    ∇N::MVector{L, Vec{dim, T}}
+    N::Vector{T}
+    ∇N::Vector{Vec{dim, T}}
     # necessary in MPValue
-    nodeindices::MVector{L, Index{dim}}
+    nodeindices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
     xp::Vec{dim, T}
-    len::Int
 end
 
 function MPValue{dim, T}(F::KernelCorrection) where {dim, T}
-    L = num_nodes(get_kernel(F), Val(dim))
-    N = MVector{L, T}(undef)
-    ∇N = MVector{L, Vec{dim, T}}(undef)
-    nodeindices = MVector{L, Index{dim}}(undef)
+    N = Vector{T}(undef, 0)
+    ∇N = Vector{Vec{dim, T}}(undef, 0)
+    nodeindices = CartesianIndices(nfill(1:0, Val(dim)))
     xp = zero(Vec{dim, T})
-    KernelCorrectionValue(F, N, ∇N, nodeindices, xp, 0)
+    KernelCorrectionValue(F, N, ∇N, nodeindices, xp)
 end
 
 get_kernel(mp::KernelCorrectionValue) = get_kernel(mp.F)
 
-function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T, L}, grid::Grid{dim}, pt) where {dim, T, L}
+function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T}, grid::Grid{dim}, sppat::AbstractArray{Bool, dim}, pt) where {dim, T}
+    n = num_nodes(mp)
+
     # reset
-    fillzero!(mp.N)
-    fillzero!(mp.∇N)
+    resize_fillzero!(mp.N, n)
+    resize_fillzero!(mp.∇N, n)
 
     # update
     F = get_kernel(mp)
     xp = getx(pt)
-    if num_nodes(mp) == L # all active
+    if n == maxnum_nodes(F, Val(dim)) && all(@inbounds view(sppat, mp.nodeindices)) # all active
         wᵢ, ∇wᵢ = values_gradients(F, grid, pt)
         mp.N .= wᵢ
         mp.∇N .= ∇wᵢ
     else
         M = zero(Mat{dim+1, dim+1, T})
-        @inbounds @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        @inbounds for (j, i) in enumerate(mp.nodeindices)
             xi = grid[i]
-            w = value(F, grid, i, pt)
+            w = value(F, grid, i, pt) * sppat[i]
             P = [1; xi - xp]
             M += w * P ⊗ P
             mp.N[j] = w
@@ -56,8 +55,7 @@ function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T, L}, grid::Gri
         C1 = Minv[1,1]
         C2 = @Tensor Minv[2:end,1]
         C3 = @Tensor Minv[2:end,2:end]
-        @inbounds @simd for j in 1:num_nodes(mp)
-            i = mp.nodeindices[j]
+        @inbounds for (j, i) in enumerate(mp.nodeindices)
             xi = grid[i]
             w = mp.N[j]
             mp.N[j] = (C1 + C2 ⋅ (xi - xp)) * w

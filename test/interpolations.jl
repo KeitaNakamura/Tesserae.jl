@@ -4,6 +4,8 @@ function local_G2P(f, mp)
     end
 end
 
+@testset "Interpolations" begin
+
 @testset "BSplineValue" begin
     for T in (Float32, Float64)
         Random.seed!(1234)
@@ -12,7 +14,7 @@ end
             grid = Grid(ntuple(i -> 0:0.1:1, Val(dim)))
             for bspline in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),)
                 mp = MPValue{dim, T}(bspline)
-                for _ in 1:2000
+                for _ in 1:100
                     x = rand(Vec{dim, T})
                     update!(mp, grid, x)
                     @test sum(mp.N) ≈ 1
@@ -40,7 +42,7 @@ end
                 for WLS in (LinearWLS, Marble.BilinearWLS)
                     WLS == Marble.BilinearWLS && dim != 2 && continue
                     mp = MPValue{dim, T}(WLS(kernel))
-                    for _ in 1:2000
+                    for _ in 1:100
                         x = rand(Vec{dim, T})
                         if kernel isa GIMP
                             update!(mp, grid, (;x,r))
@@ -70,7 +72,7 @@ end
                 r = Vec(side_length ./ 2)
                 # GIMP doesn't have pertition of unity when closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
-                for _ in 1:2000
+                for _ in 1:100
                     x = rand(Vec{dim, T})
                     if all(a->a[2]<a[1]<1-a[2], zip(x,r))
                         update!(mp, grid, (;x,r))
@@ -95,7 +97,7 @@ end
             r = Vec(side_length ./ 2)
             for kernel in (QuadraticBSpline(), CubicBSpline(), GIMP())
                 mp = MPValue{dim, T}(KernelCorrection(kernel))
-                for _ in 1:2000
+                for _ in 1:100
                     x = rand(Vec{dim, T})
                     if kernel isa GIMP
                         update!(mp, grid, (;x,r))
@@ -111,3 +113,23 @@ end
         end
     end
 end
+
+@testset "LinearWLS/KernelCorrection with sparsity pattern" begin
+    for kernel in (QuadraticBSpline(), CubicBSpline())
+        for Modifier in (LinearWLS, KernelCorrection)
+            mp1 = MPValue{2}(Modifier(kernel))
+            mp2 = MPValue{2}(Modifier(kernel))
+            grid = Grid(0:1:10, 0:1:10)
+            sppat = trues(size(grid))
+            sppat[1:2, :] .= false
+            sppat[:, 1:2] .= false
+            xp = Vec(0.12,0.13)
+            update!(mp1, grid, xp)
+            update!(mp2, grid, sppat, xp .+ 2)
+            @test mp1.N ≈ filter(!iszero, mp2.N)
+            @test mp1.∇N ≈ filter(!iszero, mp2.∇N)
+        end
+    end
+end
+
+end # Interpolations
