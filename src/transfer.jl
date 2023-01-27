@@ -87,8 +87,8 @@ function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::Poi
         end
     end
 
-    @dot_threads gridstate.v = (gridstate.vⁿ + gridstate.v) / gridstate.m
-    @dot_threads gridstate.vⁿ /= gridstate.m
+    @dot_threads gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
+    @dot_threads gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
 
     gridstate
 end
@@ -131,8 +131,8 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
         end
     end
 
-    @dot_threads gridstate.v = (gridstate.vⁿ + gridstate.v) / gridstate.m
-    @dot_threads gridstate.vⁿ /= gridstate.m
+    @dot_threads gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
+    @dot_threads gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
 
     gridstate
 end
@@ -168,8 +168,8 @@ function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::Poi
         end
     end
 
-    @dot_threads gridstate.v = (gridstate.vⁿ + gridstate.v) / gridstate.m
-    @dot_threads gridstate.vⁿ /= gridstate.m
+    @dot_threads gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
+    @dot_threads gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
 
     gridstate
 end
@@ -205,8 +205,8 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
         end
     end
 
-    @dot_threads gridstate.v = (gridstate.vⁿ + gridstate.v) / gridstate.m
-    @dot_threads gridstate.vⁿ /= gridstate.m
+    @dot_threads gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
+    @dot_threads gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
 
     gridstate
 end

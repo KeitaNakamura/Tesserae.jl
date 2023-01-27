@@ -179,7 +179,7 @@ CartesianIndex(2, 1)
 @inline function whichblock(grid::Grid, x::Vec)
     I = whichcell(grid, x)
     I === nothing && return nothing
-    CartesianIndex(@. ($Tuple(I)-1) >> BLOCK_UNIT + 1)
+    CartesianIndex(@. (I.I-1) >> BLOCK_UNIT + 1)
 end
 
 blocksize(gridsize::Tuple{Vararg{Int}}) = (ncells = gridsize .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
@@ -188,6 +188,15 @@ function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
     starts = AxisArray(nfill([1,2], Val(dim)))
     tuple2cartesian(x) = LazyDotArray(CartesianIndex{dim}, x)
     vec(map(st -> tuple2cartesian(AxisArray(StepRange.(st, 2, blocksize))), starts))
+end
+
+function neighbornodes_from_blockindex(gridsize::Dims{dim}, blk::CartesianIndex{dim}) where {dim}
+    blksize = blocksize(gridsize)
+    blk_start = @. max(blk.I - 1, 1)
+    blk_stop = @. min(blk.I + 1, blksize)
+    start = @. max((blk_start - 1) << BLOCK_UNIT + 1, 1)
+    stop = @. min((blk_stop) << BLOCK_UNIT + 1, gridsize)
+    CartesianIndex(start):CartesianIndex(stop)
 end
 
 
