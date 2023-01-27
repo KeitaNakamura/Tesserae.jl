@@ -180,7 +180,7 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
     check_gridstate(gridstate, space)
 
     grid = get_grid(space)
-    P = get_basis(get_interpolation(space))
+    P = get_basis(get_interp(space))
     fillzero!(gridstate.m)
     fillzero!(gridstate.vⁿ)
     fillzero!(gridstate.v)
@@ -353,7 +353,7 @@ function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::Abstra
     check_gridstate(gridstate, space)
 
     grid = get_grid(space)
-    P = get_basis(get_interpolation(space))
+    P = get_basis(get_interp(space))
     p0 = value(P, zero(Vec{dim, Int}))
     ∇p0 = gradient(P, zero(Vec{dim, Int}))
 

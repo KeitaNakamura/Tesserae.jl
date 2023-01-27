@@ -66,7 +66,14 @@ end
     @inbounds Grid(get_axisarray(grid)[ranges...], gridsteps(grid), gridsteps_inv(grid), grid.coordinate_system)
 end
 
-isinside(x::Vec, grid::Grid) = all(first(grid) .≤ x .≤ last(grid))
+@generated function isinside(x::Vec{dim}, grid::Grid{dim}) where {dim}
+    quote
+        @_inline_meta
+        Base.Cartesian.@nexprs $dim i -> start_i = gridaxes(grid, i)[begin]
+        Base.Cartesian.@nexprs $dim i -> stop_i  = gridaxes(grid, i)[end]
+        Base.Cartesian.@nall $dim i -> start_i ≤ x[i] ≤ stop_i
+    end
+end
 
 """
     neighbornodes(grid, x::Vec, h)
@@ -100,19 +107,19 @@ julia> neighbornodes(grid, Vec(1.5), 2)
 ```
 """
 @inline function neighbornodes(grid::Grid{dim}, x::Vec{dim}, h) where {dim}
+    isinside(x, grid) || return CartesianIndices(nfill(1:0, Val(dim)))
     dx⁻¹ = gridsteps_inv(grid)
     xmin = first(grid)
-    ξ = Tuple((x - xmin) .* dx⁻¹)
+    ξ = (x - xmin) .* dx⁻¹
     T = eltype(ξ)
-    all(@. zero(T) ≤ ξ ≤ T($size(grid)-1)) || return CartesianIndices(nfill(1:0, Val(dim)))
     # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
     # This means `neighbornodes` doesn't include bounds of range.
-    _neighborindices(size(grid), ξ, @. T(h) - sqrt(eps(T)))
+    _neighborindices(size(grid), Tuple(ξ), @. T(h) - sqrt(eps(T)))
 end
 @inline function _neighborindices(dims::Dims, ξ, h)
     imin = Tuple(@. max(unsafe_trunc(Int,  ceil(ξ - h)) + 1, 1))
     imax = Tuple(@. min(unsafe_trunc(Int, floor(ξ + h)) + 1, dims))
-    CartesianIndices(@. UnitRange(imin, imax))
+    CartesianIndices(UnitRange.(imin, imax))
 end
 
 """
@@ -135,12 +142,11 @@ julia> Marble.whichcell(grid, Vec(1.5, 1.5))
 CartesianIndex(2, 2)
 ```
 """
-@inline function whichcell(grid::Grid{dim}, x::Vec{dim}) where {dim}
+@inline function whichcell(grid::Grid, x::Vec)
+    isinside(x, grid) || return nothing
     dx⁻¹ = gridsteps_inv(grid)
     xmin = first(grid)
     ξ = Tuple((x - xmin) .* dx⁻¹)
-    ncells = size(grid) .- 1
-    all(@. 0 ≤ ξ < ncells) || return nothing # use `<` because of `floor`
     CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
 end
 

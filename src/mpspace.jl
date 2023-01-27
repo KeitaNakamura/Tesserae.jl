@@ -24,7 +24,7 @@ gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = space.npts[]
 get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_nodeindices(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
-get_interpolation(space::MPSpace) = space.interp
+get_interp(space::MPSpace) = space.interp
 get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
 get_pointsperblock(space::MPSpace) = space.ptspblk
@@ -87,7 +87,7 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Un
     space.stamp[] = time()
 
     allocate!(space.mpvals, length(pointstate)) do i
-        interp = get_interpolation(space)
+        interp = get_interp(space)
         MPValue{dim, T}(interp)
     end
 
@@ -115,7 +115,7 @@ function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; ex
     sppat = fillzero!(get_sppat(space))
     eachpoint_blockwise_parallel(space) do p
         @inbounds begin
-            inds = neighbornodes(get_interpolation(space), get_grid(space), LazyRow(pointstate, p))
+            inds = neighbornodes(get_interp(space), get_grid(space), LazyRow(pointstate, p))
             space.nodeinds[p] = inds
             sppat[inds] .= true
         end
