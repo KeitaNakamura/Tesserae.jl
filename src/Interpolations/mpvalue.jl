@@ -37,14 +37,14 @@ MPValue{dim}(F::Interpolation) where {dim} = MPValue{dim, Float64}(F)
 function update!(mp::MPValue, grid::Grid, pt)
     update!(mp, grid, trues(size(grid)), pt)
 end
-function update!(mp::MPValue, grid::Grid, sppat::AbstractArray{Bool}, pt)
+function update!(mp::MPValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, pt)
     update!(mp, grid, sppat, CartesianIndices(grid), pt)
 end
 function update!(mp::MPValue, grid::Grid, inds::AbstractArray, pt)
     update!(mp, grid, trues(size(grid)), inds, pt)
 end
-function update!(mp::MPValue, grid::Grid, sppat::AbstractArray{Bool}, inds::AbstractArray, pt)
-    @assert size(grid) == size(sppat)
+function update!(mp::MPValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, inds::AbstractArray, pt)
+    sppat isa AbstractArray && @assert size(grid) == size(sppat)
     @boundscheck checkbounds(grid, inds)
     update_kernels!(mp, grid, sppat, inds, pt)
     mp

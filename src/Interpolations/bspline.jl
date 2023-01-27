@@ -183,7 +183,7 @@ end
 
 get_kernel(mp::BSplineValue) = mp.F
 
-function update_kernels!(mp::BSplineValue, grid::Grid, sppat::AbstractArray{Bool}, nodeinds::AbstractArray, xp::Vec)
+function update_kernels!(mp::BSplineValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, xp::Vec)
     n = length(nodeinds)
     F = get_kernel(mp)
     resize_fillzero!(mp.N, n)

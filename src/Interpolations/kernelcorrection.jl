@@ -17,7 +17,7 @@ end
 
 get_kernel(mp::KernelCorrectionValue) = get_kernel(mp.F)
 
-function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T}, grid::Grid, sppat::AbstractArray{Bool}, nodeinds::AbstractArray, pt) where {dim, T}
+function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt) where {dim, T}
     n = length(nodeinds)
 
     # reset

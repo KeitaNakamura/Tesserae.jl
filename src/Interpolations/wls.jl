@@ -30,7 +30,7 @@ get_kernel(mp::WLSValue) = get_kernel(mp.F)
 get_basis(mp::WLSValue) = get_basis(mp.F)
 
 # general version
-function update_kernels!(mp::WLSValue, grid::Grid, sppat::AbstractArray{Bool}, nodeinds::AbstractArray, pt)
+function update_kernels!(mp::WLSValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt)
     n = length(nodeinds)
 
     # reset
@@ -64,7 +64,7 @@ function update_kernels!(mp::WLSValue, grid::Grid, sppat::AbstractArray{Bool}, n
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T}, grid::Grid, sppat::AbstractArray{Bool}, nodeinds::AbstractArray, pt) where {dim, T}
+function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt) where {dim, T}
     n = length(nodeinds)
 
     # reset

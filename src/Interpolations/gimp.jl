@@ -73,7 +73,7 @@ end
 
 get_kernel(mp::GIMPValue) = mp.F
 
-function update_kernels!(mp::GIMPValue, grid::Grid, sppat::AbstractArray{Bool}, nodeinds::AbstractArray, pt)
+function update_kernels!(mp::GIMPValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt)
     n = length(nodeinds)
     F = get_kernel(mp)
     resize_fillzero!(mp.N, n)

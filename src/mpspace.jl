@@ -82,7 +82,7 @@ function allocate!(f, x::Vector, n::Integer)
     x
 end
 
-function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
+function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
     space.npts[]  = length(pointstate)
     space.stamp[] = time()
 
@@ -91,43 +91,42 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; exclude::Un
         MPValue{dim, T}(interp)
     end
 
-    update_sparsity_pattern!(space, pointstate; exclude)
-    @inbounds Threads.@threads for p in 1:length(pointstate)
-        # `space.nodeinds` had been updated in `update_sparsity_pattern`
-        update!(get_mpvalue(space, p),
-                get_grid(space),
-                get_sppat(space),
-                get_nodeindices(space, p),
-                LazyRow(pointstate, p))
-    end
+    # update `pointsperblock`
+    pointsperblock!(get_pointsperblock(space), get_grid(space), pointstate.x)
+
+    update_mpvalues!(space, pointstate, filter)
 
     space
 end
 
-function update_sparsity_pattern!(space::MPSpace, pointstate::AbstractVector; exclude::Union{Nothing, AbstractArray{Bool}} = nothing)
+function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Union{Nothing, AbstractArray{Bool}})
+    # following fields are updated in this function
+    # * `space.nodeinds`
+    # * `space.mpvals`
+
     @assert length(pointstate) == num_points(space)
 
-    # update `pointsperblock`
-    pointsperblock!(get_pointsperblock(space), get_grid(space), pointstate.x)
-
-    # update sparsity pattern
-    # `space.nodeinds` is also updated
     sppat = fillzero!(get_sppat(space))
+    grid = get_grid(space)
     eachpoint_blockwise_parallel(space) do p
         @inbounds begin
-            inds = neighbornodes(get_interp(space), get_grid(space), LazyRow(pointstate, p))
+            pt = LazyRow(pointstate, p)
+            inds = neighbornodes(get_interp(space), grid, pt)
             space.nodeinds[p] = inds
             sppat[inds] .= true
+            # update mpvalues if `filter` is not given
+            filter===nothing && update!(get_mpvalue(space, p), grid, AllTrue(), inds, pt)
         end
     end
 
     # handle excluded domain
-    if exclude !== nothing
-        @. sppat &= !exclude
+    if filter !== nothing
+        @. sppat &= filter
         eachpoint_blockwise_parallel(space) do p
             @inbounds begin
-                inds = neighbornodes(get_grid(space), pointstate.x[p], 1)
-                sppat[inds] .= true
+                sppat[neighbornodes(grid, pointstate.x[p], 1)] .= true
+                # update mpvalues here if `filter` is given
+                update!(get_mpvalue(space, p), grid, sppat, get_nodeindices(space, p), LazyRow(pointstate, p))
             end
         end
     end

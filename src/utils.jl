@@ -70,3 +70,12 @@ end
 Base.empty!(v::PushVector) = (v.len=0; v)
 
 finish!(v::PushVector) = resize!(v.data, v.len)
+
+###########
+# AllTrue #
+###########
+
+struct AllTrue end
+@pure Base.getindex(::AllTrue, i...) = true
+@pure Base.all(::AllTrue) = true
+@pure Base.view(::AllTrue, i...) = AllTrue()
