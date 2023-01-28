@@ -4,7 +4,7 @@ struct MPSpace{dim, T, F <: Interpolation, C <: CoordinateSystem, V <: MPValue{d
     sppat::Array{Bool, dim}
     mpvals::Vector{V}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
-    ptspblk::Array{PushVector{Int}, dim}
+    ptspblk::Array{Vector{Int}, dim}
     npts::RefValue{Int}
     stamp::RefValue{Float64}
 end
@@ -54,19 +54,18 @@ end
 reorder_pointstate!(pointstate::AbstractVector, space::MPSpace) = reorder_pointstate!(pointstate, get_pointsperblock(space))
 
 # pointsperblock!
-function pointsperblock!(ptspblk::AbstractArray{PushVector{Int}}, grid::Grid, xₚ::AbstractVector)
+function pointsperblock!(ptspblk::AbstractArray{Vector{Int}}, grid::Grid, xₚ::AbstractVector)
     empty!.(ptspblk)
     @inbounds for p in 1:length(xₚ)
         I = whichblock(grid, xₚ[p])
         I === nothing || push!(ptspblk[I], p)
     end
-    finish!.(ptspblk)
     ptspblk
 end
 function pointsperblock(grid::Grid, xₚ::AbstractVector)
-    ptspblk = Array{PushVector{Int}}(undef, blocksize(size(grid)))
+    ptspblk = Array{Vector{Int}}(undef, blocksize(size(grid)))
     @inbounds for i in eachindex(ptspblk)
-        ptspblk[i] = PushVector{Int}()
+        ptspblk[i] = Int[]
     end
     pointsperblock!(ptspblk, grid, xₚ)
 end

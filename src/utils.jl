@@ -35,42 +35,6 @@ end
     NamedTuple{(names1..., names2...), Tuple{types1.parameters..., types2.parameters...}}
 end
 
-##############
-# PushVector #
-##############
-
-# https://github.com/JuliaLang/julia/issues/24909#issuecomment-419731925
-mutable struct PushVector{T} <: AbstractVector{T}
-    data::Vector{T}
-    len::Int
-end
-
-PushVector{T}() where {T} = PushVector(Vector{T}(undef, 4), 0)
-
-Base.size(v::PushVector) = (v.len,)
-@inline function Base.getindex(v::PushVector, i)
-    @boundscheck checkbounds(v, i)
-    @inbounds v.data[i]
-end
-@inline function Base.setindex!(v::PushVector, x, i)
-    @boundscheck checkbounds(v, i)
-    @inbounds v.data[i] = x
-    v
-end
-
-function Base.push!(v::PushVector, i)
-    v.len += 1
-    if v.len > length(v.data)
-        resize!(v.data, v.len * 2)
-    end
-    v.data[v.len] = i
-    v
-end
-
-Base.empty!(v::PushVector) = (v.len=0; v)
-
-finish!(v::PushVector) = resize!(v.data, v.len)
-
 ###########
 # AllTrue #
 ###########
