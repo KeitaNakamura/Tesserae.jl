@@ -1,11 +1,17 @@
 abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
+get_kernel(k::Kernel) = k
+
 Broadcast.broadcastable(interp::Interpolation) = (interp,)
 neighbornodes(interp::Interpolation, grid::Grid, pt) = neighbornodes(get_kernel(interp), grid, pt)
 
-abstract type MPValue{dim, T} end
+abstract type MPValue{dim, T, I <: Interpolation} end
 
+MPValue{dim, T, I}() where {dim, T, I} = MPValue{dim, T}(I())
+
+get_interp(::MPValue{<: Any, <: Any, I}) where {I} = I()
+get_kernel(mp::MPValue) = get_kernel(get_interp(mp))
 num_nodes(mp::MPValue) = length(mp.N)
 neighbornodes(mp::MPValue, grid::Grid, pt) = neighbornodes(get_kernel(mp), grid, pt)
 

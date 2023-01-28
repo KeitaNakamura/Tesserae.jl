@@ -3,21 +3,18 @@ end
 @pure KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
 @pure get_kernel(::KernelCorrection{K}) where {K} = K()
 
-struct KernelCorrectionValue{K, dim, T} <: MPValue{dim, T}
-    F::KernelCorrection{K}
+struct KernelCorrectionValue{dim, T, K} <: MPValue{dim, T, KernelCorrection{K}}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
 end
 
-function MPValue{dim, T}(F::KernelCorrection) where {dim, T}
+function MPValue{dim, T}(::KernelCorrection{K}) where {dim, T, K}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
-    KernelCorrectionValue(F, N, ∇N)
+    KernelCorrectionValue{dim, T, K}(N, ∇N)
 end
 
-get_kernel(mp::KernelCorrectionValue) = get_kernel(mp.F)
-
-function update_kernels!(mp::KernelCorrectionValue{<: Any, dim, T}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt) where {dim, T}
+function update_kernels!(mp::KernelCorrectionValue{dim, T}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt) where {dim, T}
     n = length(nodeinds)
 
     # reset

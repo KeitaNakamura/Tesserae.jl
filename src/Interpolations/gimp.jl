@@ -59,19 +59,16 @@ end
 values_gradients(f::GIMP, grid::Grid, pt) = values_gradients(f, grid, pt.x, pt.r)
 
 
-struct GIMPValue{dim, T} <: MPValue{dim, T}
-    F::GIMP
+struct GIMPValue{dim, T} <: MPValue{dim, T, GIMP}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
 end
 
-function MPValue{dim, T}(F::GIMP) where {dim, T}
+function MPValue{dim, T}(::GIMP) where {dim, T}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
-    GIMPValue(F, N, ∇N)
+    GIMPValue{dim, T}(N, ∇N)
 end
-
-get_kernel(mp::GIMPValue) = mp.F
 
 function update_kernels!(mp::GIMPValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt)
     n = length(nodeinds)

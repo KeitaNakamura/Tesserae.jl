@@ -1,8 +1,7 @@
-struct MPSpace{dim, T, F <: Interpolation, C <: CoordinateSystem, V <: MPValue{dim, T}}
-    interp::F
+struct MPSpace{dim, T, C <: CoordinateSystem, I <: Interpolation, MP <: MPValue{dim, T, I}}
     grid::Grid{dim, T, C}
     sppat::Array{Bool, dim}
-    mpvals::Vector{V}
+    mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
     ptspblk::Array{Vector{Int}, dim}
     npts::RefValue{Int}
@@ -15,7 +14,7 @@ function MPSpace(interp::Interpolation, grid::Grid{dim, T}, xₚ::AbstractVector
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
-    MPSpace(interp, grid, sppat, mpvals, nodeinds, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
+    MPSpace(grid, sppat, mpvals, nodeinds, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
 end
 MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
 
@@ -24,7 +23,6 @@ gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = space.npts[]
 get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_nodeindices(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
-get_interp(space::MPSpace) = space.interp
 get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
 get_pointsperblock(space::MPSpace) = space.ptspblk
@@ -89,8 +87,7 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; filter::Uni
     space.stamp[] = time()
 
     allocate!(space.mpvals, length(pointstate)) do i
-        interp = get_interp(space)
-        MPValue{dim, T}(interp)
+        eltype(sapce.mpvals)()
     end
 
     update_pointsperblock!(space, pointstate.x)
@@ -121,8 +118,9 @@ function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Un
 
     grid = get_grid(space)
     @inbounds Threads.@threads for p in 1:num_points(space)
+        mp = get_mpvalue(space, p)
         pt = LazyRow(pointstate, p)
-        space.nodeinds[p] = neighbornodes(get_interp(space), grid, pt)
+        space.nodeinds[p] = neighbornodes(mp, grid, pt)
         # normally update mpvalues here
         filter===nothing && update!(get_mpvalue(space, p), grid, AllTrue(), get_nodeindices(space, p), pt)
     end

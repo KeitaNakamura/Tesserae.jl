@@ -9,25 +9,23 @@ const BilinearWLS = WLS{BilinearBasis}
 @pure get_basis(::WLS{B}) where {B} = B()
 @pure get_kernel(::WLS{B, W}) where {B, W} = W()
 
-mutable struct WLSValue{W <: WLS, dim, T, Minv_T <: Mat{<: Any, <: Any, T}} <: MPValue{dim, T}
-    F::W
+mutable struct WLSValue{dim, T, B, K, L, L²} <: MPValue{dim, T, WLS{B, K}}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
     w::Vector{T}
-    Minv::Minv_T
+    Minv::Mat{L, L, T, L²}
 end
 
-function MPValue{dim, T}(F::WLS) where {dim, T}
-    n = length(value(get_basis(F), zero(Vec{dim, T})))
+function MPValue{dim, T}(F::WLS{B, K}) where {dim, T, B, K}
+    L = length(value(get_basis(F), zero(Vec{dim, T})))
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
     w = Vector{T}(undef, 0)
-    Minv = zero(Mat{n,n,T,n^2})
-    WLSValue(F, N, ∇N, w, Minv)
+    Minv = zero(Mat{L, L, T})
+    WLSValue{dim, T, B, K, L, L^2}(N, ∇N, w, Minv)
 end
 
-get_kernel(mp::WLSValue) = get_kernel(mp.F)
-get_basis(mp::WLSValue) = get_basis(mp.F)
+get_basis(x::WLSValue) = get_basis(get_interp(x))
 
 # general version
 function update_kernels!(mp::WLSValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt)
@@ -64,7 +62,7 @@ function update_kernels!(mp::WLSValue, grid::Grid, sppat::Union{AllTrue, Abstrac
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_kernels!(mp::WLSValue{<: LinearWLS{<: BSpline}, dim, T}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt) where {dim, T}
+function update_kernels!(mp::WLSValue{dim, T, PolynomialBasis{1}, <: BSpline}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt) where {dim, T}
     n = length(nodeinds)
 
     # reset

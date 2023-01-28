@@ -180,7 +180,6 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
     check_gridstate(gridstate, space)
 
     grid = get_grid(space)
-    P = get_basis(get_interp(space))
     fillzero!(gridstate.m)
     fillzero!(gridstate.vⁿ)
     fillzero!(gridstate.v)
@@ -194,6 +193,7 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
             σₚ = pointstate.σ[p]
             bₚ = pointstate.b[p]
             mp = get_mpvalue(space, p)
+            P = get_basis(mp)
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
                 xᵢ = grid[i]
@@ -353,13 +353,13 @@ function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::Abstra
     check_gridstate(gridstate, space)
 
     grid = get_grid(space)
-    P = get_basis(get_interp(space))
-    p0 = value(P, zero(Vec{dim, Int}))
-    ∇p0 = gradient(P, zero(Vec{dim, Int}))
 
     @inbounds Threads.@threads for p in 1:num_points(space)
         Cₚ = zero(eltype(pointstate.C))
         mp = get_mpvalue(space, p)
+        P = get_basis(mp)
+        p0 = value(P, zero(Vec{dim, Int}))
+        ∇p0 = gradient(P, zero(Vec{dim, Int}))
         for (j, i) in enumerate(get_nodeindices(space, p))
             w = mp.w[j]
             Minv = mp.Minv

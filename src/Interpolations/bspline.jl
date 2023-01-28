@@ -169,19 +169,16 @@ end
 values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
 
 
-struct BSplineValue{order, dim, T} <: MPValue{dim, T}
-    F::BSpline{order}
+struct BSplineValue{dim, T, order} <: MPValue{dim, T, BSpline{order}}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
 end
 
-function MPValue{dim, T}(F::BSpline) where {dim, T}
+function MPValue{dim, T}(::BSpline{order}) where {dim, T, order}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
-    BSplineValue(F, N, ∇N)
+    BSplineValue{dim, T, order}(N, ∇N)
 end
-
-get_kernel(mp::BSplineValue) = mp.F
 
 function update_kernels!(mp::BSplineValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, xp::Vec)
     n = length(nodeinds)
