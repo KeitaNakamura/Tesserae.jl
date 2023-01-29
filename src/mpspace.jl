@@ -1,11 +1,10 @@
-struct MPSpace{dim, T, C <: CoordinateSystem, I <: Interpolation, MP <: MPValue{dim, T, I}}
+mutable struct MPSpace{dim, T, C <: CoordinateSystem, I <: Interpolation, MP <: MPValue{dim, T, I}}
     grid::Grid{dim, T, C}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
     ptspblk::Array{Vector{Int}, dim}
-    npts::RefValue{Int}
-    stamp::RefValue{Float64}
+    stamp::Float64
 end
 
 # constructors
@@ -14,19 +13,19 @@ function MPSpace(interp::Interpolation, grid::Grid{dim, T}, xₚ::AbstractVector
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
-    MPSpace(grid, sppat, mpvals, nodeinds, pointsperblock(grid, xₚ), Ref(npts), Ref(NaN))
+    MPSpace(grid, sppat, mpvals, nodeinds, pointsperblock(grid, xₚ), NaN)
 end
 MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
 
 # helper functions
 gridsize(space::MPSpace) = size(space.grid)
-num_points(space::MPSpace) = space.npts[]
+num_points(space::MPSpace) = length(space.mpvals)
 get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_nodeindices(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
 get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
 get_pointsperblock(space::MPSpace) = space.ptspblk
-get_stamp(space::MPSpace) = space.stamp[]
+get_stamp(space::MPSpace) = space.stamp
 
 # reorder_pointstate!
 function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
@@ -71,25 +70,10 @@ function update_pointsperblock!(space::MPSpace, xₚ::AbstractVector)
     pointsperblock!(get_pointsperblock(space), get_grid(space), xₚ)
 end
 
-function allocate!(f, x::Vector, n::Integer)
-    len = length(x)
-    if n > len # growend
-        resize!(x, n)
-        for i in len+1:n
-            @inbounds x[i] = f(i)
-        end
-    end
-    x
-end
-
 function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
-    space.npts[]  = length(pointstate)
-    space.stamp[] = time()
+    @assert num_points(space) == length(pointstate)
 
-    allocate!(space.mpvals, length(pointstate)) do i
-        eltype(sapce.mpvals)()
-    end
-
+    space.stamp = time()
     update_pointsperblock!(space, pointstate.x)
     update_sparsity_pattern!(space)
     update_mpvalues!(space, pointstate, filter)
@@ -111,8 +95,8 @@ end
 
 function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Union{Nothing, AbstractArray{Bool}})
     # following fields are updated in this function
-    # * `space.nodeinds`
     # * `space.mpvals`
+    # * `space.nodeinds`
 
     @assert length(pointstate) == num_points(space)
 
