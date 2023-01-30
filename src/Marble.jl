@@ -15,9 +15,6 @@ export LazyRow, LazyRows
 const BLOCK_UNIT = unsigned(3) # 2^3
 
 export
-# dot macros
-    @dot_threads,
-    @dot_lazy,
 # coordinate system
     CoordinateSystem,
     PlaneStrain,
