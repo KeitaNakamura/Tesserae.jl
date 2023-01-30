@@ -47,6 +47,12 @@ const WLSTransfer = Transfer{P2G_WLS, G2P_WLS}
 # P2G transfer #
 ################
 
+function check_states(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace)
+    @assert length(pointstate) == num_points(space)
+    @assert size(gridstate) == gridsize(space)
+    check_gridstate(gridstate, space)
+end
+
 function check_gridstate(gridstate::StructArray, space::MPSpace)
 end
 function check_gridstate(gridstate::SpArray, space::MPSpace)
@@ -59,9 +65,7 @@ end
 point_to_grid!(t::Transfer, args...) = point_to_grid!(t.P2G, args...)
 
 function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace, dt::Real)
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
     fillzero!(gridstate.m)
@@ -94,9 +98,7 @@ function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::Poi
 end
 
 function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
     fillzero!(gridstate.m)
@@ -138,9 +140,7 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
 end
 
 function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace{dim}, dt::Real) where {dim}
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
     fillzero!(gridstate.m)
@@ -175,9 +175,7 @@ function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::Poi
 end
 
 function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace, dt::Real)
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
     fillzero!(gridstate.m)
@@ -228,9 +226,7 @@ end
 grid_to_point!(t::Transfer, args...) = grid_to_point!(t.G2P, args...)
 
 function grid_to_point!(::G2P_FLIP, pointstate::PointStateVector, gridstate::GridStateArray, space::MPSpace{dim}, dt::Real) where {dim}
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
 
@@ -257,9 +253,7 @@ function grid_to_point!(::G2P_FLIP, pointstate::PointStateVector, gridstate::Gri
 end
 
 function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
 
@@ -283,9 +277,7 @@ function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::Abstra
 end
 
 function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
 
@@ -317,9 +309,7 @@ function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate:
 end
 
 function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
 
@@ -348,9 +338,7 @@ function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::
 end
 
 function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
 
@@ -400,9 +388,8 @@ end
 end
 
 function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::AbstractVector, gridstate::AbstractArray, space::MPSpace)
-    @assert length(vals) == length(Vₚ) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+    check_states(gridstate, vals, space)
+    @assert length(vals) == length(xₚ) == length(Vₚ)
 
     grid = get_grid(space)
     basis = PolynomialBasis{1}()
