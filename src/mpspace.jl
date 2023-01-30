@@ -81,13 +81,20 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; filter::Uni
     space
 end
 
+@inline function neighbornodes_from_blockindex(gridsize::Dims, blk::CartesianIndex, i::Int)
+    lo = blk.I .- i
+    hi = blk.I .+ i
+    start = @. max((lo-1) << BLOCK_UNIT + 1, 1)
+    stop = @. min(hi << BLOCK_UNIT + 1, gridsize)
+    CartesianIndex(start):CartesianIndex(stop)
+end
 function update_sparsity_pattern!(space::MPSpace)
     sppat = fillzero!(get_sppat(space))
     ptspblk = get_pointsperblock(space)
     @inbounds for I in CartesianIndices(ptspblk)
         blk = ptspblk[I]
         if !isempty(blk)
-            inds = neighbornodes_from_blockindex(gridsize(space), I)
+            inds = neighbornodes_from_blockindex(gridsize(space), I, 1)
             sppat[inds] .= true
         end
     end

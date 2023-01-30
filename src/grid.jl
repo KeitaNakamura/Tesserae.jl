@@ -190,15 +190,6 @@ function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
     vec(map(st -> tuple2cartesian(AxisArray(StepRange.(st, 2, blocksize))), starts))
 end
 
-function neighbornodes_from_blockindex(gridsize::Dims{dim}, blk::CartesianIndex{dim}) where {dim}
-    blksize = blocksize(gridsize)
-    blk_start = @. max(blk.I - 1, 1)
-    blk_stop = @. min(blk.I + 1, blksize)
-    start = @. max((blk_start - 1) << BLOCK_UNIT + 1, 1)
-    stop = @. min((blk_stop) << BLOCK_UNIT + 1, gridsize)
-    CartesianIndex(start):CartesianIndex(stop)
-end
-
 
 struct Boundaries{dim} <: AbstractArray{Tuple{CartesianIndex{dim}, Vec{dim, Int}}, dim}
     inds::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
