@@ -41,20 +41,19 @@ function _values_gradients(::GIMP, x::T, l::T) where {T <: Real}
     grads = getindex.(vals_grads, 1)
     Vec(vals), Vec(grads)
 end
-@generated function values_gradients(::GIMP, x::Vec{dim}, l::Vec{dim}) where {dim}
+@generated function values_gradients(::GIMP, grid::Grid{dim}, xp::Vec{dim}, lp::Vec{dim}) where {dim}
     quote
+        @_inline_meta
+        dx⁻¹ = gridsteps_inv(grid)
+        x = (xp - first(grid)) .* dx⁻¹
+        l = lp .* dx⁻¹
         vals_grads = @ntuple $dim d -> _values_gradients(GIMP(), x[d], l[d])
         vals  = getindex.(vals_grads, 1)
-        grads = getindex.(vals_grads, 2)
+        grads = getindex.(vals_grads, 2) .* dx⁻¹
         Tuple(otimes(vals...)), Vec.((@ntuple $dim i -> begin
                                           Tuple(otimes((@ntuple $dim d -> d==i ? grads[d] : vals[d])...))
                                       end)...)
     end
-end
-function values_gradients(f::GIMP, grid::Grid, xp::Vec, lp::Vec)
-    dx⁻¹ = gridsteps_inv(grid)
-    wᵢ, ∇wᵢ = values_gradients(f, xp.*dx⁻¹, lp.*dx⁻¹)
-    wᵢ, broadcast(.*, ∇wᵢ, Ref(dx⁻¹))
 end
 values_gradients(f::GIMP, grid::Grid, pt) = values_gradients(f, grid, pt.x, pt.r)
 

@@ -151,20 +151,18 @@ function values_gradients(::BSpline{3}, x::Real)
     grads = @. $V(-0.5,1.5,-1.5,0.5)*ξ² + $V(2,-2,-2,2)*ξ + $V(-2,0,0,2)
     vals, grads
 end
-@generated function values_gradients(bspline::BSpline, x::Vec{dim}) where {dim}
+@generated function values_gradients(bspline::BSpline, grid::Grid{dim}, xp::Vec{dim}) where {dim}
     quote
+        @_inline_meta
+        dx⁻¹ = gridsteps_inv(grid)
+        x = (xp - first(grid)) .* dx⁻¹
         vals_grads = @ntuple $dim d -> values_gradients(bspline, x[d])
         vals  = getindex.(vals_grads, 1)
-        grads = getindex.(vals_grads, 2)
+        grads = getindex.(vals_grads, 2) .* dx⁻¹
         Tuple(otimes(vals...)), Vec.((@ntuple $dim i -> begin
                                           Tuple(otimes((@ntuple $dim d -> d==i ? grads[d] : vals[d])...))
                                       end)...)
     end
-end
-function values_gradients(bspline::BSpline, grid::Grid, xp::Vec)
-    dx⁻¹ = gridsteps_inv(grid)
-    wᵢ, ∇wᵢ = values_gradients(bspline, (xp-first(grid)) .* dx⁻¹)
-    wᵢ, broadcast(.*, ∇wᵢ, Ref(dx⁻¹))
 end
 values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
 

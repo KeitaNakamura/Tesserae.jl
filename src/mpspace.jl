@@ -125,7 +125,6 @@ function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Un
         end
     end
 
-
     space
 end
 
