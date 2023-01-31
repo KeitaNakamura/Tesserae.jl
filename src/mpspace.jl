@@ -108,7 +108,7 @@ function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Un
     @assert length(pointstate) == num_points(space)
 
     grid = get_grid(space)
-    @inbounds Threads.@threads for p in 1:num_points(space)
+    @threaded for p in 1:num_points(space)
         mp = get_mpvalue(space, p)
         pt = LazyRow(pointstate, p)
         space.nodeinds[p] = neighbornodes(mp, grid, pt)
@@ -127,7 +127,7 @@ function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Un
             end
         end
         # update mpvalues after completely updating `sppat`
-        @inbounds Threads.@threads for p in 1:num_points(space)
+        @threaded for p in 1:num_points(space)
             update!(get_mpvalue(space, p), grid, sppat, get_nodeindices(space, p), LazyRow(pointstate, p))
         end
     end
@@ -146,7 +146,7 @@ end
 function eachpoint_blockwise_parallel(f, space::MPSpace)
     for blocks in threadsafe_blocks(blocksize(gridsize(space)))
         pointsperblock = collect(Iterators.filter(!isempty, Iterators.map(blkidx->get_pointsperblock(space)[blkidx], blocks)))
-        Threads.@threads for pointindices in pointsperblock
+        @threaded for pointindices in pointsperblock
             foreach(f, pointindices)
         end
     end

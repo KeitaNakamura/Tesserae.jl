@@ -253,7 +253,7 @@ function grid_to_point!(::G2P_FLIP, pointstate::PointStateVector, gridstate::Gri
 
     grid = get_grid(space)
 
-    @inbounds Threads.@threads for p in 1:num_points(space)
+    @threaded for p in 1:num_points(space)
         dvₚ = zero(eltype(pointstate.v))
         vₚ  = zero(eltype(pointstate.v))
         ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
@@ -280,7 +280,7 @@ function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::Abstra
 
     grid = get_grid(space)
 
-    @inbounds Threads.@threads for p in 1:num_points(space)
+    @threaded for p in 1:num_points(space)
         vₚ  = zero(eltype(pointstate.v))
         ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
         mp = get_mpvalue(space, p)
@@ -304,7 +304,7 @@ function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate:
 
     grid = get_grid(space)
 
-    @inbounds Threads.@threads for p in 1:num_points(space)
+    @threaded for p in 1:num_points(space)
         dvₚ = zero(eltype(pointstate.v))
         vₚ  = zero(eltype(pointstate.v))
         ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
@@ -336,7 +336,7 @@ function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::
 
     grid = get_grid(space)
 
-    @inbounds Threads.@threads for p in 1:num_points(space)
+    @threaded for p in 1:num_points(space)
         vₚ  = zero(eltype(pointstate.v))
         ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
         Bₚ = zero(eltype(pointstate.B))
@@ -365,7 +365,7 @@ function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::Abstra
 
     grid = get_grid(space)
 
-    @inbounds Threads.@threads for p in 1:num_points(space)
+    @threaded for p in 1:num_points(space)
         Cₚ = zero(eltype(pointstate.C))
         mp = get_mpvalue(space, p)
         P = get_basis(mp)
@@ -434,7 +434,7 @@ function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::Ab
 
     @dot_threads gridstate.poly_coef = safe_inv(gridstate.poly_mat) ⋅ gridstate.poly_coef
 
-    @inbounds Threads.@threads for p in 1:num_points(space)
+    @threaded for p in 1:num_points(space)
         val = zero(eltype(vals))
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))

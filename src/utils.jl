@@ -43,3 +43,26 @@ struct AllTrue end
 @pure Base.getindex(::AllTrue, i...) = true
 @pure Base.all(::AllTrue) = true
 @pure Base.view(::AllTrue, i...) = AllTrue()
+
+#############
+# @threaded #
+#############
+
+macro threaded(expr)
+    @assert Meta.isexpr(expr, :for)
+    # insert @inbounds macro
+    expr.args[2] = quote
+        @inbounds begin
+            $(expr.args[2])
+        end
+    end
+    quote
+        let
+            if Threads.nthreads() == 1
+                $(expr)
+            else
+                Threads.@threads $(expr)
+            end
+        end
+    end |> esc
+end

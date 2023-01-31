@@ -88,7 +88,7 @@ function SandColumn(
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)
-        @inbounds Threads.@threads for p in eachindex(pointstate)
+        Marble.@threaded for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]
             dϵ = symmetric(∇v*dt)

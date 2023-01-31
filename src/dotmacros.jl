@@ -7,8 +7,8 @@ function dot_threads end
     @assert bc.f === identity
     @assert bc.args isa Tuple{Any}
     bc′ = Broadcast.preprocess(dest, only(bc.args))
-    Threads.@threads for I in eachindex(bc′)
-        @inbounds dest[I] = bc′[I]
+    @threaded for I in eachindex(bc′)
+        dest[I] = bc′[I]
     end
     dest
 end
