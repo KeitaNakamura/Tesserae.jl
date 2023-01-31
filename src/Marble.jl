@@ -7,7 +7,7 @@ using Base.Cartesian: @ntuple
 using Reexport
 @reexport using Tensorial
 @reexport using WriteVTK
-using StaticArrays, StructArrays
+using StructArrays
 
 # reexport from StructArrays
 export LazyRow, LazyRows
