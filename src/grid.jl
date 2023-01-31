@@ -186,8 +186,7 @@ blocksize(gridsize::Tuple{Vararg{Int}}) = (ncells = gridsize .- 1; @. (ncells - 
 
 function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
     starts = AxisArray(nfill([1,2], Val(dim)))
-    tuple2cartesian(x) = LazyDotArray(CartesianIndex{dim}, x)
-    vec(map(st -> tuple2cartesian(AxisArray(StepRange.(st, 2, blocksize))), starts))
+    vec(map(st -> map(CartesianIndex{dim}, AxisArray(StepRange.(st, 2, blocksize))), starts))
 end
 
 

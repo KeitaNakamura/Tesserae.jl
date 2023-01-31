@@ -29,7 +29,7 @@ function generate_points_randomly(grid::Grid, n::Int)
     d = gridsteps(grid) ./ n
     minmaxes = map((min,max)->(min,max), Tuple(first(grid)), Tuple(last(grid)))
     points = PoissonDiskSampling.generate(minmaxes...; r = only(unique(d)))
-    LazyDotArray(eltype(grid), points)
+    map(eltype(grid), points)
 end
 
 function generate_pointstate(isindomain::Function, ::Type{PointState}, grid::Grid{dim}; n::Int = 2, random::Bool = false) where {PointState, dim}

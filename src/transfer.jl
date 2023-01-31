@@ -96,8 +96,8 @@ function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::Poi
         end
     end
 
-    @dot_threads gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
-    @dot_threads gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
+    @. gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
+    @. gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
 
     gridstate
 end
@@ -145,8 +145,8 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
         end
     end
 
-    @dot_threads gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
-    @dot_threads gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
+    @. gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
+    @. gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
 
     gridstate
 end
@@ -186,8 +186,8 @@ function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::Poi
         end
     end
 
-    @dot_threads gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
-    @dot_threads gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
+    @. gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
+    @. gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
 
     gridstate
 end
@@ -226,8 +226,8 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
         end
     end
 
-    @dot_threads gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
-    @dot_threads gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
+    @. gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
+    @. gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
 
     gridstate
 end
@@ -432,7 +432,7 @@ function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::Ab
         end
     end
 
-    @dot_threads gridstate.poly_coef = safe_inv(gridstate.poly_mat) ⋅ gridstate.poly_coef
+    @. gridstate.poly_coef = safe_inv(gridstate.poly_mat) ⋅ gridstate.poly_coef
 
     @threaded for p in 1:num_points(space)
         val = zero(eltype(vals))

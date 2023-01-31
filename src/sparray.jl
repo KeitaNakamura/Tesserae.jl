@@ -259,17 +259,6 @@ function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     dest
 end
 
-function Base.copyto!(dest::SpArray, bc::Broadcasted{ThreadedStyle})
-    axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
-    bc′ = Broadcast.flatten(only(bc.args))
-    if identical(extract_sppats(dest, bc′.args...)...)
-        _copyto!(_getdata(dest), broadcasted(dot_threads, broadcasted(bc′.f, map(_getdata, bc′.args)...)))
-    else
-        _copyto!(dest, broadcasted(dot_threads, bc′))
-    end
-    dest
-end
-
 ###############
 # Custom show #
 ###############

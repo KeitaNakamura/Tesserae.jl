@@ -73,7 +73,6 @@ export
 
 include("misc.jl")
 include("utils.jl")
-include("dotmacros.jl")
 include("sparray.jl")
 
 # core
