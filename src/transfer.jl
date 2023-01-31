@@ -88,7 +88,7 @@ function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::Poi
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
-                f = -stress_to_force(grid.coordinate_system, N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
                 gridstate.m[i]  += N*mₚ
                 gridstate.vⁿ[i] += N*mₚvₚ
                 gridstate.v[i]  += dt*f
@@ -137,7 +137,7 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
                 xᵢ = grid[i]
-                f = -stress_to_force(grid.coordinate_system, N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
                 gridstate.m[i]  += N*mₚ
                 gridstate.vⁿ[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
                 gridstate.v[i]  += dt*f
@@ -178,7 +178,7 @@ function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::Poi
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
                 xᵢ = grid[i]
-                f = -stress_to_force(grid.coordinate_system, N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
                 gridstate.m[i]  += N*mₚ
                 gridstate.vⁿ[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
                 gridstate.v[i]  += dt*f
@@ -218,7 +218,7 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
                 xᵢ = grid[i]
-                f = -stress_to_force(grid.coordinate_system, N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
                 gridstate.m[i] += N*mₚ
                 gridstate.vⁿ[i] += N*mₚCₚ⋅value(P, xᵢ-xₚ)
                 gridstate.v[i] += dt*f
@@ -267,7 +267,7 @@ function grid_to_point!(::G2P_FLIP, pointstate::PointStateVector, gridstate::Gri
             vₚ  += N * vᵢ
             ∇vₚ += vᵢ ⊗ ∇N
         end
-        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
+        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] += dvₚ
         pointstate.x[p] += vₚ * dt
     end
@@ -291,7 +291,7 @@ function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::Abstra
             vₚ  += vᵢ * N
             ∇vₚ += vᵢ ⊗ ∇N
         end
-        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
+        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] = vₚ
         pointstate.x[p] += vₚ * dt
     end
@@ -322,7 +322,7 @@ function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate:
             ∇vₚ += vᵢ ⊗ ∇N
             Bₚ  += N * vᵢ ⊗ (xᵢ - xₚ)
         end
-        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
+        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] += dvₚ
         pointstate.x[p] += vₚ * dt
         pointstate.B[p] = Bₚ
@@ -351,7 +351,7 @@ function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::
             ∇vₚ += vᵢ ⊗ ∇N
             Bₚ  += N * vᵢ ⊗ (xᵢ - xₚ)
         end
-        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, ∇vₚ)
+        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, ∇vₚ)
         pointstate.v[p] = vₚ
         pointstate.x[p] += vₚ * dt
         pointstate.B[p] = Bₚ
@@ -378,7 +378,7 @@ function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::Abstra
         end
         vₚ = Cₚ ⋅ p0
         pointstate.C[p] = Cₚ
-        pointstate.∇v[p] = velocity_gradient(grid.coordinate_system, pointstate.x[p], vₚ, Cₚ ⋅ ∇p0)
+        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, Cₚ ⋅ ∇p0)
         pointstate.v[p] = vₚ
         pointstate.x[p] += vₚ * dt
     end

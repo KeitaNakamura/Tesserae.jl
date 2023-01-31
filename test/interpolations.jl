@@ -5,7 +5,7 @@
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
-            grid = Grid(ntuple(i -> 0:0.1:1, Val(dim)))
+            grid = Grid(ntuple(i -> 0:0.1:1, Val(dim))...)
             for bspline in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),)
                 mp = MPValue{dim, T}(bspline)
                 for _ in 1:100
@@ -31,7 +31,7 @@ end
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
-            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim)))
+            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim))...)
             side_length = gridsteps(grid) ./ 2
             r = Vec(side_length ./ 2)
             for kernel in (QuadraticBSpline(), CubicBSpline(), GIMP())
@@ -63,7 +63,7 @@ end
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
-            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim)))
+            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim))...)
             for gimp in (GIMP(),)
                 mp = MPValue{dim, T}(gimp)
                 side_length = gridsteps(grid) ./ 2
@@ -92,7 +92,7 @@ end
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
-            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim)))
+            grid = Grid(ntuple(i -> 0.0:0.1:1.0, Val(dim))...)
             side_length = gridsteps(grid) ./ 2
             r = Vec(side_length ./ 2)
             for kernel in (QuadraticBSpline(), CubicBSpline(), GIMP())

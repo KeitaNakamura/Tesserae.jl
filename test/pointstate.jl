@@ -9,7 +9,7 @@
                 prod(2*pt.r) ≈ pt.V
             end
             # axisymmetric
-            grid = Grid(0:0.1:10, 0:0.1:10; coordinate_system = Axisymmetric())
+            grid = Grid(Axisymmetric(), 0:0.1:10, 0:0.1:10)
             pointstate = generate_pointstate((x,y) -> true, grid; random)
             if random == false
                 @test sum(pointstate.V) ≈ 10^2/2 * 10 # 1 radian

@@ -22,7 +22,7 @@ function generate_points_regularly(grid::Grid, n::Int)
     axes = gridaxes(grid)
     dims = size(grid)
     r = gridsteps(grid) ./ 2n
-    Grid(@. LinRange(first(axes)+r, last(axes)-r, n*(dims-1)))
+    Grid((@. LinRange(first(axes)+r, last(axes)-r, n*(dims-1)))...)
 end
 
 function generate_points_randomly(grid::Grid, n::Int)
@@ -56,7 +56,7 @@ function generate_pointstate(isindomain::Function, ::Type{PointState}, grid::Gri
         end
     end
     if :V in propertynames(pointstate)
-        if dim == 2 && grid.coordinate_system isa Axisymmetric
+        if dim == 2 && gridsystem(grid) isa Axisymmetric
             @. pointstate.V = getindex(pointstate.x, 1) * V
         else
             @. pointstate.V = V

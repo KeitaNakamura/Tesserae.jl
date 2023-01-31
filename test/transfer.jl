@@ -18,9 +18,9 @@
     @testset "P2G" begin
         for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
             transfer = Transfer(interp)
-            for coordinate_system in (PlaneStrain(), Axisymmetric())
+            for system in (PlaneStrain(), Axisymmetric())
                 # initialization
-                grid = Grid(0.0:2.0:10.0, 0.0:2.0:20.0; coordinate_system)
+                grid = Grid(system, 0.0:2.0:10.0, 0.0:2.0:20.0)
                 gridstate = generate_gridstate(GridState, grid)
                 pointstate = generate_pointstate((x,y) -> true, PointState, grid)
                 space = MPSpace(interp, grid, pointstate.x)
