@@ -188,13 +188,23 @@ function MPValue{dim, T}(::BSpline{order}) where {dim, T, order}
     BSplineValue{dim, T, order}(N, ∇N)
 end
 
-function update_kernels!(mp::BSplineValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, xp::Vec)
+function update_kernels!(mp::BSplineValue{dim}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, xp::Vec) where {dim}
     n = length(nodeinds)
-    F = get_kernel(mp)
+
+    # reset
     resize!(mp.N, n)
     resize!(mp.∇N, n)
-    @inbounds for (j, i) in enumerate(nodeinds)
-        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all) .* sppat[i]
+
+    # update
+    F = get_kernel(mp)
+    if n == maxnum_nodes(F, Val(dim)) && all(@inbounds view(sppat, nodeinds)) # all active
+        wᵢ, ∇wᵢ = values_gradients(F, grid, xp)
+        mp.N .= wᵢ
+        mp.∇N .= ∇wᵢ
+    else
+        @inbounds for (j, i) in enumerate(nodeinds)
+            mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all) .* sppat[i]
+        end
     end
     mp
 end
