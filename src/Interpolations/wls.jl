@@ -28,7 +28,7 @@ end
 get_basis(x::WLSValue) = get_basis(get_interp(x))
 
 # general version
-function update_kernels!(mp::WLSValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt)
+function update!(mp::WLSValue, ::NearBoundary, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, pt)
     n = length(nodeinds)
 
     # reset
@@ -62,7 +62,35 @@ function update_kernels!(mp::WLSValue, grid::Grid, sppat::Union{AllTrue, Abstrac
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_kernels!(mp::WLSValue{dim, T, PolynomialBasis{1}, <: BSpline}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt) where {dim, T}
+function update!(mp::WLSValue{dim, T, PolynomialBasis{1}, <: BSpline}, ::NearBoundary{false}, grid::Grid, ::AllTrue, nodeinds::CartesianIndices, pt) where {dim, T}
+    n = length(nodeinds)
+
+    # reset
+    resize!(mp.N, n)
+    resize!(mp.∇N, n)
+    resize!(mp.w, n)
+
+    # update
+    F = get_kernel(mp)
+    xp = getx(pt)
+    D = zero(Vec{dim, T}) # diagonal entries
+    wᵢ = first(values_gradients(F, grid, xp))
+    @inbounds for (j, i) in enumerate(nodeinds)
+        xi = grid[i]
+        w = wᵢ[j]
+        D += w * (xi - xp) .* (xi - xp)
+        mp.w[j] = w
+        mp.N[j] = w
+        mp.∇N[j] = w * (xi - xp)
+    end
+    D⁻¹ = inv.(D)
+    broadcast!(.*, mp.∇N, mp.∇N, D⁻¹)
+    mp.Minv = diagm(vcat(1, D⁻¹))
+
+    mp
+end
+
+function update!(mp::WLSValue{<: Any, <: Any, PolynomialBasis{1}, <: BSpline}, ::NearBoundary{true}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, pt)
     n = length(nodeinds)
 
     # reset
@@ -74,42 +102,23 @@ function update_kernels!(mp::WLSValue{dim, T, PolynomialBasis{1}, <: BSpline}, g
     F = get_kernel(mp)
     P = get_basis(mp)
     xp = getx(pt)
-    if n == maxnum_nodes(F, Val(dim)) && all(@inbounds view(sppat, nodeinds)) # all activate
-        # fast version
-        D = zero(Vec{dim, T}) # diagonal entries
-        wᵢ = first(values_gradients(F, grid, xp))
-        @inbounds for (j, i) in enumerate(nodeinds)
-            xi = grid[i]
-            w = wᵢ[j] * sppat[i]
-            D += w * (xi - xp) .* (xi - xp)
-            mp.w[j] = w
-            mp.∇N[j] = w * (xi - xp)
-        end
-        D⁻¹ = inv.(D)
-        @inbounds for j in 1:n
-            mp.N[j] = wᵢ[j]
-            mp.∇N[j] = mp.∇N[j] .* D⁻¹
-        end
-        mp.Minv = diagm(vcat(1, D⁻¹))
-    else
-        M = zero(mp.Minv)
-        @inbounds for (j, i) in enumerate(nodeinds)
-            xi = grid[i]
-            w = value(F, grid, i, xp) * sppat[i]
-            p = value(P, xi - xp)
-            M += w * p ⊗ p
-            mp.w[j] = w
-        end
-        Minv = inv(M)
-        @inbounds for (j, i) in enumerate(nodeinds)
-            xi = grid[i]
-            q = Minv ⋅ value(P, xi - xp)
-            wq = mp.w[j] * q
-            mp.N[j] = wq[1]
-            mp.∇N[j] = @Tensor wq[2:end]
-        end
-        mp.Minv = Minv
+    M = zero(mp.Minv)
+    @inbounds for (j, i) in enumerate(nodeinds)
+        xi = grid[i]
+        w = value(F, grid, i, xp) * sppat[i]
+        p = value(P, xi - xp)
+        M += w * p ⊗ p
+        mp.w[j] = w
     end
+    Minv = inv(M)
+    @inbounds for (j, i) in enumerate(nodeinds)
+        xi = grid[i]
+        q = Minv ⋅ value(P, xi - xp)
+        wq = mp.w[j] * q
+        mp.N[j] = wq[1]
+        mp.∇N[j] = @Tensor wq[2:end]
+    end
+    mp.Minv = Minv
 
     mp
 end

@@ -174,7 +174,7 @@ simd_otimes(x::SVec) = x
                                            end)...)
     end
 end
-values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
+@inline values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
 
 
 struct BSplineValue{dim, T, order} <: MPValue{dim, T, BSpline{order}}
@@ -188,23 +188,23 @@ function MPValue{dim, T}(::BSpline{order}) where {dim, T, order}
     BSplineValue{dim, T, order}(N, ∇N)
 end
 
-function update_kernels!(mp::BSplineValue{dim}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, xp::Vec) where {dim}
+@inline function update!(mp::BSplineValue, ::NearBoundary{false}, grid::Grid, ::AllTrue, nodeinds::CartesianIndices, xp::Vec)
     n = length(nodeinds)
-
-    # reset
     resize!(mp.N, n)
     resize!(mp.∇N, n)
+    wᵢ, ∇wᵢ = values_gradients(get_kernel(mp), grid, xp)
+    mp.N .= wᵢ
+    mp.∇N .= ∇wᵢ
+    mp
+end
 
-    # update
+function update!(mp::BSplineValue, ::NearBoundary{true}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, xp::Vec)
+    n = length(nodeinds)
+    resize!(mp.N, n)
+    resize!(mp.∇N, n)
     F = get_kernel(mp)
-    if n == maxnum_nodes(F, Val(dim)) && all(@inbounds view(sppat, nodeinds)) # all active
-        wᵢ, ∇wᵢ = values_gradients(F, grid, xp)
-        mp.N .= wᵢ
-        mp.∇N .= ∇wᵢ
-    else
-        @inbounds for (j, i) in enumerate(nodeinds)
-            mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all) .* sppat[i]
-        end
+    @inbounds for (j, i) in enumerate(nodeinds)
+        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all) .* sppat[i]
     end
     mp
 end

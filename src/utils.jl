@@ -37,8 +37,6 @@ end
 
 struct AllTrue end
 @pure Base.getindex(::AllTrue, i...) = true
-@pure Base.all(::AllTrue) = true
-@pure Base.view(::AllTrue, i...) = AllTrue()
 
 #############
 # @threaded #

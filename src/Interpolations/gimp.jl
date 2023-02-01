@@ -69,7 +69,7 @@ function MPValue{dim, T}(::GIMP) where {dim, T}
     GIMPValue{dim, T}(N, ∇N)
 end
 
-function update_kernels!(mp::GIMPValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, pt)
+@inline function update!(mp::GIMPValue, ::NearBoundary, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, pt)
     n = length(nodeinds)
     F = get_kernel(mp)
     resize!(mp.N, n)
