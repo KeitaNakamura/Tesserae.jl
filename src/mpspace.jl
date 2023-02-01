@@ -1,10 +1,10 @@
-mutable struct MPSpace{dim, T, C <: CoordinateSystem, I <: Interpolation, MP <: MPValue{dim, T, I}}
+struct MPSpace{dim, T, C <: CoordinateSystem, I <: Interpolation, MP <: MPValue{dim, T, I}}
     grid::Grid{dim, T, C}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
     ptspblk::Array{Vector{Int}, dim}
-    stamp::Float64
+    stamp::RefValue{Float64}
 end
 
 # constructors
@@ -13,7 +13,7 @@ function MPSpace(interp::Interpolation, grid::Grid{dim, T}, xₚ::AbstractVector
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
-    MPSpace(grid, sppat, mpvals, nodeinds, pointsperblock(grid, xₚ), NaN)
+    MPSpace(grid, sppat, mpvals, nodeinds, pointsperblock(grid, xₚ), Ref(NaN))
 end
 MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
 
@@ -22,10 +22,11 @@ gridsize(space::MPSpace) = size(space.grid)
 num_points(space::MPSpace) = length(space.mpvals)
 get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_nodeindices(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
+set_nodeindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
 get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
 get_pointsperblock(space::MPSpace) = space.ptspblk
-get_stamp(space::MPSpace) = space.stamp
+get_stamp(space::MPSpace) = space.stamp[]
 
 # reorder_pointstate!
 function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
@@ -73,7 +74,7 @@ end
 function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
     @assert num_points(space) == length(pointstate)
 
-    space.stamp = time()
+    space.stamp[] = time()
     update_pointsperblock!(space, pointstate.x)
     update_sparsity_pattern!(space)
     update_mpvalues!(space, pointstate, filter)
@@ -111,7 +112,7 @@ function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Un
     @threaded for p in 1:num_points(space)
         mp = get_mpvalue(space, p)
         pt = LazyRow(pointstate, p)
-        space.nodeinds[p] = neighbornodes(mp, grid, pt)
+        set_nodeindices!(space, p, neighbornodes(mp, grid, pt))
         # normally update mpvalues here
         filter===nothing && update!(get_mpvalue(space, p), grid, AllTrue(), get_nodeindices(space, p), pt)
     end
