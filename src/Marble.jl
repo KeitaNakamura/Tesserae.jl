@@ -9,6 +9,10 @@ using Reexport
 @reexport using WriteVTK
 using StructArrays
 
+import SIMD
+const SVec = SIMD.Vec
+const SIMDTypes = Union{Float16, Float32, Float64}
+
 # reexport from StructArrays
 export LazyRow, LazyRows
 

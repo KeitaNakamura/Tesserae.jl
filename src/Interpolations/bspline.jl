@@ -125,32 +125,42 @@ node_position(grid::Grid, index::CartesianIndex) = map(node_position, gridaxes(g
 fract(x) = x - floor(x)
 # Fast calculations for values and gradients
 # `x` must be normalized by `dx`
-function values_gradients(::BSpline{1}, x::Real)
+@inline function values_gradients(::BSpline{1}, x::SIMDTypes)
     T = typeof(x)
-    V = Vec{2, T}
+    V = SVec{2, T}
     ξ = fract(x)
-    V(1-ξ, ξ), V(-1, 1)
+    V((1-ξ, ξ)), V((-1, 1))
 end
-function values_gradients(::BSpline{2}, x::Real)
+@inline function values_gradients(::BSpline{2}, x::SIMDTypes)
     T = typeof(x)
-    V = Vec{3, T}
+    V = SVec{3, T}
     x′ = fract(x - T(0.5))
-    ξ = x′ .- V(-0.5, 0.5, 1.5)
-    vals = @. $V(0.5,-1.0,0.5)*ξ^2 + $V(-1.5,0.0,1.5)*ξ + $V(1.125,0.75,1.125)
-    grads = @. $V(1.0,-2.0,1.0)*ξ + $V(-1.5,0.0,1.5)
+    ξ = x′ - V((-0.5,0.5,1.5))
+    vals = V((0.5,-1.0,0.5))*ξ^2 + V((-1.5,0.0,1.5))*ξ + V((1.125,0.75,1.125))
+    grads = V((1.0,-2.0,1.0))*ξ + V((-1.5,0.0,1.5))
     vals, grads
 end
-function values_gradients(::BSpline{3}, x::Real)
+@inline function values_gradients(::BSpline{3}, x::SIMDTypes)
     T = typeof(x)
-    V = Vec{4, T}
+    V = SVec{4, T}
     x′ = fract(x)
-    ξ = x′ .- V(-1, 0, 1, 2)
-    ξ² = ξ .* ξ
-    ξ³ = ξ² .* ξ
-    vals = @. $V(-1/6,0.5,-0.5,1/6)*ξ³ + $V(1,-1,-1,1)*ξ² + $V(-2,0,0,2)*ξ + $V(4/3,2/3,2/3,4/3)
-    grads = @. $V(-0.5,1.5,-1.5,0.5)*ξ² + $V(2,-2,-2,2)*ξ + $V(-2,0,0,2)
+    ξ = x′ - V((-1,0,1,2))
+    ξ² = ξ * ξ
+    ξ³ = ξ² * ξ
+    vals = V((-1/6,0.5,-0.5,1/6))*ξ³ + V((1,-1,-1,1))*ξ² + V((-2,0,0,2))*ξ + V((4/3,2/3,2/3,4/3))
+    grads = V((-0.5,1.5,-1.5,0.5))*ξ² + V((2,-2,-2,2))*ξ + V((-2,0,0,2))
     vals, grads
 end
+@generated function simd_otimes(x::SVec{m}, y::SVec{n}) where {m, n}
+    exps = [:($(Symbol(:z_,j))[$i]) for j in 1:n for i in 1:m]
+    quote
+        @_inline_meta
+        @nexprs $n j -> z_j = x * y[j]
+        SVec(tuple($(exps...)))
+    end
+end
+simd_otimes(x::SVec, y::SVec, others::SVec...) = simd_otimes(simd_otimes(x, y), others...)
+simd_otimes(x::SVec) = x
 @generated function values_gradients(bspline::BSpline, grid::Grid{dim}, xp::Vec{dim}) where {dim}
     quote
         @_inline_meta
@@ -158,10 +168,10 @@ end
         x = (xp - first(grid)) .* dx⁻¹
         vals_grads = @ntuple $dim d -> values_gradients(bspline, x[d])
         vals  = getindex.(vals_grads, 1)
-        grads = getindex.(vals_grads, 2) .* dx⁻¹
-        Tuple(otimes(vals...)), Vec.((@ntuple $dim i -> begin
-                                          Tuple(otimes((@ntuple $dim d -> d==i ? grads[d] : vals[d])...))
-                                      end)...)
+        grads = getindex.(vals_grads, 2)
+        Tuple(simd_otimes(vals...)), Vec.((@ntuple $dim i -> begin
+                                               Tuple(simd_otimes((@ntuple $dim d -> d==i ? grads[d]*dx⁻¹[d] : vals[d])...))
+                                           end)...)
     end
 end
 values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
