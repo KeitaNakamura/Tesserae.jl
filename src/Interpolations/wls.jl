@@ -32,9 +32,9 @@ function update_kernels!(mp::WLSValue, grid::Grid, sppat::Union{AllTrue, Abstrac
     n = length(nodeinds)
 
     # reset
-    resize_fillzero!(mp.N, n)
-    resize_fillzero!(mp.∇N, n)
-    resize_fillzero!(mp.w, n)
+    resize!(mp.N, n)
+    resize!(mp.∇N, n)
+    resize!(mp.w, n)
 
     # update
     F = get_kernel(mp)
@@ -66,9 +66,9 @@ function update_kernels!(mp::WLSValue{dim, T, PolynomialBasis{1}, <: BSpline}, g
     n = length(nodeinds)
 
     # reset
-    resize_fillzero!(mp.N, n)
-    resize_fillzero!(mp.∇N, n)
-    resize_fillzero!(mp.w, n)
+    resize!(mp.N, n)
+    resize!(mp.∇N, n)
+    resize!(mp.w, n)
 
     # update
     F = get_kernel(mp)

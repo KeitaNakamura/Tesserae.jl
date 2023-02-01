@@ -18,17 +18,17 @@ function update_kernels!(mp::KernelCorrectionValue{dim, T}, grid::Grid, sppat::U
     n = length(nodeinds)
 
     # reset
-    resize_fillzero!(mp.N, n)
-    resize_fillzero!(mp.∇N, n)
+    resize!(mp.N, n)
+    resize!(mp.∇N, n)
 
     # update
     F = get_kernel(mp)
-    xp = getx(pt)
     if n == maxnum_nodes(F, Val(dim)) && all(@inbounds view(sppat, nodeinds)) # all active
         wᵢ, ∇wᵢ = values_gradients(F, grid, pt)
         mp.N .= wᵢ
         mp.∇N .= ∇wᵢ
     else
+        xp = getx(pt)
         M = zero(Mat{dim+1, dim+1, T})
         @inbounds for (j, i) in enumerate(nodeinds)
             xi = grid[i]

@@ -181,8 +181,8 @@ end
 function update_kernels!(mp::BSplineValue, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::AbstractArray, xp::Vec)
     n = length(nodeinds)
     F = get_kernel(mp)
-    resize_fillzero!(mp.N, n)
-    resize_fillzero!(mp.∇N, n)
+    resize!(mp.N, n)
+    resize!(mp.∇N, n)
     @inbounds for (j, i) in enumerate(nodeinds)
         mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all) .* sppat[i]
     end
