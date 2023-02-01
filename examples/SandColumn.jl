@@ -2,13 +2,13 @@ using Marble
 using MaterialModels
 
 function SandColumn(
-        interp = LinearWLS(QuadraticBSpline()),
-        transfer = Transfer(interp);
-        dx = 0.01,
-        CFL = 1.0,
-        showprogress::Bool = true,
-        outdir = joinpath(@__DIR__, "SandColumn.tmp"),
-        output = true,
+        interp::Interpolation = LinearWLS(QuadraticBSpline()),
+        transfer::Transfer    = Transfer(interp);
+        dx::Real              = 0.01,
+        CFL::Real             = 1.0,
+        showprogress::Bool    = true,
+        outdir::String        = joinpath(@__DIR__, "SandColumn.tmp"),
+        output::Bool          = true,
     )
 
     GridState = @NamedTuple begin

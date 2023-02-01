@@ -13,7 +13,7 @@ include("pointstate.jl")
 include("mpspace.jl")
 include("transfer.jl")
 
-const fix_results = false
+const FIX_RESULTS = false
 
 function check_example(testname::String, case, interp, transfer=Transfer(interp); dx, kwargs...)
     @testset "$testname" begin
@@ -28,7 +28,7 @@ function check_example(testname::String, case, interp, transfer=Transfer(interp)
             sort(filter(file -> endswith(file, ".vtu"), only(walkdir(outdir))[3]), lt=natural)[end],
         )
 
-        if fix_results
+        if FIX_RESULTS
             mv(result_file, joinpath("examples", "$testname$case.vtu"); force=true)
         else
             # check results
@@ -56,11 +56,18 @@ end
     check_example("SandColumn", 6, KernelCorrection(QuadraticBSpline()), AFLIP(); dx)
     # StripFooting
     dx = 0.125
-    ν = 0.3
-    handle_volumetric_locking = true
-    check_example("StripFooting", 1, LinearBSpline(); dx, ν, handle_volumetric_locking)
-    check_example("StripFooting", 2, GIMP(); dx, ν, handle_volumetric_locking, CFL=0.5)
-    check_example("StripFooting", 3, LinearWLS(QuadraticBSpline()); dx, ν, handle_volumetric_locking)
-    check_example("StripFooting", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx, ν, handle_volumetric_locking)
-    check_example("StripFooting", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx, ν, handle_volumetric_locking)
+    lockingfree = true
+    check_example("StripFooting", 1, LinearBSpline(); dx, lockingfree)
+    check_example("StripFooting", 2, GIMP(); dx, lockingfree, CFL=0.5)
+    check_example("StripFooting", 3, LinearWLS(QuadraticBSpline()); dx, lockingfree)
+    check_example("StripFooting", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx, lockingfree)
+    check_example("StripFooting", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx, lockingfree)
+    # DamBreak
+    dx = 0.07
+    t_stop = 1.0
+    check_example("DamBreak", 1, QuadraticBSpline(); dx, t_stop)
+    check_example("DamBreak", 2, GIMP(); dx, t_stop)
+    check_example("DamBreak", 3, LinearWLS(QuadraticBSpline()); dx, t_stop)
+    check_example("DamBreak", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx, t_stop)
+    check_example("DamBreak", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx, t_stop)
 end

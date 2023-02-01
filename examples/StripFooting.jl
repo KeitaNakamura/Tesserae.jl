@@ -2,15 +2,15 @@ using Marble
 using MaterialModels
 
 function StripFooting(
-        interp = LinearWLS(QuadraticBSpline()),
-        transfer = Transfer(interp);
-        ν = 0.3,
-        dx = 0.1,
-        CFL = 1.0,
-        handle_volumetric_locking::Bool = false,
-        showprogress::Bool = true,
-        outdir = joinpath(@__DIR__, "StripFooting.tmp"),
-        output = true,
+        interp::Interpolation = LinearWLS(QuadraticBSpline()),
+        transfer::Transfer    = Transfer(interp);
+        ν::Real               = 0.3,
+        dx::Real              = 0.1,
+        CFL::Real             = 1.0,
+        lockingfree::Bool     = false,
+        showprogress::Bool    = true,
+        outdir::String        = joinpath(@__DIR__, "StripFooting.tmp"),
+        output::Bool          = true,
     )
 
     GridState = @NamedTuple begin
@@ -109,14 +109,14 @@ function StripFooting(
         grid_to_point!(transfer, pointstate, gridstate, space, dt)
 
         @. tr∇v = tr(pointstate.∇v)
-        if handle_volumetric_locking
+        if lockingfree
             Marble.smooth_pointstate!(tr∇v, pointstate.x, pointstate.V, gridstate, space)
         end
 
         Marble.@threaded for p in eachindex(pointstate)
             ∇v = pointstate.∇v[p]
             σ_n = pointstate.σ[p]
-            if handle_volumetric_locking
+            if lockingfree
                 ∇v_vol = @Mat [tr∇v[p]/2 0 0
                                0 tr∇v[p]/2 0
                                0 0         0]
