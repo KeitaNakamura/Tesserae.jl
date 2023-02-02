@@ -76,19 +76,33 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; filter::Uni
 
     space.stamp[] = time()
     update_pointsperblock!(space, pointstate.x)
-    update_sparsity_pattern!(space)
+    #
+    # Following `update_mpvalues!` update `space.sppat` and use it when `filter` is given.
+    # This consideration of sparsity pattern is necessary in some `Interpolation`s such as `WLS` and `KernelCorrection`.
+    # However, this updated sparsity pattern is not used for updating sparsity pattern of grid-state because
+    # the inactive nodes also need their values (even zero) for `NonzeroIndex` used in P2G.
+    # Thus, `update_sparsity_pattern!` must be executed after `update_mpvalues!`.
+    #
+    #            |      |      |                             |      |      |
+    #         ---×------×------×---                       ---●------●------●---
+    #            |      |      |                             |      |      |
+    #            |      |      |                             |      |      |
+    #         ---×------●------●---                       ---●------●------●---
+    #            |      |      |                             |      |      |
+    #            |      |      |                             |      |      |
+    #         ---●------●------●---                       ---●------●------●---
+    #            |      |      |                             |      |      |
+    #
+    #   < Sparsity pattern for `MPValue` >     < Sparsity pattern for Grid-state (`SpArray`) >
+    #
     update_mpvalues!(space, pointstate, filter)
+    update_sparsity_pattern!(space)
 
     space
 end
 
-@inline function neighbornodes_from_blockindex(gridsize::Dims, blk::CartesianIndex, i::Int)
-    lo = blk.I .- i
-    hi = blk.I .+ i
-    start = @. max((lo-1) << BLOCK_UNIT + 1, 1)
-    stop = @. min(hi << BLOCK_UNIT + 1, gridsize)
-    CartesianIndex(start):CartesianIndex(stop)
-end
+# block-wise rough sparsity pattern for grid-state
+# Don't use "exact" sparsity pattern because it requires iteraion over all particles
 function update_sparsity_pattern!(space::MPSpace)
     sppat = fillzero!(get_sppat(space))
     ptspblk = get_pointsperblock(space)
@@ -99,6 +113,13 @@ function update_sparsity_pattern!(space::MPSpace)
             sppat[inds] .= true
         end
     end
+end
+@inline function neighbornodes_from_blockindex(gridsize::Dims, blk::CartesianIndex, i::Int)
+    lo = blk.I .- i
+    hi = blk.I .+ i
+    start = @. max((lo-1) << BLOCK_UNIT + 1, 1)
+    stop = @. min(hi << BLOCK_UNIT + 1, gridsize)
+    CartesianIndex(start):CartesianIndex(stop)
 end
 
 function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Union{Nothing, AbstractArray{Bool}})
@@ -120,7 +141,7 @@ function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Un
     # handle excluded domain
     if filter !== nothing
         sppat = get_sppat(space)
-        @. sppat &= filter
+        sppat .= filter
         eachpoint_blockwise_parallel(space) do p
             @inbounds begin
                 inds = neighbornodes(grid, pointstate.x[p], 1)
@@ -128,6 +149,7 @@ function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Un
             end
         end
         # update mpvalues after completely updating `sppat`
+        # but this `sppat` is not used for `gridstate`
         @threaded for p in 1:num_points(space)
             update!(get_mpvalue(space, p), grid, sppat, get_nodeindices(space, p), LazyRow(pointstate, p))
         end

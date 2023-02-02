@@ -10,7 +10,6 @@ include("grid.jl")
 include("interpolations.jl")
 
 include("pointstate.jl")
-include("mpspace.jl")
 include("transfer.jl")
 
 const FIX_RESULTS = false
