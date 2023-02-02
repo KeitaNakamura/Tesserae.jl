@@ -89,9 +89,10 @@ function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::Poi
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
                 f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                gridstate.m[i]  += N*mₚ
-                gridstate.vⁿ[i] += N*mₚvₚ
-                gridstate.v[i]  += dt*f
+                k = nonzeroindex(gridstate, i)
+                gridstate.m[k]  += N*mₚ
+                gridstate.vⁿ[k] += N*mₚvₚ
+                gridstate.v[k]  += dt*f
             end
         end
     end
@@ -138,9 +139,10 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
                 N = mp.N[j]
                 xᵢ = grid[i]
                 f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                gridstate.m[i]  += N*mₚ
-                gridstate.vⁿ[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
-                gridstate.v[i]  += dt*f
+                k = nonzeroindex(gridstate, i)
+                gridstate.m[k]  += N*mₚ
+                gridstate.vⁿ[k] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
+                gridstate.v[k]  += dt*f
             end
         end
     end
@@ -179,9 +181,10 @@ function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::Poi
                 N = mp.N[j]
                 xᵢ = grid[i]
                 f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                gridstate.m[i]  += N*mₚ
-                gridstate.vⁿ[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
-                gridstate.v[i]  += dt*f
+                k = nonzeroindex(gridstate, i)
+                gridstate.m[k]  += N*mₚ
+                gridstate.vⁿ[k] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
+                gridstate.v[k]  += dt*f
             end
         end
     end
@@ -219,9 +222,10 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
                 N = mp.N[j]
                 xᵢ = grid[i]
                 f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                gridstate.m[i] += N*mₚ
-                gridstate.vⁿ[i] += N*mₚCₚ⋅value(P, xᵢ-xₚ)
-                gridstate.v[i] += dt*f
+                k = nonzeroindex(gridstate, i)
+                gridstate.m[k] += N*mₚ
+                gridstate.vⁿ[k] += N*mₚCₚ⋅value(P, xᵢ-xₚ)
+                gridstate.v[k] += dt*f
             end
         end
     end

@@ -187,23 +187,23 @@ end
     A
 end
 
-# faster than using `setindex!(dest, dest + getindex(src, i))` when using `SpArray`
-# since the index is checked only once
-@inline function add!(A::SpArray, v, i)
+struct NonzeroIndex
+    i::Int
+end
+@inline function nonzeroindex(A::SpArray, i)
     @boundscheck checkbounds(A, i)
-    sppat = get_sppat(A)
-    @inbounds begin
-        index = get_spindices(sppat)[i]
-        index === -1 && return A
-        get_data(A)[index] += v
-    end
+    @inbounds NonzeroIndex(get_spindices(get_sppat(A))[i])
+end
+@inline function Base.getindex(A::SpArray, i::NonzeroIndex)
+    @_propagate_inbounds_meta
+    get_data(A)[i.i]
+end
+@inline function Base.setindex!(A::SpArray, v, i::NonzeroIndex)
+    @_propagate_inbounds_meta
+    get_data(A)[i.i] = v
     A
 end
-@inline function add!(A::AbstractArray, v, i)
-    @boundscheck checkbounds(A, i)
-    @inbounds A[i] += v
-    A
-end
+@inline nonzeroindex(A::AbstractArray, i) = i
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
