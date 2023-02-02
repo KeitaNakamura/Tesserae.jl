@@ -29,7 +29,13 @@ struct AxisArray{dim, T, V <:AbstractVector{T}} <: AbstractArray{NTuple{dim, T},
 end
 get_axes(A::AxisArray) = A.axes
 Base.size(A::AxisArray) = map(length, A.axes)
-@inline Base.getindex(A::AxisArray{dim}, i::Vararg{Int, dim}) where {dim} = (@_propagate_inbounds_meta; map(getindex, A.axes, i))
+@generated function Base.getindex(A::AxisArray{dim}, i::Vararg{Int, dim}) where {dim}
+    quote
+        @_inline_meta
+        @_propagate_inbounds_meta
+        @ntuple $dim d -> A.axes[d][i[d]]
+    end
+end
 @inline function Base.getindex(A::AxisArray{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
     @_propagate_inbounds_meta
     AxisArray(map(getindex, A.axes, ranges))
@@ -146,11 +152,13 @@ julia> neighbornodes(grid, Vec(1.5), 2)
     T = eltype(ξ)
     # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
     # This means `neighbornodes` doesn't include bounds of range.
-    _neighborindices(size(grid), Tuple(ξ), @. T(h) - sqrt(eps(T)))
+    _neighborindices(size(grid), ξ, @. T(h) - sqrt(eps(T)))
 end
-@inline function _neighborindices(dims::Dims, ξ, h)
-    imin = Tuple(@. max(unsafe_trunc(Int,  ceil(ξ - h)) + 1, 1))
-    imax = Tuple(@. min(unsafe_trunc(Int, floor(ξ + h)) + 1, dims))
+@inline _neighborindices(dims::Dims, ξ::Vec, h::Real) = _neighborindices(SVec(dims), SVec(ξ), h)
+@inline _neighborindices(dims::Dims, ξ::Vec, h::Vec) = _neighborindices(SVec(dims), SVec(ξ), SVec(h))
+@inline function _neighborindices(dims::SVec{dim}, ξ::SVec{dim}, h) where {dim}
+    imin = Tuple(max(convert(SVec{dim, Int},  ceil(ξ - h)) + 1, 1))
+    imax = Tuple(min(convert(SVec{dim, Int}, floor(ξ + h)) + 1, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
 

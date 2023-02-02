@@ -151,16 +151,6 @@ end
     grads = V((-0.5,1.5,-1.5,0.5))*ξ² + V((2,-2,-2,2))*ξ + V((-2,0,0,2))
     vals, grads
 end
-@generated function simd_otimes(x::SVec{m}, y::SVec{n}) where {m, n}
-    exps = [:($(Symbol(:z_,j))[$i]) for j in 1:n for i in 1:m]
-    quote
-        @_inline_meta
-        @nexprs $n j -> z_j = x * y[j]
-        SVec(tuple($(exps...)))
-    end
-end
-simd_otimes(x::SVec, y::SVec, others::SVec...) = simd_otimes(simd_otimes(x, y), others...)
-simd_otimes(x::SVec) = x
 @generated function values_gradients(bspline::BSpline, grid::Grid{dim}, xp::Vec{dim}) where {dim}
     quote
         @_inline_meta
