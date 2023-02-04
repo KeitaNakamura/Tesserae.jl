@@ -55,12 +55,19 @@ end
     sppat isa AbstractArray && @assert size(grid) == size(sppat)
     @boundscheck checkbounds(grid, nodeinds)
     n = length(nodeinds)
-    if n == maxnum_nodes(get_kernel(mp), Val(dim)) && (sppat isa AllTrue || all(@inbounds view(sppat, nodeinds)))
+    if n == maxnum_nodes(get_kernel(mp), Val(dim)) && (sppat isa AllTrue || _all(sppat, nodeinds))
         update!(mp, NearBoundary{false}(), grid, AllTrue(), nodeinds, pt)
     else
         update!(mp, NearBoundary{true}(), grid, sppat, nodeinds, pt)
     end
     mp
+end
+# don't check bounds
+@inline function _all(A::AbstractArray, inds::CartesianIndices)
+    @inbounds @simd for i in inds
+        A[i] || return false
+    end
+    true
 end
 
 update!(mp::MPValue, nb::NearBoundary, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, pt) = update!(mp, nb, grid, sppat, nodeinds, pt.x)

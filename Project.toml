@@ -1,7 +1,7 @@
 name = "Marble"
 uuid = "8a8a7a0b-5081-41d5-b488-cbbf872f9543"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
-version = "1.2.0"
+version = "1.2.1"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
