@@ -59,9 +59,6 @@ export
     TPIC,
     AFLIP,
     APIC,
-# Frictional contact
-    CoulombFriction,
-    contacted,
 # Logger
     Logger,
     isfinised,
@@ -91,7 +88,6 @@ include("mpspace.jl")
 
 include("states.jl")
 include("transfer.jl")
-include("contact.jl")
 
 # io
 include("logger.jl")

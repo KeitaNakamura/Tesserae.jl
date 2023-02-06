@@ -18,7 +18,6 @@ makedocs(;
         "Home" => "index.md",
         "Grid" => "grid.md",
         "Interpolations" => "interpolations.md",
-        "Contact mechanics" => "contact_mechanics.md",
     ],
     doctest = true, # :fix
 )

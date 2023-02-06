@@ -92,18 +92,20 @@ function StripFooting(
 
         # boundary conditions
         vertical_load = 0.0
-        @inbounds for I in footing_indices
-            mᵢ = gridstate.m[I]
-            vᵢ = gridstate.v[I]
+        @inbounds for i in footing_indices
+            mᵢ = gridstate.m[i]
+            vᵢ = gridstate.v[i]
             vertical_load += mᵢ * ((vᵢ-v_footing)[2] / dt)
-            gridstate.v[I] = v_footing
+            gridstate.v[i] = v_footing
         end
         # don't apply any condition (free condition) on top boundary to properly handle diriclet boundary condition
-        @inbounds for (I,n) in gridbounds(grid, "-y") # bottom
-            gridstate.v[I] += contacted(CoulombFriction(:sticky), gridstate.v[I], n)
+        @inbounds for (i,n) in gridbounds(grid, "-y") # bottom
+            vᵢ = gridstate.v[i]
+            gridstate.v[i] = zero(vᵢ)
         end
-        @inbounds for (I,n) in gridbounds(grid, "-x", "+x") # left and right
-            gridstate.v[I] += contacted(CoulombFriction(:slip), gridstate.v[I], n)
+        @inbounds for (i,n) in gridbounds(grid, "-x", "+x") # left and right
+            vᵢ = gridstate.v[i]
+            gridstate.v[i] = vᵢ - (vᵢ⋅n)*n
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)

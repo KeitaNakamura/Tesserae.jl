@@ -244,8 +244,8 @@ function _boundaries(grid::AbstractArray{<: Any, dim}, which::String) where {dim
     else error("invalid bound name")
     end
 
-    if     which[1] == '-'; index = firstindex(grid, axis); dir =  1
-    elseif which[1] == '+'; index =  lastindex(grid, axis); dir = -1
+    if     which[1] == '-'; index = firstindex(grid, axis); dir = -1
+    elseif which[1] == '+'; index =  lastindex(grid, axis); dir =  1
     else error("invalid bound name")
     end
 

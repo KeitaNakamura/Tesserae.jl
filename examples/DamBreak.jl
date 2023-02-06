@@ -71,8 +71,9 @@ function DamBreak(
         point_to_grid!(transfer, gridstate, pointstate, space, dt)
 
         # boundary conditions
-        @inbounds for (I,n) in gridbounds(grid, "-x", "+x", "-y", "+y")
-            gridstate.v[I] += contacted(CoulombFriction(:slip), gridstate.v[I], n)
+        @inbounds for (i,n) in gridbounds(grid, "-x", "+x", "-y", "+y")
+            vᵢ = gridstate.v[i]
+            gridstate.v[i] = vᵢ - (vᵢ⋅n)*n
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)

@@ -80,11 +80,17 @@ function SandColumn(
         point_to_grid!(transfer, gridstate, pointstate, space, dt)
 
         # boundary conditions
-        @inbounds for (I,n) in gridbounds(grid, "-y") # bottom
-            gridstate.v[I] += contacted(CoulombFriction(μ=0.2), gridstate.v[I], n)
+        @inbounds for (i,n) in gridbounds(grid, "-y") # bottom
+            μ = 0.2
+            vᵢ = gridstate.v[i]
+            v̄ₙ = vᵢ ⋅ n
+            vₜ = vᵢ - v̄ₙ*n
+            v̄ₜ = norm(vₜ)
+            gridstate.v[i] = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * (vₜ/v̄ₜ))
         end
-        @inbounds for (I,n) in gridbounds(grid, "-x", "+x") # left and right
-            gridstate.v[I] += contacted(CoulombFriction(μ=0), gridstate.v[I], n)
+        @inbounds for (i,n) in gridbounds(grid, "-x", "+x") # left and right
+            vᵢ = gridstate.v[i]
+            gridstate.v[i] = vᵢ - (vᵢ⋅n)*n
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)
