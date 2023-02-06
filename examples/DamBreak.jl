@@ -71,9 +71,12 @@ function DamBreak(
         point_to_grid!(transfer, gridstate, pointstate, space, dt)
 
         # boundary conditions
-        @inbounds for (i,n) in gridbounds(grid, "-x", "+x", "-y", "+y")
-            vᵢ = gridstate.v[i]
-            gridstate.v[i] = vᵢ - (vᵢ⋅n)*n
+        slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
+        @inbounds for i in @view(CartesianIndices(grid)[[begin, end], :]) # left and right
+            gridstate.v[i] = slip(gridstate.v[i], Vec(1,0))
+        end
+        @inbounds for i in @view(CartesianIndices(grid)[:, [begin, end]]) # bottom and top
+            gridstate.v[i] = slip(gridstate.v[i], Vec(0,1))
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)

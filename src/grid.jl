@@ -228,32 +228,3 @@ function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
     starts = AxisArray(nfill([1,2], Val(dim)))
     vec(map(st -> map(CartesianIndex{dim}, AxisArray(StepRange.(st, 2, blocksize))), starts))
 end
-
-
-struct Boundaries{dim} <: AbstractArray{Tuple{CartesianIndex{dim}, Vec{dim, Int}}, dim}
-    inds::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
-    n::Vec{dim, Int}
-end
-Base.size(x::Boundaries) = size(x.inds)
-Base.getindex(x::Boundaries{dim}, I::Vararg{Int, dim}) where {dim} = (@_propagate_inbounds_meta; (x.inds[I...], x.n))
-
-function _boundaries(grid::AbstractArray{<: Any, dim}, which::String) where {dim}
-    if     which[2] == 'x'; axis = 1
-    elseif which[2] == 'y'; axis = 2
-    elseif which[2] == 'z'; axis = 3
-    else error("invalid bound name")
-    end
-
-    if     which[1] == '-'; index = firstindex(grid, axis); dir = -1
-    elseif which[1] == '+'; index =  lastindex(grid, axis); dir =  1
-    else error("invalid bound name")
-    end
-
-    rngs = ntuple(d -> d==axis ? (index:index) : UnitRange(axes(grid, d)), Val(dim))
-    n = Vec{dim}(i-> ifelse(i==axis, dir, 0))
-
-    Boundaries(CartesianIndices(rngs), n)
-end
-function gridbounds(grid::AbstractArray, which::String...)
-    Iterators.flatten(broadcast(_boundaries, Ref(grid), which))
-end

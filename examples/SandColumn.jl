@@ -80,7 +80,8 @@ function SandColumn(
         point_to_grid!(transfer, gridstate, pointstate, space, dt)
 
         # boundary conditions
-        @inbounds for (i,n) in gridbounds(grid, "-y") # bottom
+        @inbounds for i in @view(CartesianIndices(grid)[:, begin]) # bottom
+            n = Vec(0,-1)
             μ = 0.2
             vᵢ = gridstate.v[i]
             v̄ₙ = vᵢ ⋅ n
@@ -88,7 +89,8 @@ function SandColumn(
             v̄ₜ = norm(vₜ)
             gridstate.v[i] = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * (vₜ/v̄ₜ))
         end
-        @inbounds for (i,n) in gridbounds(grid, "-x", "+x") # left and right
+        @inbounds for i in @view(CartesianIndices(grid)[[begin, end], :]) # left and right
+            n = Vec(1,0) # this is ok for left side as well
             vᵢ = gridstate.v[i]
             gridstate.v[i] = vᵢ - (vᵢ⋅n)*n
         end

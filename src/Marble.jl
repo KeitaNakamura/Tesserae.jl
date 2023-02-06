@@ -28,7 +28,6 @@ export
     gridsteps,
     gridaxes,
     gridsystem,
-    gridbounds,
     neighbornodes,
     generate_gridstate,
     generate_pointstate,

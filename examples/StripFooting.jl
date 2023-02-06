@@ -99,11 +99,13 @@ function StripFooting(
             gridstate.v[i] = v_footing
         end
         # don't apply any condition (free condition) on top boundary to properly handle diriclet boundary condition
-        @inbounds for (i,n) in gridbounds(grid, "-y") # bottom
+        @inbounds for i in @view(CartesianIndices(grid)[:, begin]) # bottom
+            n = Vec(0,-1)
             vᵢ = gridstate.v[i]
             gridstate.v[i] = zero(vᵢ)
         end
-        @inbounds for (i,n) in gridbounds(grid, "-x", "+x") # left and right
+        @inbounds for i in @view(CartesianIndices(grid)[[begin, end], :]) # left and right
+            n = Vec(1,0) # this is ok for left side as well
             vᵢ = gridstate.v[i]
             gridstate.v[i] = vᵢ - (vᵢ⋅n)*n
         end
