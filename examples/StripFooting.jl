@@ -99,15 +99,14 @@ function StripFooting(
             gridstate.v[i] = v_footing
         end
         # don't apply any condition (free condition) on top boundary to properly handle diriclet boundary condition
-        @inbounds for i in @view(CartesianIndices(grid)[:, begin]) # bottom
+        @inbounds for node in @view(LazyRows(gridstate)[:,begin]) # bottom
             n = Vec(0,-1)
-            vᵢ = gridstate.v[i]
-            gridstate.v[i] = zero(vᵢ)
+            node.v = zero(node.v)
         end
-        @inbounds for i in @view(CartesianIndices(grid)[[begin, end], :]) # left and right
+        @inbounds for node in @view(LazyRows(gridstate)[[begin,end],:]) # left and right
             n = Vec(1,0) # this is ok for left side as well
-            vᵢ = gridstate.v[i]
-            gridstate.v[i] = vᵢ - (vᵢ⋅n)*n
+            vᵢ = node.v
+            node.v = vᵢ - (vᵢ⋅n)*n
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)

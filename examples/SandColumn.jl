@@ -80,19 +80,19 @@ function SandColumn(
         point_to_grid!(transfer, gridstate, pointstate, space, dt)
 
         # boundary conditions
-        @inbounds for i in @view(CartesianIndices(grid)[:, begin]) # bottom
+        @inbounds for node in @view(LazyRows(gridstate)[:,begin]) # bottom
             n = Vec(0,-1)
             μ = 0.2
-            vᵢ = gridstate.v[i]
+            vᵢ = node.v
             v̄ₙ = vᵢ ⋅ n
             vₜ = vᵢ - v̄ₙ*n
             v̄ₜ = norm(vₜ)
-            gridstate.v[i] = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * (vₜ/v̄ₜ))
+            node.v = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * (vₜ/v̄ₜ))
         end
-        @inbounds for i in @view(CartesianIndices(grid)[[begin, end], :]) # left and right
+        @inbounds for node in @view(LazyRows(gridstate)[[begin,end],:]) # left and right
             n = Vec(1,0) # this is ok for left side as well
-            vᵢ = gridstate.v[i]
-            gridstate.v[i] = vᵢ - (vᵢ⋅n)*n
+            vᵢ = node.v
+            node.v = vᵢ - (vᵢ⋅n)*n
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)

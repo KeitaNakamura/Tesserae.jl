@@ -72,11 +72,11 @@ function DamBreak(
 
         # boundary conditions
         slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
-        @inbounds for i in @view(CartesianIndices(grid)[[begin, end], :]) # left and right
-            gridstate.v[i] = slip(gridstate.v[i], Vec(1,0))
+        @inbounds for node in @view(LazyRows(gridstate)[[begin,end],:]) # left and right
+            node.v = slip(node.v, Vec(1,0))
         end
-        @inbounds for i in @view(CartesianIndices(grid)[:, [begin, end]]) # bottom and top
-            gridstate.v[i] = slip(gridstate.v[i], Vec(0,1))
+        @inbounds for node in @view(LazyRows(gridstate)[:,[begin,end]]) # bottom and top
+            node.v = slip(node.v, Vec(0,1))
         end
 
         grid_to_point!(transfer, pointstate, gridstate, space, dt)

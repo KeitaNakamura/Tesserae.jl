@@ -64,7 +64,7 @@ end
 
 point_to_grid!(t::Transfer, args...) = point_to_grid!(t.P2G, args...)
 
-function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace, dt::Real)
+function point_to_grid!(::P2G_Normal, gridstate::StructArray, pointstate::StructVector, space::MPSpace, dt::Real)
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -89,7 +89,7 @@ function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::Poi
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
                 f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                k = nonzeroindex(gridstate, i)
+                k = unsafe_nonzeroindex(gridstate, i)
                 gridstate.m[k]  += N*mₚ
                 gridstate.vⁿ[k] += N*mₚvₚ
                 gridstate.v[k]  += dt*f
@@ -103,7 +103,7 @@ function point_to_grid!(::P2G_Normal, gridstate::GridStateArray, pointstate::Poi
     gridstate
 end
 
-function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
+function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::StructArray, pointstate::StructVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -139,7 +139,7 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
                 N = mp.N[j]
                 xᵢ = grid[i]
                 f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                k = nonzeroindex(gridstate, i)
+                k = unsafe_nonzeroindex(gridstate, i)
                 gridstate.m[k]  += N*mₚ
                 gridstate.vⁿ[k] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
                 gridstate.v[k]  += dt*f
@@ -153,7 +153,7 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::GridS
     gridstate
 end
 
-function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace{dim}, dt::Real) where {dim}
+function point_to_grid!(::P2G_Taylor, gridstate::StructArray, pointstate::StructVector, space::MPSpace{dim}, dt::Real) where {dim}
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -181,7 +181,7 @@ function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::Poi
                 N = mp.N[j]
                 xᵢ = grid[i]
                 f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                k = nonzeroindex(gridstate, i)
+                k = unsafe_nonzeroindex(gridstate, i)
                 gridstate.m[k]  += N*mₚ
                 gridstate.vⁿ[k] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
                 gridstate.v[k]  += dt*f
@@ -195,7 +195,7 @@ function point_to_grid!(::P2G_Taylor, gridstate::GridStateArray, pointstate::Poi
     gridstate
 end
 
-function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointStateVector, space::MPSpace, dt::Real)
+function point_to_grid!(::P2G_WLS, gridstate::StructArray, pointstate::StructVector, space::MPSpace, dt::Real)
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -222,7 +222,7 @@ function point_to_grid!(::P2G_WLS, gridstate::GridStateArray, pointstate::PointS
                 N = mp.N[j]
                 xᵢ = grid[i]
                 f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                k = nonzeroindex(gridstate, i)
+                k = unsafe_nonzeroindex(gridstate, i)
                 gridstate.m[k] += N*mₚ
                 gridstate.vⁿ[k] += N*mₚCₚ⋅P(xᵢ-xₚ)
                 gridstate.v[k] += dt*f
@@ -252,7 +252,7 @@ end
 
 grid_to_point!(t::Transfer, args...) = grid_to_point!(t.G2P, args...)
 
-function grid_to_point!(::G2P_FLIP, pointstate::PointStateVector, gridstate::GridStateArray, space::MPSpace{dim}, dt::Real) where {dim}
+function grid_to_point!(::G2P_FLIP, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -265,7 +265,7 @@ function grid_to_point!(::G2P_FLIP, pointstate::PointStateVector, gridstate::Gri
         for (j, i) in enumerate(get_nodeindices(space, p))
             N = mp.N[j]
             ∇N = mp.∇N[j]
-            k = nonzeroindex(gridstate, i)
+            k = unsafe_nonzeroindex(gridstate, i)
             vᵢ = gridstate.v[k]
             dvᵢ = vᵢ - gridstate.vⁿ[k]
             dvₚ += N * dvᵢ
@@ -292,7 +292,7 @@ function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::Abstra
         for (j, i) in enumerate(get_nodeindices(space, p))
             N = mp.N[j]
             ∇N = mp.∇N[j]
-            k = nonzeroindex(gridstate, i)
+            k = unsafe_nonzeroindex(gridstate, i)
             vᵢ = gridstate.v[k]
             vₚ  += vᵢ * N
             ∇vₚ += vᵢ ⊗ ∇N
@@ -319,7 +319,7 @@ function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate:
         for (j, i) in enumerate(get_nodeindices(space, p))
             N = mp.N[j]
             ∇N = mp.∇N[j]
-            k = nonzeroindex(gridstate, i)
+            k = unsafe_nonzeroindex(gridstate, i)
             vᵢ = gridstate.v[k]
             dvᵢ = vᵢ - gridstate.vⁿ[k]
             xᵢ = grid[i]
@@ -351,7 +351,7 @@ function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::
         for (j, i) in enumerate(get_nodeindices(space, p))
             N = mp.N[j]
             ∇N = mp.∇N[j]
-            k = nonzeroindex(gridstate, i)
+            k = unsafe_nonzeroindex(gridstate, i)
             vᵢ = gridstate.v[k]
             xᵢ = grid[i]
             xₚ = pointstate.x[p]
@@ -382,7 +382,7 @@ function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::Abstra
         ∇p0 = gradient(get_basis(mp), zero(Vec{dim, Int}))
         for (j, i) in enumerate(get_nodeindices(space, p))
             w = mp.w[j]
-            k = nonzeroindex(gridstate, i)
+            k = unsafe_nonzeroindex(gridstate, i)
             vᵢ = gridstate.v[k]
             xᵢ = grid[i]
             Minv = mp.Minv
@@ -438,7 +438,7 @@ function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::Ab
                 N = mp.N[j]
                 P = value(basis, xₚ[p] - grid[i])
                 VP = (mp.N[j] * Vₚ[p]) * P
-                k = nonzeroindex(gridstate, i)
+                k = unsafe_nonzeroindex(gridstate, i)
                 gridstate.poly_coef[k] += VP * vals[p]
                 gridstate.poly_mat[k]  += VP ⊗ P
             end
@@ -452,7 +452,7 @@ function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::Ab
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
             P = value(basis, xₚ[p] - grid[i])
-            k = nonzeroindex(gridstate, i)
+            k = unsafe_nonzeroindex(gridstate, i)
             val += mp.N[j] * (P ⋅ gridstate.poly_coef[k])
         end
         vals[p] = val

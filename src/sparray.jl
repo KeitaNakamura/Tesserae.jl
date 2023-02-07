@@ -71,38 +71,37 @@ julia> A[1,1] = 2; A[1,1]
 2.0
 ```
 """
-struct SpArray{T, dim, V <: AbstractVector{T}} <: AbstractArray{T, dim}
-    data::V
+struct SpArray{T, dim} <: AbstractArray{T, dim}
+    data::Vector{T}
     sppat::SpPattern{dim}
-    parent::Bool
     stamp::RefValue{Float64} # only used when constructing `SpArray` by `generate_gridstate`
 end
 
+const StructSpArray{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{<: Any, <: Tuple{Vararg{SpArray}}}, I}
+
 function SpArray{T}(dims::Tuple{Vararg{Int}}) where {T}
-    data = Vector{T}(undef, prod(dims))
+    data = Vector{T}(undef, 0)
     sppat = SpPattern(dims)
-    SpArray(data, sppat, true, Ref(NaN))
+    SpArray(data, sppat, Ref(NaN))
 end
 SpArray{T}(dims::Int...) where {T} = SpArray{T}(dims)
+
+function SpArray{T}(sppat::SpPattern, stamp::RefValue{Float64}) where {T}
+    data = Vector{T}(undef, 0)
+    SpArray(data, sppat, stamp)
+end
 
 Base.IndexStyle(::Type{<: SpArray}) = IndexLinear()
 Base.size(A::SpArray) = size(A.sppat)
 
-nonzeros(A::SpArray) = getfield(A, :data)
-get_stamp(A::SpArray) = getfield(A, :stamp)[]
-set_stamp!(A::SpArray, v) = getfield(A, :stamp)[] = v
-get_sppat(A::SpArray) = getfield(A, :sppat)
-is_parent(A::SpArray) = getfield(A, :parent)
+nonzeros(A::SpArray) = A.data
+get_stamp(A::SpArray) = A.stamp[]
+set_stamp!(A::SpArray, v) = A.stamp[]=v
+get_sppat(A::SpArray) = A.sppat
 
-# handle `StructVector`
-Base.propertynames(A::SpArray{<: Any, <: Any, <: StructVector}) = (:data, :sppat, :parent, :stamp, propertynames(A.data)...)
-function Base.getproperty(A::SpArray{<: Any, <: Any, <: StructVector}, name::Symbol)
-    name == :data   && return getfield(A, :data)
-    name == :sppat  && return getfield(A, :sppat)
-    name == :parent && return getfield(A, :parent)
-    name == :stamp  && return getfield(A, :stamp)
-    SpArray(getproperty(nonzeros(A), name), get_sppat(A), false, getfield(A, :stamp))
-end
+get_stamp(A::StructSpArray) = get_stamp(getproperty(A, 1))
+set_stamp!(A::StructSpArray, v) = set_stamp!(getproperty(A, 1), v)
+get_sppat(A::StructSpArray) = get_sppat(getproperty(A, 1))
 
 # return zero if the index is not active
 @inline function Base.getindex(A::SpArray, i::Int)
@@ -129,7 +128,8 @@ end
 struct NonzeroIndex
     i::Int
 end
-@inline function nonzeroindex(A::SpArray, i)
+# unsafe becuase the returned index can be -1 if the SpPattern is not correctly updated
+@inline function unsafe_nonzeroindex(A::Union{SpArray, StructSpArray}, i)
     @boundscheck checkbounds(A, i)
     @inbounds NonzeroIndex(get_spindices(get_sppat(A))[i])
 end
@@ -145,13 +145,22 @@ end
 @inline nonzeroindex(A::AbstractArray, i) = i
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
+fillzero!(A::StructSpArray) = (StructArrays.foreachfield(fillzero!, A); A)
 
 function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
-    @assert is_parent(A)
     @assert size(A) == size(sppat)
+    set_stamp!(A, NaN)
     n = update_sparsity_pattern!(get_sppat(A), sppat)
     resize!(nonzeros(A), n)
-    A.stamp[] = NaN
+    A
+end
+function update_sparsity_pattern!(A::StructSpArray, sppat::AbstractArray{Bool})
+    @assert size(A) == size(sppat)
+    set_stamp!(A, NaN)
+    n = update_sparsity_pattern!(get_sppat(A), sppat)
+    StructArrays.foreachfield(A) do a
+        resize!(nonzeros(a), n)
+    end
     A
 end
 
@@ -207,4 +216,6 @@ maybecustomshow(x::SpArray) = ShowSpArray(x)
 
 Base.summary(io::IO, x::ShowSpArray) = summary(io, x.parent)
 Base.show(io::IO, mime::MIME"text/plain", x::SpArray) = show(io, mime, ShowSpArray(x))
+Base.show(io::IO, mime::MIME"text/plain", x::StructSpArray) = show(io, mime, ShowSpArray(x))
 Base.show(io::IO, x::SpArray) = show(io, ShowSpArray(x))
+Base.show(io::IO, x::StructSpArray) = show(io, ShowSpArray(x))

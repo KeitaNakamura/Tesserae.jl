@@ -158,8 +158,7 @@ function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Un
     space
 end
 
-function update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)
-    @assert is_parent(gridstate)
+function update_sparsity_pattern!(gridstate::StructSpArray, space::MPSpace)
     @assert size(gridstate) == gridsize(space)
     update_sparsity_pattern!(gridstate, get_sppat(space))
     set_stamp!(gridstate, get_stamp(space))

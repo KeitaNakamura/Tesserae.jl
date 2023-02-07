@@ -4,10 +4,13 @@ using PoissonDiskSampling
 # Grid states #
 ###############
 
-const GridStateArray = Union{SpArray{<: Any, <: Any, <: StructVector}, StructArray}
-
-function generate_gridstate(GridState::Type, dims::Dims)
-    SpArray(StructVector{GridState}(undef, 0), SpPattern(dims), true, Ref(NaN))
+@generated function generate_gridstate(::Type{GridState}, dims::Dims) where {GridState}
+    exps = [:(SpArray{$T}(sppat, stamp)) for T in fieldtypes(GridState)]
+    quote
+        sppat = SpPattern(dims)
+        stamp = Ref(NaN)
+        StructArray{GridState}(tuple($(exps...)))
+    end
 end
 generate_gridstate(GridState::Type, dims::Int...) = generate_gridstate(GridState, dims)
 generate_gridstate(GridState::Type, grid::AbstractArray) = generate_gridstate(GridState, size(grid))
@@ -15,8 +18,6 @@ generate_gridstate(GridState::Type, grid::AbstractArray) = generate_gridstate(Gr
 ################
 # Point states #
 ################
-
-const PointStateVector = StructVector
 
 function generate_points_regularly(grid::Grid, n::Int)
     axes = gridaxes(grid)

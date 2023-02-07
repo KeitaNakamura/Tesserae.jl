@@ -15,8 +15,8 @@ using Marble: SpPattern, SpArray
 end
 
 @testset "SpArray" begin
-    A = (@inferred SpArray{Float64}((5,5)))::SpArray{Float64, 2, Vector{Float64}}
-    A = (@inferred SpArray{Float64}(5,5))::SpArray{Float64, 2, Vector{Float64}}
+    A = (@inferred SpArray{Float64}((5,5)))::SpArray{Float64, 2}
+    A = (@inferred SpArray{Float64}(5,5))::SpArray{Float64, 2}
 
     @test all(==(0), A)
     for i in eachindex(A)
