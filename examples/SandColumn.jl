@@ -3,7 +3,7 @@ using MaterialModels
 
 function SandColumn(
         interp::Interpolation = LinearWLS(QuadraticBSpline()),
-        transfer::Transfer    = Transfer(interp);
+        transfer::Transfer    = DefaultTransfer();
         dx::Real              = 0.01,
         CFL::Real             = 1.0,
         showprogress::Bool    = true,

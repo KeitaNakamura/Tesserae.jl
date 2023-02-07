@@ -52,6 +52,7 @@ export
     update_sparsity_pattern!,
 # Transfer
     Transfer,
+    DefaultTransfer,
     FLIP,
     PIC,
     TFLIP,

@@ -17,7 +17,6 @@
     end
     @testset "P2G" begin
         for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-            transfer = Transfer(interp)
             for system in (PlaneStrain(), Axisymmetric())
                 # initialization
                 grid = Grid(system, 0.0:2.0:10.0, 0.0:2.0:20.0)
@@ -32,7 +31,7 @@
                 # transfer
                 update!(space, pointstate)
                 update_sparsity_pattern!(gridstate, space)
-                point_to_grid!(transfer, gridstate, pointstate, space, 1)
+                point_to_grid!(FLIP(), gridstate, pointstate, space, 1)
                 @test all(==(v0), pointstate.v)
             end
         end
@@ -45,7 +44,7 @@
         for include_near_boundary in (true, false)
             for kernel in (QuadraticBSpline(), CubicBSpline())
                 interp = LinearWLS(kernel)
-                wls, apic, tpic = map((Transfer(interp), APIC(), TPIC())) do transfer
+                wls, apic, tpic = map((DefaultTransfer(), APIC(), TPIC())) do transfer
                     dt = 0.002
 
                     if include_near_boundary
@@ -94,9 +93,11 @@
         grid_v = [∇v⋅x for x in grid] # create linear distribution
 
         for include_near_boundary in (true, false,)
-            for kernel in (QuadraticBSpline(), CubicBSpline())
-                for interp in (KernelCorrection(kernel), LinearWLS(kernel))
-                    for transfer in (FLIP(), TPIC(), APIC(), Transfer(interp))
+            @testset "$kernel" for kernel in (QuadraticBSpline(), CubicBSpline())
+                @testset "$interp" for interp in (KernelCorrection(kernel), LinearWLS(kernel))
+                    @testset "$transfer" for transfer in (FLIP(), TPIC(), APIC(), DefaultTransfer())
+                        interp isa KernelCorrection && transfer isa DefaultTransfer && continue
+
                         dt = 1.0
 
                         if include_near_boundary

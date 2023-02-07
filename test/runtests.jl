@@ -14,7 +14,7 @@ include("transfer.jl")
 
 const FIX_RESULTS = false
 
-function check_example(testname::String, case, interp, transfer=Transfer(interp); dx, kwargs...)
+function check_example(testname::String, case, interp, transfer=DefaultTransfer(); dx, kwargs...)
     @testset "$testname" begin
         outdir = joinpath("examples", "$testname.tmp")
         rm(outdir; recursive = true, force = true)
@@ -46,7 +46,7 @@ end
 @testset "Check examples" begin
     # SandColumn
     dx = 0.01
-    check_example("SandColumn", 1, QuadraticBSpline(); dx)
+    check_example("SandColumn", 1, QuadraticBSpline(), FLIP(); dx)
     check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()); dx)
     check_example("SandColumn", 2, LinearWLS(QuadraticBSpline()), TPIC(); dx)
     check_example("SandColumn", 3, LinearWLS(QuadraticBSpline()), APIC(); dx)

@@ -1,53 +1,20 @@
-# P2G
-abstract type P2G_Transfer end
-struct P2G_Normal     <: P2G_Transfer end
-struct P2G_Taylor     <: P2G_Transfer end
-struct P2G_WLS        <: P2G_Transfer end
-struct P2G_AffineFLIP <: P2G_Transfer end
-struct P2G_AffinePIC  <: P2G_Transfer end
-# G2P
-abstract type G2P_Transfer end
-struct G2P_FLIP       <: G2P_Transfer end
-struct G2P_PIC        <: G2P_Transfer end
-struct G2P_WLS        <: G2P_Transfer end
-struct G2P_AffineFLIP <: G2P_Transfer end
-struct G2P_AffinePIC  <: G2P_Transfer end
+abstract type Transfer end
+struct DefaultTransfer <: Transfer end
+# classical
+struct FLIP  <: Transfer end
+struct PIC   <: Transfer end
+# affine transfer
+struct AFLIP <: Transfer end
+struct APIC  <: Transfer end
+# Taylor transfer
+struct TFLIP <: Transfer end
+struct TPIC  <: Transfer end
 
-struct Transfer{P2G <: P2G_Transfer, G2P <: G2P_Transfer}
-    P2G::P2G
-    G2P::G2P
-end
-Transfer{P2G, G2P}() where {P2G, G2P} = Transfer(P2G(), G2P())
+###########
+# helpers #
+###########
 
-# supported transfer combinations
-const FLIP  = Transfer{P2G_Normal, G2P_FLIP}
-const PIC   = Transfer{P2G_Normal, G2P_PIC}
-const TFLIP = Transfer{P2G_Taylor, G2P_FLIP}
-const TPIC  = Transfer{P2G_Taylor, G2P_PIC}
-const AFLIP = Transfer{P2G_AffineFLIP, G2P_AffineFLIP}
-const APIC  = Transfer{P2G_AffinePIC, G2P_AffinePIC}
-
-const WLSTransfer = Transfer{P2G_WLS, G2P_WLS}
-
-########################
-# default combinations #
-########################
-
-@pure Transfer(interp::Interpolation) = Transfer(P2G_default(interp), G2P_default(interp))
-
-# use FLIP by default
-@pure P2G_default(::Interpolation) = P2G_Normal()
-@pure G2P_default(::Interpolation) = G2P_FLIP()
-
-# WLS
-@pure P2G_default(::WLS) = P2G_WLS()
-@pure G2P_default(::WLS) = G2P_WLS()
-
-################
-# P2G transfer #
-################
-
-function check_states(gridstate::AbstractArray, pointstate::AbstractVector, space::MPSpace)
+function check_states(gridstate::StructArray, pointstate::AbstractVector, space::MPSpace)
     @assert length(pointstate) == num_points(space)
     @assert size(gridstate) == gridsize(space)
     check_gridstate(gridstate, space)
@@ -55,16 +22,23 @@ end
 
 function check_gridstate(gridstate::StructArray, space::MPSpace)
 end
-function check_gridstate(gridstate::SpArray, space::MPSpace)
+function check_gridstate(gridstate::StructSpArray, space::MPSpace)
     if get_stamp(gridstate) != get_stamp(space)
         # check to use @inbounds for `SpArray`
         error("`update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)` must be executed before `point_to_grid!` and `grid_to_point!`")
     end
 end
 
-point_to_grid!(t::Transfer, args...) = point_to_grid!(t.P2G, args...)
+################
+# P2G transfer #
+################
 
-function point_to_grid!(::P2G_Normal, gridstate::StructArray, pointstate::StructVector, space::MPSpace, dt::Real)
+# default
+function point_to_grid!(gridstate::StructArray, pointstate::StructVector, space::MPSpace, dt::Real)
+    point_to_grid!(DefaultTransfer(), gridstate, pointstate, space, dt)
+end
+
+function point_to_grid!(::Union{DefaultTransfer, FLIP, PIC}, gridstate::StructArray, pointstate::StructVector, space::MPSpace, dt::Real)
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -103,7 +77,7 @@ function point_to_grid!(::P2G_Normal, gridstate::StructArray, pointstate::Struct
     gridstate
 end
 
-function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::StructArray, pointstate::StructVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
+function point_to_grid!(::Union{AFLIP, APIC}, gridstate::StructArray, pointstate::StructVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -153,7 +127,7 @@ function point_to_grid!(::Union{P2G_AffinePIC, P2G_AffineFLIP}, gridstate::Struc
     gridstate
 end
 
-function point_to_grid!(::P2G_Taylor, gridstate::StructArray, pointstate::StructVector, space::MPSpace{dim}, dt::Real) where {dim}
+function point_to_grid!(::Union{TFLIP, TPIC}, gridstate::StructArray, pointstate::StructVector, space::MPSpace{dim}, dt::Real) where {dim}
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -195,7 +169,8 @@ function point_to_grid!(::P2G_Taylor, gridstate::StructArray, pointstate::Struct
     gridstate
 end
 
-function point_to_grid!(::P2G_WLS, gridstate::StructArray, pointstate::StructVector, space::MPSpace, dt::Real)
+# special default transfer for `WLS` interpolation
+function point_to_grid!(::DefaultTransfer, gridstate::StructArray, pointstate::StructVector, space::MPSpace{<: Any, <: Any, <: WLS}, dt::Real)
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -250,9 +225,12 @@ end
 # G2P transfer #
 ################
 
-grid_to_point!(t::Transfer, args...) = grid_to_point!(t.G2P, args...)
+# default
+function grid_to_point!(pointstate::StructVector, gridstate::StructArray, space::MPSpace, dt::Real)
+    grid_to_point!(DefaultTransfer(), pointstate, gridstate, space, dt)
+end
 
-function grid_to_point!(::G2P_FLIP, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
+function grid_to_point!(::Union{DefaultTransfer, FLIP, TFLIP}, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -280,7 +258,7 @@ function grid_to_point!(::G2P_FLIP, pointstate::StructVector, gridstate::StructA
     pointstate
 end
 
-function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
+function grid_to_point!(::Union{PIC, TPIC}, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -305,70 +283,42 @@ function grid_to_point!(::G2P_PIC, pointstate::AbstractVector, gridstate::Abstra
     pointstate
 end
 
-function grid_to_point!(::G2P_AffineFLIP, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
+function affine_grid_to_point!(pointstate::StructVector, gridstate::StructArray, space::MPSpace, dt::Real)
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
 
     @threaded for p in 1:num_points(space)
-        dvₚ = zero(eltype(pointstate.v))
-        vₚ  = zero(eltype(pointstate.v))
-        ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
+        xₚ = pointstate.x[p]
         Bₚ  = zero(eltype(pointstate.B))
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
             N = mp.N[j]
-            ∇N = mp.∇N[j]
             k = unsafe_nonzeroindex(gridstate, i)
             vᵢ = gridstate.v[k]
-            dvᵢ = vᵢ - gridstate.vⁿ[k]
             xᵢ = grid[i]
-            xₚ = pointstate.x[p]
-            dvₚ += N * dvᵢ
-            vₚ  += N * vᵢ
-            ∇vₚ += vᵢ ⊗ ∇N
-            Bₚ  += N * vᵢ ⊗ (xᵢ - xₚ)
+            Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
         end
-        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, ∇vₚ)
-        pointstate.v[p] += dvₚ
-        pointstate.x[p] += vₚ * dt
         pointstate.B[p] = Bₚ
     end
 
     pointstate
 end
 
-function grid_to_point!(::G2P_AffinePIC, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
-    check_states(gridstate, pointstate, space)
-
-    grid = get_grid(space)
-
-    @threaded for p in 1:num_points(space)
-        vₚ  = zero(eltype(pointstate.v))
-        ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
-        Bₚ = zero(eltype(pointstate.B))
-        mp = get_mpvalue(space, p)
-        for (j, i) in enumerate(get_nodeindices(space, p))
-            N = mp.N[j]
-            ∇N = mp.∇N[j]
-            k = unsafe_nonzeroindex(gridstate, i)
-            vᵢ = gridstate.v[k]
-            xᵢ = grid[i]
-            xₚ = pointstate.x[p]
-            vₚ  += N * vᵢ
-            ∇vₚ += vᵢ ⊗ ∇N
-            Bₚ  += N * vᵢ ⊗ (xᵢ - xₚ)
-        end
-        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, ∇vₚ)
-        pointstate.v[p] = vₚ
-        pointstate.x[p] += vₚ * dt
-        pointstate.B[p] = Bₚ
-    end
-
+function grid_to_point!(::AFLIP, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
+    affine_grid_to_point!(pointstate, gridstate, space, dt)
+    grid_to_point!(FLIP(), pointstate, gridstate, space, dt)
     pointstate
 end
 
-function grid_to_point!(::G2P_WLS, pointstate::AbstractVector, gridstate::AbstractArray, space::MPSpace{dim}, dt::Real) where {dim}
+function grid_to_point!(::APIC, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
+    affine_grid_to_point!(pointstate, gridstate, space, dt)
+    grid_to_point!(PIC(), pointstate, gridstate, space, dt)
+    pointstate
+end
+
+# special default transfer for `WLS` interpolation
+function grid_to_point!(::DefaultTransfer, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim, <: Any, <: WLS}, dt::Real) where {dim}
     check_states(gridstate, pointstate, space)
 
     grid = get_grid(space)
@@ -422,7 +372,7 @@ end
     end
 end
 
-function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::AbstractVector, gridstate::AbstractArray, space::MPSpace)
+function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::AbstractVector, gridstate::StructArray, space::MPSpace)
     check_states(gridstate, vals, space)
     @assert length(vals) == length(xₚ) == length(Vₚ)
 

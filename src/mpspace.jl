@@ -1,4 +1,4 @@
-struct MPSpace{dim, T, C <: CoordinateSystem, I <: Interpolation, MP <: MPValue{dim, T, I}}
+struct MPSpace{dim, T, I <: Interpolation, C <: CoordinateSystem, MP <: MPValue{dim, T, I}}
     grid::Grid{dim, T, C}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}

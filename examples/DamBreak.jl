@@ -3,7 +3,7 @@ using MaterialModels
 
 function DamBreak(
         interp::Interpolation = LinearWLS(QuadraticBSpline()),
-        transfer::Transfer    = Transfer(interp);
+        transfer::Transfer    = DefaultTransfer();
         t_stop::Real          = 2.0,  # 5.0
         dx::Real              = 0.07, # 0.014
         CFL::Real             = 0.1,
