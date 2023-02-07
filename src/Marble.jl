@@ -58,11 +58,6 @@ export
     TPIC,
     AFLIP,
     APIC,
-# Logger
-    Logger,
-    isfinised,
-    islogpoint,
-    logindex,
 # VTK
     openvtk,
     openvtm,
@@ -89,7 +84,6 @@ include("states.jl")
 include("transfer.jl")
 
 # io
-include("logger.jl")
 include("vtk.jl")
 
 end # module

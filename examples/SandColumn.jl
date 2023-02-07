@@ -63,10 +63,11 @@ function SandColumn(
     pvdfile = joinpath(outdir, "SandColumn")
     closepvd(openpvd(pvdfile))
 
-    logger = Logger(0.0, 0.6, 0.01; showprogress)
-
     t = 0.0
-    while !isfinised(logger, t)
+    t_stop = 0.6
+    num_data = 100
+    ts_output = collect(range(t, t_stop; length=num_data))
+    while t < t_stop
 
         dt = minimum(pointstate) do p
             ρ = p.m / p.V
@@ -112,11 +113,12 @@ function SandColumn(
             pointstate.V[p] *= exp(tr(dϵ))
         end
 
-        update!(logger, t += dt)
+        t += dt
 
-        if output && islogpoint(logger)
+        if output && t ≥ first(ts_output)
+            popfirst!(ts_output)
             openpvd(pvdfile; append=true) do pvd
-                openvtm(string(pvdfile, logindex(logger))) do vtm
+                openvtm(string(pvdfile, num_data-length(ts_output))) do vtm
                     openvtk(vtm, pointstate.x) do vtk
                         vtk["velocity"] = pointstate.v
                     end

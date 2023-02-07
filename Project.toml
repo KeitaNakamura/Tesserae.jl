@@ -4,9 +4,7 @@ authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
 version = "1.2.1"
 
 [deps]
-Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
-ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 SIMD = "fdea26ae-647d-5447-a871-4b548cad5224"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
@@ -15,7 +13,6 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
 PoissonDiskSampling = "0.2"
-ProgressMeter = "1.5"
 Reexport = "1"
 SIMD = "3"
 StructArrays = "0.6"

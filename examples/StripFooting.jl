@@ -72,12 +72,13 @@ function StripFooting(
     pvdfile = joinpath(outdir, "StripFooting")
     closepvd(openpvd(pvdfile))
 
-    logger = Logger(0.0, 0.1, 0.002; showprogress)
-
     t = 0.0
+    t_stop = 0.1
+    num_data = 100
+    ts_output = collect(range(t, t_stop; length=num_data))
     disp = Float64[]
     load = Float64[]
-    while !isfinised(logger, t)
+    while t < t_stop
 
         dt = minimum(pointstate) do p
             ρ = p.m / p.V
@@ -134,14 +135,15 @@ function StripFooting(
             pointstate.V[p] *= exp(tr(dϵ))
         end
 
-        update!(logger, t += dt)
+        t += dt
 
         push!(disp, -v_footing[2] * t)
         push!(load, vertical_load)
 
-        if output && islogpoint(logger)
+        if output && t ≥ first(ts_output)
+            popfirst!(ts_output)
             openpvd(pvdfile; append=true) do pvd
-                openvtm(string(pvdfile, logindex(logger))) do vtm
+                openvtm(string(pvdfile, num_data-length(ts_output))) do vtm
                     openvtk(vtm, pointstate.x) do vtk
                         σ = pointstate.σ
                         ϵ = pointstate.ϵ
