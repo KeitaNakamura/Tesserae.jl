@@ -3,22 +3,14 @@
 ####################
 
 abstract type CoordinateSystem end
-
-struct OneDimensional   <: CoordinateSystem end
-struct PlaneStrain      <: CoordinateSystem end
-struct Axisymmetric     <: CoordinateSystem end
-struct ThreeDimensional <: CoordinateSystem end
-
-# default coordinate system
-get_coordinate_system(::Nothing, ::Val{1}) = OneDimensional()
-get_coordinate_system(::Nothing, ::Val{2}) = PlaneStrain()
-get_coordinate_system(::Nothing, ::Val{3}) = ThreeDimensional()
-
-# check coordinate system
-get_coordinate_system(::PlaneStrain, ::Val{2}) = PlaneStrain()
-get_coordinate_system(::Axisymmetric, ::Val{2}) = Axisymmetric()
-get_coordinate_system(c::CoordinateSystem, ::Val{dim}) where {dim} =
-    throw(ArgumentError("wrong coordinate system $c for dimension $dim"))
+struct NormalSystem <: CoordinateSystem end
+struct PlaneStrain  <: CoordinateSystem end
+struct Axisymmetric <: CoordinateSystem end
+coordinate_system(::NormalSystem, ::Val{1}) = NormalSystem()
+coordinate_system(::NormalSystem, ::Val{2}) = PlaneStrain()
+coordinate_system(::PlaneStrain,  ::Val{2}) = PlaneStrain()
+coordinate_system(::Axisymmetric, ::Val{2}) = Axisymmetric()
+coordinate_system(::NormalSystem, ::Val{3}) = NormalSystem()
 
 #############
 # AxisArray #
@@ -62,7 +54,7 @@ julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Grid{dim, T, C <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
+struct Grid{dim, T, C <: Union{Nothing, CoordinateSystem}} <: AbstractArray{Vec{dim, T}, dim}
     axisarray::AxisArray{dim, T, Vector{T}}
     gridsteps::NTuple{dim, T}
     gridsteps_inv::NTuple{dim, T}
@@ -80,20 +72,16 @@ gridaxes(x::Grid) = get_axes(x.axisarray)
 gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
 gridsystem(x::Grid) = x.system
 
-function Grid(::Type{T}, system::Union{Nothing, CoordinateSystem}, axes::NTuple{dim, AbstractVector}) where {T, dim}
+function Grid(::Type{T}, system::CoordinateSystem, axes::NTuple{dim, AbstractVector}) where {T, dim}
     @assert all(map(issorted, axes))
+    axisarray = AxisArray(map(Vector{T}, axes))
     dx = map(step, axes)
     dx⁻¹ = map(inv, dx)
-    Grid(
-        AxisArray(map(Array{T}, axes)),
-        map(T, dx),
-        map(T, dx⁻¹),
-        get_coordinate_system(system, Val(dim)),
-    )
+    Grid(axisarray, map(T, dx), map(T, dx⁻¹), coordinate_system(system, Val(dim)))
 end
-Grid(::Type{T}, axes::AbstractVector...) where {T} = Grid(T, nothing, axes)
+Grid(::Type{T}, axes::AbstractVector...) where {T} = Grid(T, NormalSystem(), axes)
 Grid(system::CoordinateSystem, axes::AbstractVector...) = Grid(Float64, system, axes)
-Grid(axes::AbstractVector...) = Grid(Float64, nothing, axes)
+Grid(axes::AbstractVector...) = Grid(Float64, NormalSystem(), axes)
 
 @inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(grid, i...)

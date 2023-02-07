@@ -217,7 +217,7 @@ end
 @inline function stress_to_force(::Axisymmetric, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
     @inbounds Tensorial.resizedim(σ, Val(2)) ⋅ ∇N + Vec(1,0) * (σ[3,3] * N / x[1])
 end
-@inline function stress_to_force(::ThreeDimensional, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
+@inline function stress_to_force(::NormalSystem, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
     σ ⋅ ∇N
 end
 
@@ -354,7 +354,7 @@ end
 @inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
     @inbounds Tensorial.resizedim(∇v, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
 end
-@inline function velocity_gradient(::ThreeDimensional, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
+@inline function velocity_gradient(::NormalSystem, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
     ∇v
 end
 
