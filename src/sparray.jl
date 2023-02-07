@@ -70,67 +70,6 @@ julia> update_sparsity_pattern!(A, sppat)
 julia> A[1,1] = 2; A[1,1]
 2.0
 ```
-
-Although the inactive indices return zero value when using `getindex`,
-the behaviors in array calculation is similar to `missing` rather than zero:
-
-```jldoctest sparray; setup = :(sppat=falses(5,5); sppat[1,1]=true; update_sparsity_pattern!(A, sppat); A[1,1]=2)
-julia> A
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
- 2.0  ⋅  ⋅  ⋅  ⋅
-  ⋅   ⋅  ⋅  ⋅  ⋅
-  ⋅   ⋅  ⋅  ⋅  ⋅
-  ⋅   ⋅  ⋅  ⋅  ⋅
-  ⋅   ⋅  ⋅  ⋅  ⋅
-
-julia> C = rand(5,5)
-5×5 Matrix{Float64}:
- 0.579862   0.639562  0.566704  0.870539  0.526344
- 0.411294   0.839622  0.536369  0.962715  0.0779683
- 0.972136   0.967143  0.711389  0.15118   0.966197
- 0.0149088  0.789764  0.103929  0.715355  0.666558
- 0.520355   0.696041  0.806704  0.939548  0.131026
-
-julia> A + C
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
- 2.57986  ⋅  ⋅  ⋅  ⋅
-  ⋅       ⋅  ⋅  ⋅  ⋅
-  ⋅       ⋅  ⋅  ⋅  ⋅
-  ⋅       ⋅  ⋅  ⋅  ⋅
-  ⋅       ⋅  ⋅  ⋅  ⋅
-
-julia> 3A
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
- 6.0  ⋅  ⋅  ⋅  ⋅
-  ⋅   ⋅  ⋅  ⋅  ⋅
-  ⋅   ⋅  ⋅  ⋅  ⋅
-  ⋅   ⋅  ⋅  ⋅  ⋅
-  ⋅   ⋅  ⋅  ⋅  ⋅
-```
-
-Thus, inactive indices are propagated as
-
-```jldoctest sparray
-julia> B = Marble.SpArray{Float64}(5,5);
-
-julia> fill!(sppat, false); sppat[3,3] = true; update_sparsity_pattern!(B, sppat); B[3,3] = 8.0;
-
-julia> B
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
- ⋅  ⋅   ⋅   ⋅  ⋅
- ⋅  ⋅   ⋅   ⋅  ⋅
- ⋅  ⋅  8.0  ⋅  ⋅
- ⋅  ⋅   ⋅   ⋅  ⋅
- ⋅  ⋅   ⋅   ⋅  ⋅
-
-julia> A + B
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
-```
 """
 struct SpArray{T, dim, V <: AbstractVector{T}} <: AbstractArray{T, dim}
     data::V
@@ -149,7 +88,7 @@ SpArray{T}(dims::Int...) where {T} = SpArray{T}(dims)
 Base.IndexStyle(::Type{<: SpArray}) = IndexLinear()
 Base.size(A::SpArray) = size(A.sppat)
 
-get_data(A::SpArray) = getfield(A, :data)
+nonzeros(A::SpArray) = getfield(A, :data)
 get_stamp(A::SpArray) = getfield(A, :stamp)[]
 set_stamp!(A::SpArray, v) = getfield(A, :stamp)[] = v
 get_sppat(A::SpArray) = getfield(A, :sppat)
@@ -162,7 +101,7 @@ function Base.getproperty(A::SpArray{<: Any, <: Any, <: StructVector}, name::Sym
     name == :sppat  && return getfield(A, :sppat)
     name == :parent && return getfield(A, :parent)
     name == :stamp  && return getfield(A, :stamp)
-    SpArray(getproperty(get_data(A), name), get_sppat(A), false, getfield(A, :stamp))
+    SpArray(getproperty(nonzeros(A), name), get_sppat(A), false, getfield(A, :stamp))
 end
 
 # return zero if the index is not active
@@ -171,7 +110,7 @@ end
     sppat = get_sppat(A)
     @inbounds begin
         index = get_spindices(sppat)[i]
-        index !== -1 ? get_data(A)[index] : zero_recursive(eltype(A))
+        index !== -1 ? nonzeros(A)[index] : zero_recursive(eltype(A))
     end
 end
 
@@ -182,7 +121,7 @@ end
     @inbounds begin
         index = get_spindices(sppat)[i]
         index === -1 && return A
-        get_data(A)[index] = v
+        nonzeros(A)[index] = v
     end
     A
 end
@@ -196,11 +135,11 @@ end
 end
 @inline function Base.getindex(A::SpArray, i::NonzeroIndex)
     @_propagate_inbounds_meta
-    get_data(A)[i.i]
+    nonzeros(A)[i.i]
 end
 @inline function Base.setindex!(A::SpArray, v, i::NonzeroIndex)
     @_propagate_inbounds_meta
-    get_data(A)[i.i] = v
+    nonzeros(A)[i.i] = v
     A
 end
 @inline nonzeroindex(A::AbstractArray, i) = i
@@ -211,7 +150,7 @@ function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
     @assert is_parent(A)
     @assert size(A) == size(sppat)
     n = update_sparsity_pattern!(get_sppat(A), sppat)
-    resize!(get_data(A), n)
+    resize!(nonzeros(A), n)
     A.stamp[] = NaN
     A
 end
@@ -222,40 +161,27 @@ end
 
 Broadcast.BroadcastStyle(::Type{<: SpArray}) = ArrayStyle{SpArray}()
 
-@generated function extract_sppats(args::Vararg{Any, N}) where {N}
-    exps = []
-    for i in 1:N
-        if args[i] <: SpArray
-            push!(exps, :(get_sppat(args[$i])))
-        elseif (args[i] <: AbstractArray) && !(args[i] <: AbstractTensor)
-            push!(exps, :nothing)
-        end
-    end
-    quote
-        tuple($(exps...))
-    end
+function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) where {ElType}
+    N = ndims(bc)
+    bc′ = convert(Broadcasted{DefaultArrayStyle{N}}, bc)
+    similar(bc′, ElType)
 end
-identical(x, ys...) = all(y -> y === x, ys)
 
 _get_sppat(x::SpArray) = get_sppat(x)
-_get_sppat(x::Any) = true
-function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) where {ElType}
-    A = SpArray{ElType}(size(bc))
-    sppat = broadcast(&, map(_get_sppat, bc.args)...)
-    update_sparsity_pattern!(A, sppat)
-    A
+_get_sppat(x::Any) = nothing
+function identical_sppat(args...)
+    sppats = map(_get_sppat, args)
+    all(x->x===first(sppats), sppats)
 end
 
-_getdata(x::SpArray) = get_data(x)
-_getdata(x::Any) = x
+_nonzeros(x::SpArray) = nonzeros(x)
+_nonzeros(x::Any) = x
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bc′ = Broadcast.flatten(bc)
-    if identical(extract_sppats(dest, bc′.args...)...)
-        broadcast!(bc′.f, _getdata(dest), map(_getdata, bc′.args)...)
-    else
-        copyto!(dest, convert(Broadcasted{Nothing}, bc′))
-    end
+    !identical_sppat(dest, bc′.args...) &&
+        error("SpArray: broadcast along with different `SpPattern`s is not supported")
+    broadcast!(bc′.f, _nonzeros(dest), map(_nonzeros, bc′.args)...)
     dest
 end
 

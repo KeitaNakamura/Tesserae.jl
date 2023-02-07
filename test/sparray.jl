@@ -44,13 +44,11 @@ end
     # broadcast
     AA = Array(A)
     BB = Array(B)
-    @test @inferred(A + A)::SpArray{Float64} == AA + AA
-    @test @inferred(A + B)::SpArray{Float64} == map((x,y) -> ifelse(x==0||y==0,0,x+y), AA, BB)
-    @test @inferred(A .* A)::SpArray{Float64} == AA .* AA
-    @test @inferred(A .* B)::SpArray{Float64} == map((x,y) -> ifelse(x==0||y==0,0,x*y), AA, BB)
+    @test @inferred(A + A)::Array{Float64} == AA + AA
+    @test @inferred(A + B)::Array{Float64} == AA + BB
+    @test @inferred(A .* A)::Array{Float64} == AA .* AA
+    @test @inferred(A .* B)::Array{Float64} == AA .* BB
+    @test @inferred(broadcast(iszero, A))::BitArray == @. iszero(AA)
     @test @inferred(broadcast!(*, A, A, A))::SpArray{Float64} == broadcast!(*, AA, AA, AA)
-    @test @inferred(broadcast!(*, A, A, B))::SpArray{Float64} == broadcast!(*, AA, AA, BB)
-    @test A.sppat == A_sppat # sparsity pattern is never changed in `broadcast`
-    @test @inferred(broadcast!(*, A, AA, B, 2))::SpArray{Float64} == broadcast!(*, AA, AA, BB, 2)
-    @test A.sppat == A_sppat # sparsity pattern is never changed in `broadcast`
+    @test_throws Exception broadcast!(*, A, A, B)
 end
