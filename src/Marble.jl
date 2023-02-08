@@ -45,11 +45,9 @@ export
     MPSpace,
     get_mpvalue,
     get_nodeindices,
-    particles_to_grid!,
-    grid_to_particles!,
-    update_sparsity_pattern!,
+    transfer!,
 # Transfer
-    Transfer,
+    TransferAlgorithm,
     DefaultTransfer,
     FLIP,
     PIC,
@@ -68,8 +66,8 @@ export
 
 include("utils.jl")
 include("sparray.jl")
-
 include("lattice.jl")
+
 include("grid.jl")
 include("particles.jl")
 include("Interpolations/mpvalue.jl")

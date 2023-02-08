@@ -2,14 +2,14 @@ using Marble
 using MaterialModels
 
 function DamBreak(
-        interp::Interpolation = LinearWLS(QuadraticBSpline()),
-        transfer::Transfer    = DefaultTransfer();
-        t_stop::Real          = 2.0,  # 5.0
-        dx::Real              = 0.07, # 0.014
-        CFL::Real             = 0.1,
-        showprogress::Bool    = true,
-        outdir::String        = joinpath(@__DIR__, "DamBreak.tmp"),
-        output::Bool          = true,
+        interp::Interpolation  = LinearWLS(QuadraticBSpline()),
+        alg::TransferAlgorithm = DefaultTransfer();
+        t_stop::Real           = 2.0,  # 5.0
+        dx::Real               = 0.07, # 0.014
+        CFL::Real              = 0.1,
+        showprogress::Bool     = true,
+        outdir::String         = joinpath(@__DIR__, "DamBreak.tmp"),
+        output::Bool           = true,
     )
 
     GridState = @NamedTuple begin
@@ -67,7 +67,7 @@ function DamBreak(
 
         update!(space, grid, particles)
 
-        particles_to_grid!(transfer, grid, particles, space, dt)
+        transfer!(grid, particles, space, dt; alg)
 
         # boundary conditions
         slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
@@ -78,7 +78,7 @@ function DamBreak(
             node.v = slip(node.v, Vec(0,1))
         end
 
-        grid_to_particles!(transfer, particles, grid, space, dt)
+        transfer!(particles, grid, space, dt; alg)
 
         Marble.@threaded for p in LazyRows(particles)
             m = p.m

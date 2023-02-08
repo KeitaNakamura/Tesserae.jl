@@ -1,14 +1,14 @@
-abstract type Transfer end
-struct DefaultTransfer <: Transfer end
+abstract type TransferAlgorithm end
+struct DefaultTransfer <: TransferAlgorithm end
 # classical
-struct FLIP  <: Transfer end
-struct PIC   <: Transfer end
+struct FLIP  <: TransferAlgorithm end
+struct PIC   <: TransferAlgorithm end
 # affine transfer
-struct AFLIP <: Transfer end
-struct APIC  <: Transfer end
+struct AFLIP <: TransferAlgorithm end
+struct APIC  <: TransferAlgorithm end
 # Taylor transfer
-struct TFLIP <: Transfer end
-struct TPIC  <: Transfer end
+struct TFLIP <: TransferAlgorithm end
+struct TPIC  <: TransferAlgorithm end
 
 ###########
 # helpers #
@@ -25,7 +25,7 @@ end
 function check_grid(grid::SpGrid, space::MPSpace)
     if get_stamp(grid) != get_stamp(space)
         # check to use @inbounds for `SpArray`
-        error("`update_sparsity_pattern!(grid, space::MPSpace)` must be executed before `particles_to_grid!` and `grid_to_particles!`")
+        error("`update_sparsity_pattern!(grid, space::MPSpace)` must be executed before `transfer!`")
     end
 end
 
@@ -34,11 +34,11 @@ end
 ################
 
 # default
-function particles_to_grid!(grid::Grid, particles::StructVector, space::MPSpace, dt::Real)
-    particles_to_grid!(DefaultTransfer(), grid, particles, space, dt)
+function transfer!(grid::Grid, particles::StructVector, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer())
+    transfer!(alg, grid, particles, space, dt)
 end
 
-function particles_to_grid!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::StructVector, space::MPSpace, dt::Real)
+function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::StructVector, space::MPSpace, dt::Real)
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -76,7 +76,7 @@ function particles_to_grid!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, par
     grid
 end
 
-function particles_to_grid!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
+function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -125,7 +125,7 @@ function particles_to_grid!(::Union{AFLIP, APIC}, grid::Grid, particles::StructV
     grid
 end
 
-function particles_to_grid!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructVector, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructVector, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -167,7 +167,7 @@ function particles_to_grid!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructV
 end
 
 # special default transfer for `WLS` interpolation
-function particles_to_grid!(::DefaultTransfer, grid::Grid, particles::StructVector, space::MPSpace{<: Any, <: Any, <: WLS}, dt::Real)
+function transfer!(::DefaultTransfer, grid::Grid, particles::StructVector, space::MPSpace{<: Any, <: Any, <: WLS}, dt::Real)
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -222,11 +222,11 @@ end
 ################
 
 # default
-function grid_to_particles!(particles::StructVector, grid::Grid, space::MPSpace, dt::Real)
-    grid_to_particles!(DefaultTransfer(), particles, grid, space, dt)
+function transfer!(particles::StructVector, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer())
+    transfer!(alg, particles, grid, space, dt)
 end
 
-function grid_to_particles!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -252,7 +252,7 @@ function grid_to_particles!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::St
     particles
 end
 
-function grid_to_particles!(::Union{PIC, TPIC}, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{PIC, TPIC}, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -275,7 +275,7 @@ function grid_to_particles!(::Union{PIC, TPIC}, particles::StructVector, grid::G
     particles
 end
 
-function affine_grid_to_particles!(particles::StructVector, grid::Grid, space::MPSpace, dt::Real)
+function affine_transfer!(particles::StructVector, grid::Grid, space::MPSpace, dt::Real)
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -295,20 +295,20 @@ function affine_grid_to_particles!(particles::StructVector, grid::Grid, space::M
     particles
 end
 
-function grid_to_particles!(::AFLIP, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
-    affine_grid_to_particles!(particles, grid, space, dt)
-    grid_to_particles!(FLIP(), particles, grid, space, dt)
+function transfer!(::AFLIP, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+    affine_transfer!(particles, grid, space, dt)
+    transfer!(FLIP(), particles, grid, space, dt)
     particles
 end
 
-function grid_to_particles!(::APIC, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
-    affine_grid_to_particles!(particles, grid, space, dt)
-    grid_to_particles!(PIC(), particles, grid, space, dt)
+function transfer!(::APIC, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+    affine_transfer!(particles, grid, space, dt)
+    transfer!(PIC(), particles, grid, space, dt)
     particles
 end
 
 # special default transfer for `WLS` interpolation
-function grid_to_particles!(::DefaultTransfer, particles::StructVector, grid::Grid, space::MPSpace{dim, <: Any, <: WLS}, dt::Real) where {dim}
+function transfer!(::DefaultTransfer, particles::StructVector, grid::Grid, space::MPSpace{dim, <: Any, <: WLS}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)

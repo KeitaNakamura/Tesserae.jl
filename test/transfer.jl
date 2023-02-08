@@ -30,7 +30,7 @@
                 @. particles.σ = zero(SymmetricSecondOrderTensor{3})
                 # transfer
                 update!(space, grid, particles)
-                particles_to_grid!(FLIP(), grid, particles, space, 1)
+                transfer!(grid, particles, space, 1; alg=FLIP())
                 @test all(==(v0), particles.v)
             end
         end
@@ -42,7 +42,7 @@
         for include_near_boundary in (true, false)
             for kernel in (QuadraticBSpline(), CubicBSpline())
                 interp = LinearWLS(kernel)
-                wls, apic, tpic = map((DefaultTransfer(), APIC(), TPIC())) do transfer
+                wls, apic, tpic = map((DefaultTransfer(), APIC(), TPIC())) do alg
                     dt = 0.002
 
                     if include_near_boundary
@@ -59,12 +59,12 @@
 
                     # initialize particles
                     grid.v .= grid_v
-                    grid_to_particles!(transfer, particles, grid, space, dt)
+                    transfer!(particles, grid, space, dt; alg)
 
                     for step in 1:10
                         update!(space, grid, particles)
-                        particles_to_grid!(transfer, grid, particles, space, dt)
-                        grid_to_particles!(transfer, particles, grid, space, dt)
+                        transfer!(grid, particles, space, dt; alg)
+                        transfer!(particles, grid, space, dt; alg)
                     end
 
                     # check if movement of particles is large enough
@@ -90,8 +90,8 @@
         for include_near_boundary in (true, false,)
             @testset "$kernel" for kernel in (QuadraticBSpline(), CubicBSpline())
                 @testset "$interp" for interp in (KernelCorrection(kernel), LinearWLS(kernel))
-                    @testset "$transfer" for transfer in (FLIP(), TPIC(), APIC(), DefaultTransfer())
-                        interp isa KernelCorrection && transfer isa DefaultTransfer && continue
+                    @testset "$alg" for alg in (FLIP(), TPIC(), APIC(), DefaultTransfer())
+                        interp isa KernelCorrection && alg isa DefaultTransfer && continue
 
                         dt = 1.0
 
@@ -109,11 +109,11 @@
 
                         # initialize point states
                         grid.v .= grid_v
-                        if transfer isa FLIP
+                        if alg isa FLIP
                             # use PIC to correctly initialize particle velocity
-                            grid_to_particles!(PIC(), particles, grid, space, dt)
+                            transfer!(particles, grid, space, dt; alg=PIC())
                         else
-                            grid_to_particles!(transfer, particles, grid, space, dt)
+                            transfer!(particles, grid, space, dt; alg)
                         end
                         particles.x .= x₀
 
@@ -136,8 +136,8 @@
 
                         particles_set = map(1:10) do step
                             update!(space, grid, particles)
-                            particles_to_grid!(transfer, grid, particles, space, dt)
-                            grid_to_particles!(transfer, particles, grid, space, dt)
+                            transfer!(grid, particles, space, dt; alg)
+                            transfer!(particles, grid, space, dt; alg)
                             particles.x .= x₀
 
                             # openpvd(pvdfile; append=true) do pvd
@@ -154,7 +154,7 @@
                         end
 
                         for particles in particles_set
-                            if transfer isa FLIP
+                            if alg isa FLIP
                                 # velocity gradient is preserved only if the particle is far from boundary
                                 @test !(∇v₀ ≈ particles.∇v)
                                 # but there is no change after the first step

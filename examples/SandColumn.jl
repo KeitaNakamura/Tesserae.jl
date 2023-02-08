@@ -2,13 +2,13 @@ using Marble
 using MaterialModels
 
 function SandColumn(
-        interp::Interpolation = LinearWLS(QuadraticBSpline()),
-        transfer::Transfer    = DefaultTransfer();
-        dx::Real              = 0.01,
-        CFL::Real             = 1.0,
-        showprogress::Bool    = true,
-        outdir::String        = joinpath(@__DIR__, "SandColumn.tmp"),
-        output::Bool          = true,
+        interp::Interpolation  = LinearWLS(QuadraticBSpline()),
+        alg::TransferAlgorithm = DefaultTransfer();
+        dx::Real               = 0.01,
+        CFL::Real              = 1.0,
+        showprogress::Bool     = true,
+        outdir::String         = joinpath(@__DIR__, "SandColumn.tmp"),
+        output::Bool           = true,
     )
 
     GridState = @NamedTuple begin
@@ -77,7 +77,7 @@ function SandColumn(
 
         update!(space, grid, particles)
 
-        particles_to_grid!(transfer, grid, particles, space, dt)
+        transfer!(grid, particles, space, dt; alg)
 
         # boundary conditions
         @inbounds for node in @view(LazyRows(grid)[:,begin]) # bottom
@@ -95,7 +95,7 @@ function SandColumn(
             node.v = vᵢ - (vᵢ⋅n)*n
         end
 
-        grid_to_particles!(transfer, particles, grid, space, dt)
+        transfer!(particles, grid, space, dt; alg)
         Marble.@threaded for p in LazyRows(particles)
             ∇v = p.∇v
             σ_n = p.σ

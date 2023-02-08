@@ -2,15 +2,15 @@ using Marble
 using MaterialModels
 
 function StripFooting(
-        interp::Interpolation = LinearWLS(QuadraticBSpline()),
-        transfer::Transfer    = DefaultTransfer();
-        ν::Real               = 0.3,
-        dx::Real              = 0.1,
-        CFL::Real             = 1.0,
-        lockingfree::Bool     = false,
-        showprogress::Bool    = true,
-        outdir::String        = joinpath(@__DIR__, "StripFooting.tmp"),
-        output::Bool          = true,
+        interp::Interpolation  = LinearWLS(QuadraticBSpline()),
+        alg::TransferAlgorithm = DefaultTransfer();
+        ν::Real                = 0.3,
+        dx::Real               = 0.1,
+        CFL::Real              = 1.0,
+        lockingfree::Bool      = false,
+        showprogress::Bool     = true,
+        outdir::String         = joinpath(@__DIR__, "StripFooting.tmp"),
+        output::Bool           = true,
     )
 
     GridState = @NamedTuple begin
@@ -89,7 +89,7 @@ function StripFooting(
 
         update!(space, grid, particles)
 
-        particles_to_grid!(transfer, grid, particles, space, dt)
+        transfer!(grid, particles, space, dt; alg)
 
         # boundary conditions
         vertical_load = 0.0
@@ -110,7 +110,7 @@ function StripFooting(
             node.v = vᵢ - (vᵢ⋅n)*n
         end
 
-        grid_to_particles!(transfer, particles, grid, space, dt)
+        transfer!(particles, grid, space, dt; alg)
 
         @. particles.tr∇v = tr(particles.∇v)
         if lockingfree

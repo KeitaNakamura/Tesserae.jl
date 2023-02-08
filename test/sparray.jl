@@ -6,7 +6,7 @@ using Marble: SpPattern, SpArray
 
     sppat = SpPattern(5,5)
     mask = rand(Bool,5,5)
-    update_sparsity_pattern!(sppat, mask)
+    Marble.update_sparsity_pattern!(sppat, mask)
 
     @test sppat == mask
     for (i,I) in enumerate(findall(mask))
@@ -28,7 +28,7 @@ end
     B_sppat = rand(Bool, size(B))
 
     for (x, x_sppat) in ((A, A_sppat), (B, B_sppat))
-        update_sparsity_pattern!(x, x_sppat)
+        Marble.update_sparsity_pattern!(x, x_sppat)
         @test x.sppat == x_sppat
         @test count(x.sppat) == length(x.data)
         for i in eachindex(x)
