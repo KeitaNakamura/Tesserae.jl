@@ -1,5 +1,4 @@
-struct MPSpace{dim, T, I <: Interpolation, C <: CoordinateSystem, MP <: MPValue{dim, T, I}}
-    grid::Grid{dim, T, C}
+struct MPSpace{dim, T, I <: Interpolation, MP <: MPValue{dim, T, I}}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
@@ -8,28 +7,27 @@ struct MPSpace{dim, T, I <: Interpolation, C <: CoordinateSystem, MP <: MPValue{
 end
 
 # constructors
-function MPSpace(interp::Interpolation, grid::Grid{dim, T}, xₚ::AbstractVector{<: Vec}) where {dim, T}
-    sppat = fill(false, size(grid))
+function MPSpace(interp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec}) where {dim, T}
+    sppat = fill(false, size(lattice))
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
-    MPSpace(grid, sppat, mpvals, nodeinds, pointsperblock(grid, xₚ), Ref(NaN))
+    MPSpace(sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), Ref(NaN))
 end
-MPSpace(interp::Interpolation, grid::Grid, pointstate::AbstractVector) = MPSpace(interp, grid, pointstate.x)
+MPSpace(interp::Interpolation, grid::Grid, particles::StructVector) = MPSpace(interp, get_lattice(grid), particles.x)
 
 # helper functions
-gridsize(space::MPSpace) = size(space.grid)
-num_points(space::MPSpace) = length(space.mpvals)
+gridsize(space::MPSpace) = size(space.sppat)
+num_particles(space::MPSpace) = length(space.mpvals)
 get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 get_nodeindices(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
 set_nodeindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
-get_grid(space::MPSpace) = space.grid
 get_sppat(space::MPSpace) = space.sppat
 get_pointsperblock(space::MPSpace) = space.ptspblk
 get_stamp(space::MPSpace) = space.stamp[]
 
-# reorder_pointstate!
-function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
+# reorder_particles!
+function reorder_particles!(particles::Particles, ptspblk::Array)
     inds = Vector{Int}(undef, sum(length, ptspblk))
     cnt = 1
     for blocks in threadsafe_blocks(size(ptspblk))
@@ -42,40 +40,40 @@ function reorder_pointstate!(pointstate::AbstractVector, ptspblk::Array)
             end
         end
     end
-    rest = pointstate[setdiff(1:length(pointstate), inds)]
+    rest = particles[setdiff(1:length(particles), inds)]
     @inbounds begin
-        pointstate[1:length(inds)] .= view(pointstate, inds)
-        pointstate[length(inds)+1:end] .= rest
+        particles[1:length(inds)] .= view(particles, inds)
+        particles[length(inds)+1:end] .= rest
     end
-    pointstate
+    particles
 end
-reorder_pointstate!(pointstate::AbstractVector, space::MPSpace) = reorder_pointstate!(pointstate, get_pointsperblock(space))
+reorder_particles!(particles::Particles, space::MPSpace) = reorder_particles!(particles, get_pointsperblock(space))
 
 # pointsperblock!
-function pointsperblock!(ptspblk::AbstractArray{Vector{Int}}, grid::Grid, xₚ::AbstractVector)
+function pointsperblock!(ptspblk::AbstractArray{Vector{Int}}, lattice::Lattice, xₚ::AbstractVector)
     empty!.(ptspblk)
     @inbounds for p in 1:length(xₚ)
-        I = whichblock(grid, xₚ[p])
+        I = whichblock(lattice, xₚ[p])
         I === nothing || push!(ptspblk[I], p)
     end
     ptspblk
 end
-function pointsperblock(grid::Grid, xₚ::AbstractVector)
-    ptspblk = Array{Vector{Int}}(undef, blocksize(size(grid)))
+function pointsperblock(lattice::Lattice, xₚ::AbstractVector)
+    ptspblk = Array{Vector{Int}}(undef, blocksize(size(lattice)))
     @inbounds for i in eachindex(ptspblk)
         ptspblk[i] = Int[]
     end
-    pointsperblock!(ptspblk, grid, xₚ)
+    pointsperblock!(ptspblk, lattice, xₚ)
 end
-function update_pointsperblock!(space::MPSpace, xₚ::AbstractVector)
-    pointsperblock!(get_pointsperblock(space), get_grid(space), xₚ)
+function update_pointsperblock!(space::MPSpace, lattice::Lattice, xₚ::AbstractVector)
+    pointsperblock!(get_pointsperblock(space), lattice, xₚ)
 end
 
-function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
-    @assert num_points(space) == length(pointstate)
+function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
+    @assert num_particles(space) == length(particles)
 
     space.stamp[] = time()
-    update_pointsperblock!(space, pointstate.x)
+    update_pointsperblock!(space, get_lattice(grid), particles.x)
     #
     # Following `update_mpvalues!` update `space.sppat` and use it when `filter` is given.
     # This consideration of sparsity pattern is necessary in some `Interpolation`s such as `WLS` and `KernelCorrection`.
@@ -95,8 +93,9 @@ function update!(space::MPSpace{dim, T}, pointstate::AbstractVector; filter::Uni
     #
     #   < Sparsity pattern for `MPValue` >     < Sparsity pattern for Grid-state (`SpArray`) >
     #
-    update_mpvalues!(space, pointstate, filter)
+    update_mpvalues!(space, get_lattice(grid), particles, filter)
     update_sparsity_pattern!(space)
+    update_sparsity_pattern!(grid, space)
 
     space
 end
@@ -122,54 +121,55 @@ end
     CartesianIndex(start):CartesianIndex(stop)
 end
 
-function update_mpvalues!(space::MPSpace, pointstate::AbstractVector, filter::Union{Nothing, AbstractArray{Bool}})
+function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles, filter::Union{Nothing, AbstractArray{Bool}})
     # following fields are updated in this function
     # * `space.mpvals`
     # * `space.nodeinds`
 
-    @assert length(pointstate) == num_points(space)
+    @assert length(particles) == num_particles(space)
 
-    grid = get_grid(space)
-    @threaded for p in 1:num_points(space)
+    @threaded for p in 1:num_particles(space)
         mp = get_mpvalue(space, p)
-        pt = LazyRow(pointstate, p)
-        set_nodeindices!(space, p, neighbornodes(mp, grid, pt))
+        pt = LazyRow(particles, p)
+        set_nodeindices!(space, p, neighbornodes(mp, lattice, pt))
         # normally update mpvalues here
-        filter===nothing && update!(get_mpvalue(space, p), grid, AllTrue(), get_nodeindices(space, p), pt)
+        filter===nothing && update!(get_mpvalue(space, p), lattice, AllTrue(), get_nodeindices(space, p), pt)
     end
 
     # handle excluded domain
     if filter !== nothing
         sppat = get_sppat(space)
         sppat .= filter
-        eachpoint_blockwise_parallel(space) do p
+        parallel_each_particle(space) do p
             @inbounds begin
-                inds = neighbornodes(grid, pointstate.x[p], 1)
+                inds = neighbornodes(lattice, particles.x[p], 1)
                 sppat[inds] .= true
             end
         end
         # update mpvalues after completely updating `sppat`
-        # but this `sppat` is not used for `gridstate`
-        @threaded for p in 1:num_points(space)
-            update!(get_mpvalue(space, p), grid, sppat, get_nodeindices(space, p), LazyRow(pointstate, p))
+        # but this `sppat` is not used for `SpArray` for grid
+        @threaded for p in 1:num_particles(space)
+            update!(get_mpvalue(space, p), lattice, sppat, get_nodeindices(space, p), LazyRow(particles, p))
         end
     end
 
     space
 end
 
-function update_sparsity_pattern!(gridstate::StructSpArray, space::MPSpace)
-    @assert size(gridstate) == gridsize(space)
-    update_sparsity_pattern!(gridstate, get_sppat(space))
-    set_stamp!(gridstate, get_stamp(space))
-    gridstate
+function update_sparsity_pattern!(grid::SpGrid, space::MPSpace)
+    @assert size(grid) == gridsize(space)
+    update_sparsity_pattern!(grid, get_sppat(space))
+    set_stamp!(grid, get_stamp(space))
+    grid
 end
+update_sparsity_pattern!(grid::Grid, space::MPSpace) = grid
 
-function eachpoint_blockwise_parallel(f, space::MPSpace)
+# block-wise parallel computation
+function parallel_each_particle(f, space::MPSpace)
     for blocks in threadsafe_blocks(blocksize(gridsize(space)))
         pointsperblock = collect(Iterators.filter(!isempty, Iterators.map(blkidx->get_pointsperblock(space)[blkidx], blocks)))
-        @threaded for pointindices in pointsperblock
-            foreach(f, pointindices)
+        @threaded for pinds in pointsperblock
+            foreach(f, pinds)
         end
     end
 end

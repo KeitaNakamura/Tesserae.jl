@@ -23,14 +23,12 @@ export
     CoordinateSystem,
     PlaneStrain,
     Axisymmetric,
-# grid
-    Grid,
-    gridsteps,
-    gridaxes,
-    gridsystem,
+# lattice
+    Lattice,
+    spacing,
     neighbornodes,
-    generate_gridstate,
-    generate_pointstate,
+    generate_grid,
+    generate_particles,
 # interpolations
     update!,
     num_nodes,
@@ -47,8 +45,8 @@ export
     MPSpace,
     get_mpvalue,
     get_nodeindices,
-    point_to_grid!,
-    grid_to_point!,
+    particles_to_grid!,
+    grid_to_particles!,
     update_sparsity_pattern!,
 # Transfer
     Transfer,
@@ -71,8 +69,9 @@ export
 include("utils.jl")
 include("sparray.jl")
 
-# core
+include("lattice.jl")
 include("grid.jl")
+include("particles.jl")
 include("Interpolations/mpvalue.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
@@ -80,11 +79,8 @@ include("Interpolations/polybasis.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
 include("mpspace.jl")
-
-include("states.jl")
 include("transfer.jl")
 
-# io
 include("vtk.jl")
 
 end # module

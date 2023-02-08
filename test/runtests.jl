@@ -6,10 +6,9 @@ using ReadVTK
 using NaturalSort
 
 include("sparray.jl")
-include("grid.jl")
+include("lattice.jl")
+include("particles.jl")
 include("interpolations.jl")
-
-include("pointstate.jl")
 include("transfer.jl")
 
 const FIX_RESULTS = false

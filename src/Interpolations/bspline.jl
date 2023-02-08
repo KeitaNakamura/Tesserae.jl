@@ -34,10 +34,10 @@ get_supportlength(::BSpline{4}) = 2.5
     (2*get_supportlength(bspline))^dim
 end
 
-@inline function neighbornodes(bsp::BSpline, grid::Grid, x::Vec)
-    neighbornodes(grid, x, get_supportlength(bsp))
+@inline function neighbornodes(bsp::BSpline, lattice::Lattice, x::Vec)
+    neighbornodes(lattice, x, get_supportlength(bsp))
 end
-@inline neighbornodes(bsp::BSpline, grid::Grid, pt) = neighbornodes(bsp, grid, pt.x)
+@inline neighbornodes(bsp::BSpline, lattice::Lattice, pt) = neighbornodes(bsp, lattice, pt.x)
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)
@@ -61,14 +61,14 @@ function value(::BSpline{4}, ξ::Real)
     ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
 @inline value(bspline::BSpline, ξ::Vec) = prod(value.(bspline, ξ))
-function value(bspline::BSpline, grid::Grid, I::CartesianIndex, xp::Vec)
+function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec)
     @_propagate_inbounds_meta
-    xi = grid[I]
-    dx⁻¹ = gridsteps_inv(grid)
-    ξ = (xp - xi) .* dx⁻¹
+    xi = lattice[I]
+    dx⁻¹ = spacing_inv(lattice)
+    ξ = (xp - xi) * dx⁻¹
     value(bspline, ξ)
 end
-@inline value(bspline::BSpline, grid::Grid, I::CartesianIndex, pt) = value(bspline, grid, I, pt.x)
+@inline value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, pt) = value(bspline, lattice, I, pt.x)
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
@@ -107,11 +107,11 @@ function value(spline::BSpline{3}, ξ::Real, pos::Int)::typeof(ξ)
     end
 end
 @inline value(bspline::BSpline, ξ::Vec, pos::Tuple{Vararg{Int}}) = prod(value.(bspline, ξ, pos))
-function value(bspline::BSpline, grid::Grid, I::CartesianIndex, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
-    xi = grid[I]
-    dx⁻¹ = gridsteps_inv(grid)
-    ξ = (xp - xi) .* dx⁻¹
-    value(bspline, ξ, node_position(grid, I))
+function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
+    xi = lattice[I]
+    dx⁻¹ = spacing_inv(lattice)
+    ξ = (xp - xi) * dx⁻¹
+    value(bspline, ξ, node_position(lattice, I))
 end
 
 @inline function node_position(ax::Vector, i::Int)
@@ -119,7 +119,7 @@ end
     right = lastindex(ax) - i
     ifelse(left < right, left, -right)
 end
-node_position(grid::Grid, index::CartesianIndex) = map(node_position, gridaxes(grid), Tuple(index))
+node_position(lattice::Lattice, index::CartesianIndex) = map(node_position, get_axes(lattice), Tuple(index))
 
 
 fract(x) = x - floor(x)
@@ -151,20 +151,20 @@ end
     grads = V((-0.5,1.5,-1.5,0.5))*ξ² + V((2,-2,-2,2))*ξ + V((-2,0,0,2))
     vals, grads
 end
-@generated function values_gradients(bspline::BSpline, grid::Grid{dim}, xp::Vec{dim}) where {dim}
+@generated function values_gradients(bspline::BSpline, lattice::Lattice{dim}, xp::Vec{dim}) where {dim}
     quote
         @_inline_meta
-        dx⁻¹ = gridsteps_inv(grid)
-        x = (xp - first(grid)) .* dx⁻¹
+        dx⁻¹ = spacing_inv(lattice)
+        x = (xp - first(lattice)) * dx⁻¹
         vals_grads = @ntuple $dim d -> values_gradients(bspline, x[d])
         vals  = getindex.(vals_grads, 1)
-        grads = getindex.(vals_grads, 2)
+        grads = getindex.(vals_grads, 2) .* dx⁻¹
         Tuple(simd_otimes(vals...)), Vec.((@ntuple $dim i -> begin
-                                               Tuple(simd_otimes((@ntuple $dim d -> d==i ? grads[d]*dx⁻¹[d] : vals[d])...))
+                                               Tuple(simd_otimes((@ntuple $dim d -> d==i ? grads[d] : vals[d])...))
                                            end)...)
     end
 end
-@inline values_gradients(bspline::BSpline, grid::Grid, pt) = values_gradients(bspline, grid, pt.x)
+@inline values_gradients(bspline::BSpline, lattice::Lattice, pt) = values_gradients(bspline, lattice, pt.x)
 
 
 struct BSplineValue{dim, T, order} <: MPValue{dim, T, BSpline{order}}
@@ -178,23 +178,23 @@ function MPValue{dim, T}(::BSpline{order}) where {dim, T, order}
     BSplineValue{dim, T, order}(N, ∇N)
 end
 
-@inline function update!(mp::BSplineValue, ::NearBoundary{false}, grid::Grid, ::AllTrue, nodeinds::CartesianIndices, xp::Vec)
+@inline function update!(mp::BSplineValue, ::NearBoundary{false}, lattice::Lattice, ::AllTrue, nodeinds::CartesianIndices, xp::Vec)
     n = length(nodeinds)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
-    wᵢ, ∇wᵢ = values_gradients(get_kernel(mp), grid, xp)
+    wᵢ, ∇wᵢ = values_gradients(get_kernel(mp), lattice, xp)
     mp.N .= wᵢ
     mp.∇N .= ∇wᵢ
     mp
 end
 
-function update!(mp::BSplineValue, ::NearBoundary{true}, grid::Grid, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, xp::Vec)
+function update!(mp::BSplineValue, ::NearBoundary{true}, lattice::Lattice, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, xp::Vec)
     n = length(nodeinds)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
     F = get_kernel(mp)
     @inbounds for (j, i) in enumerate(nodeinds)
-        mp.∇N[j], mp.N[j] = gradient(x->value(F,grid,i,x,:steffen), xp, :all) .* sppat[i]
+        mp.∇N[j], mp.N[j] = gradient(x->value(F,lattice,i,x,:steffen), xp, :all) .* sppat[i]
     end
     mp
 end

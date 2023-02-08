@@ -1,218 +1,60 @@
-####################
-# CoordinateSystem #
-####################
-
-abstract type CoordinateSystem end
-struct NormalSystem <: CoordinateSystem end
-struct PlaneStrain  <: CoordinateSystem end
-struct Axisymmetric <: CoordinateSystem end
-coordinate_system(::NormalSystem, ::Val{1}) = NormalSystem()
-coordinate_system(::NormalSystem, ::Val{2}) = PlaneStrain()
-coordinate_system(::PlaneStrain,  ::Val{2}) = PlaneStrain()
-coordinate_system(::Axisymmetric, ::Val{2}) = Axisymmetric()
-coordinate_system(::NormalSystem, ::Val{3}) = NormalSystem()
-
-#############
-# AxisArray #
-#############
-
-struct AxisArray{dim, T, V <:AbstractVector{T}} <: AbstractArray{NTuple{dim, T}, dim}
-    axes::NTuple{dim, V}
-end
-get_axes(A::AxisArray) = A.axes
-Base.size(A::AxisArray) = map(length, A.axes)
-@generated function Base.getindex(A::AxisArray{dim}, i::Vararg{Int, dim}) where {dim}
-    quote
-        @_inline_meta
-        @_propagate_inbounds_meta
-        @ntuple $dim d -> A.axes[d][i[d]]
-    end
-end
-@inline function Base.getindex(A::AxisArray{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
-    @_propagate_inbounds_meta
-    AxisArray(map(getindex, A.axes, ranges))
-end
-
 ########
 # Grid #
 ########
 
-"""
-    Grid(axes::AbstractVector...)
-    Grid(T, axes::AbstractVector...)
+const Grid{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I}
 
-Construct `Grid` by `axes`.
-`axes` must have `step` function, i.e., each axis should be linearly spaced.
+generate_grid(::Type{GridState}, dx::Real, minmax::Tuple{Real, Real}...) where {GridState} = generate_grid(GridState, NormalSystem(), dx, minmax...)
 
-# Examples
-```jldoctest
-julia> Grid(range(0, 3, step = 1.0), range(1, 4, step = 1.0))
-4×4 Grid{2, Float64, PlaneStrain}:
- [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
- [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
- [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
- [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
-```
-"""
-struct Grid{dim, T, C <: Union{Nothing, CoordinateSystem}} <: AbstractArray{Vec{dim, T}, dim}
-    axisarray::AxisArray{dim, T, Vector{T}}
-    gridsteps::NTuple{dim, T}
-    gridsteps_inv::NTuple{dim, T}
-    system::C
-end
+get_lattice(grid::Grid) = grid.x
+get_system(grid::Grid) = get_system(get_lattice(grid))
+spacing(grid::Grid) = spacing(get_lattice(grid))
 
-get_axisarray(x::Grid) = x.axisarray
-Base.size(x::Grid) = size(get_axisarray(x))
-# grid helpers
-gridsteps(x::Grid) = x.gridsteps
-gridsteps(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps(x)[i])
-gridsteps_inv(x::Grid) = x.gridsteps_inv
-gridsteps_inv(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridsteps_inv(x)[i])
-gridaxes(x::Grid) = get_axes(x.axisarray)
-gridaxes(x::Grid, i::Int) = (@_propagate_inbounds_meta; gridaxes(x)[i])
-gridsystem(x::Grid) = x.system
+##########
+# SpGrid #
+##########
 
-function Grid(::Type{T}, system::CoordinateSystem, axes::NTuple{dim, AbstractVector}) where {T, dim}
-    @assert all(map(issorted, axes))
-    axisarray = AxisArray(map(Vector{T}, axes))
-    dx = map(step, axes)
-    dx⁻¹ = map(inv, dx)
-    Grid(axisarray, map(T, dx), map(T, dx⁻¹), coordinate_system(system, Val(dim)))
-end
-Grid(::Type{T}, axes::AbstractVector...) where {T} = Grid(T, NormalSystem(), axes)
-Grid(system::CoordinateSystem, axes::AbstractVector...) = Grid(Float64, system, axes)
-Grid(axes::AbstractVector...) = Grid(Float64, NormalSystem(), axes)
+const SpGrid{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I}
 
-@inline function Base.getindex(grid::Grid{dim}, i::Vararg{Int, dim}) where {dim}
-    @boundscheck checkbounds(grid, i...)
-    @inbounds Vec(get_axisarray(grid)[i...])
-end
-@inline function Base.getindex(grid::Grid{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
-    @boundscheck checkbounds(grid, ranges...)
-    @inbounds Grid(get_axisarray(grid)[ranges...], gridsteps(grid), gridsteps_inv(grid), gridsystem(grid))
-end
-
-@generated function isinside(x::Vec{dim}, grid::Grid{dim}) where {dim}
+# spgrid
+@generated function generate_grid(::Type{GridState}, system::CoordinateSystem, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridState, dim}
+    fieldname(GridState, 1) == :x || return :(error("generate_grid: first field name must be `:x`"))
+    V = fieldtype(GridState, 1)
+    V <: Vec{dim} || return :(error("generate_grid: `fieldtype` of `:x` must be `<: Vec{$dim}`"))
+    exps = [:(SpArray{$T}(sppat, stamp)) for T in fieldtypes(GridState)[2:end]]
     quote
-        @_inline_meta
-        @nexprs $dim i -> start_i = gridaxes(grid, i)[begin]
-        @nexprs $dim i -> stop_i  = gridaxes(grid, i)[end]
-        @nall $dim i -> start_i ≤ x[i] ≤ stop_i
+        lattice = Lattice($(eltype(V)), system, dx, minmax...)
+        sppat = SpPattern(size(lattice))
+        stamp = Ref(NaN)
+        StructArray{GridState}(tuple(lattice, $(exps...)))
     end
 end
 
-"""
-    neighbornodes(grid, x::Vec, h)
+get_stamp(A::SpGrid) = get_stamp(getproperty(A, 2))
+set_stamp!(A::SpGrid, v) = set_stamp!(getproperty(A, 2), v)
+get_sppat(A::SpGrid) = get_sppat(getproperty(A, 2))
 
-Return `CartesianIndices` storing neighboring node indices around `x`.
-`h` is a range for searching and its unit is `gridsteps` `dx`.
-In 1D, for example, the searching range becomes `x ± h*dx`.
+# fillzero!
+fillzero!(A::SpGrid) = (StructArrays.foreachfield(_fillzero!, A); A)
+_fillzero!(x::Lattice) = x
+_fillzero!(x::AbstractArray) = fillzero!(x)
 
-# Examples
-```jldoctest
-julia> grid = Grid(0.0:1.0:5.0)
-6-element Grid{1, Float64, Marble.OneDimensional}:
- [0.0]
- [1.0]
- [2.0]
- [3.0]
- [4.0]
- [5.0]
-
-julia> neighbornodes(grid, Vec(1.5), 1)
-2-element CartesianIndices{1, Tuple{UnitRange{Int64}}}:
- CartesianIndex(2,)
- CartesianIndex(3,)
-
-julia> neighbornodes(grid, Vec(1.5), 2)
-4-element CartesianIndices{1, Tuple{UnitRange{Int64}}}:
- CartesianIndex(1,)
- CartesianIndex(2,)
- CartesianIndex(3,)
- CartesianIndex(4,)
-```
-"""
-@inline function neighbornodes(grid::Grid{dim}, x::Vec{dim}, h) where {dim}
-    isinside(x, grid) || return CartesianIndices(nfill(1:0, Val(dim)))
-    dx⁻¹ = gridsteps_inv(grid)
-    xmin = first(grid)
-    ξ = (x - xmin) .* dx⁻¹
-    T = eltype(ξ)
-    # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
-    # This means `neighbornodes` doesn't include bounds of range.
-    _neighborindices(size(grid), ξ, @. T(h) - sqrt(eps(T)))
+# update_sparsity_pattern!
+function update_sparsity_pattern!(A::SpGrid, sppat::AbstractArray{Bool})
+    @assert size(A) == size(sppat)
+    set_stamp!(A, NaN)
+    n = update_sparsity_pattern!(get_sppat(A), sppat)
+    StructArrays.foreachfield(a->_resize_nonzeros!(a,n), A)
+    A
 end
-@inline _neighborindices(dims::Dims, ξ::Vec, h::Real) = _neighborindices(SVec(dims), SVec(ξ), h)
-@inline _neighborindices(dims::Dims, ξ::Vec, h::Vec) = _neighborindices(SVec(dims), SVec(ξ), SVec(h))
-@inline function _neighborindices(dims::SVec{dim}, ξ::SVec{dim}, h) where {dim}
-    imin = Tuple(max(convert(SVec{dim, Int},  ceil(ξ - h)) + 1, 1))
-    imax = Tuple(min(convert(SVec{dim, Int}, floor(ξ + h)) + 1, dims))
-    CartesianIndices(UnitRange.(imin, imax))
+_resize_nonzeros!(x::Lattice, n) = x
+_resize_nonzeros!(x::SpArray, n) = resize!(nonzeros(x), n)
+
+# unsafe becuase the returned index can be -1 if the SpPattern is not correctly updated
+@inline function unsafe_nonzeroindex(A::SpGrid, i)
+    @boundscheck checkbounds(A, i)
+    @inbounds NonzeroIndex(get_spindices(get_sppat(A))[i])
 end
 
-"""
-    Marble.whichcell(grid, x::Vec)
-
-Return cell index where `x` locates.
-
-# Examples
-```jldoctest
-julia> grid = Grid(0.0:1.0:5.0, 0.0:1.0:5.0)
-6×6 Grid{2, Float64, PlaneStrain}:
- [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
- [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
- [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
- [3.0, 0.0]  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]  [3.0, 5.0]
- [4.0, 0.0]  [4.0, 1.0]  [4.0, 2.0]  [4.0, 3.0]  [4.0, 4.0]  [4.0, 5.0]
- [5.0, 0.0]  [5.0, 1.0]  [5.0, 2.0]  [5.0, 3.0]  [5.0, 4.0]  [5.0, 5.0]
-
-julia> Marble.whichcell(grid, Vec(1.5, 1.5))
-CartesianIndex(2, 2)
-```
-"""
-@inline function whichcell(grid::Grid, x::Vec)
-    isinside(x, grid) || return nothing
-    dx⁻¹ = gridsteps_inv(grid)
-    xmin = first(grid)
-    ξ = Tuple((x - xmin) .* dx⁻¹)
-    CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
-end
-
-"""
-    Marble.whichblock(grid, x::Vec)
-
-Return block index where `x` locates.
-The unit block size is `2^$BLOCK_UNIT` cells.
-
-# Examples
-```jldoctest
-julia> grid = Grid(0.0:1.0:10.0, 0.0:1.0:10.0)
-11×11 Grid{2, Float64, PlaneStrain}:
- [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
- [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
- [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]
- [3.0, 0.0]   [3.0, 1.0]   [3.0, 2.0]      [3.0, 9.0]   [3.0, 10.0]
- [4.0, 0.0]   [4.0, 1.0]   [4.0, 2.0]      [4.0, 9.0]   [4.0, 10.0]
- [5.0, 0.0]   [5.0, 1.0]   [5.0, 2.0]   …  [5.0, 9.0]   [5.0, 10.0]
- [6.0, 0.0]   [6.0, 1.0]   [6.0, 2.0]      [6.0, 9.0]   [6.0, 10.0]
- [7.0, 0.0]   [7.0, 1.0]   [7.0, 2.0]      [7.0, 9.0]   [7.0, 10.0]
- [8.0, 0.0]   [8.0, 1.0]   [8.0, 2.0]      [8.0, 9.0]   [8.0, 10.0]
- [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]      [9.0, 9.0]   [9.0, 10.0]
- [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
-
-julia> Marble.whichblock(grid, Vec(8.5, 1.5))
-CartesianIndex(2, 1)
-```
-"""
-@inline function whichblock(grid::Grid, x::Vec)
-    I = whichcell(grid, x)
-    I === nothing && return nothing
-    CartesianIndex(@. (I.I-1) >> BLOCK_UNIT + 1)
-end
-
-blocksize(gridsize::Tuple{Vararg{Int}}) = (ncells = gridsize .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
-
-function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
-    starts = AxisArray(nfill([1,2], Val(dim)))
-    vec(map(st -> map(CartesianIndex{dim}, AxisArray(StepRange.(st, 2, blocksize))), starts))
-end
+Base.show(io::IO, mime::MIME"text/plain", x::SpGrid) = show(io, mime, ShowSpArray(x))
+Base.show(io::IO, x::SpGrid) = show(io, ShowSpArray(x))

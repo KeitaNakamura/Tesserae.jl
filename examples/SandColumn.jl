@@ -12,16 +12,17 @@ function SandColumn(
     )
 
     GridState = @NamedTuple begin
+        x::Vec{2, Float64}
         m::Float64
         v::Vec{2, Float64}
         vⁿ::Vec{2, Float64}
     end
-    PointState = @NamedTuple begin
+    ParticleState = @NamedTuple begin
         m::Float64
         V::Float64
+        r::Float64
         x::Vec{2, Float64}
         v::Vec{2, Float64}
-        r::Vec{2, Float64}
         b::Vec{2, Float64}
         σ::SymmetricSecondOrderTensor{3, Float64, 6}
         ϵ::SymmetricSecondOrderTensor{3, Float64, 6}
@@ -38,25 +39,24 @@ function SandColumn(
     ν = 0.333
     E = 1e6
 
-    grid = Grid(0:dx:1.0, 0:dx:1.0)
-    gridstate = generate_gridstate(GridState, grid)
-    pointstate = generate_pointstate((x,y) -> 0.4<x<0.6 && y<h, PointState, grid)
-    space = MPSpace(interp, grid, pointstate.x)
+    grid = generate_grid(GridState, dx, (0,1), (0,1))
+    particles = generate_particles((x,y) -> 0.4<x<0.6 && y<h, ParticleState, grid)
+    space = MPSpace(interp, grid, particles)
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c=0, ϕ, ψ, tensioncutoff=0)
 
-    for p in 1:length(pointstate)
-        y = pointstate.x[p][2]
+    for p in LazyRows(particles)
+        y = p.x[2]
         σ_y = -ρ₀ * g * (h - y)
         σ_x = σ_y * ν / (1 - ν)
-        pointstate.σ[p] = (@Mat [σ_x 0.0 0.0
-                                 0.0 σ_y 0.0
-                                 0.0 0.0 σ_x]) |> symmetric
+        p.σ = (@Mat [σ_x 0.0 0.0
+                     0.0 σ_y 0.0
+                     0.0 0.0 σ_x]) |> symmetric
     end
-    @. pointstate.m = ρ₀ * pointstate.V
-    @. pointstate.b = Vec(0.0, -g)
+    @. particles.m = ρ₀ * particles.V
+    @. particles.b = Vec(0.0, -g)
 
-    @show length(pointstate)
+    @show length(particles)
 
     # Outputs
     mkpath(outdir)
@@ -69,19 +69,18 @@ function SandColumn(
     ts_output = collect(range(t, t_stop; length=num_data))
     while t < t_stop
 
-        dt = minimum(pointstate) do p
+        dt = CFL * minimum(LazyRows(particles)) do p
             ρ = p.m / p.V
             vc = @matcalc(:soundspeed; elastic.K, elastic.G, ρ)
-            CFL * minimum(gridsteps(grid)) / vc
+            spacing(grid) / vc
         end
 
-        update!(space, pointstate)
-        update_sparsity_pattern!(gridstate, space)
+        update!(space, grid, particles)
 
-        point_to_grid!(transfer, gridstate, pointstate, space, dt)
+        particles_to_grid!(transfer, grid, particles, space, dt)
 
         # boundary conditions
-        @inbounds for node in @view(LazyRows(gridstate)[:,begin]) # bottom
+        @inbounds for node in @view(LazyRows(grid)[:,begin]) # bottom
             n = Vec(0,-1)
             μ = 0.2
             vᵢ = node.v
@@ -90,16 +89,17 @@ function SandColumn(
             v̄ₜ = norm(vₜ)
             node.v = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * (vₜ/v̄ₜ))
         end
-        @inbounds for node in @view(LazyRows(gridstate)[[begin,end],:]) # left and right
+        @inbounds for node in @view(LazyRows(grid)[[begin,end],:]) # left and right
             n = Vec(1,0) # this is ok for left side as well
             vᵢ = node.v
             node.v = vᵢ - (vᵢ⋅n)*n
         end
 
-        grid_to_point!(transfer, pointstate, gridstate, space, dt)
-        Marble.@threaded for p in eachindex(pointstate)
-            ∇v = pointstate.∇v[p]
-            σ_n = pointstate.σ[p]
+        grid_to_particles!(transfer, particles, grid, space, dt)
+        Marble.@threaded for p in LazyRows(particles)
+            ∇v = p.∇v
+            σ_n = p.σ
+
             dϵ = symmetric(∇v*dt)
             ret = @matcalc(:stressall, model; σ=σ_n, dϵ)
             dσᴶ = ret.σ - σ_n
@@ -108,9 +108,10 @@ function SandColumn(
                 # recalculate strain to prevent excessive volume change
                 dϵ = @matcalc(:strain, model.elastic; σ=σ-σ_n)
             end
-            pointstate.σ[p] = σ
-            pointstate.ϵ[p] += dϵ
-            pointstate.V[p] *= exp(tr(dϵ))
+
+            p.σ = σ
+            p.ϵ += dϵ
+            p.V *= exp(tr(dϵ))
         end
 
         t += dt
@@ -119,8 +120,8 @@ function SandColumn(
             popfirst!(ts_output)
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, num_data-length(ts_output))) do vtm
-                    openvtk(vtm, pointstate.x) do vtk
-                        vtk["velocity"] = pointstate.v
+                    openvtk(vtm, particles.x) do vtk
+                        vtk["velocity"] = particles.v
                     end
                     pvd[t] = vtm
                 end

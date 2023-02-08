@@ -14,18 +14,18 @@ struct TPIC  <: Transfer end
 # helpers #
 ###########
 
-function check_states(gridstate::StructArray, pointstate::AbstractVector, space::MPSpace)
-    @assert length(pointstate) == num_points(space)
-    @assert size(gridstate) == gridsize(space)
-    check_gridstate(gridstate, space)
+function check_grid_particles(grid::Grid, particles::AbstractVector, space::MPSpace)
+    @assert length(particles) == num_particles(space)
+    @assert size(grid) == gridsize(space)
+    check_grid(grid, space)
 end
 
-function check_gridstate(gridstate::StructArray, space::MPSpace)
+function check_grid(grid::Grid, space::MPSpace)
 end
-function check_gridstate(gridstate::StructSpArray, space::MPSpace)
-    if get_stamp(gridstate) != get_stamp(space)
+function check_grid(grid::SpGrid, space::MPSpace)
+    if get_stamp(grid) != get_stamp(space)
         # check to use @inbounds for `SpArray`
-        error("`update_sparsity_pattern!(gridstate::SpArray, space::MPSpace)` must be executed before `point_to_grid!` and `grid_to_point!`")
+        error("`update_sparsity_pattern!(grid, space::MPSpace)` must be executed before `particles_to_grid!` and `grid_to_particles!`")
     end
 end
 
@@ -34,26 +34,25 @@ end
 ################
 
 # default
-function point_to_grid!(gridstate::StructArray, pointstate::StructVector, space::MPSpace, dt::Real)
-    point_to_grid!(DefaultTransfer(), gridstate, pointstate, space, dt)
+function particles_to_grid!(grid::Grid, particles::StructVector, space::MPSpace, dt::Real)
+    particles_to_grid!(DefaultTransfer(), grid, particles, space, dt)
 end
 
-function point_to_grid!(::Union{DefaultTransfer, FLIP, PIC}, gridstate::StructArray, pointstate::StructVector, space::MPSpace, dt::Real)
-    check_states(gridstate, pointstate, space)
+function particles_to_grid!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::StructVector, space::MPSpace, dt::Real)
+    check_grid_particles(grid, particles, space)
 
-    grid = get_grid(space)
-    fillzero!(gridstate.m)
-    fillzero!(gridstate.vⁿ)
-    fillzero!(gridstate.v)
+    fillzero!(grid.m)
+    fillzero!(grid.vⁿ)
+    fillzero!(grid.v)
 
-    eachpoint_blockwise_parallel(space) do p
+    parallel_each_particle(space) do p
         @inbounds begin
-            xₚ = pointstate.x[p]
-            mₚ = pointstate.m[p]
-            Vₚ = pointstate.V[p]
-            vₚ = pointstate.v[p]
-            σₚ = pointstate.σ[p]
-            bₚ = pointstate.b[p]
+            xₚ = particles.x[p]
+            mₚ = particles.m[p]
+            Vₚ = particles.V[p]
+            vₚ = particles.v[p]
+            σₚ = particles.σ[p]
+            bₚ = particles.b[p]
 
             Vₚσₚ = Vₚ * σₚ
             mₚbₚ = mₚ * bₚ
@@ -62,43 +61,42 @@ function point_to_grid!(::Union{DefaultTransfer, FLIP, PIC}, gridstate::StructAr
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
-                f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                k = unsafe_nonzeroindex(gridstate, i)
-                gridstate.m[k]  += N*mₚ
-                gridstate.vⁿ[k] += N*mₚvₚ
-                gridstate.v[k]  += dt*f
+                f = -stress_to_force(get_system(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                k = unsafe_nonzeroindex(grid, i)
+                grid.m[k]  += N*mₚ
+                grid.vⁿ[k] += N*mₚvₚ
+                grid.v[k]  += dt*f
             end
         end
     end
 
-    @. gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
-    @. gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
+    @. grid.v = ((grid.vⁿ + grid.v) / grid.m) * !iszero(grid.m)
+    @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
 
-    gridstate
+    grid
 end
 
-function point_to_grid!(::Union{AFLIP, APIC}, gridstate::StructArray, pointstate::StructVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
-    check_states(gridstate, pointstate, space)
+function particles_to_grid!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
+    check_grid_particles(grid, particles, space)
 
-    grid = get_grid(space)
-    fillzero!(gridstate.m)
-    fillzero!(gridstate.vⁿ)
-    fillzero!(gridstate.v)
+    fillzero!(grid.m)
+    fillzero!(grid.vⁿ)
+    fillzero!(grid.v)
 
-    eachpoint_blockwise_parallel(space) do p
+    parallel_each_particle(space) do p
         @inbounds begin
-            xₚ = pointstate.x[p]
-            mₚ = pointstate.m[p]
-            Vₚ = pointstate.V[p]
-            vₚ = pointstate.v[p]
-            Bₚ = pointstate.B[p]
-            σₚ = pointstate.σ[p]
-            bₚ = pointstate.b[p]
+            xₚ = particles.x[p]
+            mₚ = particles.m[p]
+            Vₚ = particles.V[p]
+            vₚ = particles.v[p]
+            Bₚ = particles.B[p]
+            σₚ = particles.σ[p]
+            bₚ = particles.b[p]
 
             Dₚ = zero(Mat{dim, dim, T})
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
-                xᵢ = grid[i]
+                xᵢ = grid.x[i]
                 N = mp.N[j]
                 Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
             end
@@ -111,39 +109,38 @@ function point_to_grid!(::Union{AFLIP, APIC}, gridstate::StructArray, pointstate
 
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
-                xᵢ = grid[i]
-                f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                k = unsafe_nonzeroindex(gridstate, i)
-                gridstate.m[k]  += N*mₚ
-                gridstate.vⁿ[k] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
-                gridstate.v[k]  += dt*f
+                xᵢ = grid.x[i]
+                f = -stress_to_force(get_system(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                k = unsafe_nonzeroindex(grid, i)
+                grid.m[k]  += N*mₚ
+                grid.vⁿ[k] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
+                grid.v[k]  += dt*f
             end
         end
     end
 
-    @. gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
-    @. gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
+    @. grid.v = ((grid.vⁿ + grid.v) / grid.m) * !iszero(grid.m)
+    @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
 
-    gridstate
+    grid
 end
 
-function point_to_grid!(::Union{TFLIP, TPIC}, gridstate::StructArray, pointstate::StructVector, space::MPSpace{dim}, dt::Real) where {dim}
-    check_states(gridstate, pointstate, space)
+function particles_to_grid!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructVector, space::MPSpace{dim}, dt::Real) where {dim}
+    check_grid_particles(grid, particles, space)
 
-    grid = get_grid(space)
-    fillzero!(gridstate.m)
-    fillzero!(gridstate.vⁿ)
-    fillzero!(gridstate.v)
+    fillzero!(grid.m)
+    fillzero!(grid.vⁿ)
+    fillzero!(grid.v)
 
-    eachpoint_blockwise_parallel(space) do p
+    parallel_each_particle(space) do p
         @inbounds begin
-            xₚ  = pointstate.x[p]
-            mₚ  = pointstate.m[p]
-            Vₚ  = pointstate.V[p]
-            vₚ  = pointstate.v[p]
-            ∇vₚ = pointstate.∇v[p]
-            σₚ  = pointstate.σ[p]
-            bₚ  = pointstate.b[p]
+            xₚ  = particles.x[p]
+            mₚ  = particles.m[p]
+            Vₚ  = particles.V[p]
+            vₚ  = particles.v[p]
+            ∇vₚ = particles.∇v[p]
+            σₚ  = particles.σ[p]
+            bₚ  = particles.b[p]
 
             Vₚσₚ = Vₚ * σₚ
             mₚbₚ = mₚ * bₚ
@@ -153,39 +150,38 @@ function point_to_grid!(::Union{TFLIP, TPIC}, gridstate::StructArray, pointstate
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
-                xᵢ = grid[i]
-                f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                k = unsafe_nonzeroindex(gridstate, i)
-                gridstate.m[k]  += N*mₚ
-                gridstate.vⁿ[k] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
-                gridstate.v[k]  += dt*f
+                xᵢ = grid.x[i]
+                f = -stress_to_force(get_system(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                k = unsafe_nonzeroindex(grid, i)
+                grid.m[k]  += N*mₚ
+                grid.vⁿ[k] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
+                grid.v[k]  += dt*f
             end
         end
     end
 
-    @. gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
-    @. gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
+    @. grid.v = ((grid.vⁿ + grid.v) / grid.m) * !iszero(grid.m)
+    @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
 
-    gridstate
+    grid
 end
 
 # special default transfer for `WLS` interpolation
-function point_to_grid!(::DefaultTransfer, gridstate::StructArray, pointstate::StructVector, space::MPSpace{<: Any, <: Any, <: WLS}, dt::Real)
-    check_states(gridstate, pointstate, space)
+function particles_to_grid!(::DefaultTransfer, grid::Grid, particles::StructVector, space::MPSpace{<: Any, <: Any, <: WLS}, dt::Real)
+    check_grid_particles(grid, particles, space)
 
-    grid = get_grid(space)
-    fillzero!(gridstate.m)
-    fillzero!(gridstate.vⁿ)
-    fillzero!(gridstate.v)
+    fillzero!(grid.m)
+    fillzero!(grid.vⁿ)
+    fillzero!(grid.v)
 
-    eachpoint_blockwise_parallel(space) do p
+    parallel_each_particle(space) do p
         @inbounds begin
-            xₚ = pointstate.x[p]
-            mₚ = pointstate.m[p]
-            Vₚ = pointstate.V[p]
-            Cₚ = pointstate.C[p]
-            σₚ = pointstate.σ[p]
-            bₚ = pointstate.b[p]
+            xₚ = particles.x[p]
+            mₚ = particles.m[p]
+            Vₚ = particles.V[p]
+            Cₚ = particles.C[p]
+            σₚ = particles.σ[p]
+            bₚ = particles.b[p]
 
             Vₚσₚ = Vₚ * σₚ
             mₚbₚ = mₚ * bₚ
@@ -195,20 +191,20 @@ function point_to_grid!(::DefaultTransfer, gridstate::StructArray, pointstate::S
             P = x -> value(get_basis(mp), x)
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
-                xᵢ = grid[i]
-                f = -stress_to_force(gridsystem(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
-                k = unsafe_nonzeroindex(gridstate, i)
-                gridstate.m[k] += N*mₚ
-                gridstate.vⁿ[k] += N*mₚCₚ⋅P(xᵢ-xₚ)
-                gridstate.v[k] += dt*f
+                xᵢ = grid.x[i]
+                f = -stress_to_force(get_system(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                k = unsafe_nonzeroindex(grid, i)
+                grid.m[k] += N*mₚ
+                grid.vⁿ[k] += N*mₚCₚ⋅P(xᵢ-xₚ)
+                grid.v[k] += dt*f
             end
         end
     end
 
-    @. gridstate.v = ((gridstate.vⁿ + gridstate.v) / gridstate.m) * !iszero(gridstate.m)
-    @. gridstate.vⁿ = (gridstate.vⁿ / gridstate.m) * !iszero(gridstate.m)
+    @. grid.v = ((grid.vⁿ + grid.v) / grid.m) * !iszero(grid.m)
+    @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
 
-    gridstate
+    grid
 end
 
 @inline function stress_to_force(::PlaneStrain, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
@@ -226,126 +222,118 @@ end
 ################
 
 # default
-function grid_to_point!(pointstate::StructVector, gridstate::StructArray, space::MPSpace, dt::Real)
-    grid_to_point!(DefaultTransfer(), pointstate, gridstate, space, dt)
+function grid_to_particles!(particles::StructVector, grid::Grid, space::MPSpace, dt::Real)
+    grid_to_particles!(DefaultTransfer(), particles, grid, space, dt)
 end
 
-function grid_to_point!(::Union{DefaultTransfer, FLIP, TFLIP}, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
-    check_states(gridstate, pointstate, space)
+function grid_to_particles!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+    check_grid_particles(grid, particles, space)
 
-    grid = get_grid(space)
-
-    @threaded for p in 1:num_points(space)
-        dvₚ = zero(eltype(pointstate.v))
-        vₚ  = zero(eltype(pointstate.v))
-        ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
+    @threaded for p in 1:num_particles(space)
+        dvₚ = zero(eltype(particles.v))
+        vₚ  = zero(eltype(particles.v))
+        ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
             N = mp.N[j]
             ∇N = mp.∇N[j]
-            k = unsafe_nonzeroindex(gridstate, i)
-            vᵢ = gridstate.v[k]
-            dvᵢ = vᵢ - gridstate.vⁿ[k]
+            k = unsafe_nonzeroindex(grid, i)
+            vᵢ = grid.v[k]
+            dvᵢ = vᵢ - grid.vⁿ[k]
             dvₚ += N * dvᵢ
             vₚ  += N * vᵢ
             ∇vₚ += vᵢ ⊗ ∇N
         end
-        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, ∇vₚ)
-        pointstate.v[p] += dvₚ
-        pointstate.x[p] += vₚ * dt
+        particles.∇v[p] = velocity_gradient(get_system(grid), particles.x[p], vₚ, ∇vₚ)
+        particles.v[p] += dvₚ
+        particles.x[p] += vₚ * dt
     end
 
-    pointstate
+    particles
 end
 
-function grid_to_point!(::Union{PIC, TPIC}, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
-    check_states(gridstate, pointstate, space)
+function grid_to_particles!(::Union{PIC, TPIC}, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+    check_grid_particles(grid, particles, space)
 
-    grid = get_grid(space)
-
-    @threaded for p in 1:num_points(space)
-        vₚ  = zero(eltype(pointstate.v))
-        ∇vₚ = @Tensor zero(eltype(pointstate.∇v))[1:dim, 1:dim]
+    @threaded for p in 1:num_particles(space)
+        vₚ  = zero(eltype(particles.v))
+        ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
             N = mp.N[j]
             ∇N = mp.∇N[j]
-            k = unsafe_nonzeroindex(gridstate, i)
-            vᵢ = gridstate.v[k]
+            k = unsafe_nonzeroindex(grid, i)
+            vᵢ = grid.v[k]
             vₚ  += vᵢ * N
             ∇vₚ += vᵢ ⊗ ∇N
         end
-        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), pointstate.x[p], vₚ, ∇vₚ)
-        pointstate.v[p] = vₚ
-        pointstate.x[p] += vₚ * dt
+        particles.∇v[p] = velocity_gradient(get_system(grid), particles.x[p], vₚ, ∇vₚ)
+        particles.v[p] = vₚ
+        particles.x[p] += vₚ * dt
     end
 
-    pointstate
+    particles
 end
 
-function affine_grid_to_point!(pointstate::StructVector, gridstate::StructArray, space::MPSpace, dt::Real)
-    check_states(gridstate, pointstate, space)
+function affine_grid_to_particles!(particles::StructVector, grid::Grid, space::MPSpace, dt::Real)
+    check_grid_particles(grid, particles, space)
 
-    grid = get_grid(space)
-
-    @threaded for p in 1:num_points(space)
-        xₚ = pointstate.x[p]
-        Bₚ  = zero(eltype(pointstate.B))
+    @threaded for p in 1:num_particles(space)
+        xₚ = particles.x[p]
+        Bₚ  = zero(eltype(particles.B))
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
             N = mp.N[j]
-            k = unsafe_nonzeroindex(gridstate, i)
-            vᵢ = gridstate.v[k]
-            xᵢ = grid[i]
+            k = unsafe_nonzeroindex(grid, i)
+            vᵢ = grid.v[k]
+            xᵢ = grid.x[i]
             Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
         end
-        pointstate.B[p] = Bₚ
+        particles.B[p] = Bₚ
     end
 
-    pointstate
+    particles
 end
 
-function grid_to_point!(::AFLIP, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
-    affine_grid_to_point!(pointstate, gridstate, space, dt)
-    grid_to_point!(FLIP(), pointstate, gridstate, space, dt)
-    pointstate
+function grid_to_particles!(::AFLIP, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+    affine_grid_to_particles!(particles, grid, space, dt)
+    grid_to_particles!(FLIP(), particles, grid, space, dt)
+    particles
 end
 
-function grid_to_point!(::APIC, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim}, dt::Real) where {dim}
-    affine_grid_to_point!(pointstate, gridstate, space, dt)
-    grid_to_point!(PIC(), pointstate, gridstate, space, dt)
-    pointstate
+function grid_to_particles!(::APIC, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+    affine_grid_to_particles!(particles, grid, space, dt)
+    grid_to_particles!(PIC(), particles, grid, space, dt)
+    particles
 end
 
 # special default transfer for `WLS` interpolation
-function grid_to_point!(::DefaultTransfer, pointstate::StructVector, gridstate::StructArray, space::MPSpace{dim, <: Any, <: WLS}, dt::Real) where {dim}
-    check_states(gridstate, pointstate, space)
+function grid_to_particles!(::DefaultTransfer, particles::StructVector, grid::Grid, space::MPSpace{dim, <: Any, <: WLS}, dt::Real) where {dim}
+    check_grid_particles(grid, particles, space)
 
-    grid = get_grid(space)
-
-    @threaded for p in 1:num_points(space)
-        xₚ = pointstate.x[p]
-        Cₚ = zero(eltype(pointstate.C))
+    @threaded for p in 1:num_particles(space)
+        xₚ = particles.x[p]
+        Cₚ = zero(eltype(particles.C))
         mp = get_mpvalue(space, p)
         P = x -> value(get_basis(mp), x)
         p0 = value(get_basis(mp), zero(Vec{dim, Int}))
         ∇p0 = gradient(get_basis(mp), zero(Vec{dim, Int}))
         for (j, i) in enumerate(get_nodeindices(space, p))
             w = mp.w[j]
-            k = unsafe_nonzeroindex(gridstate, i)
-            vᵢ = gridstate.v[k]
-            xᵢ = grid[i]
+            k = unsafe_nonzeroindex(grid, i)
+            vᵢ = grid.v[k]
+            xᵢ = grid.x[i]
             Minv = mp.Minv
             Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xᵢ - xₚ))
         end
         vₚ = Cₚ ⋅ p0
-        pointstate.C[p] = Cₚ
-        pointstate.∇v[p] = velocity_gradient(gridsystem(grid), xₚ, vₚ, Cₚ ⋅ ∇p0)
-        pointstate.v[p] = vₚ
-        pointstate.x[p] += vₚ * dt
+        particles.C[p] = Cₚ
+        particles.∇v[p] = velocity_gradient(get_system(grid), xₚ, vₚ, Cₚ ⋅ ∇p0)
+        particles.v[p] = vₚ
+        particles.x[p] += vₚ * dt
     end
 
-    pointstate
+    particles
 end
 
 @inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
@@ -358,9 +346,9 @@ end
     ∇v
 end
 
-######################
-# smooth_pointstate! #
-######################
+##########################
+# smooth_particle_state! #
+##########################
 
 @generated function safe_inv(x::Mat{dim, dim, T, L}) where {dim, T, L}
     exps = fill(:z, L-1)
@@ -372,38 +360,37 @@ end
     end
 end
 
-function smooth_pointstate!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::AbstractVector, gridstate::StructArray, space::MPSpace)
-    check_states(gridstate, vals, space)
+function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::AbstractVector, grid::Grid, space::MPSpace)
+    check_grid_particles(grid, vals, space)
     @assert length(vals) == length(xₚ) == length(Vₚ)
 
-    grid = get_grid(space)
     basis = PolynomialBasis{1}()
-    fillzero!(gridstate.poly_coef)
-    fillzero!(gridstate.poly_mat)
+    fillzero!(grid.poly_coef)
+    fillzero!(grid.poly_mat)
 
-    eachpoint_blockwise_parallel(space) do p
+    parallel_each_particle(space) do p
         @inbounds begin
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
                 N = mp.N[j]
-                P = value(basis, xₚ[p] - grid[i])
+                P = value(basis, xₚ[p] - grid.x[i])
                 VP = (mp.N[j] * Vₚ[p]) * P
-                k = unsafe_nonzeroindex(gridstate, i)
-                gridstate.poly_coef[k] += VP * vals[p]
-                gridstate.poly_mat[k]  += VP ⊗ P
+                k = unsafe_nonzeroindex(grid, i)
+                grid.poly_coef[k] += VP * vals[p]
+                grid.poly_mat[k]  += VP ⊗ P
             end
         end
     end
 
-    @. gridstate.poly_coef = safe_inv(gridstate.poly_mat) ⋅ gridstate.poly_coef
+    @. grid.poly_coef = safe_inv(grid.poly_mat) ⋅ grid.poly_coef
 
-    @threaded for p in 1:num_points(space)
+    @threaded for p in 1:num_particles(space)
         val = zero(eltype(vals))
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
-            P = value(basis, xₚ[p] - grid[i])
-            k = unsafe_nonzeroindex(gridstate, i)
-            val += mp.N[j] * (P ⋅ gridstate.poly_coef[k])
+            P = value(basis, xₚ[p] - grid.x[i])
+            k = unsafe_nonzeroindex(grid, i)
+            val += mp.N[j] * (P ⋅ grid.poly_coef[k])
         end
         vals[p] = val
     end

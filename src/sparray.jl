@@ -74,10 +74,8 @@ julia> A[1,1] = 2; A[1,1]
 struct SpArray{T, dim} <: AbstractArray{T, dim}
     data::Vector{T}
     sppat::SpPattern{dim}
-    stamp::RefValue{Float64} # only used when constructing `SpArray` by `generate_gridstate`
+    stamp::RefValue{Float64} # only used when constructing `SpArray` by `generate_grid`
 end
-
-const StructSpArray{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{<: Any, <: Tuple{Vararg{SpArray}}}, I}
 
 function SpArray{T}(dims::Tuple{Vararg{Int}}) where {T}
     data = Vector{T}(undef, 0)
@@ -98,10 +96,6 @@ nonzeros(A::SpArray) = A.data
 get_stamp(A::SpArray) = A.stamp[]
 set_stamp!(A::SpArray, v) = A.stamp[]=v
 get_sppat(A::SpArray) = A.sppat
-
-get_stamp(A::StructSpArray) = get_stamp(getproperty(A, 1))
-set_stamp!(A::StructSpArray, v) = set_stamp!(getproperty(A, 1), v)
-get_sppat(A::StructSpArray) = get_sppat(getproperty(A, 1))
 
 # return zero if the index is not active
 @inline function Base.getindex(A::SpArray, i::Int)
@@ -129,7 +123,7 @@ struct NonzeroIndex
     i::Int
 end
 # unsafe becuase the returned index can be -1 if the SpPattern is not correctly updated
-@inline function unsafe_nonzeroindex(A::Union{SpArray, StructSpArray}, i)
+@inline function unsafe_nonzeroindex(A::SpArray, i)
     @boundscheck checkbounds(A, i)
     @inbounds NonzeroIndex(get_spindices(get_sppat(A))[i])
 end
@@ -145,22 +139,12 @@ end
 @inline nonzeroindex(A::AbstractArray, i) = i
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
-fillzero!(A::StructSpArray) = (StructArrays.foreachfield(fillzero!, A); A)
 
 function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
     @assert size(A) == size(sppat)
     set_stamp!(A, NaN)
     n = update_sparsity_pattern!(get_sppat(A), sppat)
     resize!(nonzeros(A), n)
-    A
-end
-function update_sparsity_pattern!(A::StructSpArray, sppat::AbstractArray{Bool})
-    @assert size(A) == size(sppat)
-    set_stamp!(A, NaN)
-    n = update_sparsity_pattern!(get_sppat(A), sppat)
-    StructArrays.foreachfield(A) do a
-        resize!(nonzeros(a), n)
-    end
     A
 end
 
@@ -216,6 +200,4 @@ maybecustomshow(x::SpArray) = ShowSpArray(x)
 
 Base.summary(io::IO, x::ShowSpArray) = summary(io, x.parent)
 Base.show(io::IO, mime::MIME"text/plain", x::SpArray) = show(io, mime, ShowSpArray(x))
-Base.show(io::IO, mime::MIME"text/plain", x::StructSpArray) = show(io, mime, ShowSpArray(x))
 Base.show(io::IO, x::SpArray) = show(io, ShowSpArray(x))
-Base.show(io::IO, x::StructSpArray) = show(io, ShowSpArray(x))

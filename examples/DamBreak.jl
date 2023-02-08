@@ -13,16 +13,17 @@ function DamBreak(
     )
 
     GridState = @NamedTuple begin
+        x::Vec{2, Float64}
         m::Float64
         v::Vec{2, Float64}
         vⁿ::Vec{2, Float64}
     end
-    PointState = @NamedTuple begin
+    ParticleState = @NamedTuple begin
         m::Float64
         V::Float64
+        r::Float64
         x::Vec{2, Float64}
         v::Vec{2, Float64}
-        r::Vec{2, Float64}
         b::Vec{2, Float64}
         σ::SymmetricSecondOrderTensor{3, Float64, 6}
         ∇v::SecondOrderTensor{3, Float64, 9}
@@ -35,17 +36,16 @@ function DamBreak(
     μ = 1.01e-3 # (Pa⋅s)
     c = 60.0    # (m/s)
 
-    grid = Grid(0:dx:3.22, 0:dx:4.0)
-    gridstate = generate_gridstate(GridState, grid)
-    pointstate = generate_pointstate((x,y) -> x<1.2 && y<0.6, PointState, grid)
-    space = MPSpace(interp, grid, pointstate.x)
+    grid = generate_grid(GridState, dx, (0,3.22), (0,4.0))
+    particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid)
+    space = MPSpace(interp, grid, particles)
     model = NewtonianFluid(MorrisWaterEOS(; c, ρ_ref=ρ₀); μ)
 
-    @. pointstate.σ = zero(pointstate.σ)
-    @. pointstate.m = ρ₀ * pointstate.V
-    @. pointstate.b = Vec(0.0, -g)
+    @. particles.σ = zero(particles.σ)
+    @. particles.m = ρ₀ * particles.V
+    @. particles.b = Vec(0.0, -g)
 
-    @show length(pointstate)
+    @show length(particles)
 
     # Outputs
     mkpath(outdir)
@@ -57,40 +57,40 @@ function DamBreak(
     ts_output = collect(range(t, t_stop; length=num_data))
     while t < t_stop
 
-        dt = CFL * minimum(pointstate) do pt
-            ρ = pt.m / pt.V
+        dt = CFL * minimum(LazyRows(particles)) do p
+            ρ = p.m / p.V
             ν = model.μ / ρ # kinemtatic viscosity
-            v = norm(pt.v)
+            v = norm(p.v)
             vc = model.eos.c # speed of sound
             min(dx / (vc + v), dx^2 / ν)
         end
 
-        update!(space, pointstate)
-        update_sparsity_pattern!(gridstate, space)
+        update!(space, grid, particles)
 
-        point_to_grid!(transfer, gridstate, pointstate, space, dt)
+        particles_to_grid!(transfer, grid, particles, space, dt)
 
         # boundary conditions
         slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
-        @inbounds for node in @view(LazyRows(gridstate)[[begin,end],:]) # left and right
+        @inbounds for node in @view(LazyRows(grid)[[begin,end],:]) # left and right
             node.v = slip(node.v, Vec(1,0))
         end
-        @inbounds for node in @view(LazyRows(gridstate)[:,[begin,end]]) # bottom and top
+        @inbounds for node in @view(LazyRows(grid)[:,[begin,end]]) # bottom and top
             node.v = slip(node.v, Vec(0,1))
         end
 
-        grid_to_point!(transfer, pointstate, gridstate, space, dt)
+        grid_to_particles!(transfer, particles, grid, space, dt)
 
-        Marble.@threaded for p in eachindex(pointstate)
-            m = pointstate.m[p]
-            V = pointstate.V[p]
-            ∇v = pointstate.∇v[p]
+        Marble.@threaded for p in LazyRows(particles)
+            m = p.m
+            V = p.V
+            ∇v = p.∇v
 
             dϵ = symmetric(dt*∇v)
             V = V * exp(tr(dϵ)) # need updated volume
             σ = @matcalc(:stress, model; d = symmetric(∇v), ρ = m/V)
-            pointstate.σ[p] = σ
-            pointstate.V[p] = V
+
+            p.σ = σ
+            p.V = V
         end
 
         t += dt
@@ -99,10 +99,10 @@ function DamBreak(
             popfirst!(ts_output)
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, num_data-length(ts_output))) do vtm
-                    openvtk(vtm, pointstate.x) do vtk
-                        vₚ = pointstate.v
-                        σₚ = pointstate.σ
-                        ∇vₚ = pointstate.∇v
+                    openvtk(vtm, particles.x) do vtk
+                        vₚ = particles.v
+                        σₚ = particles.σ
+                        ∇vₚ = particles.∇v
                         vorticity(∇v) = ∇v[2,1] - ∇v[1,2]
                         vtk["velocity"] = vₚ
                         vtk["pressure"] = @. -mean(σₚ)
