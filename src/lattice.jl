@@ -6,10 +6,13 @@ abstract type CoordinateSystem end
 struct NormalSystem <: CoordinateSystem end
 struct PlaneStrain  <: CoordinateSystem end
 struct Axisymmetric <: CoordinateSystem end
+# 1D
 coordinate_system(::NormalSystem, ::Val{1}) = NormalSystem()
+# 2D
 coordinate_system(::NormalSystem, ::Val{2}) = PlaneStrain()
 coordinate_system(::PlaneStrain,  ::Val{2}) = PlaneStrain()
 coordinate_system(::Axisymmetric, ::Val{2}) = Axisymmetric()
+# 3D
 coordinate_system(::NormalSystem, ::Val{3}) = NormalSystem()
 
 #############
@@ -91,18 +94,22 @@ end
 @generated function isinside(x::Vec{dim}, lattice::Lattice{dim}) where {dim}
     quote
         @_inline_meta
-        @nexprs $dim i -> start_i = get_axes(lattice, i)[begin]
-        @nexprs $dim i -> stop_i  = get_axes(lattice, i)[end]
-        @nall $dim i -> start_i ≤ x[i] ≤ stop_i
+        @inbounds begin
+            @nexprs $dim i -> start_i = get_axes(lattice, i)[begin]
+            @nexprs $dim i -> stop_i  = get_axes(lattice, i)[end]
+            @nall $dim i -> start_i ≤ x[i] ≤ stop_i
+        end
     end
 end
 
 """
-    neighbornodes(lattice, x::Vec, h)
+    neighbornodes(lattice, x::Vec, h) -> (indices, isnearbounds)
 
-Return `CartesianIndices` storing neighboring node indices around `x`.
-`h` is a range for searching and its unit `dx` is `spacing(lattice)`.
-In 1D, for example, the searching range becomes `x ± h*dx`.
+Return `CartesianIndices` storing neighboring node `indices` around `x`.
+`h` denotes the range for searching area. In 1D, for example, the range `a`
+becomes ` x-h*dx < a < x+h*dx` where `dx` is `spacing(lattice)`.
+`isnearbounds` is `false` if the neighboring nodes are completely inside of
+the `lattice`.
 
 # Examples
 ```jldoctest
@@ -116,26 +123,26 @@ julia> lattice = Lattice(1, (0,5))
  [5.0]
 
 julia> neighbornodes(lattice, Vec(1.5), 1)
-CartesianIndices((2:3,))
+(CartesianIndices((2:3,)), false)
 
 julia> neighbornodes(lattice, Vec(1.5), 2)
-CartesianIndices((1:4,))
+(CartesianIndices((1:4,)), true)
 ```
 """
 @inline function neighbornodes(lattice::Lattice{dim}, x::Vec{dim}, h::Real) where {dim}
-    isinside(x, lattice) || return CartesianIndices(nfill(1:0, Val(dim)))
+    isinside(x, lattice) || return (CartesianIndices(nfill(1:0, Val(dim))), false)
     dx⁻¹ = spacing_inv(lattice)
     xmin = first(lattice)
     ξ = (x - xmin) * dx⁻¹
-    T = eltype(ξ)
-    # To handle zero division in nodal calculations such as fᵢ/mᵢ, we use a bit small `h`.
-    # This means `neighbornodes` doesn't include bounds of range.
-    _neighborindices(SVec(size(lattice)), SVec(ξ), T(h) - sqrt(eps(T)))
+    _neighborindices(SVec(size(lattice)), SVec(ξ), convert(eltype(ξ), h))
 end
-@inline function _neighborindices(dims::SVec{dim}, ξ::SVec{dim}, h::SIMDTypes) where {dim}
-    imin = Tuple(max(convert(SVec{dim, Int},  ceil(ξ - h)) + 1, 1))
-    imax = Tuple(min(convert(SVec{dim, Int}, floor(ξ + h)) + 1, dims))
-    CartesianIndices(UnitRange.(imin, imax))
+@inline function _neighborindices(dims::SVec{dim, Int}, ξ::SVec{dim}, h::SIMDTypes) where {dim}
+    start = convert(SVec{dim, Int},  ceil(ξ - h)) + 1
+    stop  = convert(SVec{dim, Int}, floor(ξ + h)) + 1
+    imin = Tuple(max(start, 1))
+    imax = Tuple(min(stop, dims))
+    isnearbounds = any(start < 1) || any(dims < stop)
+    CartesianIndices(UnitRange.(imin, imax)), isnearbounds
 end
 
 """

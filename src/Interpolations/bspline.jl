@@ -1,43 +1,15 @@
-"""
-    BSpline{order}()
-    LinearBSpline()
-    QuadraticBSpline()
-    CubicBSpline()
-
-Create B-spline kernel.
-
-# Examples
-```jldoctest
-julia> f = LinearBSpline()
-LinearBSpline()
-
-julia> Marble.value(f, Vec(0.5, 0.5))
-0.25
-```
-"""
 struct BSpline{order} <: Kernel
-    function BSpline{order}() where {order}
-        new{order::Int}()
-    end
+    BSpline{order}() where {order} = new{order::Int}()
 end
 
 const LinearBSpline    = BSpline{1}
 const QuadraticBSpline = BSpline{2}
 const CubicBSpline     = BSpline{3}
 
-get_supportlength(::BSpline{1}) = 1.0
-get_supportlength(::BSpline{2}) = 1.5
-get_supportlength(::BSpline{3}) = 2.0
-get_supportlength(::BSpline{4}) = 2.5
-
-@pure function maxnum_nodes(bspline::BSpline, ::Val{dim})::Int where {dim}
-    (2*get_supportlength(bspline))^dim
-end
-
-@inline function neighbornodes(bsp::BSpline, lattice::Lattice, x::Vec)
-    neighbornodes(lattice, x, get_supportlength(bsp))
-end
-@inline neighbornodes(bsp::BSpline, lattice::Lattice, pt) = neighbornodes(bsp, lattice, pt.x)
+@inline neighbornodes(::BSpline{1}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.0)
+@inline neighbornodes(::BSpline{2}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.5)
+@inline neighbornodes(::BSpline{3}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 2.0)
+@inline neighbornodes(::BSpline{4}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 2.5)
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)
@@ -68,7 +40,7 @@ function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec)
     ξ = (xp - xi) * dx⁻¹
     value(bspline, ξ)
 end
-@inline value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, pt) = value(bspline, lattice, I, pt.x)
+@inline value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, pt) = value(bspline, lattice, I, getx(pt))
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
@@ -164,37 +136,45 @@ end
                                            end)...)
     end
 end
-@inline values_gradients(bspline::BSpline, lattice::Lattice, pt) = values_gradients(bspline, lattice, pt.x)
+@inline values_gradients(bspline::BSpline, lattice::Lattice, pt) = values_gradients(bspline, lattice, getx(pt))
 
 
-struct BSplineValue{dim, T, order} <: MPValue{dim, T, BSpline{order}}
+struct BSplineValue{dim, T, order} <: MPValue{dim, T}
+    itp::BSpline{order}
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
 end
 
-function MPValue{dim, T}(::BSpline{order}) where {dim, T, order}
+function MPValue{dim, T}(itp::BSpline{order}) where {dim, T, order}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
-    BSplineValue{dim, T, order}(N, ∇N)
+    BSplineValue(itp, N, ∇N)
 end
 
-@inline function update!(mp::BSplineValue, ::NearBoundary{false}, lattice::Lattice, ::AllTrue, nodeinds::CartesianIndices, xp::Vec)
-    n = length(nodeinds)
-    resize!(mp.N, n)
-    resize!(mp.∇N, n)
-    wᵢ, ∇wᵢ = values_gradients(get_kernel(mp), lattice, xp)
-    mp.N .= wᵢ
-    mp.∇N .= ∇wᵢ
-    mp
-end
+num_nodes(mp::BSplineValue) = length(mp.N)
+@inline shape_value(mp::BSplineValue, j::Int) = (@_propagate_inbounds_meta; mp.N[j])
+@inline shape_gradient(mp::BSplineValue, j::Int) = (@_propagate_inbounds_meta; mp.∇N[j])
 
-function update!(mp::BSplineValue, ::NearBoundary{true}, lattice::Lattice, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, xp::Vec)
-    n = length(nodeinds)
+@inline function update_mpvalue!(mp::BSplineValue, lattice::Lattice, pt)
+    indices, isnearbounds = neighbornodes(mp.itp, lattice, pt)
+
+    n = length(indices)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
-    F = get_kernel(mp)
-    @inbounds for (j, i) in enumerate(nodeinds)
-        mp.∇N[j], mp.N[j] = gradient(x->value(F,lattice,i,x,:steffen), xp, :all) .* sppat[i]
+
+    if isnearbounds
+        update_mpvalue_nearbounds!(mp, lattice, indices, pt)
+    else
+        wᵢ, ∇wᵢ = values_gradients(mp.itp, lattice, getx(pt))
+        mp.N .= wᵢ
+        mp.∇N .= ∇wᵢ
     end
-    mp
+
+    indices
+end
+
+function update_mpvalue_nearbounds!(mp::BSplineValue, lattice::Lattice, indices, pt)
+    @inbounds for (j, i) in enumerate(indices)
+        mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,:steffen), getx(pt), :all)
+    end
 end

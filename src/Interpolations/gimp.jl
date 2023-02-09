@@ -1,12 +1,9 @@
 struct GIMP <: Kernel end
 
-@pure maxnum_nodes(f::GIMP, ::Val{dim}) where {dim} = prod(nfill(3, Val(dim)))
-
-@inline function neighbornodes(f::GIMP, lattice::Lattice, xp::Vec, rp::Real)
+@inline function neighbornodes(::GIMP, lattice::Lattice, pt)
     dx⁻¹ = spacing_inv(lattice)
-    neighbornodes(lattice, xp, 1 + rp*dx⁻¹)
+    neighbornodes(lattice, pt.x, 1+pt.r*dx⁻¹)
 end
-@inline neighbornodes(f::GIMP, lattice::Lattice, pt) = neighbornodes(f, lattice, pt.x, pt.r)
 
 # simple GIMP calculation
 # See Eq.(40) in
@@ -30,51 +27,38 @@ function value(f::GIMP, lattice::Lattice, I::CartesianIndex, xp::Vec, rp::Real)
 end
 @inline value(f::GIMP, lattice::Lattice, I::CartesianIndex, pt) = value(f, lattice, I, pt.x, pt.r)
 
-# `x` and `l` must be normalized by `dx`
-_gradient_GIMP(x, l) = gradient(x -> value(GIMP(), x, l), x, :all)
-function _values_gradients(::GIMP, x::T, l::T) where {T <: Real}
-    V = Vec{3, T}
-    x′ = fract(x - T(0.5))
-    ξ = x′ .- V(-0.5, 0.5, 1.5)
-    vals_grads = _gradient_GIMP.(Tuple(ξ), l)
-    vals  = getindex.(vals_grads, 2)
-    grads = getindex.(vals_grads, 1)
-    Vec(vals), Vec(grads)
+@inline function value_gradient(f::GIMP, lattice::Lattice, I::CartesianIndex, pt)
+    ∇N, N = gradient(x -> value(f, lattice, I, x, pt.r), pt.x, :all)
+    N, ∇N
 end
-@generated function values_gradients(::GIMP, lattice::Lattice{dim}, xp::Vec{dim}, lp::Real) where {dim}
-    quote
-        @_inline_meta
-        dx⁻¹ = spacing_inv(lattice)
-        x = (xp - first(lattice)) * dx⁻¹
-        vals_grads = @ntuple $dim d -> _values_gradients(GIMP(), x[d], lp*dx⁻¹)
-        vals  = getindex.(vals_grads, 1)
-        grads = getindex.(vals_grads, 2) .* dx⁻¹
-        Tuple(otimes(vals...)), Vec.((@ntuple $dim i -> begin
-                                          Tuple(otimes((@ntuple $dim d -> d==i ? grads[d] : vals[d])...))
-                                      end)...)
-    end
-end
-values_gradients(f::GIMP, lattice::Lattice, pt) = values_gradients(f, lattice, pt.x, pt.r)
 
 
-struct GIMPValue{dim, T} <: MPValue{dim, T, GIMP}
+struct GIMPValue{dim, T} <: MPValue{dim, T}
+    itp::GIMP
     N::Vector{T}
     ∇N::Vector{Vec{dim, T}}
 end
 
-function MPValue{dim, T}(::GIMP) where {dim, T}
+function MPValue{dim, T}(itp::GIMP) where {dim, T}
     N = Vector{T}(undef, 0)
     ∇N = Vector{Vec{dim, T}}(undef, 0)
-    GIMPValue{dim, T}(N, ∇N)
+    GIMPValue(itp, N, ∇N)
 end
 
-@inline function update!(mp::GIMPValue, ::NearBoundary, lattice::Lattice, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, pt)
-    n = length(nodeinds)
-    F = get_kernel(mp)
+num_nodes(mp::GIMPValue) = length(mp.N)
+@inline shape_value(mp::GIMPValue, j::Int) = (@_propagate_inbounds_meta; mp.N[j])
+@inline shape_gradient(mp::GIMPValue, j::Int) = (@_propagate_inbounds_meta; mp.∇N[j])
+
+@inline function update_mpvalue!(mp::GIMPValue, lattice::Lattice, pt)
+    indices, _ = neighbornodes(mp.itp, lattice, pt)
+
+    n = length(indices)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
-    @inbounds for (j, i) in enumerate(nodeinds)
-        mp.∇N[j], mp.N[j] = gradient(x->value(F,lattice,i,x,pt.r), pt.x, :all) .* sppat[i]
+
+    @inbounds for (j, i) in enumerate(indices)
+        mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,pt.r), getx(pt), :all)
     end
-    mp
+
+    indices
 end

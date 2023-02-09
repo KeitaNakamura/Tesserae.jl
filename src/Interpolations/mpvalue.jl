@@ -1,21 +1,9 @@
 abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
-get_kernel(k::Kernel) = k
-
 Broadcast.broadcastable(interp::Interpolation) = (interp,)
-@inline neighbornodes(interp::Interpolation, lattice::Lattice, pt) = neighbornodes(get_kernel(interp), lattice, pt)
 
-abstract type MPValue{dim, T, I <: Interpolation} end
-
-MPValue{dim, T, I}() where {dim, T, I} = MPValue{dim, T}(I())
-
-get_interp(::MPValue{<: Any, <: Any, I}) where {I} = I()
-get_kernel(mp::MPValue) = get_kernel(get_interp(mp))
-num_nodes(mp::MPValue) = length(mp.N)
-@inline neighbornodes(mp::MPValue, lattice::Lattice, pt) = neighbornodes(get_interp(mp), lattice, pt)
-
-struct NearBoundary{true_or_false} end
+abstract type MPValue{dim, T} end
 
 """
     MPValue{dim}(::Interpolation)
@@ -41,33 +29,37 @@ julia> sum(mp.∇N)
 MPValue{dim}(F::Interpolation) where {dim} = MPValue{dim, Float64}(F)
 
 @inline getx(x::Vec) = x
-@inline getx(pt) = pt.x
-function update!(mp::MPValue, lattice::Lattice, pt)
-    update!(mp, lattice, trues(size(lattice)), pt)
-end
-function update!(mp::MPValue, lattice::Lattice, sppat::Union{AllTrue, AbstractArray{Bool}}, pt)
-    update!(mp, lattice, sppat, CartesianIndices(lattice), pt)
-end
-function update!(mp::MPValue, lattice::Lattice, nodeinds::CartesianIndices, pt)
-    update!(mp, lattice, trues(size(lattice)), nodeinds, pt)
-end
-@inline function update!(mp::MPValue{dim}, lattice::Lattice, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, pt) where {dim}
-    sppat isa AbstractArray && @assert size(lattice) == size(sppat)
-    @boundscheck checkbounds(lattice, nodeinds)
-    n = length(nodeinds)
-    if n == maxnum_nodes(get_kernel(mp), Val(dim)) && (sppat isa AllTrue || _all(sppat, nodeinds))
-        update!(mp, NearBoundary{false}(), lattice, AllTrue(), nodeinds, pt)
-    else
-        update!(mp, NearBoundary{true}(), lattice, sppat, nodeinds, pt)
-    end
-    mp
-end
-# don't check bounds
-@inline function _all(A::AbstractArray, inds::CartesianIndices)
-    @inbounds @simd for i in inds
+@inline getx(pt) = @inbounds pt.x
+@inline function alltrue(A::AbstractArray, indices::CartesianIndices)
+    @boundscheck checkbounds(A, indices)
+    @inbounds @simd for i in indices
         A[i] || return false
     end
     true
 end
+@inline function alltrue(A::Trues, indices::CartesianIndices)
+    @boundscheck checkbounds(A, indices)
+    true
+end
 
-update!(mp::MPValue, nb::NearBoundary, lattice::Lattice, sppat::Union{AllTrue, AbstractArray{Bool}}, nodeinds::CartesianIndices, pt) = update!(mp, nb, lattice, sppat, nodeinds, pt.x)
+@inline function update!(mp::MPValue, lattice::Lattice, pt)
+    indices = update_mpvalue!(mp, lattice, pt)
+    indices isa CartesianIndices || error("`update_mpvalue` must return `CartesianIndices`")
+    @assert length(indices) == num_nodes(mp)
+    indices
+end
+@inline function update!(mp::MPValue, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    @assert size(lattice) == size(sppat)
+    indices = update_mpvalue!(mp, lattice, sppat, pt)
+    indices isa CartesianIndices || error("`update_mpvalue` must return `CartesianIndices`")
+    @assert length(indices) == num_nodes(mp)
+    indices
+end
+
+@inline function update_mpvalue!(mp::MPValue, lattice::Lattice, pt)
+    update_mpvalue!(mp, lattice, Trues(size(lattice)), pt)
+end
+@inline function update_mpvalue!(mp::MPValue, lattice::Lattice, sppat::AbstractArray, pt)
+    sppat isa Trues || @warn "Sparsity pattern on grid is not supported in `$(typeof(mp))`, just ignored" maxlog=1
+    update_mpvalue!(mp, lattice, pt)
+end

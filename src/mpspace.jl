@@ -1,4 +1,4 @@
-struct MPSpace{dim, T, I <: Interpolation, MP <: MPValue{dim, T, I}}
+struct MPSpace{dim, T, MP <: MPValue{dim, T}}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
@@ -126,18 +126,13 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
     # * `space.mpvals`
     # * `space.nodeinds`
 
+    @assert gridsize(space) == size(lattice)
     @assert length(particles) == num_particles(space)
 
-    @threaded for p in 1:num_particles(space)
-        mp = get_mpvalue(space, p)
-        pt = LazyRow(particles, p)
-        set_nodeindices!(space, p, neighbornodes(mp, lattice, pt))
-        # normally update mpvalues here
-        filter===nothing && update!(get_mpvalue(space, p), lattice, AllTrue(), get_nodeindices(space, p), pt)
-    end
-
-    # handle excluded domain
-    if filter !== nothing
+    if filter === nothing
+        update_mpvalues!(space, lattice, Trues(size(lattice)), particles)
+    else
+        # handle excluded domain
         sppat = get_sppat(space)
         sppat .= filter
         parallel_each_particle(space) do p
@@ -146,14 +141,16 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
                 sppat[inds] .= true
             end
         end
-        # update mpvalues after completely updating `sppat`
-        # but this `sppat` is not used for `SpArray` for grid
-        @threaded for p in 1:num_particles(space)
-            update!(get_mpvalue(space, p), lattice, sppat, get_nodeindices(space, p), LazyRow(particles, p))
-        end
+        update_mpvalues!(space, lattice, sppat, particles)
     end
 
     space
+end
+function update_mpvalues!(space::MPSpace, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
+    @threaded for p in 1:num_particles(space)
+        indices = update!(get_mpvalue(space, p), lattice, sppat, LazyRow(particles, p))
+        set_nodeindices!(space, p, indices)
+    end
 end
 
 function update_sparsity_pattern!(grid::SpGrid, space::MPSpace)

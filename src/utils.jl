@@ -31,12 +31,19 @@ end
     NamedTuple{(names1..., names2...), Tuple{types1.parameters..., types2.parameters...}}
 end
 
-###########
-# AllTrue #
-###########
+#########
+# Trues #
+#########
 
-struct AllTrue end
-@pure Base.getindex(::AllTrue, i...) = true
+struct Trues{N} <: AbstractArray{Bool, N}
+    dims::Dims{N}
+end
+Base.size(t::Trues) = t.dims
+Base.IndexStyle(::Type{<: Trues}) = IndexLinear()
+@inline function Base.getindex(t::Trues, i::Int)
+    @boundscheck checkbounds(t, i)
+    true
+end
 
 #############
 # @threaded #

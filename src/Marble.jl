@@ -32,6 +32,8 @@ export
 # interpolations
     update!,
     num_nodes,
+    shape_value,
+    shape_gradient,
     Interpolation,
     BSpline,
     LinearBSpline,

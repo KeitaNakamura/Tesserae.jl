@@ -60,8 +60,9 @@ function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::S
 
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
-                N = mp.N[j]
-                f = -stress_to_force(get_system(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                N = shape_value(mp, j)
+                ∇N = shape_gradient(mp, j)
+                f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
                 k = unsafe_nonzeroindex(grid, i)
                 grid.m[k]  += N*mₚ
                 grid.vⁿ[k] += N*mₚvₚ
@@ -97,7 +98,7 @@ function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, sp
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
                 xᵢ = grid.x[i]
-                N = mp.N[j]
+                N = shape_value(mp, j)
                 Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
             end
             Cₚ = Bₚ ⋅ inv(Dₚ)
@@ -108,10 +109,11 @@ function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, sp
             mₚCₚ = mₚ * Cₚ
 
             for (j, i) in enumerate(get_nodeindices(space, p))
-                N = mp.N[j]
-                xᵢ = grid.x[i]
-                f = -stress_to_force(get_system(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                N = shape_value(mp, j)
+                ∇N = shape_gradient(mp, j)
+                f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
                 k = unsafe_nonzeroindex(grid, i)
+                xᵢ = grid.x[i]
                 grid.m[k]  += N*mₚ
                 grid.vⁿ[k] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
                 grid.v[k]  += dt*f
@@ -149,10 +151,11 @@ function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructVector, sp
 
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
-                N = mp.N[j]
-                xᵢ = grid.x[i]
-                f = -stress_to_force(get_system(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                N = shape_value(mp, j)
+                ∇N = shape_gradient(mp, j)
+                f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
                 k = unsafe_nonzeroindex(grid, i)
+                xᵢ = grid.x[i]
                 grid.m[k]  += N*mₚ
                 grid.vⁿ[k] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
                 grid.v[k]  += dt*f
@@ -167,7 +170,7 @@ function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructVector, sp
 end
 
 # special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, grid::Grid, particles::StructVector, space::MPSpace{<: Any, <: Any, <: WLS}, dt::Real)
+function transfer!(::DefaultTransfer, grid::Grid, particles::StructVector, space::MPSpace{<: Any, <: Any, <: WLSValue}, dt::Real)
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -190,10 +193,11 @@ function transfer!(::DefaultTransfer, grid::Grid, particles::StructVector, space
             mp = get_mpvalue(space, p)
             P = x -> value(get_basis(mp), x)
             for (j, i) in enumerate(get_nodeindices(space, p))
-                N = mp.N[j]
-                xᵢ = grid.x[i]
-                f = -stress_to_force(get_system(grid), N, mp.∇N[j], xₚ, Vₚσₚ) + N*mₚbₚ
+                N = shape_value(mp, j)
+                ∇N = shape_gradient(mp, j)
+                f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
                 k = unsafe_nonzeroindex(grid, i)
+                xᵢ = grid.x[i]
                 grid.m[k] += N*mₚ
                 grid.vⁿ[k] += N*mₚCₚ⋅P(xᵢ-xₚ)
                 grid.v[k] += dt*f
@@ -235,8 +239,8 @@ function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::StructVecto
         ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
-            N = mp.N[j]
-            ∇N = mp.∇N[j]
+            N = shape_value(mp, j)
+            ∇N = shape_gradient(mp, j)
             k = unsafe_nonzeroindex(grid, i)
             vᵢ = grid.v[k]
             dvᵢ = vᵢ - grid.vⁿ[k]
@@ -260,8 +264,8 @@ function transfer!(::Union{PIC, TPIC}, particles::StructVector, grid::Grid, spac
         ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
-            N = mp.N[j]
-            ∇N = mp.∇N[j]
+            N = shape_value(mp, j)
+            ∇N = shape_gradient(mp, j)
             k = unsafe_nonzeroindex(grid, i)
             vᵢ = grid.v[k]
             vₚ  += vᵢ * N
@@ -283,7 +287,7 @@ function affine_transfer!(particles::StructVector, grid::Grid, space::MPSpace, d
         Bₚ  = zero(eltype(particles.B))
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
-            N = mp.N[j]
+            N = shape_value(mp, j)
             k = unsafe_nonzeroindex(grid, i)
             vᵢ = grid.v[k]
             xᵢ = grid.x[i]
@@ -308,7 +312,7 @@ function transfer!(::APIC, particles::StructVector, grid::Grid, space::MPSpace{d
 end
 
 # special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, particles::StructVector, grid::Grid, space::MPSpace{dim, <: Any, <: WLS}, dt::Real) where {dim}
+function transfer!(::DefaultTransfer, particles::StructVector, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -320,10 +324,10 @@ function transfer!(::DefaultTransfer, particles::StructVector, grid::Grid, space
         ∇p0 = gradient(get_basis(mp), zero(Vec{dim, Int}))
         for (j, i) in enumerate(get_nodeindices(space, p))
             w = mp.w[j]
+            Minv = mp.Minv
             k = unsafe_nonzeroindex(grid, i)
             vᵢ = grid.v[k]
             xᵢ = grid.x[i]
-            Minv = mp.Minv
             Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xᵢ - xₚ))
         end
         vₚ = Cₚ ⋅ p0
@@ -372,9 +376,9 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
         @inbounds begin
             mp = get_mpvalue(space, p)
             for (j, i) in enumerate(get_nodeindices(space, p))
-                N = mp.N[j]
+                N = shape_value(mp, j)
                 P = value(basis, xₚ[p] - grid.x[i])
-                VP = (mp.N[j] * Vₚ[p]) * P
+                VP = (N * Vₚ[p]) * P
                 k = unsafe_nonzeroindex(grid, i)
                 grid.poly_coef[k] += VP * vals[p]
                 grid.poly_mat[k]  += VP ⊗ P
@@ -388,9 +392,10 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
         val = zero(eltype(vals))
         mp = get_mpvalue(space, p)
         for (j, i) in enumerate(get_nodeindices(space, p))
+            N = shape_value(mp, j)
             P = value(basis, xₚ[p] - grid.x[i])
             k = unsafe_nonzeroindex(grid, i)
-            val += mp.N[j] * (P ⋅ grid.poly_coef[k])
+            val += N * (P ⋅ grid.poly_coef[k])
         end
         vals[p] = val
     end
