@@ -3,17 +3,16 @@ struct MPSpace{dim, T, MP <: MPValue{dim, T}, GS <: Union{Nothing, SpPattern}}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
     ptspblk::Array{Vector{Int}, dim}
-    stamp::RefValue{Float64}
-    gsspat::GS # sppat used in SpGrid
+    gridsppat::GS # sppat used in SpGrid
 end
 
 # constructors
-function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec{dim}}, gsspat) where {dim, T}
+function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec{dim}}, gridsppat) where {dim, T}
     sppat = fill(false, size(lattice))
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(itp) for _ in 1:npts]
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
-    MPSpace(sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), Ref(NaN), gsspat)
+    MPSpace(sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), gridsppat)
 end
 MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, nothing)
 MPSpace(itp::Interpolation, grid::SpGrid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
@@ -22,13 +21,13 @@ MPSpace(itp::Interpolation, grid::SpGrid, particles::Particles) = MPSpace(itp, g
 gridsize(space::MPSpace) = size(space.sppat)
 num_particles(space::MPSpace) = length(space.mpvals)
 get_sppat(space::MPSpace) = space.sppat
+get_gridsppat(space::MPSpace) = space.gridsppat
 get_pointsperblock(space::MPSpace) = space.ptspblk
-get_stamp(space::MPSpace) = space.stamp[]
 
 # mpvalue
 mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 # set/get gridindices
-@inline neighbornodes(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; _neighbornodes(space.gsspat, space, i))
+@inline neighbornodes(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; _neighbornodes(space.gridsppat, space, i))
 @inline _neighbornodes(::Nothing, space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
 @inline _neighbornodes(sppat::SpPattern, space::MPSpace, i::Int) =
     (@_propagate_inbounds_meta; Iterators.map(I -> NonzeroIndex(I, @inbounds(sppat.indices[I])), space.nodeinds[i]))
@@ -80,7 +79,6 @@ end
 function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
     @assert num_particles(space) == length(particles)
 
-    space.stamp[] = time()
     update_pointsperblock!(space, get_lattice(grid), particles.x)
     #
     # Following `update_mpvalues!` update `space.sppat` and use it when `filter` is given.
@@ -163,8 +161,7 @@ end
 
 function update_sparsity_pattern!(grid::SpGrid, space::MPSpace)
     @assert size(grid) == gridsize(space)
-    update_sparsity_pattern!(grid, get_sppat(space))
-    set_stamp!(grid, get_stamp(space))
+    unsafe_update_sparsity_pattern!(grid, get_sppat(space))
     grid
 end
 update_sparsity_pattern!(grid::Grid, space::MPSpace) = grid

@@ -74,27 +74,25 @@ julia> A[1,1] = 2; A[1,1]
 struct SpArray{T, dim} <: AbstractArray{T, dim}
     data::Vector{T}
     sppat::SpPattern{dim}
-    stamp::RefValue{Float64} # only used when constructing `SpArray` by `generate_grid`
+    shared_sppat::Bool
 end
 
 function SpArray{T}(dims::Tuple{Vararg{Int}}) where {T}
     data = Vector{T}(undef, 0)
     sppat = SpPattern(dims)
-    SpArray(data, sppat, Ref(NaN))
+    SpArray(data, sppat, false)
 end
 SpArray{T}(dims::Int...) where {T} = SpArray{T}(dims)
 
-function SpArray{T}(sppat::SpPattern, stamp::RefValue{Float64}) where {T}
+function SpArray{T}(sppat::SpPattern) where {T}
     data = Vector{T}(undef, 0)
-    SpArray(data, sppat, stamp)
+    SpArray(data, sppat, true)
 end
 
 Base.IndexStyle(::Type{<: SpArray}) = IndexLinear()
 Base.size(A::SpArray) = size(A.sppat)
 
 nonzeros(A::SpArray) = A.data
-get_stamp(A::SpArray) = A.stamp[]
-set_stamp!(A::SpArray, v) = A.stamp[]=v
 get_sppat(A::SpArray) = A.sppat
 
 # return zero if the index is not active
@@ -145,8 +143,8 @@ end
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
 function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
+    A.shared_sppat && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
     @assert size(A) == size(sppat)
-    set_stamp!(A, NaN)
     n = update_sparsity_pattern!(get_sppat(A), sppat)
     resize!(nonzeros(A), n)
     A

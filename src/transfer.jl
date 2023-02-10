@@ -23,10 +23,8 @@ end
 function check_grid(grid::Grid, space::MPSpace)
 end
 function check_grid(grid::SpGrid, space::MPSpace)
-    if get_stamp(grid) != get_stamp(space)
-        # check to use @inbounds for `SpArray`
-        error("`update_sparsity_pattern!(grid, space::MPSpace)` must be executed before `transfer!`")
-    end
+    get_sppat(grid) !== get_gridsppat(space) &&
+        error("Using different sparsity pattern between `MPSpace` and `Grid`")
 end
 
 ################
