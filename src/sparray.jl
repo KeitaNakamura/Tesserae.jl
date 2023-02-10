@@ -164,22 +164,32 @@ function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) wher
     similar(bc′, ElType)
 end
 
-_get_sppat(x::SpArray) = get_sppat(x)
-_get_sppat(x::Any) = nothing
-function identical_sppat(args...)
-    sppats = map(_get_sppat, args)
-    all(x->x===first(sppats), sppats)
-end
-
-_nonzeros(x::SpArray) = nonzeros(x)
-_nonzeros(x::Any) = x
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
-    bc′ = Broadcast.flatten(bc)
-    !identical_sppat(dest, bc′.args...) &&
+    bcf = Broadcast.flatten(bc)
+    !identical_sppat(dest, bcf.args...) &&
         error("SpArray: broadcast along with different `SpPattern`s is not supported")
-    broadcast!(bc′.f, _nonzeros(dest), map(_nonzeros, bc′.args)...)
+    Base.copyto!(_nonzeros(dest), _nonzeros(bc))
     dest
+end
+@inline _nonzeros(bc::Broadcasted{ArrayStyle{SpArray}}) = Broadcast.broadcasted(bc.f, map(_nonzeros, bc.args)...)
+@inline _nonzeros(x::SpArray) = nonzeros(x)
+@inline _nonzeros(x::Any) = x
+
+# helpers for copyto!
+# all abstract arrays except SpArray and Tensor are not allowed in broadcasting
+_ok(::Type{<: AbstractArray}) = false
+_ok(::Type{<: SpArray})       = true
+_ok(::Type{<: Tensor})        = true
+_ok(::Type{<: Any})           = true
+@generated function identical_sppat(args...)
+    all(_ok, args) || return :(false)
+    exps = [:(args[$i].sppat) for i in 1:length(args) if args[i] <: SpArray]
+    n = length(exps)
+    quote
+        sppats = tuple($(exps...))
+        @nall $n i -> sppats[1] === sppats[i]
+    end
 end
 
 ###############

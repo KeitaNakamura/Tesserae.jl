@@ -15,8 +15,8 @@ function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVec
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
     MPSpace(sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), Ref(NaN), gsspat)
 end
-MPSpace(itp::Interpolation, grid::Grid, particles::StructVector) = MPSpace(itp, get_lattice(grid), particles.x, nothing)
-MPSpace(itp::Interpolation, grid::SpGrid, particles::StructVector) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
+MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, nothing)
+MPSpace(itp::Interpolation, grid::SpGrid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
 
 # helper functions
 gridsize(space::MPSpace) = size(space.sppat)

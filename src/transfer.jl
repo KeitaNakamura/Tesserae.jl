@@ -34,11 +34,11 @@ end
 ################
 
 # default
-function transfer!(grid::Grid, particles::StructVector, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer())
+function transfer!(grid::Grid, particles::Particles, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer())
     transfer!(alg, grid, particles, space, dt)
 end
 
-function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::StructVector, space::MPSpace, dt::Real)
+function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::Particles, space::MPSpace, dt::Real)
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -76,7 +76,7 @@ function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::S
     grid
 end
 
-function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, space::MPSpace{dim, T}, dt::Real) where {dim, T}
+function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::Particles, space::MPSpace{dim, T}, dt::Real) where {dim, T}
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -125,7 +125,7 @@ function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, sp
     grid
 end
 
-function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructVector, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::Particles, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -167,7 +167,7 @@ function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructVector, sp
 end
 
 # special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, grid::Grid, particles::StructVector, space::MPSpace{<: Any, <: Any, <: WLSValue}, dt::Real)
+function transfer!(::DefaultTransfer, grid::Grid, particles::Particles, space::MPSpace{<: Any, <: Any, <: WLSValue}, dt::Real)
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -222,11 +222,11 @@ end
 ################
 
 # default
-function transfer!(particles::StructVector, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer())
+function transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer())
     transfer!(alg, particles, grid, space, dt)
 end
 
-function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -251,7 +251,7 @@ function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::StructVecto
     particles
 end
 
-function transfer!(::Union{PIC, TPIC}, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{PIC, TPIC}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -273,7 +273,7 @@ function transfer!(::Union{PIC, TPIC}, particles::StructVector, grid::Grid, spac
     particles
 end
 
-function affine_transfer!(particles::StructVector, grid::Grid, space::MPSpace, dt::Real)
+function affine_transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::Real)
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -292,20 +292,20 @@ function affine_transfer!(particles::StructVector, grid::Grid, space::MPSpace, d
     particles
 end
 
-function transfer!(::AFLIP, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::AFLIP, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     affine_transfer!(particles, grid, space, dt)
     transfer!(FLIP(), particles, grid, space, dt)
     particles
 end
 
-function transfer!(::APIC, particles::StructVector, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::APIC, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     affine_transfer!(particles, grid, space, dt)
     transfer!(PIC(), particles, grid, space, dt)
     particles
 end
 
 # special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, particles::StructVector, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {dim}
+function transfer!(::DefaultTransfer, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
