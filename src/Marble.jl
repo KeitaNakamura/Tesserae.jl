@@ -45,8 +45,7 @@ export
     MPValue,
 # MPSpace
     MPSpace,
-    get_mpvalue,
-    get_nodeindices,
+    mpvalue,
     transfer!,
 # Transfer
     TransferAlgorithm,

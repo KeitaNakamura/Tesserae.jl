@@ -1,30 +1,38 @@
-struct MPSpace{dim, T, MP <: MPValue{dim, T}}
+struct MPSpace{dim, T, MP <: MPValue{dim, T}, GS <: Union{Nothing, SpPattern}}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
     ptspblk::Array{Vector{Int}, dim}
     stamp::RefValue{Float64}
+    gsspat::GS # sppat used in SpGrid
 end
 
 # constructors
-function MPSpace(interp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec}) where {dim, T}
+function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec{dim}}, gsspat) where {dim, T}
     sppat = fill(false, size(lattice))
     npts = length(xₚ)
-    mpvals = [MPValue{dim, T}(interp) for _ in 1:npts]
+    mpvals = [MPValue{dim, T}(itp) for _ in 1:npts]
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
-    MPSpace(sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), Ref(NaN))
+    MPSpace(sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), Ref(NaN), gsspat)
 end
-MPSpace(interp::Interpolation, grid::Grid, particles::StructVector) = MPSpace(interp, get_lattice(grid), particles.x)
+MPSpace(itp::Interpolation, grid::Grid, particles::StructVector) = MPSpace(itp, get_lattice(grid), particles.x, nothing)
+MPSpace(itp::Interpolation, grid::SpGrid, particles::StructVector) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
 
 # helper functions
 gridsize(space::MPSpace) = size(space.sppat)
 num_particles(space::MPSpace) = length(space.mpvals)
-get_mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
-get_nodeindices(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
-set_nodeindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
 get_sppat(space::MPSpace) = space.sppat
 get_pointsperblock(space::MPSpace) = space.ptspblk
 get_stamp(space::MPSpace) = space.stamp[]
+
+# mpvalue
+mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
+# set/get gridindices
+@inline neighbornodes(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; _neighbornodes(space.gsspat, space, i))
+@inline _neighbornodes(::Nothing, space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
+@inline _neighbornodes(sppat::SpPattern, space::MPSpace, i::Int) =
+    (@_propagate_inbounds_meta; Iterators.map(I -> NonzeroIndex(I, @inbounds(sppat.indices[I])), space.nodeinds[i]))
+set_gridindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
 
 # reorder_particles!
 function reorder_particles!(particles::Particles, ptspblk::Array)
@@ -148,8 +156,8 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
 end
 function update_mpvalues!(space::MPSpace, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
     @threaded for p in 1:num_particles(space)
-        indices = update!(get_mpvalue(space, p), lattice, sppat, LazyRow(particles, p))
-        set_nodeindices!(space, p, indices)
+        indices = update!(mpvalue(space, p), lattice, sppat, LazyRow(particles, p))
+        set_gridindices!(space, p, indices)
     end
 end
 

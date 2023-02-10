@@ -119,24 +119,28 @@ end
     A
 end
 
-struct NonzeroIndex
+struct NonzeroIndex{dim}
+    parent::CartesianIndex{dim}
     i::Int
 end
-# unsafe becuase the returned index can be -1 if the SpPattern is not correctly updated
-@inline function unsafe_nonzeroindex(A::SpArray, i)
-    @boundscheck checkbounds(A, i)
-    @inbounds NonzeroIndex(get_spindices(get_sppat(A))[i])
-end
 @inline function Base.getindex(A::SpArray, i::NonzeroIndex)
-    @_propagate_inbounds_meta
-    nonzeros(A)[i.i]
+    @boundscheck checkbounds(nonzeros(A), i.i)
+    @inbounds nonzeros(A)[i.i]
 end
 @inline function Base.setindex!(A::SpArray, v, i::NonzeroIndex)
-    @_propagate_inbounds_meta
-    nonzeros(A)[i.i] = v
+    @boundscheck checkbounds(nonzeros(A), i.i)
+    @inbounds nonzeros(A)[i.i] = v
     A
 end
-@inline nonzeroindex(A::AbstractArray, i) = i
+@inline function Base.getindex(A::AbstractArray, i::NonzeroIndex)
+    @boundscheck checkbounds(A, i.parent)
+    @inbounds A[i.parent]
+end
+@inline function Base.setindex!(A::AbstractArray, v, i::NonzeroIndex)
+    @boundscheck checkbounds(A, i.parent)
+    @inbounds A[i.parent] = v
+    A
+end
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 

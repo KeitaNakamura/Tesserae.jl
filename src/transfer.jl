@@ -58,15 +58,14 @@ function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::S
             mₚbₚ = mₚ * bₚ
             mₚvₚ = mₚ * vₚ
 
-            mp = get_mpvalue(space, p)
-            for (j, i) in enumerate(get_nodeindices(space, p))
+            mp = mpvalue(space, p)
+            for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
                 f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
-                k = unsafe_nonzeroindex(grid, i)
-                grid.m[k]  += N*mₚ
-                grid.vⁿ[k] += N*mₚvₚ
-                grid.v[k]  += dt*f
+                grid.m[i]  += N*mₚ
+                grid.vⁿ[i] += N*mₚvₚ
+                grid.v[i]  += dt*f
             end
         end
     end
@@ -95,8 +94,8 @@ function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, sp
             bₚ = particles.b[p]
 
             Dₚ = zero(Mat{dim, dim, T})
-            mp = get_mpvalue(space, p)
-            for (j, i) in enumerate(get_nodeindices(space, p))
+            mp = mpvalue(space, p)
+            for (j, i) in enumerate(neighbornodes(space, p))
                 xᵢ = grid.x[i]
                 N = shape_value(mp, j)
                 Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
@@ -108,15 +107,14 @@ function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::StructVector, sp
             mₚvₚ = mₚ * vₚ
             mₚCₚ = mₚ * Cₚ
 
-            for (j, i) in enumerate(get_nodeindices(space, p))
+            for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
                 f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
-                k = unsafe_nonzeroindex(grid, i)
                 xᵢ = grid.x[i]
-                grid.m[k]  += N*mₚ
-                grid.vⁿ[k] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
-                grid.v[k]  += dt*f
+                grid.m[i]  += N*mₚ
+                grid.vⁿ[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
+                grid.v[i]  += dt*f
             end
         end
     end
@@ -149,16 +147,15 @@ function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::StructVector, sp
             mₚvₚ = mₚ * vₚ
             mₚ∇vₚ = mₚ * @Tensor(∇vₚ[1:dim, 1:dim])
 
-            mp = get_mpvalue(space, p)
-            for (j, i) in enumerate(get_nodeindices(space, p))
+            mp = mpvalue(space, p)
+            for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
                 f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
-                k = unsafe_nonzeroindex(grid, i)
                 xᵢ = grid.x[i]
-                grid.m[k]  += N*mₚ
-                grid.vⁿ[k] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
-                grid.v[k]  += dt*f
+                grid.m[i]  += N*mₚ
+                grid.vⁿ[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
+                grid.v[i]  += dt*f
             end
         end
     end
@@ -190,17 +187,16 @@ function transfer!(::DefaultTransfer, grid::Grid, particles::StructVector, space
             mₚbₚ = mₚ * bₚ
             mₚCₚ = mₚ * Cₚ
 
-            mp = get_mpvalue(space, p)
+            mp = mpvalue(space, p)
             P = x -> value(get_basis(mp), x)
-            for (j, i) in enumerate(get_nodeindices(space, p))
+            for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
                 f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
-                k = unsafe_nonzeroindex(grid, i)
                 xᵢ = grid.x[i]
-                grid.m[k] += N*mₚ
-                grid.vⁿ[k] += N*mₚCₚ⋅P(xᵢ-xₚ)
-                grid.v[k] += dt*f
+                grid.m[i] += N*mₚ
+                grid.vⁿ[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
+                grid.v[i] += dt*f
             end
         end
     end
@@ -237,13 +233,12 @@ function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::StructVecto
         dvₚ = zero(eltype(particles.v))
         vₚ  = zero(eltype(particles.v))
         ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
-        mp = get_mpvalue(space, p)
-        for (j, i) in enumerate(get_nodeindices(space, p))
+        mp = mpvalue(space, p)
+        for (j, i) in enumerate(neighbornodes(space, p))
             N = shape_value(mp, j)
             ∇N = shape_gradient(mp, j)
-            k = unsafe_nonzeroindex(grid, i)
-            vᵢ = grid.v[k]
-            dvᵢ = vᵢ - grid.vⁿ[k]
+            vᵢ = grid.v[i]
+            dvᵢ = vᵢ - grid.vⁿ[i]
             dvₚ += N * dvᵢ
             vₚ  += N * vᵢ
             ∇vₚ += vᵢ ⊗ ∇N
@@ -262,12 +257,11 @@ function transfer!(::Union{PIC, TPIC}, particles::StructVector, grid::Grid, spac
     @threaded for p in 1:num_particles(space)
         vₚ  = zero(eltype(particles.v))
         ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
-        mp = get_mpvalue(space, p)
-        for (j, i) in enumerate(get_nodeindices(space, p))
+        mp = mpvalue(space, p)
+        for (j, i) in enumerate(neighbornodes(space, p))
             N = shape_value(mp, j)
             ∇N = shape_gradient(mp, j)
-            k = unsafe_nonzeroindex(grid, i)
-            vᵢ = grid.v[k]
+            vᵢ = grid.v[i]
             vₚ  += vᵢ * N
             ∇vₚ += vᵢ ⊗ ∇N
         end
@@ -285,11 +279,10 @@ function affine_transfer!(particles::StructVector, grid::Grid, space::MPSpace, d
     @threaded for p in 1:num_particles(space)
         xₚ = particles.x[p]
         Bₚ  = zero(eltype(particles.B))
-        mp = get_mpvalue(space, p)
-        for (j, i) in enumerate(get_nodeindices(space, p))
+        mp = mpvalue(space, p)
+        for (j, i) in enumerate(neighbornodes(space, p))
             N = shape_value(mp, j)
-            k = unsafe_nonzeroindex(grid, i)
-            vᵢ = grid.v[k]
+            vᵢ = grid.v[i]
             xᵢ = grid.x[i]
             Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
         end
@@ -318,15 +311,14 @@ function transfer!(::DefaultTransfer, particles::StructVector, grid::Grid, space
     @threaded for p in 1:num_particles(space)
         xₚ = particles.x[p]
         Cₚ = zero(eltype(particles.C))
-        mp = get_mpvalue(space, p)
+        mp = mpvalue(space, p)
         P = x -> value(get_basis(mp), x)
         p0 = value(get_basis(mp), zero(Vec{dim, Int}))
         ∇p0 = gradient(get_basis(mp), zero(Vec{dim, Int}))
-        for (j, i) in enumerate(get_nodeindices(space, p))
+        for (j, i) in enumerate(neighbornodes(space, p))
             w = mp.w[j]
             Minv = mp.Minv
-            k = unsafe_nonzeroindex(grid, i)
-            vᵢ = grid.v[k]
+            vᵢ = grid.v[i]
             xᵢ = grid.x[i]
             Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xᵢ - xₚ))
         end
@@ -374,14 +366,13 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
 
     parallel_each_particle(space) do p
         @inbounds begin
-            mp = get_mpvalue(space, p)
-            for (j, i) in enumerate(get_nodeindices(space, p))
+            mp = mpvalue(space, p)
+            for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 P = value(basis, xₚ[p] - grid.x[i])
                 VP = (N * Vₚ[p]) * P
-                k = unsafe_nonzeroindex(grid, i)
-                grid.poly_coef[k] += VP * vals[p]
-                grid.poly_mat[k]  += VP ⊗ P
+                grid.poly_coef[i] += VP * vals[p]
+                grid.poly_mat[i]  += VP ⊗ P
             end
         end
     end
@@ -390,12 +381,11 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
 
     @threaded for p in 1:num_particles(space)
         val = zero(eltype(vals))
-        mp = get_mpvalue(space, p)
-        for (j, i) in enumerate(get_nodeindices(space, p))
+        mp = mpvalue(space, p)
+        for (j, i) in enumerate(neighbornodes(space, p))
             N = shape_value(mp, j)
             P = value(basis, xₚ[p] - grid.x[i])
-            k = unsafe_nonzeroindex(grid, i)
-            val += N * (P ⋅ grid.poly_coef[k])
+            val += N * (P ⋅ grid.poly_coef[i])
         end
         vals[p] = val
     end
