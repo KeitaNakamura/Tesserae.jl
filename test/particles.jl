@@ -8,8 +8,8 @@
             (2*pt.r)^2 ≈ pt.V
         end
         # axisymmetric
-        lattice = Lattice(Axisymmetric(), 0.1, (0,10), (0,10))
-        particles = generate_particles((x,y) -> true, lattice; random)
+        lattice = Lattice(0.1, (0,10), (0,10))
+        particles = generate_particles((x,y) -> true, lattice; random, system=Axisymmetric())
         if random == false
             @test sum(particles.V) ≈ 10^2/2 * 10 # 1 radian
         else

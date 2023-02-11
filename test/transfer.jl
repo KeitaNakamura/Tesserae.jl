@@ -20,8 +20,8 @@
         for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
             for system in (PlaneStrain(), Axisymmetric())
                 # initialization
-                grid = generate_grid(GridState, system, 2.0, (0,10), (0,20))
-                particles= generate_particles((x,y) -> true, ParticleState, grid)
+                grid = generate_grid(GridState, 2.0, (0,10), (0,20))
+                particles= generate_particles((x,y) -> true, ParticleState, grid; system)
                 space = MPSpace(interp, grid, particles)
                 v0 = rand(Vec{2})
                 ρ0 = 1.2e3
@@ -30,7 +30,7 @@
                 @. particles.σ = zero(SymmetricSecondOrderTensor{3})
                 # transfer
                 update!(space, grid, particles)
-                transfer!(grid, particles, space, 1; alg=FLIP())
+                transfer!(grid, particles, space, 1; alg=FLIP(), system)
                 @test all(==(v0), particles.v)
             end
         end

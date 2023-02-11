@@ -32,11 +32,11 @@ end
 ################
 
 # default
-function transfer!(grid::Grid, particles::Particles, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer())
-    transfer!(alg, grid, particles, space, dt)
+function transfer!(grid::Grid, particles::Particles, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    transfer!(alg, system, grid, particles, space, dt)
 end
 
-function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::Particles, space::MPSpace, dt::Real)
+function transfer!(::Union{DefaultTransfer, FLIP, PIC}, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace, dt::Real)
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -60,7 +60,7 @@ function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::P
             for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
-                f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
+                f = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
                 grid.m[i]  += N*mₚ
                 grid.vⁿ[i] += N*mₚvₚ
                 grid.v[i]  += dt*f
@@ -74,7 +74,7 @@ function transfer!(::Union{DefaultTransfer, FLIP, PIC}, grid::Grid, particles::P
     grid
 end
 
-function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::Particles, space::MPSpace{dim, T}, dt::Real) where {dim, T}
+function transfer!(::Union{AFLIP, APIC}, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace{dim, T}, dt::Real) where {dim, T}
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -108,7 +108,7 @@ function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::Particles, space
             for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
-                f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
+                f = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
                 xᵢ = grid.x[i]
                 grid.m[i]  += N*mₚ
                 grid.vⁿ[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
@@ -123,7 +123,7 @@ function transfer!(::Union{AFLIP, APIC}, grid::Grid, particles::Particles, space
     grid
 end
 
-function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::Particles, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{TFLIP, TPIC}, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -149,7 +149,7 @@ function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::Particles, space
             for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
-                f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
+                f = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
                 xᵢ = grid.x[i]
                 grid.m[i]  += N*mₚ
                 grid.vⁿ[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
@@ -165,7 +165,7 @@ function transfer!(::Union{TFLIP, TPIC}, grid::Grid, particles::Particles, space
 end
 
 # special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, grid::Grid, particles::Particles, space::MPSpace{<: Any, <: Any, <: WLSValue}, dt::Real)
+function transfer!(::DefaultTransfer, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace{<: Any, <: Any, <: WLSValue}, dt::Real)
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -190,7 +190,7 @@ function transfer!(::DefaultTransfer, grid::Grid, particles::Particles, space::M
             for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
-                f = -stress_to_force(get_system(grid), N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
+                f = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
                 xᵢ = grid.x[i]
                 grid.m[i] += N*mₚ
                 grid.vⁿ[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
@@ -205,7 +205,7 @@ function transfer!(::DefaultTransfer, grid::Grid, particles::Particles, space::M
     grid
 end
 
-@inline function stress_to_force(::PlaneStrain, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
+@inline function stress_to_force(::Union{NormalSystem, PlaneStrain}, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
     Tensorial.resizedim(σ, Val(2)) ⋅ ∇N
 end
 @inline function stress_to_force(::Axisymmetric, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
@@ -220,11 +220,11 @@ end
 ################
 
 # default
-function transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer())
-    transfer!(alg, particles, grid, space, dt)
+function transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    transfer!(alg, system, particles, grid, space, dt)
 end
 
-function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -241,7 +241,7 @@ function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::Particles, 
             vₚ  += N * vᵢ
             ∇vₚ += vᵢ ⊗ ∇N
         end
-        particles.∇v[p] = velocity_gradient(get_system(grid), particles.x[p], vₚ, ∇vₚ)
+        particles.∇v[p] = velocity_gradient(system, particles.x[p], vₚ, ∇vₚ)
         particles.v[p] += dvₚ
         particles.x[p] += vₚ * dt
     end
@@ -249,7 +249,7 @@ function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, particles::Particles, 
     particles
 end
 
-function transfer!(::Union{PIC, TPIC}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::Union{PIC, TPIC}, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -263,7 +263,7 @@ function transfer!(::Union{PIC, TPIC}, particles::Particles, grid::Grid, space::
             vₚ  += vᵢ * N
             ∇vₚ += vᵢ ⊗ ∇N
         end
-        particles.∇v[p] = velocity_gradient(get_system(grid), particles.x[p], vₚ, ∇vₚ)
+        particles.∇v[p] = velocity_gradient(system, particles.x[p], vₚ, ∇vₚ)
         particles.v[p] = vₚ
         particles.x[p] += vₚ * dt
     end
@@ -290,20 +290,20 @@ function affine_transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::
     particles
 end
 
-function transfer!(::AFLIP, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::AFLIP, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     affine_transfer!(particles, grid, space, dt)
-    transfer!(FLIP(), particles, grid, space, dt)
+    transfer!(FLIP(), system, particles, grid, space, dt)
     particles
 end
 
-function transfer!(::APIC, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(::APIC, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     affine_transfer!(particles, grid, space, dt)
-    transfer!(PIC(), particles, grid, space, dt)
+    transfer!(PIC(), system, particles, grid, space, dt)
     particles
 end
 
 # special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {dim}
+function transfer!(::DefaultTransfer, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
@@ -322,7 +322,7 @@ function transfer!(::DefaultTransfer, particles::Particles, grid::Grid, space::M
         end
         vₚ = Cₚ ⋅ p0
         particles.C[p] = Cₚ
-        particles.∇v[p] = velocity_gradient(get_system(grid), xₚ, vₚ, Cₚ ⋅ ∇p0)
+        particles.∇v[p] = velocity_gradient(system, xₚ, vₚ, Cₚ ⋅ ∇p0)
         particles.v[p] = vₚ
         particles.x[p] += vₚ * dt
     end
@@ -330,7 +330,7 @@ function transfer!(::DefaultTransfer, particles::Particles, grid::Grid, space::M
     particles
 end
 
-@inline function velocity_gradient(::PlaneStrain, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
+@inline function velocity_gradient(::Union{NormalSystem, PlaneStrain}, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
     Tensorial.resizedim(∇v, Val(3)) # expaned entries are filled with zero
 end
 @inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})

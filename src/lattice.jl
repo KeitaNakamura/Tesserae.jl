@@ -1,20 +1,3 @@
-####################
-# CoordinateSystem #
-####################
-
-abstract type CoordinateSystem end
-struct NormalSystem <: CoordinateSystem end
-struct PlaneStrain  <: CoordinateSystem end
-struct Axisymmetric <: CoordinateSystem end
-# 1D
-coordinate_system(::NormalSystem, ::Val{1}) = NormalSystem()
-# 2D
-coordinate_system(::NormalSystem, ::Val{2}) = PlaneStrain()
-coordinate_system(::PlaneStrain,  ::Val{2}) = PlaneStrain()
-coordinate_system(::Axisymmetric, ::Val{2}) = Axisymmetric()
-# 3D
-coordinate_system(::NormalSystem, ::Val{3}) = NormalSystem()
-
 #############
 # AxisArray #
 #############
@@ -49,18 +32,17 @@ Construct `Lattice` with the spacing `dx`.
 # Examples
 ```jldoctest
 julia> Lattice(1.0, (0,3), (1,4))
-4×4 Lattice{2, Float64, PlaneStrain}:
+4×4 Lattice{2, Float64}:
  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Lattice{dim, T, C <: CoordinateSystem} <: AbstractArray{Vec{dim, T}, dim}
+struct Lattice{dim, T} <: AbstractArray{Vec{dim, T}, dim}
     axisarray::AxisArray{dim, T, Vector{T}}
     dx::T
     dx_inv::T
-    system::C
 end
 
 get_axisarray(x::Lattice) = x.axisarray
@@ -70,17 +52,14 @@ spacing(x::Lattice) = x.dx
 spacing_inv(x::Lattice) = x.dx_inv
 get_axes(x::Lattice) = get_axes(x.axisarray)
 get_axes(x::Lattice, i::Int) = (@_propagate_inbounds_meta; get_axes(x)[i])
-get_system(x::Lattice) = x.system
 
-function Lattice(::Type{T}, system::CoordinateSystem, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
+function Lattice(::Type{T}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
     @assert all(map(issorted, minmax))
     axes = map(x->range(x...; step=dx), minmax)
     axisarray = AxisArray(map(Vector{T}, axes))
-    Lattice(axisarray, T(dx), T(inv(dx)), coordinate_system(system, Val(dim)))
+    Lattice(axisarray, T(dx), T(inv(dx)))
 end
-Lattice(::Type{T}, dx::Real, minmax::Tuple{Real, Real}...) where {T} = Lattice(T, NormalSystem(), dx, minmax...)
-Lattice(system::CoordinateSystem, dx::Real, minmax::Tuple{Real, Real}...) = Lattice(Float64, system, dx, minmax...)
-Lattice(dx::Real, minmax::Tuple{Real, Real}...) = Lattice(Float64, NormalSystem(), dx, minmax...)
+Lattice(dx::Real, minmax::Tuple{Real, Real}...) = Lattice(Float64, dx, minmax...)
 
 @inline function Base.getindex(lattice::Lattice{dim}, i::Vararg{Int, dim}) where {dim}
     @boundscheck checkbounds(lattice, i...)
@@ -88,7 +67,7 @@ Lattice(dx::Real, minmax::Tuple{Real, Real}...) = Lattice(Float64, NormalSystem(
 end
 @inline function Base.getindex(lattice::Lattice{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
     @boundscheck checkbounds(lattice, ranges...)
-    @inbounds Lattice(get_axisarray(lattice)[ranges...], spacing(lattice), spacing_inv(lattice), get_system(lattice))
+    @inbounds Lattice(get_axisarray(lattice)[ranges...], spacing(lattice), spacing_inv(lattice))
 end
 
 @generated function isinside(x::Vec{dim}, lattice::Lattice{dim}) where {dim}
@@ -114,7 +93,7 @@ the `lattice`.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,5))
-6-element Lattice{1, Float64, Marble.NormalSystem}:
+6-element Lattice{1, Float64}:
  [0.0]
  [1.0]
  [2.0]
@@ -153,7 +132,7 @@ Return cell index where `x` locates.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,5), (0,5))
-6×6 Lattice{2, Float64, PlaneStrain}:
+6×6 Lattice{2, Float64}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -182,7 +161,7 @@ The unit block size is `2^$BLOCK_UNIT` cells.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,10), (0,10))
-11×11 Lattice{2, Float64, PlaneStrain}:
+11×11 Lattice{2, Float64}:
  [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
  [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
  [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]

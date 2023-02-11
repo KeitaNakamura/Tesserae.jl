@@ -16,7 +16,14 @@ function generate_points_randomly(lattice::Lattice, n::Int)
     map(eltype(lattice), points)
 end
 
-function generate_particles(isindomain::Function, ::Type{ParticleState}, lattice::Lattice{dim}; n::Int = 2, random::Bool = false) where {ParticleState, dim}
+function generate_particles(
+        isindomain::Function,
+        ::Type{ParticleState},
+        lattice::Lattice{dim};
+        n::Int = 2,
+        random::Bool = false,
+        system::CoordinateSystem = NormalSystem(),
+    ) where {ParticleState, dim}
     if random
         allpoints = generate_points_randomly(lattice, n)
     else
@@ -40,7 +47,7 @@ function generate_particles(isindomain::Function, ::Type{ParticleState}, lattice
         end
     end
     if :V in propertynames(particles)
-        if dim == 2 && get_system(lattice) isa Axisymmetric
+        if dim == 2 && system isa Axisymmetric
             @. particles.V = getindex(particles.x, 1) * V
         else
             @. particles.V = V

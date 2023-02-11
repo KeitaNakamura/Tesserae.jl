@@ -31,6 +31,15 @@ end
     NamedTuple{(names1..., names2...), Tuple{types1.parameters..., types2.parameters...}}
 end
 
+####################
+# CoordinateSystem #
+####################
+
+abstract type CoordinateSystem end
+struct NormalSystem <: CoordinateSystem end
+struct PlaneStrain  <: CoordinateSystem end
+struct Axisymmetric <: CoordinateSystem end
+
 #########
 # Trues #
 #########

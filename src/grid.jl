@@ -4,10 +4,7 @@
 
 const Grid{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I}
 
-generate_grid(::Type{GridState}, dx::Real, minmax::Tuple{Real, Real}...) where {GridState} = generate_grid(GridState, NormalSystem(), dx, minmax...)
-
 get_lattice(grid::Grid) = grid.x
-get_system(grid::Grid) = get_system(get_lattice(grid))
 spacing(grid::Grid) = spacing(get_lattice(grid))
 
 ##########
@@ -17,13 +14,13 @@ spacing(grid::Grid) = spacing(get_lattice(grid))
 const SpGrid{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I}
 
 # spgrid
-@generated function generate_grid(::Type{GridState}, system::CoordinateSystem, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridState, dim}
+@generated function generate_grid(::Type{GridState}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridState, dim}
     fieldname(GridState, 1) == :x || return :(error("generate_grid: first field name must be `:x`"))
     V = fieldtype(GridState, 1)
     V <: Vec{dim} || return :(error("generate_grid: `fieldtype` of `:x` must be `<: Vec{$dim}`"))
     exps = [:(SpArray{$T}(sppat)) for T in fieldtypes(GridState)[2:end]]
     quote
-        lattice = Lattice($(eltype(V)), system, dx, minmax...)
+        lattice = Lattice($(eltype(V)), dx, minmax...)
         sppat = SpPattern(size(lattice))
         StructArray{GridState}(tuple(lattice, $(exps...)))
     end
