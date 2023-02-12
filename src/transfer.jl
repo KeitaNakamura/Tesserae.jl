@@ -10,6 +10,11 @@ struct APIC  <: TransferAlgorithm end
 struct TFLIP <: TransferAlgorithm end
 struct TPIC  <: TransferAlgorithm end
 
+const AffineGroup = Union{AFLIP, APIC}
+const TaylorGroup = Union{TFLIP, TPIC}
+const FLIPGroup = Union{DefaultTransfer, FLIP, AFLIP, TFLIP}
+const PICGroup = Union{PIC, APIC, TPIC}
+
 ###########
 # helpers #
 ###########
@@ -36,7 +41,8 @@ function transfer!(grid::Grid, particles::Particles, space::MPSpace, dt::Real; a
     transfer!(alg, system, grid, particles, space, dt)
 end
 
-function transfer!(::Union{DefaultTransfer, FLIP, PIC}, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace, dt::Real)
+# don't use dispatch and all transfer algorithms are writtein in this function to reduce a lot of deplicated code
+function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace{dim, T}, dt::Real) where {dim, T}
     check_grid_particles(grid, particles, space)
 
     fillzero!(grid.m)
@@ -45,156 +51,60 @@ function transfer!(::Union{DefaultTransfer, FLIP, PIC}, system::CoordinateSystem
 
     parallel_each_particle(space) do p
         @inbounds begin
+            mp = mpvalue(space, p)
+
             xₚ = particles.x[p]
             mₚ = particles.m[p]
             Vₚ = particles.V[p]
-            vₚ = particles.v[p]
             σₚ = particles.σ[p]
             bₚ = particles.b[p]
 
             Vₚσₚ = Vₚ * σₚ
             mₚbₚ = mₚ * bₚ
-            mₚvₚ = mₚ * vₚ
 
-            mp = mpvalue(space, p)
-            for (j, i) in enumerate(neighbornodes(space, p))
-                N = shape_value(mp, j)
-                ∇N = shape_gradient(mp, j)
-                f = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
-                grid.m[i]  += N*mₚ
-                grid.vⁿ[i] += N*mₚvₚ
-                grid.v[i]  += dt*f
+            # grid momentum depends on transfer algorithm
+            if alg isa DefaultTransfer && mp isa WLSValue
+                Cₚ = particles.C[p]
+                mₚCₚ = mₚ * Cₚ
+                P = x -> value(get_basis(mp), x)
+            else
+                vₚ = particles.v[p]
+                mₚvₚ = mₚ * vₚ
+                if alg isa AffineGroup
+                    Bₚ = particles.B[p]
+                    Dₚ = zero(Mat{dim, dim, T})
+                    for (j, i) in enumerate(neighbornodes(space, p))
+                        xᵢ = grid.x[i]
+                        N = shape_value(mp, j)
+                        Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
+                    end
+                    mₚCₚ = mₚ * Bₚ ⋅ inv(Dₚ)
+                elseif alg isa TaylorGroup
+                    ∇vₚ = particles.∇v[p]
+                    mₚ∇vₚ = mₚ * @Tensor(∇vₚ[1:dim, 1:dim])
+                end
             end
-        end
-    end
-
-    @. grid.v = ((grid.vⁿ + grid.v) / grid.m) * !iszero(grid.m)
-    @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
-
-    grid
-end
-
-function transfer!(::Union{AFLIP, APIC}, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace{dim, T}, dt::Real) where {dim, T}
-    check_grid_particles(grid, particles, space)
-
-    fillzero!(grid.m)
-    fillzero!(grid.vⁿ)
-    fillzero!(grid.v)
-
-    parallel_each_particle(space) do p
-        @inbounds begin
-            xₚ = particles.x[p]
-            mₚ = particles.m[p]
-            Vₚ = particles.V[p]
-            vₚ = particles.v[p]
-            Bₚ = particles.B[p]
-            σₚ = particles.σ[p]
-            bₚ = particles.b[p]
-
-            Dₚ = zero(Mat{dim, dim, T})
-            mp = mpvalue(space, p)
-            for (j, i) in enumerate(neighbornodes(space, p))
-                xᵢ = grid.x[i]
-                N = shape_value(mp, j)
-                Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
-            end
-            Cₚ = Bₚ ⋅ inv(Dₚ)
-
-            Vₚσₚ = Vₚ * σₚ
-            mₚbₚ = mₚ * bₚ
-            mₚvₚ = mₚ * vₚ
-            mₚCₚ = mₚ * Cₚ
 
             for (j, i) in enumerate(neighbornodes(space, p))
                 N = shape_value(mp, j)
                 ∇N = shape_gradient(mp, j)
                 f = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
-                xᵢ = grid.x[i]
-                grid.m[i]  += N*mₚ
-                grid.vⁿ[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
-                grid.v[i]  += dt*f
-            end
-        end
-    end
-
-    @. grid.v = ((grid.vⁿ + grid.v) / grid.m) * !iszero(grid.m)
-    @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
-
-    grid
-end
-
-function transfer!(::Union{TFLIP, TPIC}, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace{dim}, dt::Real) where {dim}
-    check_grid_particles(grid, particles, space)
-
-    fillzero!(grid.m)
-    fillzero!(grid.vⁿ)
-    fillzero!(grid.v)
-
-    parallel_each_particle(space) do p
-        @inbounds begin
-            xₚ  = particles.x[p]
-            mₚ  = particles.m[p]
-            Vₚ  = particles.V[p]
-            vₚ  = particles.v[p]
-            ∇vₚ = particles.∇v[p]
-            σₚ  = particles.σ[p]
-            bₚ  = particles.b[p]
-
-            Vₚσₚ = Vₚ * σₚ
-            mₚbₚ = mₚ * bₚ
-            mₚvₚ = mₚ * vₚ
-            mₚ∇vₚ = mₚ * @Tensor(∇vₚ[1:dim, 1:dim])
-
-            mp = mpvalue(space, p)
-            for (j, i) in enumerate(neighbornodes(space, p))
-                N = shape_value(mp, j)
-                ∇N = shape_gradient(mp, j)
-                f = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
-                xᵢ = grid.x[i]
-                grid.m[i]  += N*mₚ
-                grid.vⁿ[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
-                grid.v[i]  += dt*f
-            end
-        end
-    end
-
-    @. grid.v = ((grid.vⁿ + grid.v) / grid.m) * !iszero(grid.m)
-    @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
-
-    grid
-end
-
-# special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, system::CoordinateSystem, grid::Grid, particles::Particles, space::MPSpace{<: Any, <: Any, <: WLSValue}, dt::Real)
-    check_grid_particles(grid, particles, space)
-
-    fillzero!(grid.m)
-    fillzero!(grid.vⁿ)
-    fillzero!(grid.v)
-
-    parallel_each_particle(space) do p
-        @inbounds begin
-            xₚ = particles.x[p]
-            mₚ = particles.m[p]
-            Vₚ = particles.V[p]
-            Cₚ = particles.C[p]
-            σₚ = particles.σ[p]
-            bₚ = particles.b[p]
-
-            Vₚσₚ = Vₚ * σₚ
-            mₚbₚ = mₚ * bₚ
-            mₚCₚ = mₚ * Cₚ
-
-            mp = mpvalue(space, p)
-            P = x -> value(get_basis(mp), x)
-            for (j, i) in enumerate(neighbornodes(space, p))
-                N = shape_value(mp, j)
-                ∇N = shape_gradient(mp, j)
-                f = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ) + N*mₚbₚ
-                xᵢ = grid.x[i]
                 grid.m[i] += N*mₚ
-                grid.vⁿ[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
                 grid.v[i] += dt*f
+
+                # grid momentum depends on transfer algorithm
+                if alg isa DefaultTransfer && mp isa WLSValue
+                    xᵢ = grid.x[i]
+                    grid.vⁿ[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
+                elseif alg isa AffineGroup
+                    xᵢ = grid.x[i]
+                    grid.vⁿ[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
+                elseif alg isa TaylorGroup
+                    xᵢ = grid.x[i]
+                    grid.vⁿ[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
+                else
+                    grid.vⁿ[i] += N*mₚvₚ
+                end
             end
         end
     end
@@ -224,81 +134,55 @@ function transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; a
     transfer!(alg, system, particles, grid, space, dt)
 end
 
-function transfer!(::Union{DefaultTransfer, FLIP, TFLIP}, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
+function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
     check_grid_particles(grid, particles, space)
 
     @threaded for p in 1:num_particles(space)
-        dvₚ = zero(eltype(particles.v))
+        mp = mpvalue(space, p)
+
+        xₚ  = particles.x[p]
         vₚ  = zero(eltype(particles.v))
         ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
-        mp = mpvalue(space, p)
-        for (j, i) in enumerate(neighbornodes(space, p))
-            N = shape_value(mp, j)
-            ∇N = shape_gradient(mp, j)
-            vᵢ = grid.v[i]
-            dvᵢ = vᵢ - grid.vⁿ[i]
-            dvₚ += N * dvᵢ
-            vₚ  += N * vᵢ
-            ∇vₚ += vᵢ ⊗ ∇N
+
+        if alg isa FLIPGroup
+            dvₚ = zero(eltype(particles.v))
         end
-        particles.∇v[p] = velocity_gradient(system, particles.x[p], vₚ, ∇vₚ)
-        particles.v[p] += dvₚ
-        particles.x[p] += vₚ * dt
-    end
+        if alg isa AffineGroup
+            Bₚ = zero(eltype(particles.B))
+        end
 
-    particles
-end
-
-function transfer!(::Union{PIC, TPIC}, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
-    check_grid_particles(grid, particles, space)
-
-    @threaded for p in 1:num_particles(space)
-        vₚ  = zero(eltype(particles.v))
-        ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
-        mp = mpvalue(space, p)
         for (j, i) in enumerate(neighbornodes(space, p))
             N = shape_value(mp, j)
             ∇N = shape_gradient(mp, j)
+
             vᵢ = grid.v[i]
             vₚ  += vᵢ * N
             ∇vₚ += vᵢ ⊗ ∇N
+
+            if alg isa FLIPGroup
+                dvᵢ = vᵢ - grid.vⁿ[i]
+                dvₚ += N * dvᵢ
+            end
+            if alg isa AffineGroup
+                xᵢ = grid.x[i]
+                Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
+            end
         end
-        particles.∇v[p] = velocity_gradient(system, particles.x[p], vₚ, ∇vₚ)
-        particles.v[p] = vₚ
+
         particles.x[p] += vₚ * dt
-    end
+        particles.∇v[p] = velocity_gradient(system, xₚ, vₚ, ∇vₚ)
 
-    particles
-end
-
-function affine_transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::Real)
-    check_grid_particles(grid, particles, space)
-
-    @threaded for p in 1:num_particles(space)
-        xₚ = particles.x[p]
-        Bₚ  = zero(eltype(particles.B))
-        mp = mpvalue(space, p)
-        for (j, i) in enumerate(neighbornodes(space, p))
-            N = shape_value(mp, j)
-            vᵢ = grid.v[i]
-            xᵢ = grid.x[i]
-            Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
+        if alg isa FLIPGroup
+            particles.v[p] += dvₚ
+        else
+            @assert alg isa PICGroup
+            particles.v[p] = vₚ
         end
-        particles.B[p] = Bₚ
+        if alg isa AffineGroup
+            particles.B[p] = Bₚ
+        end
     end
 
-    particles
-end
-
-function transfer!(::AFLIP, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
-    affine_transfer!(particles, grid, space, dt)
-    transfer!(FLIP(), system, particles, grid, space, dt)
-    particles
-end
-
-function transfer!(::APIC, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {dim}
-    affine_transfer!(particles, grid, space, dt)
-    transfer!(PIC(), system, particles, grid, space, dt)
     particles
 end
 
