@@ -7,6 +7,7 @@
         b::Vec{2, Float64}
         σ::SymmetricSecondOrderTensor{3, Float64, 6}
         ∇v::SecondOrderTensor{3, Float64, 9}
+        xᵣ::Float64 # for axisymmetric
         B::Mat{2, 2, Float64, 4} # for APIC
         C::Mat{2, 3, Float64, 6} # for LinearWLS
     end
@@ -23,6 +24,8 @@
                 grid = generate_grid(GridState, 2.0, (0,10), (0,20))
                 particles= generate_particles((x,y) -> true, ParticleState, grid; system)
                 space = MPSpace(interp, grid, particles)
+                getr(x) = x[1]
+                @. particles.xᵣ = getr(particles.x)
                 v0 = rand(Vec{2})
                 ρ0 = 1.2e3
                 @. particles.m = ρ0 * particles.V

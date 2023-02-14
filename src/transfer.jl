@@ -65,16 +65,19 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
         @inbounds begin
             mp = mpvalue(space, p)
 
-            # 100% used
+            # almost always used
+            xₚ = particles.x[p]
             mₚ = particles.m[p]
 
             if :f in names
-                xₚ = particles.x[p]
                 Vₚ = particles.V[p]
                 σₚ = particles.σ[p]
                 bₚ = particles.b[p]
                 Vₚσₚ = Vₚ * σₚ
                 mₚbₚ = mₚ * bₚ
+                if system isa Axisymmetric
+                    rₚ = particles.xᵣ[p]
+                end
             end
 
             # grid momentum depends on transfer algorithms
@@ -113,20 +116,22 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
                 end
 
                 if :f in names
-                    fint = -stress_to_force(system, N, ∇N, xₚ, Vₚσₚ)
+                    if system isa Axisymmetric
+                        fint = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
+                    else
+                        fint = -calc_fint(system, ∇N, Vₚσₚ)
+                    end
                     grid.f[i] += fint + N*mₚbₚ
                 end
 
                 # grid momentum depends on transfer algorithms
                 if :mv in names
+                    xᵢ = lattice[i]
                     if alg isa DefaultTransfer && mp isa WLSValue
-                        xᵢ = lattice[i]
                         grid.mv[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
                     elseif alg isa AffineGroup
-                        xᵢ = lattice[i]
                         grid.mv[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
                     elseif alg isa TaylorGroup
-                        xᵢ = lattice[i]
                         grid.mv[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
                     else
                         grid.mv[i] += N*mₚvₚ
@@ -139,15 +144,15 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
     grid
 end
 
-@inline function stress_to_force(::Union{NormalSystem, PlaneStrain}, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
-    Tensorial.resizedim(σ, Val(2)) ⋅ ∇N
-end
-@inline function stress_to_force(::Axisymmetric, N, ∇N, x::Vec{2}, σ::SymmetricSecondOrderTensor{3})
-    @inbounds Tensorial.resizedim(σ, Val(2)) ⋅ ∇N + Vec(1,0) * (σ[3,3] * N / x[1])
-end
-@inline function stress_to_force(::NormalSystem, N, ∇N, x::Vec{3}, σ::SymmetricSecondOrderTensor{3})
-    σ ⋅ ∇N
-end
+# 1D
+@inline calc_fint(::NormalSystem, ∇N::Vec{1}, Vₚσₚ::SymmetricSecondOrderTensor{1}) = σₚ ⋅ ∇N
+# plane-strain
+@inline calc_fint(::Union{NormalSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{3}) = @Tensor(Vₚσₚ[1:2,1:2]) ⋅ ∇N
+@inline calc_fint(::Union{NormalSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{2}) = Vₚσₚ ⋅ ∇N
+# axisymmetric
+@inline calc_fint(::Axisymmetric, N::Real, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{3}, rₚ::Real) = @Tensor(Vₚσₚ[1:2,1:2])⋅∇N + Vec(1,0)*Vₚσₚ[3,3]*N*rₚ
+# 3D
+@inline calc_fint(::NormalSystem, ∇N::Vec{3}, Vₚσₚ::SymmetricSecondOrderTensor{3}) = Vₚσₚ ⋅ ∇N
 
 ################
 # G2P transfer #
@@ -169,13 +174,12 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
     @threaded for p in 1:num_particles(space)
         mp = mpvalue(space, p)
 
-        # 100% used
-        xₚ  = particles.x[p]
-
-        # there is no difference along with algorithms for calculating `:∇v` and `:x`
+        # there is no difference along with transfer algorithms for calculating `:∇v` and `:x`
         if :∇v in names
-            vₚ  = zero(eltype(particles.v))
             ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
+            if system isa Axisymmetric
+                vₚ = zero(eltype(particles.v))
+            end
         end
 
         if :x in names
@@ -192,6 +196,7 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
             end
             if alg isa AffineGroup
                 # Bₚ is always calculated when `:v` is specified
+                xₚ = particles.x[p]
                 Bₚ = zero(eltype(particles.B))
             end
         end
@@ -228,11 +233,16 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
         end
 
         if :∇v in names
-            particles.∇v[p] = velocity_gradient(system, xₚ, vₚ, ∇vₚ)
+            T_∇v = eltype(particles.∇v)
+            if system isa Axisymmetric
+                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ, vₚ[1], particles.xᵣ[p])
+            else
+                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ)
+            end
         end
 
         if :x in names
-            particles.x[p] = xₚ + vₚ * dt
+            particles.x[p] += vₚ * dt
         end
 
         # particle velocity depends on transfer algorithms
@@ -282,11 +292,17 @@ function transfer!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, pa
 
         if :∇v in names
             ∇p0 = gradient(get_basis(mp), zero(Vec{dim, Int}))
-            particles.∇v[p] = velocity_gradient(system, xₚ, vₚ, Cₚ ⋅ ∇p0)
+            ∇vₚ = Cₚ ⋅ ∇p0
+            T_∇v = eltype(particles.∇v)
+            if system isa Axisymmetric
+                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ, vₚ[1], particles.xᵣ[p])
+            else
+                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ)
+            end
         end
 
         if :x in names
-            particles.x[p] = xₚ + vₚ * dt
+            particles.x[p] += vₚ * dt
         end
 
         if :v in names
@@ -298,15 +314,15 @@ function transfer!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, pa
     particles
 end
 
-@inline function velocity_gradient(::Union{NormalSystem, PlaneStrain}, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    Tensorial.resizedim(∇v, Val(3)) # expaned entries are filled with zero
-end
-@inline function velocity_gradient(::Axisymmetric, x::Vec{2}, v::Vec{2}, ∇v::SecondOrderTensor{2})
-    @inbounds Tensorial.resizedim(∇v, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 v[1]/x[1]])
-end
-@inline function velocity_gradient(::NormalSystem, x::Vec{3}, v::Vec{3}, ∇v::SecondOrderTensor{3})
-    ∇v
-end
+# 1D
+@inline calc_∇v(::NormalSystem, ::Type{<: SecondOrderTensor{1}}, ∇vₚ::SecondOrderTensor{1}) = ∇vₚ
+# plane-strain
+@inline calc_∇v(::Union{NormalSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{2}}, ∇vₚ::SecondOrderTensor{2}) = ∇vₚ
+@inline calc_∇v(::Union{NormalSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{2}) = Tensorial.resizedim(∇vₚ, Val(3))
+# axisymmetric
+@inline calc_∇v(::Axisymmetric, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{2}, v::Real, r::Real) = Tensorial.resizedim(∇v, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 v/r])
+# 3D
+@inline calc_∇v(::NormalSystem, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{3}) = ∇vₚ
 
 ##########################
 # smooth_particle_state! #
