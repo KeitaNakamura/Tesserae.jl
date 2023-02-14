@@ -31,6 +31,26 @@ end
     NamedTuple{(names1..., names2...), Tuple{types1.parameters..., types2.parameters...}}
 end
 
+# rename property names
+function rename(A::NamedTuple{srcnames}, ::Val{before}, ::Val{after}) where {srcnames, before, after}
+    @assert length(before) == length(after)
+    nt = (; zip(before, after)...)
+    newnames = map(name -> get(nt, name, name), srcnames)
+    NamedTuple{newnames}(values(A))
+end
+function rename(A::StructArray, b::Val, a::Val)
+    StructArray(rename(StructArrays.components(A), b, a))
+end
+
+macro rename(src, list...)
+    for ex in list
+        @assert Meta.isexpr(ex, :call) && ex.args[1] == :(=>)
+    end
+    before = Val(tuple(Symbol[ex.args[2] for ex in list]...))
+    after  = Val(tuple(Symbol[ex.args[3] for ex in list]...))
+    esc(:(Marble.rename($src, $before, $after)))
+end
+
 ####################
 # CoordinateSystem #
 ####################

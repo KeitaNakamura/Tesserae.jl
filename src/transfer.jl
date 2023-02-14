@@ -45,18 +45,16 @@ function transfer!(grid::Grid, particles::Particles, space::MPSpace, dt::Real; a
     fillzero!(grid.m)
     fillzero!(grid.vⁿ)
     fillzero!(grid.v)
-    transfer!(alg, system, (; m=grid.m, mv=grid.vⁿ, f=grid.v), particles, space)
+    transfer!(alg, system, Val((:m, :f, :mv)), @rename(grid, v=>f, vⁿ=>mv), particles, space)
     @. grid.v = ((grid.vⁿ + dt*grid.v) / grid.m) * !iszero(grid.m)
     @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
     grid
 end
 
 # don't use dispatch and all transfer algorithms are writtein in this function to reduce a lot of deplicated code
-function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, grid::NamedTuple{names}, particles::Particles, space::MPSpace{dim, T}) where {names, dim, T}
+function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace{dim, T}) where {names, dim, T}
     check_statenames(names, (:m, :f, :mv))
-    :m  in names && check_grid(grid.m, space)
-    :f  in names && check_grid(grid.f, space)
-    :mv in names && check_grid(grid.mv, space)
+    check_grid(grid, space)
     check_particles(particles, space)
 
     lattice = get_lattice(space)
@@ -154,25 +152,13 @@ end
 
 # default
 function transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    _transfer!(alg, system, particles, grid, space, dt)
-end
-function _transfer!(alg::TransferAlgorithm, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace, dt::Real)
-    transfer!(alg, system, (; ∇v=particles.∇v, x=particles.x, v=particles.v), grid, space, dt)
-end
-function _transfer!(alg::AffineGroup, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace, dt::Real)
-    transfer!(alg, system, (; ∇v=particles.∇v, x=particles.x, v=particles.v, B=particles.B), grid, space, dt)
-end
-function _transfer!(alg::DefaultTransfer, system::CoordinateSystem, particles::Particles, grid::Grid, space::MPSpace{<: Any, <: Any, <: WLSValue}, dt::Real)
-    transfer!(alg, system, (; ∇v=particles.∇v, x=particles.x, v=particles.v, C=particles.C), grid, space, dt)
+    transfer!(alg, system, Val((:∇v, :x, :v)), particles, grid, space, dt)
 end
 
-function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, particles::NamedTuple{names}, grid::Grid, space::MPSpace{dim}, dt::Real) where {names, dim}
-    check_statenames(names, (:∇v, :x, :v, :B))
+function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {names, dim}
+    check_statenames(names, (:∇v, :x, :v))
     check_grid(grid, space)
-    :∇v in names && check_particles(particles.∇v, space)
-    :x  in names && check_particles(particles.x, space)
-    :v  in names && check_particles(particles.v, space)
-    :B  in names && check_particles(particles.B, space) # for affine
+    check_particles(particles, space)
 
     @threaded for p in 1:num_particles(space)
         mp = mpvalue(space, p)
@@ -263,13 +249,12 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, particles::
 end
 
 # special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, system::CoordinateSystem, particles::NamedTuple{names}, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {names, dim}
-    check_statenames(names, (:∇v, :x, :v, :C))
+function transfer!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {names, dim}
+    check_statenames(names, (:∇v, :x, :v))
     check_grid(grid, space)
     :∇v in names && check_particles(particles.∇v, space)
     :x  in names && check_particles(particles.x, space)
     :v  in names && check_particles(particles.v, space)
-    :C  in names && check_particles(particles.C, space)
 
     @threaded for p in 1:num_particles(space)
         mp = mpvalue(space, p)
