@@ -60,7 +60,7 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
     check_grid(grid, space)
     check_particles(particles, space)
 
-    lattice = get_lattice(space)
+    lattice = get_lattice(grid)
     parallel_each_particle(space) do p
         @inbounds begin
             mp = mpvalue(space, p)
@@ -201,7 +201,7 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
             end
         end
 
-        lattice = get_lattice(space)
+        lattice = get_lattice(grid)
         for (j, i) in enumerate(neighbornodes(space, p))
             N = shape_value(mp, j)
             ∇N = shape_gradient(mp, j)

@@ -1,5 +1,4 @@
 struct MPSpace{dim, T, MP <: MPValue{dim, T}, GS <: Union{Nothing, SpPattern}}
-    lattice::Lattice{dim, T}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
@@ -13,7 +12,7 @@ function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVec
     npts = length(xₚ)
     mpvals = [MPValue{dim, T}(itp) for _ in 1:npts]
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
-    MPSpace(lattice, sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), gridsppat)
+    MPSpace(sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), gridsppat)
 end
 MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, nothing)
 MPSpace(itp::Interpolation, grid::SpGrid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
@@ -21,7 +20,6 @@ MPSpace(itp::Interpolation, grid::SpGrid, particles::Particles) = MPSpace(itp, g
 # helper functions
 gridsize(space::MPSpace) = size(space.sppat)
 num_particles(space::MPSpace) = length(space.mpvals)
-get_lattice(space::MPSpace) = space.lattice
 get_sppat(space::MPSpace) = space.sppat
 get_gridsppat(space::MPSpace) = space.gridsppat
 get_pointsperblock(space::MPSpace) = space.ptspblk
@@ -81,7 +79,7 @@ end
 function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
     @assert num_particles(space) == length(particles)
 
-    update_pointsperblock!(space, get_lattice(space), particles.x)
+    update_pointsperblock!(space, get_lattice(grid), particles.x)
     #
     # Following `update_mpvalues!` update `space.sppat` and use it when `filter` is given.
     # This consideration of sparsity pattern is necessary in some `Interpolation`s such as `WLS` and `KernelCorrection`.
@@ -101,7 +99,7 @@ function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filte
     #
     #   < Sparsity pattern for `MPValue` >     < Sparsity pattern for Grid-state (`SpArray`) >
     #
-    update_mpvalues!(space, get_lattice(space), particles, filter)
+    update_mpvalues!(space, get_lattice(grid), particles, filter)
     update_sparsity_pattern!(space)
     update_sparsity_pattern!(grid, space)
 
