@@ -46,8 +46,10 @@ export
 # MPSpace
     MPSpace,
     mpvalue,
-    transfer!,
 # Transfer
+    particles_to_grid!,
+    grid_to_particles!,
+    transfer!,
     TransferAlgorithm,
     DefaultTransfer,
     FLIP,

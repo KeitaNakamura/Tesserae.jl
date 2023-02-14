@@ -40,15 +40,18 @@ end
 # P2G transfer #
 ################
 
-# default
-function transfer!(grid::Grid, particles::Particles, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+function particles_to_grid!(grid::Grid, particles::Particles, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
     fillzero!(grid.m)
     fillzero!(grid.vⁿ)
     fillzero!(grid.v)
-    transfer!(alg, system, Val((:m, :f, :mv)), @rename(grid, v=>f, vⁿ=>mv), particles, space)
+    transfer!((:m, :f, :mv), @rename(grid, v=>f, vⁿ=>mv), particles, space; alg, system)
     @. grid.v = ((grid.vⁿ + dt*grid.v) / grid.m) * !iszero(grid.m)
     @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
     grid
+end
+
+function transfer!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    transfer!(alg, system, Val(names), grid, particles, space)
 end
 
 # don't use dispatch and all transfer algorithms are writtein in this function to reduce a lot of deplicated code
@@ -150,9 +153,12 @@ end
 # G2P transfer #
 ################
 
-# default
-function transfer!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    transfer!(alg, system, Val((:∇v, :x, :v)), particles, grid, space, dt)
+function grid_to_particles!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    transfer!((:∇v, :x, :v), particles, grid, space, dt; alg, system)
+end
+
+function transfer!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    transfer!(alg, system, Val(names), particles, grid, space, dt)
 end
 
 function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {names, dim}

@@ -77,7 +77,7 @@ function SandColumn(
 
         update!(space, grid, particles)
 
-        transfer!(grid, particles, space, dt; alg)
+        particles_to_grid!(grid, particles, space, dt; alg)
 
         # boundary conditions
         @inbounds for node in @view(LazyRows(grid)[:,begin]) # bottom
@@ -95,7 +95,7 @@ function SandColumn(
             node.v = vᵢ - (vᵢ⋅n)*n
         end
 
-        transfer!(particles, grid, space, dt; alg)
+        grid_to_particles!(particles, grid, space, dt; alg)
         Marble.@threaded for p in LazyRows(particles)
             ∇v = p.∇v
             σ_n = p.σ

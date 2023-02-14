@@ -89,7 +89,7 @@ function StripFooting(
 
         update!(space, grid, particles)
 
-        transfer!(grid, particles, space, dt; alg)
+        particles_to_grid!(grid, particles, space, dt; alg)
 
         # boundary conditions
         vertical_load = 0.0
@@ -110,7 +110,7 @@ function StripFooting(
             node.v = vᵢ - (vᵢ⋅n)*n
         end
 
-        transfer!(particles, grid, space, dt; alg)
+        grid_to_particles!(particles, grid, space, dt; alg)
 
         @. particles.tr∇v = tr(particles.∇v)
         if lockingfree

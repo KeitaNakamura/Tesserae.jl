@@ -67,7 +67,7 @@ function DamBreak(
 
         update!(space, grid, particles)
 
-        transfer!(grid, particles, space, dt; alg)
+        particles_to_grid!(grid, particles, space, dt; alg)
 
         # boundary conditions
         slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
@@ -78,7 +78,7 @@ function DamBreak(
             node.v = slip(node.v, Vec(0,1))
         end
 
-        transfer!(particles, grid, space, dt; alg)
+        grid_to_particles!(particles, grid, space, dt; alg)
 
         Marble.@threaded for p in LazyRows(particles)
             m = p.m

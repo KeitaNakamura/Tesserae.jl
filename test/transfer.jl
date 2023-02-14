@@ -30,7 +30,7 @@
                 @. particles.σ = zero(SymmetricSecondOrderTensor{3})
                 # transfer
                 update!(space, grid, particles)
-                transfer!(grid, particles, space, 1; alg=FLIP(), system)
+                particles_to_grid!(grid, particles, space, 1; alg=FLIP(), system)
                 @test all(==(v0), particles.v)
             end
         end
@@ -59,12 +59,12 @@
 
                     # initialize particles
                     grid.v .= grid_v
-                    transfer!(particles, grid, space, dt; alg)
+                    grid_to_particles!(particles, grid, space, dt; alg)
 
                     for step in 1:10
                         update!(space, grid, particles)
-                        transfer!(grid, particles, space, dt; alg)
-                        transfer!(particles, grid, space, dt; alg)
+                        particles_to_grid!(grid, particles, space, dt; alg)
+                        grid_to_particles!(particles, grid, space, dt; alg)
                     end
 
                     # check if movement of particles is large enough
@@ -111,9 +111,9 @@
                         grid.v .= grid_v
                         if alg isa FLIP
                             # use PIC to correctly initialize particle velocity
-                            transfer!(particles, grid, space, dt; alg=PIC())
+                            grid_to_particles!(particles, grid, space, dt; alg=PIC())
                         else
-                            transfer!(particles, grid, space, dt; alg)
+                            grid_to_particles!(particles, grid, space, dt; alg)
                         end
                         particles.x .= x₀
 
@@ -136,8 +136,8 @@
 
                         particles_set = map(1:10) do step
                             update!(space, grid, particles)
-                            transfer!(grid, particles, space, dt; alg)
-                            transfer!(particles, grid, space, dt; alg)
+                            particles_to_grid!(grid, particles, space, dt; alg)
+                            grid_to_particles!(particles, grid, space, dt; alg)
                             particles.x .= x₀
 
                             # openpvd(pvdfile; append=true) do pvd
