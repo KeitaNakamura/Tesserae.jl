@@ -53,13 +53,13 @@ function generate_particles(
             @. particles.V = V
         end
     end
-    if :r in propertynames(particles)
+    if :l in propertynames(particles)
         if random
-            h = V^(1/dim)
+            l = V^(1/dim)
         else
-            h = spacing(lattice) / n
+            l = spacing(lattice) / n
         end
-        particles.r .= h / 2
+        particles.l .= l
     end
 
     reorder_particles!(particles, pointsperblock(lattice, particles.x))
@@ -85,8 +85,8 @@ function generate_particles(::Type{ParticleState}, particles_old::StructVector) 
     if :V in propertynames(particles)
         particles.V .= particles_old.V
     end
-    if :r in propertynames(particles)
-        particles.r .= particles_old.r
+    if :l in propertynames(particles)
+        particles.l .= particles_old.l
     end
 
     particles
@@ -102,6 +102,6 @@ function minimum_particle_state(::Val{dim}, ::Type{T}) where {dim, T}
     @NamedTuple begin
         x::Vec{dim, T}
         V::T
-        r::T
+        l::T
     end
 end

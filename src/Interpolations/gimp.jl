@@ -2,7 +2,7 @@ struct GIMP <: Kernel end
 
 @inline function neighbornodes(::GIMP, lattice::Lattice, pt)
     dx⁻¹ = spacing_inv(lattice)
-    neighbornodes(lattice, pt.x, 1+pt.r*dx⁻¹)
+    neighbornodes(lattice, pt.x, 1+(pt.l/2)*dx⁻¹)
 end
 
 # simple GIMP calculation
@@ -13,22 +13,22 @@ end
 # boundary treatment is ignored
 function value(::GIMP, ξ::Real, l::Real) # `l` is normalized radius by dx
     ξ = abs(ξ)
-    ξ < l   ? 1 - (ξ^2 + l^2) / 2l :
-    ξ < 1-l ? 1 - ξ                :
-    ξ < 1+l ? (1+l-ξ)^2 / 4l       : zero(ξ)
+    ξ < l/2   ? 1 - (4ξ^2 + l^2) / 4l :
+    ξ < 1-l/2 ? 1 - ξ                 :
+    ξ < 1+l/2 ? (2+l-2ξ)^2 / 8l       : zero(ξ)
 end
 @inline value(f::GIMP, ξ::Vec, l::Real) = prod(value.(f, ξ, l))
-function value(f::GIMP, lattice::Lattice, I::CartesianIndex, xp::Vec, rp::Real)
+function value(f::GIMP, lattice::Lattice, I::CartesianIndex, xp::Vec, lp::Real)
     @_propagate_inbounds_meta
     xi = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
     ξ = (xp - xi) * dx⁻¹
-    value(f, ξ, rp*dx⁻¹)
+    value(f, ξ, lp*dx⁻¹)
 end
-@inline value(f::GIMP, lattice::Lattice, I::CartesianIndex, pt) = value(f, lattice, I, pt.x, pt.r)
+@inline value(f::GIMP, lattice::Lattice, I::CartesianIndex, pt) = value(f, lattice, I, pt.x, pt.l)
 
 @inline function value_gradient(f::GIMP, lattice::Lattice, I::CartesianIndex, pt)
-    ∇N, N = gradient(x -> value(f, lattice, I, x, pt.r), pt.x, :all)
+    ∇N, N = gradient(x -> value(f, lattice, I, x, pt.l), pt.x, :all)
     N, ∇N
 end
 
@@ -57,7 +57,7 @@ num_nodes(mp::GIMPValue) = length(mp.N)
     resize!(mp.∇N, n)
 
     @inbounds for (j, i) in enumerate(indices)
-        mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,pt.r), getx(pt), :all)
+        mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,pt.l), getx(pt), :all)
     end
 
     indices

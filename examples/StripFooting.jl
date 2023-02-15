@@ -27,7 +27,7 @@ function StripFooting(
     ParticleState = @NamedTuple begin
         m::Float64
         V::Float64
-        r::Float64
+        l::Float64
         x::Vec{2, Float64}
         v::Vec{2, Float64}
         b::Vec{2, Float64}

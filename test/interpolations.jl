@@ -30,7 +30,7 @@ end
         TOL = sqrt(eps(T))
         for dim in 1:3
             lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
-            r = spacing(lattice) / 4
+            l = spacing(lattice) / 2
             for kernel in (QuadraticBSpline(), CubicBSpline(), GIMP())
                 for WLS in (LinearWLS, Marble.BilinearWLS)
                     WLS == Marble.BilinearWLS && dim != 2 && continue
@@ -38,7 +38,7 @@ end
                     for _ in 1:100
                         x = rand(Vec{dim, T})
                         if kernel isa GIMP
-                            pt = (;x,r)
+                            pt = (;x,l)
                         else
                             pt = x
                         end
@@ -62,12 +62,12 @@ end
             lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
             for itp in (GIMP(),)
                 mp = MPValue{dim, T}(itp)
-                r = spacing(lattice) / 4
+                l = spacing(lattice) / 2
                 # GIMP doesn't have pertition of unity when closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
                 for _ in 1:100
                     x = rand(Vec{dim, T})
-                    pt = (;x,r)
+                    pt = (;x,l)
                     _, isnearbounds = neighbornodes(itp, lattice, pt)
                     if !isnearbounds
                         indices = update!(mp, lattice, pt)
@@ -89,12 +89,12 @@ end
             TOL = sqrt(eps(T))
             for dim in 1:3
                 lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
-                r = spacing(lattice) / 4
+                l = spacing(lattice) / 2
                 mp = MPValue{dim, T}(KernelCorrection(kernel))
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     if kernel isa GIMP
-                        pt = (;x,r)
+                        pt = (;x,l)
                     else
                         pt = x
                     end
