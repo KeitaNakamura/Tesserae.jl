@@ -4,14 +4,14 @@ struct DefaultTransfer <: TransferAlgorithm end
 struct FLIP  <: TransferAlgorithm end
 struct PIC   <: TransferAlgorithm end
 # affine transfer
-struct AFLIP <: TransferAlgorithm end
-struct APIC  <: TransferAlgorithm end
+struct AffineTransfer{T <: Union{FLIP, PIC}} <: TransferAlgorithm end
+const AFLIP = AffineTransfer{FLIP}
+const APIC  = AffineTransfer{PIC}
 # Taylor transfer
-struct TFLIP <: TransferAlgorithm end
-struct TPIC  <: TransferAlgorithm end
+struct TaylorTransfer{T <: Union{FLIP, PIC}} <: TransferAlgorithm end
+const TFLIP = TaylorTransfer{FLIP}
+const TPIC  = TaylorTransfer{PIC}
 
-const AffineGroup = Union{AFLIP, APIC}
-const TaylorGroup = Union{TFLIP, TPIC}
 const FLIPGroup = Union{DefaultTransfer, FLIP, AFLIP, TFLIP}
 const PICGroup = Union{PIC, APIC, TPIC}
 
@@ -84,7 +84,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                     mₚvₚ = mₚ * vₚ
 
                     # additional term from high order approximation
-                    if alg isa AffineGroup
+                    if alg isa AffineTransfer
                         Bₚ = particles.B[p]
                         Dₚ = zero(Mat{dim, dim, T})
                         for (j, i) in enumerate(neighbornodes(space, p))
@@ -93,7 +93,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                             Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
                         end
                         mₚCₚ = mₚ * Bₚ ⋅ inv(Dₚ)
-                    elseif alg isa TaylorGroup
+                    elseif alg isa TaylorTransfer
                         ∇vₚ = particles.∇v[p]
                         mₚ∇vₚ = mₚ * @Tensor(∇vₚ[1:dim, 1:dim])
                     end
@@ -122,9 +122,9 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                     xᵢ = lattice[i]
                     if alg isa DefaultTransfer && mp isa WLSValue
                         grid.mv[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
-                    elseif alg isa AffineGroup
+                    elseif alg isa AffineTransfer
                         grid.mv[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
-                    elseif alg isa TaylorGroup
+                    elseif alg isa TaylorTransfer
                         grid.mv[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
                     else
                         grid.mv[i] += N*mₚvₚ
@@ -187,7 +187,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                 @assert alg isa PICGroup
                 vₚ = zero(eltype(particles.v))
             end
-            if alg isa AffineGroup
+            if alg isa AffineTransfer
                 # Bₚ is always calculated when `:v` is specified
                 xₚ = particles.x[p]
                 Bₚ = zero(eltype(particles.B))
@@ -218,7 +218,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                     dvᵢ = vᵢ - grid.vⁿ[i]
                     dvₚ += N * dvᵢ
                 end
-                if alg isa AffineGroup
+                if alg isa AffineTransfer
                     xᵢ = lattice[i]
                     Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
                 end
@@ -246,7 +246,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                 @assert alg isa PICGroup
                 particles.v[p] = vₚ
             end
-            if alg isa AffineGroup
+            if alg isa AffineTransfer
                 # additional quantity for affine transfers
                 # Bₚ is always calculated when `:v` is specified
                 particles.B[p] = Bₚ
