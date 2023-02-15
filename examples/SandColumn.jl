@@ -14,6 +14,8 @@ function SandColumn(
     GridState = @NamedTuple begin
         x::Vec{2, Float64}
         m::Float64
+        mv::Vec{2, Float64}
+        f::Vec{2, Float64}
         v::Vec{2, Float64}
         vⁿ::Vec{2, Float64}
     end
@@ -77,7 +79,9 @@ function SandColumn(
 
         update!(space, grid, particles)
 
-        particles_to_grid!(grid, particles, space, dt; alg)
+        particle_to_grid!(fillzero!(grid), particles, space; alg)
+        @. grid.vⁿ = grid.mv / grid.m
+        @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
 
         # boundary conditions
         @inbounds for node in @view(LazyRows(grid)[:,begin]) # bottom
@@ -95,7 +99,7 @@ function SandColumn(
             node.v = vᵢ - (vᵢ⋅n)*n
         end
 
-        grid_to_particles!(particles, grid, space, dt; alg)
+        grid_to_particle!(particles, grid, space, dt; alg)
         Marble.@threaded for p in LazyRows(particles)
             ∇v = p.∇v
             σ_n = p.σ

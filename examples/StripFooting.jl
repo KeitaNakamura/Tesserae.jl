@@ -16,6 +16,8 @@ function StripFooting(
     GridState = @NamedTuple begin
         x::Vec{2, Float64}
         m::Float64
+        mv::Vec{2, Float64}
+        f::Vec{2, Float64}
         v::Vec{2, Float64}
         vⁿ::Vec{2, Float64}
         # for smooth_particle_state!
@@ -89,7 +91,9 @@ function StripFooting(
 
         update!(space, grid, particles)
 
-        particles_to_grid!(grid, particles, space, dt; alg)
+        particle_to_grid!(fillzero!(grid), particles, space; alg)
+        @. grid.vⁿ = grid.mv / grid.m
+        @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
 
         # boundary conditions
         vertical_load = 0.0
@@ -110,7 +114,7 @@ function StripFooting(
             node.v = vᵢ - (vᵢ⋅n)*n
         end
 
-        grid_to_particles!(particles, grid, space, dt; alg)
+        grid_to_particle!(particles, grid, space, dt; alg)
 
         @. particles.tr∇v = tr(particles.∇v)
         if lockingfree

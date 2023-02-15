@@ -19,6 +19,9 @@ export LazyRow, LazyRows
 const BLOCK_UNIT = unsigned(3) # 2^3
 
 export
+# utils
+    fillzero!,
+    @rename,
 # coordinate system
     CoordinateSystem,
     PlaneStrain,
@@ -47,9 +50,8 @@ export
     MPSpace,
     mpvalue,
 # Transfer
-    particles_to_grid!,
-    grid_to_particles!,
-    transfer!,
+    particle_to_grid!,
+    grid_to_particle!,
     TransferAlgorithm,
     DefaultTransfer,
     FLIP,

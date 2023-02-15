@@ -15,6 +15,8 @@ function DamBreak(
     GridState = @NamedTuple begin
         x::Vec{2, Float64}
         m::Float64
+        mv::Vec{2, Float64}
+        f::Vec{2, Float64}
         v::Vec{2, Float64}
         vⁿ::Vec{2, Float64}
     end
@@ -67,7 +69,9 @@ function DamBreak(
 
         update!(space, grid, particles)
 
-        particles_to_grid!(grid, particles, space, dt; alg)
+        particle_to_grid!(fillzero!(grid), particles, space; alg)
+        @. grid.vⁿ = grid.mv / grid.m
+        @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
 
         # boundary conditions
         slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
@@ -78,7 +82,7 @@ function DamBreak(
             node.v = slip(node.v, Vec(0,1))
         end
 
-        grid_to_particles!(particles, grid, space, dt; alg)
+        grid_to_particle!(particles, grid, space, dt; alg)
 
         Marble.@threaded for p in LazyRows(particles)
             m = p.m

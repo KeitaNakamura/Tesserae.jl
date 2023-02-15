@@ -14,27 +14,30 @@
     GridState = @NamedTuple begin
         x::Vec{2, Float64}
         m::Float64
+        mv::Vec{2, Float64}
+        f::Vec{2, Float64}
         v::Vec{2, Float64}
         vⁿ::Vec{2, Float64}
     end
     @testset "P2G" begin
-        for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-            for system in (PlaneStrain(), Axisymmetric())
+        @testset "$interp" for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
+            @testset "$system" for system in (PlaneStrain(), Axisymmetric())
+                Random.seed!(1234)
                 # initialization
                 grid = generate_grid(GridState, 2.0, (0,10), (0,20))
-                particles= generate_particles((x,y) -> true, ParticleState, grid; system)
+                particles = generate_particles((x,y) -> true, ParticleState, grid; system)
                 space = MPSpace(interp, grid, particles)
                 getr(x) = x[1]
-                @. particles.xᵣ = getr(particles.x)
                 v0 = rand(Vec{2})
                 ρ0 = 1.2e3
                 @. particles.m = ρ0 * particles.V
                 @. particles.v = v0
-                @. particles.σ = zero(SymmetricSecondOrderTensor{3})
+                @. particles.xᵣ = getr(particles.x)
                 # transfer
                 update!(space, grid, particles)
-                particles_to_grid!(grid, particles, space, 1; alg=FLIP(), system)
-                @test all(==(v0), particles.v)
+                particle_to_grid!((:m,:mv), grid, particles, space; alg=FLIP(), system)
+                @. grid.v = grid.mv / grid.m
+                @test all(≈(v0), grid.v)
             end
         end
     end
@@ -62,12 +65,14 @@
 
                     # initialize particles
                     grid.v .= grid_v
-                    grid_to_particles!(particles, grid, space, dt; alg)
+                    grid_to_particle!(particles, grid, space, dt; alg)
 
                     for step in 1:10
                         update!(space, grid, particles)
-                        particles_to_grid!(grid, particles, space, dt; alg)
-                        grid_to_particles!(particles, grid, space, dt; alg)
+                        particle_to_grid!(fillzero!(grid), particles, space; alg)
+                        @. grid.vⁿ = grid.mv / grid.m
+                        @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
+                        grid_to_particle!(particles, grid, space, dt; alg)
                     end
 
                     # check if movement of particles is large enough
@@ -114,9 +119,9 @@
                         grid.v .= grid_v
                         if alg isa FLIP
                             # use PIC to correctly initialize particle velocity
-                            grid_to_particles!(particles, grid, space, dt; alg=PIC())
+                            grid_to_particle!(particles, grid, space, dt; alg=PIC())
                         else
-                            grid_to_particles!(particles, grid, space, dt; alg)
+                            grid_to_particle!(particles, grid, space, dt; alg)
                         end
                         particles.x .= x₀
 
@@ -139,8 +144,10 @@
 
                         particles_set = map(1:10) do step
                             update!(space, grid, particles)
-                            particles_to_grid!(grid, particles, space, dt; alg)
-                            grid_to_particles!(particles, grid, space, dt; alg)
+                            particle_to_grid!(fillzero!(grid), particles, space; alg)
+                            @. grid.vⁿ = grid.mv / grid.m
+                            @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
+                            grid_to_particle!(particles, grid, space, dt; alg)
                             particles.x .= x₀
 
                             # openpvd(pvdfile; append=true) do pvd

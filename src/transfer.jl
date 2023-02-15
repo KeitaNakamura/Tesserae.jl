@@ -40,22 +40,15 @@ end
 # P2G transfer #
 ################
 
-function particles_to_grid!(grid::Grid, particles::Particles, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    fillzero!(grid.m)
-    fillzero!(grid.vⁿ)
-    fillzero!(grid.v)
-    transfer!((:m, :f, :mv), @rename(grid, v=>f, vⁿ=>mv), particles, space; alg, system)
-    @. grid.v = ((grid.vⁿ + dt*grid.v) / grid.m) * !iszero(grid.m)
-    @. grid.vⁿ = (grid.vⁿ / grid.m) * !iszero(grid.m)
-    grid
+function particle_to_grid!(grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    particle_to_grid!((:m, :f, :mv), grid, particles, space; alg, system)
 end
-
-function transfer!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    transfer!(alg, system, Val(names), grid, particles, space)
+function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    particle_to_grid!(alg, system, Val(names), grid, particles, space)
 end
 
 # don't use dispatch and all transfer algorithms are writtein in this function to reduce a lot of deplicated code
-function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace{dim, T}) where {names, dim, T}
+function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace{dim, T}) where {names, dim, T}
     check_statenames(names, (:m, :f, :mv))
     check_grid(grid, space)
     check_particles(particles, space)
@@ -158,15 +151,15 @@ end
 # G2P transfer #
 ################
 
-function grid_to_particles!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    transfer!((:∇v, :x, :v), particles, grid, space, dt; alg, system)
+function grid_to_particle!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    grid_to_particle!((:∇v, :x, :v), particles, grid, space, dt; alg, system)
 end
 
-function transfer!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    transfer!(alg, system, Val(names), particles, grid, space, dt)
+function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    grid_to_particle!(alg, system, Val(names), particles, grid, space, dt)
 end
 
-function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {names, dim}
+function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {names, dim}
     check_statenames(names, (:∇v, :x, :v))
     check_grid(grid, space)
     check_particles(particles, space)
@@ -265,7 +258,7 @@ function transfer!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names
 end
 
 # special default transfer for `WLS` interpolation
-function transfer!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {names, dim}
+function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {names, dim}
     check_statenames(names, (:∇v, :x, :v))
     check_grid(grid, space)
     :∇v in names && check_particles(particles.∇v, space)
