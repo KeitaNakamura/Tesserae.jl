@@ -104,8 +104,8 @@ julia> lattice = Lattice(1, (0,5))
 julia> neighbornodes(lattice, Vec(1.5), 1)
 (CartesianIndices((2:3,)), false)
 
-julia> neighbornodes(lattice, Vec(1.5), 2)
-(CartesianIndices((1:4,)), true)
+julia> neighbornodes(lattice, Vec(1.5), 3)
+(CartesianIndices((1:5,)), true)
 ```
 """
 @inline function neighbornodes(lattice::Lattice{dim}, x::Vec{dim}, h::Real) where {dim}

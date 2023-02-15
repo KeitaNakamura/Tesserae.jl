@@ -30,7 +30,7 @@ For example, trying to `setindex!` doesn't change anything without any errors as
 
 ```jldoctest sparray
 julia> A = Marble.SpArray{Float64}(5,5)
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+5×5 Marble.SpArray{Float64, 2}:
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
@@ -60,7 +60,7 @@ julia> sppat = falses(5,5); sppat[1,1] = true; sppat
  0  0  0  0  0
 
 julia> update_sparsity_pattern!(A, sppat)
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}}:
+5×5 Marble.SpArray{Float64, 2}:
  2.17321e-314  ⋅  ⋅  ⋅  ⋅
   ⋅            ⋅  ⋅  ⋅  ⋅
   ⋅            ⋅  ⋅  ⋅  ⋅

@@ -2,13 +2,7 @@ using Documenter
 using Marble
 
 # Setup for doctests in docstrings
-DocMeta.setdocmeta!(Marble, :DocTestSetup, recursive = true,
-    quote
-        using Marble
-        using Random
-        Random.seed!(1234)
-    end
-)
+DocMeta.setdocmeta!(Marble, :DocTestSetup, :(using Marble); recursive=true)
 
 makedocs(;
     format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == "true"),
