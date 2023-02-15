@@ -35,7 +35,7 @@
                 @. particles.xᵣ = getr(particles.x)
                 # transfer
                 update!(space, grid, particles)
-                particle_to_grid!((:m,:mv), grid, particles, space; alg=FLIP(), system)
+                particle_to_grid!((:m,:mv), fillzero!(grid), particles, space; alg=FLIP(), system)
                 @. grid.v = grid.mv / grid.m
                 @test all(≈(v0), grid.v)
             end

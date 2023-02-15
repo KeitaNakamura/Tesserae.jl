@@ -22,7 +22,7 @@ const SpGrid{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{
     quote
         lattice = Lattice($(eltype(V)), dx, minmax...)
         sppat = SpPattern(size(lattice))
-        fillzero!(StructArray{GridState}(tuple(lattice, $(exps...))))
+        StructArray{GridState}(tuple(lattice, $(exps...)))
     end
 end
 
