@@ -5,10 +5,12 @@ struct FLIP  <: TransferAlgorithm end
 struct PIC   <: TransferAlgorithm end
 # affine transfer
 struct AffineTransfer{T <: Union{FLIP, PIC}} <: TransferAlgorithm end
+AffineTransfer(t::TransferAlgorithm) = AffineTransfer{typeof(t)}()
 const AFLIP = AffineTransfer{FLIP}
 const APIC  = AffineTransfer{PIC}
 # Taylor transfer
 struct TaylorTransfer{T <: Union{FLIP, PIC}} <: TransferAlgorithm end
+TaylorTransfer(t::TransferAlgorithm) = TaylorTransfer{typeof(t)}()
 const TFLIP = TaylorTransfer{FLIP}
 const TPIC  = TaylorTransfer{PIC}
 
@@ -41,15 +43,16 @@ end
 ################
 
 function particle_to_grid!(grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    particle_to_grid!((:m, :f, :mv), grid, particles, space; alg, system)
+    particle_to_grid!((:m, :mv, :f), grid, particles, space; alg, system)
 end
+
 function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
     particle_to_grid!(alg, system, Val(names), grid, particles, space)
 end
 
 # don't use dispatch and all transfer algorithms are writtein in this function to reduce a lot of deplicated code
 function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace{dim, T}) where {names, dim, T}
-    check_statenames(names, (:m, :f, :mv))
+    check_statenames(names, (:m, :mv, :f))
     check_grid(grid, space)
     check_particles(particles, space)
 
@@ -152,7 +155,7 @@ end
 ################
 
 function grid_to_particle!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    grid_to_particle!((:∇v, :x, :v), particles, grid, space, dt; alg, system)
+    grid_to_particle!((:v, :∇v, :x), particles, grid, space, dt; alg, system)
 end
 
 function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
@@ -160,7 +163,7 @@ function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, g
 end
 
 function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {names, dim}
-    check_statenames(names, (:∇v, :x, :v))
+    check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
     check_particles(particles, space)
 
@@ -259,11 +262,9 @@ end
 
 # special default transfer for `WLS` interpolation
 function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {names, dim}
-    check_statenames(names, (:∇v, :x, :v))
+    check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
-    :∇v in names && check_particles(particles.∇v, space)
-    :x  in names && check_particles(particles.x, space)
-    :v  in names && check_particles(particles.v, space)
+    check_particles(particles, space)
 
     @threaded for p in 1:num_particles(space)
         mp = mpvalue(space, p)

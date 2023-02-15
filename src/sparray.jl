@@ -144,6 +144,10 @@ fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
 function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
     A.shared_sppat && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
+    unsafe_update_sparsity_pattern!(A, sppat)
+end
+
+function unsafe_update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
     @assert size(A) == size(sppat)
     n = update_sparsity_pattern!(get_sppat(A), sppat)
     resize!(nonzeros(A), n)

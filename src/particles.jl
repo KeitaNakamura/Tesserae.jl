@@ -72,8 +72,8 @@ function generate_particles(isindomain::Function, lattice::Lattice{dim, T}; kwar
 end
 
 # for grid
-generate_particles(isindomain::Function, grid::Grid; kwargs...) = generate_particles(isindomain, grid.x; kwargs...)
 generate_particles(isindomain::Function, ::Type{ParticleState}, grid::Grid; kwargs...) where {ParticleState} = generate_particles(isindomain, ParticleState, grid.x; kwargs...)
+generate_particles(isindomain::Function, grid::Grid; kwargs...) = generate_particles(isindomain, grid.x; kwargs...)
 
 function generate_particles(::Type{ParticleState}, particles_old::StructVector) where {ParticleState}
     particles = StructVector{ParticleState}(undef, length(particles_old))
