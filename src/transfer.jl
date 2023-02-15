@@ -69,7 +69,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                 Vₚσₚ = Vₚ * σₚ
                 mₚbₚ = mₚ * bₚ
                 if system isa Axisymmetric
-                    rₚ = particles.xᵣ[p]
+                    rₚ = particles.x[p][1]
                 end
             end
 
@@ -228,7 +228,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
         if :∇v in names
             T_∇v = eltype(particles.∇v)
             if system isa Axisymmetric
-                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ, vₚ[1], particles.xᵣ[p])
+                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ, vₚ[1], particles.x[p][1])
             else
                 particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ)
             end
@@ -288,7 +288,7 @@ function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{na
             ∇vₚ = Cₚ ⋅ ∇p0
             T_∇v = eltype(particles.∇v)
             if system isa Axisymmetric
-                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ, vₚ[1], particles.xᵣ[p])
+                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ, vₚ[1], particles.x[p][1])
             else
                 particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ)
             end
