@@ -31,13 +31,13 @@ end
         for dim in 1:3
             lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
             l = spacing(lattice) / 2
-            for kernel in (QuadraticBSpline(), CubicBSpline(), GIMP())
+            for kernel in (QuadraticBSpline(), CubicBSpline(), uGIMP())
                 for WLS in (LinearWLS, Marble.BilinearWLS)
                     WLS == Marble.BilinearWLS && dim != 2 && continue
                     mp = MPValue{dim, T}(WLS(kernel))
                     for _ in 1:100
                         x = rand(Vec{dim, T})
-                        if kernel isa GIMP
+                        if kernel isa uGIMP
                             pt = (;x,l)
                         else
                             pt = x
@@ -54,16 +54,16 @@ end
     end
 end
 
-@testset "GIMPValue" begin
+@testset "uGIMPValue" begin
     for T in (Float32, Float64)
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
             lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
-            for itp in (GIMP(),)
+            for itp in (uGIMP(),)
                 mp = MPValue{dim, T}(itp)
                 l = spacing(lattice) / 2
-                # GIMP doesn't have pertition of unity when closed to boundaries
+                # uGIMP doesn't have pertition of unity when closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
                 for _ in 1:100
                     x = rand(Vec{dim, T})
@@ -83,7 +83,7 @@ end
 end
 
 @testset "KernelCorrectionValue" begin
-    @testset "$kernel" for kernel in (QuadraticBSpline(), CubicBSpline(), GIMP())
+    @testset "$kernel" for kernel in (QuadraticBSpline(), CubicBSpline(), uGIMP())
         for T in (Float32, Float64)
             Random.seed!(1234)
             TOL = sqrt(eps(T))
@@ -93,7 +93,7 @@ end
                 mp = MPValue{dim, T}(KernelCorrection(kernel))
                 for _ in 1:100
                     x = rand(Vec{dim, T})
-                    if kernel isa GIMP
+                    if kernel isa uGIMP
                         pt = (;x,l)
                     else
                         pt = x

@@ -47,7 +47,7 @@ export
     LinearBSpline,
     QuadraticBSpline,
     CubicBSpline,
-    GIMP,
+    uGIMP,
     LinearWLS,
     KernelCorrection,
     MPValue,

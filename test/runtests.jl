@@ -56,7 +56,7 @@ end
     dx = 0.125
     lockingfree = true
     check_example("StripFooting", 1, LinearBSpline(); dx, lockingfree)
-    check_example("StripFooting", 2, GIMP(); dx, lockingfree, CFL=0.5)
+    check_example("StripFooting", 2, uGIMP(); dx, lockingfree, CFL=0.5)
     check_example("StripFooting", 3, LinearWLS(QuadraticBSpline()); dx, lockingfree)
     check_example("StripFooting", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx, lockingfree)
     check_example("StripFooting", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx, lockingfree)
@@ -64,7 +64,7 @@ end
     dx = 0.07
     t_stop = 1.0
     check_example("DamBreak", 1, QuadraticBSpline(); dx, t_stop)
-    check_example("DamBreak", 2, GIMP(); dx, t_stop)
+    check_example("DamBreak", 2, uGIMP(); dx, t_stop)
     check_example("DamBreak", 3, LinearWLS(QuadraticBSpline()); dx, t_stop)
     check_example("DamBreak", 4, KernelCorrection(QuadraticBSpline()), TPIC(); dx, t_stop)
     check_example("DamBreak", 5, KernelCorrection(QuadraticBSpline()), APIC(); dx, t_stop)
