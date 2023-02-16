@@ -4,7 +4,6 @@
         V::Float64
         x::Vec{2, Float64}
         v::Vec{2, Float64}
-        b::Vec{2, Float64}
         σ::SymmetricSecondOrderTensor{3, Float64, 6}
         ∇v::SecondOrderTensor{3, Float64, 9}
         B::Mat{2, 2, Float64, 4} # for APIC

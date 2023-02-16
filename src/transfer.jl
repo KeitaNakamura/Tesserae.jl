@@ -68,9 +68,11 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
             if :f in names
                 Vₚ = particles.V[p]
                 σₚ = particles.σ[p]
-                bₚ = particles.b[p]
                 Vₚσₚ = Vₚ * σₚ
-                mₚbₚ = mₚ * bₚ
+                if hasproperty(particles, :b)
+                    bₚ = particles.b[p]
+                    mₚbₚ = mₚ * bₚ
+                end
                 if system isa Axisymmetric
                     rₚ = particles.x[p][1]
                 end
@@ -113,11 +115,14 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
 
                 if :f in names
                     if system isa Axisymmetric
-                        fint = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
+                        f = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
                     else
-                        fint = -calc_fint(system, ∇N, Vₚσₚ)
+                        f = -calc_fint(system, ∇N, Vₚσₚ)
                     end
-                    grid.f[i] += fint + N*mₚbₚ
+                    if hasproperty(particles, :b)
+                        f += N*mₚbₚ
+                    end
+                    grid.f[i] += f
                 end
 
                 # grid momentum depends on transfer algorithms
