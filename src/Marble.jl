@@ -30,7 +30,12 @@ export
     Lattice,
     spacing,
     neighbornodes,
+# Grid
+    Grid,
+    SpGrid,
     generate_grid,
+# Particles
+    Particles,
     generate_particles,
 # interpolations
     update!,
