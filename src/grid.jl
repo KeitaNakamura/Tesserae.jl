@@ -25,6 +25,10 @@ const SpGrid{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{
         StructArray{GridState}(tuple(lattice, $(exps...)))
     end
 end
+function generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}})
+    lattice = Lattice(dx, minmax...)
+    StructArray((; x = lattice))
+end
 
 get_sppat(A::SpGrid) = get_sppat(getproperty(A, 2))
 
