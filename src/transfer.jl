@@ -61,17 +61,14 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
         @inbounds begin
             mp = mpvalue(space, p)
 
-            # almost always used
-            xₚ = particles.x[p]
-            mₚ = particles.m[p]
+            if :m in names
+                mₚ = particles.m[p]
+            end
 
             if :f in names
-                Vₚ = particles.V[p]
-                σₚ = particles.σ[p]
-                Vₚσₚ = Vₚ * σₚ
+                Vₚσₚ = particles.V[p] * particles.σ[p]
                 if hasproperty(particles, :b)
-                    bₚ = particles.b[p]
-                    mₚbₚ = mₚ * bₚ
+                    mₚbₚ = particles.m[p] * particles.b[p]
                 end
                 if system isa Axisymmetric
                     rₚ = particles.x[p][1]
@@ -82,25 +79,24 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
             if :mv in names
                 if alg isa DefaultTransfer && mp isa WLSValue
                     P = x -> value(get_basis(mp), x)
-                    Cₚ = particles.C[p]
-                    mₚCₚ = mₚ * Cₚ
+                    xₚ = particles.x[p]
+                    mₚCₚ = particles.m[p] * particles.C[p]
                 else
-                    vₚ = particles.v[p]
-                    mₚvₚ = mₚ * vₚ
+                    mₚvₚ = particles.m[p] * particles.v[p]
 
                     # additional term from high order approximation
                     if alg isa AffineTransfer
-                        Bₚ = particles.B[p]
+                        xₚ = particles.x[p]
                         Dₚ = zero(Mat{dim, dim, T})
                         for (j, i) in enumerate(neighbornodes(space, p))
                             N = shape_value(mp, j)
                             xᵢ = lattice[i]
                             Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
                         end
-                        mₚCₚ = mₚ * Bₚ ⋅ inv(Dₚ)
+                        mₚCₚ = particles.m[p] * particles.B[p] ⋅ inv(Dₚ)
                     elseif alg isa TaylorTransfer
-                        ∇vₚ = particles.∇v[p]
-                        mₚ∇vₚ = mₚ * @Tensor(∇vₚ[1:dim, 1:dim])
+                        xₚ = particles.x[p]
+                        mₚ∇vₚ = particles.m[p] * @Tensor(particles.∇v[p][1:dim, 1:dim])
                     end
                 end
             end
