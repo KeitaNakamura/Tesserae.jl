@@ -26,11 +26,6 @@ function fillzero!(x::AbstractArray)
     x
 end
 
-# merge_namedtuple_type
-@pure function merge_namedtuple_type(::NamedTuple{names1, types1}, ::NamedTuple{names2, types2}) where {names1, types1, names2, types2}
-    NamedTuple{(names1..., names2...), Tuple{types1.parameters..., types2.parameters...}}
-end
-
 # rename property names
 function rename(A::NamedTuple{srcnames}, ::Val{before}, ::Val{after}) where {srcnames, before, after}
     @assert length(before) == length(after)
