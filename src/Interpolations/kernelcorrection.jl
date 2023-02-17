@@ -1,8 +1,8 @@
 struct KernelCorrection{K <: Kernel} <: Interpolation
 end
-@pure KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
+KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
 
-@pure get_kernel(::KernelCorrection{K}) where {K} = K()
+get_kernel(::KernelCorrection{K}) where {K} = K()
 @inline neighbornodes(kc::KernelCorrection, lattice::Lattice, pt) = neighbornodes(get_kernel(kc), lattice, pt)
 
 struct KernelCorrectionValue{dim, T, K} <: MPValue{dim, T}

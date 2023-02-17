@@ -1,6 +1,6 @@
 module Marble
 
-using Base: RefValue, @_inline_meta, @_propagate_inbounds_meta, @pure
+using Base: RefValue, @_inline_meta, @_propagate_inbounds_meta
 using Base.Broadcast: Broadcasted, ArrayStyle, DefaultArrayStyle
 using Base.Cartesian: @ntuple, @nall, @nexprs
 

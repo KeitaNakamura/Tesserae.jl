@@ -4,10 +4,10 @@ end
 const LinearWLS = WLS{PolynomialBasis{1}}
 const BilinearWLS = WLS{BilinearBasis}
 
-@pure WLS{B}(w::Kernel) where {B} = WLS{B, typeof(w)}()
+WLS{B}(w::Kernel) where {B} = WLS{B, typeof(w)}()
 
-@pure get_basis(::WLS{B}) where {B} = B()
-@pure get_kernel(::WLS{B, W}) where {B, W} = W()
+get_basis(::WLS{B}) where {B} = B()
+get_kernel(::WLS{B, W}) where {B, W} = W()
 @inline neighbornodes(wls::WLS, lattice::Lattice, pt) = neighbornodes(get_kernel(wls), lattice, pt)
 
 mutable struct WLSValue{dim, T, B, K, L, L²} <: MPValue{dim, T}
