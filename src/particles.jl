@@ -32,19 +32,13 @@ function generate_particles(
     V = prod(last(lattice) - first(lattice)) / length(allpoints)
 
     # find points `isindomain`
-    mask = broadcast(x -> isindomain(x...), allpoints)
-    npts = count(mask)
+    mask = broadcast(Base.splat(isindomain), allpoints)
 
-    particles = StructVector{ParticleState}(undef, npts)
+    particles = StructVector{ParticleState}(undef, count(mask))
     fillzero!(particles)
 
     if :x in propertynames(particles)
-        cnt = 0
-        @inbounds for (i, x) in enumerate(allpoints)
-            if mask[i]
-                particles.x[cnt+=1] = x
-            end
-        end
+        @. particles.x = allpoints[mask]
     end
     if :V in propertynames(particles)
         if dim == 2 && system isa Axisymmetric
