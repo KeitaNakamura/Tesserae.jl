@@ -28,12 +28,11 @@ export
     Axisymmetric,
 # lattice
     Lattice,
-    spacing,
-    neighbornodes,
 # Grid
     Grid,
     SpGrid,
     generate_grid,
+    spacing,
 # Particles
     Particles,
     generate_particles,
@@ -42,19 +41,20 @@ export
     num_nodes,
     shape_value,
     shape_gradient,
-    Interpolation,
+    Kernel,
     BSpline,
     LinearBSpline,
     QuadraticBSpline,
     CubicBSpline,
     uGIMP,
-    Kernel,
+    Interpolation,
     LinearWLS,
     KernelCorrection,
     MPValue,
 # MPSpace
     MPSpace,
     mpvalue,
+    neighbornodes,
 # Transfer
     particle_to_grid!,
     grid_to_particle!,
