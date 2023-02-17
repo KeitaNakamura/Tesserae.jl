@@ -36,6 +36,7 @@ set_gridindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.
 # reorder_particles!
 function reorder_particles!(particles::Particles, ptspblk::Array)
     inds = Vector{Int}(undef, sum(length, ptspblk))
+
     cnt = 1
     for blocks in threadsafe_blocks(size(ptspblk))
         @inbounds for blockindex in blocks
@@ -47,11 +48,20 @@ function reorder_particles!(particles::Particles, ptspblk::Array)
             end
         end
     end
-    rest = particles[setdiff(1:length(particles), inds)]
-    @inbounds begin
-        particles[1:length(inds)] .= view(particles, inds)
-        particles[length(inds)+1:end] .= rest
+
+    # keep missing particles aside
+    if length(inds) != length(particles) # some points are missing
+        missed = particles[setdiff(1:length(particles), inds)]
     end
+
+    # reorder particles
+    @inbounds particles[1:length(inds)] .= view(particles, inds)
+
+    # assign missing particles to the end part of `particles`
+    if length(inds) != length(particles)
+        @inbounds particles[length(inds)+1:end] .= missed
+    end
+
     particles
 end
 reorder_particles!(particles::Particles, space::MPSpace) = reorder_particles!(particles, get_pointsperblock(space))
