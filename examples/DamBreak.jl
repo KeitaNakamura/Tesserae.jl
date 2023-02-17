@@ -69,7 +69,7 @@ function DamBreak(
 
         update!(space, grid, particles)
 
-        particle_to_grid!(fillzero!(grid), particles, space; alg)
+        particle_to_grid!((:m,:mv,:f), fillzero!(grid), particles, space; alg)
         @. grid.vⁿ = grid.mv / grid.m
         @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
 
@@ -82,7 +82,7 @@ function DamBreak(
             node.v = slip(node.v, Vec(0,1))
         end
 
-        grid_to_particle!(particles, grid, space, dt; alg)
+        grid_to_particle!((:v,:∇v,:x), particles, grid, space, dt; alg)
 
         Marble.@threaded for p in LazyRows(particles)
             m = p.m

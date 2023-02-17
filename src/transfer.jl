@@ -42,10 +42,6 @@ end
 # P2G transfer #
 ################
 
-function particle_to_grid!(grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    particle_to_grid!((:m, :mv, :f), grid, particles, space; alg, system)
-end
-
 function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
     particle_to_grid!(alg, system, Val(names), grid, particles, space)
 end
@@ -154,10 +150,6 @@ end
 ################
 # G2P transfer #
 ################
-
-function grid_to_particle!(particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    grid_to_particle!((:v, :∇v, :x), particles, grid, space, dt; alg, system)
-end
 
 function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
     grid_to_particle!(alg, system, Val(names), particles, grid, space, dt)

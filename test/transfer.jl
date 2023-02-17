@@ -61,14 +61,14 @@
 
                     # initialize particles
                     grid.v .= grid_v
-                    grid_to_particle!(particles, grid, space, dt; alg)
+                    grid_to_particle!((:v,:∇v), particles, grid, space, dt; alg)
 
                     for step in 1:10
                         update!(space, grid, particles)
-                        particle_to_grid!(fillzero!(grid), particles, space; alg)
+                        particle_to_grid!((:m,:mv,:f), fillzero!(grid), particles, space; alg)
                         @. grid.vⁿ = grid.mv / grid.m
                         @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
-                        grid_to_particle!(particles, grid, space, dt; alg)
+                        grid_to_particle!((:v,:∇v,:x), particles, grid, space, dt; alg)
                     end
 
                     # check if movement of particles is large enough
@@ -105,7 +105,6 @@
                             particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid; random=true)
                         end
                         @. particles.m = 1
-                        x₀ = copy(particles.x)
 
                         space = MPSpace(interp, grid, particles)
                         # update interpolation values and sparsity pattern
@@ -115,11 +114,10 @@
                         grid.v .= grid_v
                         if alg isa FLIP
                             # use PIC to correctly initialize particle velocity
-                            grid_to_particle!(particles, grid, space, dt; alg=PIC())
+                            grid_to_particle!((:v,:∇v), particles, grid, space, dt; alg=PIC())
                         else
-                            grid_to_particle!(particles, grid, space, dt; alg)
+                            grid_to_particle!((:v,:∇v), particles, grid, space, dt; alg)
                         end
-                        particles.x .= x₀
 
                         v₀ = copy(particles.v)
                         ∇v₀ = copy(particles.∇v)
@@ -140,11 +138,10 @@
 
                         particles_set = map(1:10) do step
                             update!(space, grid, particles)
-                            particle_to_grid!(fillzero!(grid), particles, space; alg)
+                            particle_to_grid!((:m,:mv,:f), fillzero!(grid), particles, space; alg)
                             @. grid.vⁿ = grid.mv / grid.m
                             @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
-                            grid_to_particle!(particles, grid, space, dt; alg)
-                            particles.x .= x₀
+                            grid_to_particle!((:v,:∇v), particles, grid, space, dt; alg)
 
                             # openpvd(pvdfile; append=true) do pvd
                                 # openvtm(string(pvdfile, step)) do vtm
