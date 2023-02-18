@@ -91,11 +91,11 @@ function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filte
 
     update_pointsperblock!(space, get_lattice(grid), particles.x)
     #
-    # Following `update_mpvalues!` update `space.sppat` and use it when `filter` is given.
+    # Following `update_mpvalues_neighbornodes!` update `space.sppat` and use it when `filter` is given.
     # This consideration of sparsity pattern is necessary in some `Interpolation`s such as `WLS` and `KernelCorrection`.
     # However, this updated sparsity pattern is not used for updating sparsity pattern of grid-state because
     # the inactive nodes also need their values (even zero) for `NonzeroIndex` used in P2G.
-    # Thus, `update_sparsity_pattern!` must be executed after `update_mpvalues!`.
+    # Thus, `update_sparsity_pattern!` must be executed after `update_mpvalues_neighbornodes!`.
     #
     #            |      |      |                             |      |      |
     #         ---×------×------×---                       ---●------●------●---
@@ -109,7 +109,7 @@ function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filte
     #
     #   < Sparsity pattern for `MPValue` >     < Sparsity pattern for Grid-state (`SpArray`) >
     #
-    update_mpvalues!(space, get_lattice(grid), particles, filter)
+    update_mpvalues_neighbornodes!(space, get_lattice(grid), particles, filter)
     update_sparsity_pattern!(space)
     update_sparsity_pattern!(grid, space)
 
@@ -137,16 +137,12 @@ end
     CartesianIndex(start):CartesianIndex(stop)
 end
 
-function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles, filter::Union{Nothing, AbstractArray{Bool}})
-    # following fields are updated in this function
-    # * `space.mpvals`
-    # * `space.nodeinds`
-
+function update_mpvalues_neighbornodes!(space::MPSpace, lattice::Lattice, particles::Particles, filter::Union{Nothing, AbstractArray{Bool}})
     @assert gridsize(space) == size(lattice)
     @assert length(particles) == num_particles(space)
 
     if filter === nothing
-        update_mpvalues!(space, lattice, Trues(size(lattice)), particles)
+        update_mpvalues_neighbornodes!(space, lattice, Trues(size(lattice)), particles)
     else
         # handle excluded domain
         sppat = get_sppat(space)
@@ -157,12 +153,12 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
                 sppat[inds] .= true
             end
         end
-        update_mpvalues!(space, lattice, sppat, particles)
+        update_mpvalues_neighbornodes!(space, lattice, sppat, particles)
     end
 
     space
 end
-function update_mpvalues!(space::MPSpace, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
+function update_mpvalues_neighbornodes!(space::MPSpace, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
     @threaded for p in 1:num_particles(space)
         indices = update!(mpvalue(space, p), lattice, sppat, LazyRow(particles, p))
         set_gridindices!(space, p, indices)
