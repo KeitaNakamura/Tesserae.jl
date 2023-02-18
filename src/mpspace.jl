@@ -177,11 +177,14 @@ end
 update_sparsity_pattern!(grid::Grid, space::MPSpace) = grid
 
 # block-wise parallel computation
-function parallel_each_particle(f, space::MPSpace)
-    for blocks in threadsafe_blocks(blocksize(gridsize(space)))
-        pointsperblock = collect(Iterators.filter(!isempty, Iterators.map(blkidx->get_pointsperblock(space)[blkidx], blocks)))
-        @threaded for pinds in pointsperblock
+function parallel_each_particle(f, ptspblk::Array{Vector{Int}})
+    for blocks in threadsafe_blocks(size(ptspblk))
+        ptspblk′ = collect(Iterators.filter(!isempty, view(ptspblk, blocks)))
+        @threaded for pinds in ptspblk′
             foreach(f, pinds)
         end
     end
+end
+function parallel_each_particle(f, space::MPSpace)
+    parallel_each_particle(f, get_pointsperblock(space))
 end
