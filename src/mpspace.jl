@@ -2,7 +2,7 @@ struct MPSpace{dim, T, MP <: MPValue{dim, T}, GS <: Union{Nothing, SpPattern}}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
-    ptspblk::Array{Vector{Int}, dim}
+    ptspblk::Array{PushVector{Int}, dim}
     gridsppat::GS # sppat used in SpGrid
 end
 
@@ -67,7 +67,7 @@ end
 reorder_particles!(particles::Particles, space::MPSpace) = reorder_particles!(particles, get_pointsperblock(space))
 
 # pointsperblock!
-function pointsperblock!(ptspblk::AbstractArray{Vector{Int}}, lattice::Lattice, xₚ::AbstractVector)
+function pointsperblock!(ptspblk::AbstractArray, lattice::Lattice, xₚ::AbstractVector)
     empty!.(ptspblk)
     @inbounds for p in 1:length(xₚ)
         I = whichblock(lattice, xₚ[p])
@@ -76,9 +76,9 @@ function pointsperblock!(ptspblk::AbstractArray{Vector{Int}}, lattice::Lattice, 
     ptspblk
 end
 function pointsperblock(lattice::Lattice, xₚ::AbstractVector)
-    ptspblk = Array{Vector{Int}}(undef, blocksize(size(lattice)))
+    ptspblk = Array{PushVector{Int}}(undef, blocksize(size(lattice)))
     @inbounds for i in eachindex(ptspblk)
-        ptspblk[i] = Int[]
+        ptspblk[i] = PushVector{Int}()
     end
     pointsperblock!(ptspblk, lattice, xₚ)
 end
@@ -173,7 +173,7 @@ end
 update_sparsity_pattern!(grid::Grid, space::MPSpace) = grid
 
 # block-wise parallel computation
-function parallel_each_particle(f, ptspblk::Array{Vector{Int}})
+function parallel_each_particle(f, ptspblk::Array)
     for blocks in threadsafe_blocks(size(ptspblk))
         ptspblk′ = collect(Iterators.filter(!isempty, view(ptspblk, blocks)))
         @threaded for pinds in ptspblk′

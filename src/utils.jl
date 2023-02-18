@@ -108,3 +108,36 @@ end
 end
 simd_otimes(x::SVec, y::SVec, others::SVec...) = simd_otimes(simd_otimes(x, y), others...)
 simd_otimes(x::SVec) = x
+
+##############
+# PushVector #
+##############
+
+# https://github.com/JuliaLang/julia/issues/24909#issuecomment-419731925
+mutable struct PushVector{T} <: AbstractVector{T}
+    data::Vector{T}
+    len::Int
+end
+
+PushVector{T}() where {T} = PushVector(Vector{T}(undef, 4), 0)
+
+Base.size(v::PushVector) = (v.len,)
+@inline function Base.getindex(v::PushVector, i)
+    @boundscheck checkbounds(v, i)
+    @inbounds v.data[i]
+end
+@inline function Base.setindex!(v::PushVector, x, i)
+    @boundscheck checkbounds(v, i)
+    @inbounds v.data[i] = x
+    v
+end
+
+function Base.push!(v::PushVector, i)
+    n = v.len += 1
+    n > length(v.data) && resize!(v.data, 2n)
+    @inbounds v.data[n] = i
+    v
+end
+
+Base.empty!(v::PushVector) = (v.len=0; v)
+finish!(v::PushVector) = resize!(v.data, v.len)
