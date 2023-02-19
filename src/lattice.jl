@@ -82,12 +82,12 @@ end
 end
 
 """
-    neighbornodes(lattice, x::Vec, h) -> (indices, isnearbounds)
+    neighbornodes(lattice, x::Vec, h) -> (indices, isfullyinside)
 
 Return `CartesianIndices` storing neighboring node `indices` around `x`.
 `h` denotes the range for searching area. In 1D, for example, the range `a`
 becomes ` x-h*dx < a < x+h*dx` where `dx` is `spacing(lattice)`.
-`isnearbounds` is `false` if the neighboring nodes are completely inside of
+`isfullyinside` is `false` if the neighboring nodes are completely inside of
 the `lattice`.
 
 # Examples
@@ -120,8 +120,8 @@ end
     stop  = convert(SVec{dim, Int}, floor(ξ + h)) + 1
     imin = Tuple(max(start, 1))
     imax = Tuple(min(stop, dims))
-    isnearbounds = any(start < 1) || any(dims < stop)
-    CartesianIndices(UnitRange.(imin, imax)), isnearbounds
+    isfullyinside = all(1 ≤ start) && all(stop ≤ dims)
+    CartesianIndices(UnitRange.(imin, imax)), isfullyinside
 end
 
 """

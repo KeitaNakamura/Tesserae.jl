@@ -70,14 +70,14 @@ end
 
 # fast version for `LinearWLS(BSpline{order}())`
 function update_mpvalue!(mp::WLSValue{<: Any, <: Any, PolynomialBasis{1}, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, isnearbounds = neighbornodes(mp.itp, lattice, pt)
+    indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
 
     n = length(indices)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
     resize!(mp.w, n)
 
-    if !isnearbounds && @inbounds alltrue(sppat, indices)
+    if isfullyinside && @inbounds alltrue(sppat, indices)
         fast_update_mpvalue!(mp, lattice, sppat, indices, pt)
     else
         fast_update_mpvalue_nearbounds!(mp, lattice, sppat, indices, pt)

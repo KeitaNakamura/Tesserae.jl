@@ -23,13 +23,13 @@ num_nodes(mp::KernelCorrectionValue) = length(mp.N)
 
 # general version
 @inline function update_mpvalue!(mp::KernelCorrectionValue, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, isnearbounds = neighbornodes(mp.itp, lattice, pt)
+    indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
 
     n = length(indices)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
 
-    if !isnearbounds && @inbounds alltrue(sppat, indices)
+    if isfullyinside && @inbounds alltrue(sppat, indices)
         @inbounds for (j, i) in enumerate(indices)
             mp.N[j], mp.∇N[j] = value_gradient(get_kernel(mp.itp), lattice, i, pt)
         end
@@ -42,13 +42,13 @@ end
 
 # fast version for B-spline kernels
 @inline function update_mpvalue!(mp::KernelCorrectionValue{<: Any, <: Any, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, isnearbounds = neighbornodes(mp.itp, lattice, pt)
+    indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
 
     n = length(indices)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
 
-    if !isnearbounds && @inbounds alltrue(sppat, indices)
+    if isfullyinside && @inbounds alltrue(sppat, indices)
         fast_update_mpvalue!(mp, lattice, sppat, indices, pt)
     else
         update_mpvalue_nearbounds!(mp, lattice, sppat, indices, pt)

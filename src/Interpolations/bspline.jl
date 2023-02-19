@@ -156,18 +156,18 @@ num_nodes(mp::BSplineValue) = length(mp.N)
 @inline shape_gradient(mp::BSplineValue, j::Int) = (@_propagate_inbounds_meta; mp.∇N[j])
 
 @inline function update_mpvalue!(mp::BSplineValue, lattice::Lattice, pt)
-    indices, isnearbounds = neighbornodes(mp.itp, lattice, pt)
+    indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
 
     n = length(indices)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
 
-    if isnearbounds
-        update_mpvalue_nearbounds!(mp, lattice, indices, pt)
-    else
+    if isfullyinside
         wᵢ, ∇wᵢ = values_gradients(mp.itp, lattice, getx(pt))
         mp.N .= wᵢ
         mp.∇N .= ∇wᵢ
+    else
+        update_mpvalue_nearbounds!(mp, lattice, indices, pt)
     end
 
     indices

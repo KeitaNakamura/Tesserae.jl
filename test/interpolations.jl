@@ -10,11 +10,11 @@
                 mp = MPValue{dim, T}(itp)
                 for _ in 1:100
                     x = rand(Vec{dim, T})
-                    _, isnearbounds = neighbornodes(itp, lattice, x)
+                    _, isfullyinside = neighbornodes(itp, lattice, x)
                     indices = update!(mp, lattice, x)
                     @test sum(mp.N) ≈ 1
                     @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                    if !isnearbounds
+                    if isfullyinside
                         @test mapreduce((N,∇N,i) -> N*lattice[i], +, mp.N, mp.∇N, indices) ≈ x atol=TOL
                         @test mapreduce((N,∇N,i) -> lattice[i]⊗∇N, +, mp.N, mp.∇N, indices) ≈ I atol=TOL
                     end
@@ -68,8 +68,8 @@ end
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     pt = (;x,l)
-                    _, isnearbounds = neighbornodes(itp, lattice, pt)
-                    if !isnearbounds
+                    _, isfullyinside = neighbornodes(itp, lattice, pt)
+                    if isfullyinside
                         indices = update!(mp, lattice, pt)
                         @test sum(mp.N) ≈ 1
                         @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
