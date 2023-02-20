@@ -108,15 +108,13 @@ julia> neighbornodes(lattice, Vec(1.5), 3)
 (CartesianIndices((1:5,)), true)
 ```
 """
-@inline function neighbornodes(lattice::Lattice{dim}, x::Vec{dim}, h::Real) where {dim}
+@inline function neighbornodes(lattice::Lattice{dim, T}, x::Vec{dim, T}, h::Real) where {dim, T}
     isinside(x, lattice) || return (CartesianIndices(nfill(1:0, Val(dim))), false)
-    dx⁻¹ = spacing_inv(lattice)
-    xmin = first(lattice)
-    ξ = (x - xmin) * dx⁻¹
-    _neighborindices(SVec(size(lattice)), SVec(ξ), convert(eltype(ξ), h))
+    _neighborindices(SVec(size(lattice)), spacing_inv(lattice), SVec(first(lattice)), SVec(x), convert(T, h))
 end
-@inline function _neighborindices(dims::SVec{dim, Int}, ξ::SVec{dim}, h::SIMDTypes) where {dim}
-    start = convert(SVec{dim, Int},  ceil(ξ - h)) + 1
+@inline function _neighborindices(dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}, h::T) where {dim, T}
+    ξ = (x - xmin) * dx⁻¹
+    start = convert(SVec{dim, Int}, floor(ξ - h)) + 2
     stop  = convert(SVec{dim, Int}, floor(ξ + h)) + 1
     imin = Tuple(max(start, 1))
     imax = Tuple(min(stop, dims))

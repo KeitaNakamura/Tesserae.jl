@@ -1,11 +1,37 @@
 @testset "Interpolations" begin
 
+@testset "Kernel" begin
+@testset "BSpline" begin
+    @testset "Consistency between `values_gradients` and `neighbornodes`" begin
+        # check consistency between `values_gradients` and `neighbornodes` when a particle is exactly on the knot
+        getvalues(itp, lattice, pt) = [Marble.value(itp, lattice, I, pt) for I in first(neighbornodes(itp, lattice, pt))]
+        lattice = Lattice(1, (0,5))
+        ## LinearBSpline
+        itp = LinearBSpline()
+        N = Marble.values_gradients(itp, 1.0) |> first |> Tuple |> collect
+        @test N == [1, 0]
+        @test N == getvalues(itp, lattice, Vec(2.0))
+        ## QuadraticBSpline
+        itp = QuadraticBSpline()
+        N = Marble.values_gradients(itp, 1.5) |> first |> Tuple |> collect
+        @test N == [0.5, 0.5, 0.0]
+        @test N == getvalues(itp, lattice, Vec(2.5))
+        ## CubicBSpline
+        itp = CubicBSpline()
+        N = Marble.values_gradients(itp, 2.0) |> first |> Tuple |> collect
+        @test N ≈ [1/6, 4/6, 1/6, 0.0]
+        @test N ≈ getvalues(itp, lattice, Vec(3.0))
+    end
+end
+end # Kernel
+
+@testset "MPValue" begin
 @testset "BSplineValue" begin
     for T in (Float32, Float64)
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
-            lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
+            lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
             for itp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),)
                 mp = MPValue{dim, T}(itp)
                 for _ in 1:100
@@ -29,7 +55,7 @@ end
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
-            lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
+            lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
             l = spacing(lattice) / 2
             for kernel in (QuadraticBSpline(), CubicBSpline(), uGIMP())
                 for WLS in (LinearWLS, Marble.BilinearWLS)
@@ -59,7 +85,7 @@ end
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
-            lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
+            lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
             for itp in (uGIMP(),)
                 mp = MPValue{dim, T}(itp)
                 l = spacing(lattice) / 2
@@ -88,7 +114,7 @@ end
             Random.seed!(1234)
             TOL = sqrt(eps(T))
             for dim in 1:3
-                lattice = Lattice(0.1, ntuple(i->(0,1), Val(dim))...)
+                lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
                 l = spacing(lattice) / 2
                 mp = MPValue{dim, T}(KernelCorrection(kernel))
                 for _ in 1:100
@@ -127,5 +153,6 @@ end
         end
     end
 end
+end # MPValue
 
 end # Interpolations
