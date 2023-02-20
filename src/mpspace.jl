@@ -73,6 +73,7 @@ function pointsperblock!(ptspblk::AbstractArray, lattice::Lattice, xₚ::Abstrac
         I = whichblock(lattice, xₚ[p])
         I === nothing || push!(ptspblk[I], p)
     end
+    finish!.(ptspblk)
     ptspblk
 end
 function pointsperblock(lattice::Lattice, xₚ::AbstractVector)
