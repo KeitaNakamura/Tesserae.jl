@@ -62,15 +62,12 @@ end
     @inbounds Lattice(get_axisarray(lattice)[ranges...], spacing(lattice), spacing_inv(lattice))
 end
 
-@generated function isinside(x::Vec{dim}, lattice::Lattice{dim}) where {dim}
-    quote
-        @_inline_meta
-        @inbounds begin
-            @nexprs $dim i -> start_i = get_axes(lattice, i)[begin]
-            @nexprs $dim i -> stop_i  = get_axes(lattice, i)[end]
-            @nall $dim i -> start_i ≤ x[i] ≤ stop_i
-        end
-    end
+@inline function isinside(x::Vec{dim, T}, lattice::Lattice{dim, T}) where {dim, T}
+    axes = get_axes(lattice)
+    @inbounds _isinside(SVec(map(first, axes)), SVec(map(last, axes)), SVec(x))
+end
+@inline function _isinside(start::SVec{dim, T}, stop::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
+    all(start ≤ x) && all(x ≤ stop)
 end
 
 """
@@ -134,12 +131,13 @@ julia> Marble.whichcell(lattice, Vec(1.5, 1.5))
 CartesianIndex(2, 2)
 ```
 """
-@inline function whichcell(lattice::Lattice, x::Vec)
+@inline function whichcell(lattice::Lattice{dim, T}, x::Vec{dim, T}) where {dim, T}
     isinside(x, lattice) || return nothing
-    dx⁻¹ = spacing_inv(lattice)
-    xmin = first(lattice)
-    ξ = Tuple((x - xmin) * dx⁻¹)
-    CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
+    _whichcell(spacing_inv(lattice), SVec(first(lattice)), SVec(x))
+end
+@inline function _whichcell(dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
+    ξ = (x - xmin) * dx⁻¹
+    CartesianIndex(Tuple(convert(SVec{dim, Int}, floor(ξ)) + 1))
 end
 
 """
