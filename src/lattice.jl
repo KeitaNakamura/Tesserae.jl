@@ -1,7 +1,3 @@
-#############
-# AxisArray #
-#############
-
 struct AxisArray{dim, T, V <:AbstractVector{T}} <: AbstractArray{NTuple{dim, T}, dim}
     axes::NTuple{dim, V}
 end
@@ -18,10 +14,6 @@ end
     @_propagate_inbounds_meta
     AxisArray(map(getindex, A.axes, ranges))
 end
-
-###########
-# Lattice #
-###########
 
 """
     Lattice(dx, (xmin, xmax), (ymin, ymax)...)
@@ -87,7 +79,7 @@ end
 Return `CartesianIndices` storing neighboring node `indices` around `x`.
 `h` denotes the range for searching area. In 1D, for example, the range `a`
 becomes ` x-h*dx < a < x+h*dx` where `dx` is `spacing(lattice)`.
-`isfullyinside` is `false` if the neighboring nodes are completely inside of
+`isfullyinside` is `true` if the neighboring nodes are completely inside of
 the `lattice`.
 
 # Examples
