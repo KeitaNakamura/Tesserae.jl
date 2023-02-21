@@ -27,12 +27,21 @@ get_pointsperblock(space::MPSpace) = space.ptspblk
 # mpvalue
 mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 # set/get gridindices
-@inline neighbornodes(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; _neighbornodes(space.gridsppat, space, i))
-@inline _neighbornodes(::Trues, space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
-@inline _neighbornodes(sppat::SpPattern, space::MPSpace, i::Int) =
-    (@_propagate_inbounds_meta; Iterators.map(I -> NonzeroIndex(I, @inbounds(sppat.indices[I])), space.nodeinds[i]))
+@inline function neighbornodes(space::MPSpace, i::Int)
+    @boundscheck checkbounds(space.nodeinds, i)
+    @inbounds begin
+        inds = space.nodeinds[i]
+        nonzeroindices(space, inds)
+    end
+end
 set_gridindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
 # nonzeroindices
+nonzeroindices(space::MPSpace, inds) = _nonzeroindices(get_gridsppat(space), inds)
+_nonzeroindices(::Trues, inds) = inds
+@inline function _nonzeroindices(sppat::SpPattern, inds)
+    @boundscheck checkbounds(sppat, inds)
+    Iterators.map(i -> NonzeroIndex(i, @inbounds(sppat.indices[i])), inds)
+end
 
 # reorder_particles!
 function reorder_particles!(particles::Particles, ptspblk::Array)
