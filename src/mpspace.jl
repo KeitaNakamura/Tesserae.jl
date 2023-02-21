@@ -1,4 +1,4 @@
-struct MPSpace{dim, T, MP <: MPValue{dim, T}, GS <: Union{Nothing, SpPattern}}
+struct MPSpace{dim, T, MP <: MPValue{dim, T}, GS <: Union{Trues, SpPattern}}
     sppat::Array{Bool, dim}
     mpvals::Vector{MP}
     nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
@@ -14,7 +14,7 @@ function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVec
     nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
     MPSpace(sppat, mpvals, nodeinds, pointsperblock(lattice, xₚ), gridsppat)
 end
-MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, nothing)
+MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, Trues(size(grid)))
 MPSpace(itp::Interpolation, grid::SpGrid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
 
 # helper functions
@@ -28,7 +28,7 @@ get_pointsperblock(space::MPSpace) = space.ptspblk
 mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 # set/get gridindices
 @inline neighbornodes(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; _neighbornodes(space.gridsppat, space, i))
-@inline _neighbornodes(::Nothing, space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
+@inline _neighbornodes(::Trues, space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.nodeinds[i])
 @inline _neighbornodes(sppat::SpPattern, space::MPSpace, i::Int) =
     (@_propagate_inbounds_meta; Iterators.map(I -> NonzeroIndex(I, @inbounds(sppat.indices[I])), space.nodeinds[i]))
 set_gridindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
