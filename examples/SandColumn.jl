@@ -91,7 +91,7 @@ function SandColumn(
             v̄ₙ = vᵢ ⋅ n
             vₜ = vᵢ - v̄ₙ*n
             v̄ₜ = norm(vₜ)
-            node.v = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * (vₜ/v̄ₜ))
+            node.v = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ/v̄ₜ, 1) * vₜ)
         end
         @inbounds for node in @view(LazyRows(grid)[[begin,end],:]) # left and right
             n = Vec(1,0) # this is ok for left side as well
