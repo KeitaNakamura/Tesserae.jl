@@ -2,6 +2,26 @@
 
 @testset "Kernel" begin
 @testset "BSpline" begin
+    @testset "Fast calculations" begin
+        getvals(itp, lattice, x) = [Marble.value(itp, lattice, I, x) for I in first(neighbornodes(itp, lattice, x))] |> vec
+        getgrads(itp, lattice, x) = [gradient(x->Marble.value(itp, lattice, I, x), x) for I in first(neighbornodes(itp, lattice, x))] |> vec
+        @testset "$itp" for (len,itp) in ((2,LinearBSpline()), (3,QuadraticBSpline()), (4,CubicBSpline()))
+            @testset "dim=$dim" for dim in 1:3
+                for T in (Float32, Float64)
+                    lattice = Lattice(T, 1, ntuple(i->(-10,10), Val(dim))...)
+                    # wrap by KernelCorrection because `BSpline` uses only fast version
+                    mp = MPValue{dim, T}(KernelCorrection(itp))
+                    x = rand(Vec{dim, T})
+                    # fast version
+                    N = Vector{T}(undef, len^dim)
+                    ∇N = Vector{Vec{dim, T}}(undef, len^dim)
+                    Marble.values_gradients!(N, reinterpret(reshape, T, ∇N), itp, lattice, x)
+                    @test N ≈ getvals(itp, lattice, x)
+                    @test ∇N ≈ getgrads(itp, lattice, x)
+                end
+            end
+        end
+    end
     @testset "Consistency between `values_gradients` and `neighbornodes`" begin
         # check consistency between `values_gradients` and `neighbornodes` when a particle is exactly on the knot
         getvalues(itp, lattice, pt) = [Marble.value(itp, lattice, I, pt) for I in first(neighbornodes(itp, lattice, pt))]

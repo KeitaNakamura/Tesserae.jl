@@ -57,10 +57,10 @@ end
     indices
 end
 
-@inline function fast_update_mpvalue!(mp::KernelCorrectionValue{dim, T}, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
-    wᵢ, ∇wᵢ = values_gradients(get_kernel(mp.itp), lattice, pt)
-    mp.N .= wᵢ
-    mp.∇N .= ∇wᵢ
+@inline function fast_update_mpvalue!(mp::KernelCorrectionValue{<: Any, T}, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {T}
+    N = mp.N
+    ∇N = reinterpret(reshape, T, mp.∇N)
+    values_gradients!(N, ∇N, get_kernel(mp.itp), lattice, pt)
 end
 
 @inline function update_mpvalue_nearbounds!(mp::KernelCorrectionValue{dim, T}, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}

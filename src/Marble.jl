@@ -7,8 +7,10 @@ using Base.Cartesian: @ntuple, @nall, @nexprs
 using Reexport
 @reexport using Tensorial
 @reexport using WriteVTK
-using StructArrays
+using StructArrays, StaticArrays
 
+# SIMD
+using LoopVectorization
 import SIMD
 const SVec = SIMD.Vec
 const SIMDTypes = Union{Float16, Float32, Float64}

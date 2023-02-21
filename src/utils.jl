@@ -97,17 +97,7 @@ end
 ########
 
 @inline SIMD.Vec(x::Vec) = SVec(Tuple(x))
-
-@generated function simd_otimes(x::SVec{m}, y::SVec{n}) where {m, n}
-    exps = [:($(Symbol(:z_,j))[$i]) for j in 1:n for i in 1:m]
-    quote
-        @_inline_meta
-        @nexprs $n j -> z_j = x * y[j]
-        SVec(tuple($(exps...)))
-    end
-end
-simd_otimes(x::SVec, y::SVec, others::SVec...) = simd_otimes(simd_otimes(x, y), others...)
-simd_otimes(x::SVec) = x
+@inline StaticArrays.SVector(x::SVec) = SVector(Tuple(x))
 
 ##############
 # PushVector #

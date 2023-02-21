@@ -90,13 +90,12 @@ function fast_update_mpvalue!(mp::WLSValue{dim, T}, lattice::Lattice, sppat::Abs
     F = get_kernel(mp.itp)
     xp = getx(pt)
     D = zero(Vec{dim, T}) # diagonal entries
-    wᵢ = first(values_gradients(F, lattice, xp))
+    values_gradients!(mp.w, reinterpret(reshape, T, mp.∇N), F, lattice, xp)
 
     @inbounds for (j, i) in enumerate(indices)
         xi = lattice[i]
-        w = wᵢ[j]
+        w = mp.w[j]
         D += w * (xi - xp) .* (xi - xp)
-        mp.w[j] = w
         mp.N[j] = w
         mp.∇N[j] = w * (xi - xp)
     end

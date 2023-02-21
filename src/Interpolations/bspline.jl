@@ -123,21 +123,56 @@ end
     grads = V((-0.5,1.5,-1.5,0.5))*ξ² + V((2,-2,-2,2))*ξ + V((-2,0,0,2))
     vals, grads
 end
-@generated function values_gradients(bspline::BSpline, lattice::Lattice{dim}, xp::Vec{dim}) where {dim}
+
+@inline values_gradients!(N, ∇N, bspline::BSpline, lattice::Lattice, pt) = values_gradients!(N, ∇N, bspline, lattice, getx(pt))
+
+@generated function values_gradients!(N, ∇N, bspline::BSpline, lattice::Lattice{dim}, xp::Vec{dim}) where {dim}
     quote
         @_inline_meta
         dx⁻¹ = spacing_inv(lattice)
         x = (xp - first(lattice)) * dx⁻¹
-        vals_grads = @ntuple $dim d -> values_gradients(bspline, x[d])
-        vals  = getindex.(vals_grads, 1)
-        grads = getindex.(vals_grads, 2) .* dx⁻¹
-        Tuple(simd_otimes(vals...)), Vec.((@ntuple $dim i -> begin
-                                               Tuple(simd_otimes((@ntuple $dim d -> d==i ? grads[d] : vals[d])...))
-                                           end)...)
+        @nexprs $dim d -> (V_d, ∇V_d) = values_gradients(bspline, x[d])
+        V_tuple = @ntuple $dim d -> SVector(V_d)
+        ∇V_tuple = @ntuple $dim d -> SVector(∇V_d*dx⁻¹)
+        _values_gradients!(N, ∇N, V_tuple, ∇V_tuple)
     end
 end
-@inline values_gradients(bspline::BSpline, lattice::Lattice, pt) = values_gradients(bspline, lattice, getx(pt))
 
+# 1D
+@inline function _values_gradients!(N, ∇N, (Vx,)::NTuple{1}, (∇Vx,)::NTuple{1})
+    N .= Vx
+    ∇N .= ∇Vx
+end
+
+# 2D
+@inline function _values_gradients!(N, ∇N, (Vx, Vy)::NTuple{2}, (∇Vx, ∇Vy)::NTuple{2})
+    n = length(Vx)
+    @turbo for j in 1:n
+        offset = n*(j-1)
+        for i in 1:n
+            N[offset+i] = Vx[i] * Vy[j]
+            ∇N[1, offset+i] = ∇Vx[i] *  Vy[j]
+            ∇N[2, offset+i] =  Vx[i] * ∇Vy[j]
+        end
+    end
+end
+
+# 3D
+@inline function _values_gradients!(N, ∇N, (Vx, Vy, Vz)::NTuple{3}, (∇Vx, ∇Vy, ∇Vz)::NTuple{3})
+    n = length(Vx)
+    @turbo for k in 1:n
+        offset_j = n*n*(k-1)
+        for j in 1:n
+            offset_i = offset_j + n*(j-1)
+            for i in 1:n
+                N[offset_i+i] = Vx[i] * Vy[j] * Vz[k]
+                ∇N[1, offset_i+i] = ∇Vx[i] *  Vy[j] *  Vz[k]
+                ∇N[2, offset_i+i] =  Vx[i] * ∇Vy[j] *  Vz[k]
+                ∇N[3, offset_i+i] =  Vx[i] *  Vy[j] * ∇Vz[k]
+            end
+        end
+    end
+end
 
 struct BSplineValue{dim, T, order} <: MPValue{dim, T}
     itp::BSpline{order}
@@ -155,7 +190,7 @@ num_nodes(mp::BSplineValue) = length(mp.N)
 @inline shape_value(mp::BSplineValue, j::Int) = (@_propagate_inbounds_meta; mp.N[j])
 @inline shape_gradient(mp::BSplineValue, j::Int) = (@_propagate_inbounds_meta; mp.∇N[j])
 
-@inline function update_mpvalue!(mp::BSplineValue, lattice::Lattice, pt)
+@inline function update_mpvalue!(mp::BSplineValue{<: Any, T}, lattice::Lattice, pt) where {T}
     indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
 
     n = length(indices)
@@ -163,9 +198,9 @@ num_nodes(mp::BSplineValue) = length(mp.N)
     resize!(mp.∇N, n)
 
     if isfullyinside
-        wᵢ, ∇wᵢ = values_gradients(mp.itp, lattice, getx(pt))
-        mp.N .= wᵢ
-        mp.∇N .= ∇wᵢ
+        N = mp.N
+        ∇N = reinterpret(reshape, T, mp.∇N)
+        values_gradients!(N, ∇N, mp.itp, lattice, pt)
     else
         update_mpvalue_nearbounds!(mp, lattice, indices, pt)
     end
