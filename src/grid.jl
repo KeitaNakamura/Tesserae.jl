@@ -2,7 +2,7 @@
 # Grid #
 ########
 
-const Grid{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I}
+const Grid{N, T, C <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I} = StructArray{T, N, C, I}
 
 get_lattice(grid::Grid) = grid.x
 spacing(grid::Grid) = spacing(get_lattice(grid))
@@ -11,7 +11,7 @@ spacing(grid::Grid) = spacing(get_lattice(grid))
 # SpGrid #
 ##########
 
-const SpGrid{T, N, C, I} = StructArray{T, N, C, I} where {T, N, C <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I}
+const SpGrid{T, N, C <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, C, I}
 
 # spgrid
 @generated function generate_grid(::Type{GridState}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridState, dim}
