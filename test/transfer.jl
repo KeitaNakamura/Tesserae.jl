@@ -107,7 +107,6 @@
                         @. particles.m = 1
 
                         space = MPSpace(interp, grid, particles)
-                        # update interpolation values and sparsity pattern
                         update!(space, grid, particles)
 
                         # initialize point states
@@ -138,9 +137,9 @@
 
                         particles_set = map(1:10) do step
                             update!(space, grid, particles)
-                            particle_to_grid!((:m,:mv,:f), fillzero!(grid), particles, space; alg)
+                            particle_to_grid!((:m,:mv), fillzero!(grid), particles, space; alg)
                             @. grid.vⁿ = grid.mv / grid.m
-                            @. grid.v = grid.vⁿ + dt*(grid.f/grid.m)
+                            @. grid.v = grid.vⁿ
                             grid_to_particle!((:v,:∇v), particles, grid, space, dt; alg)
 
                             # openpvd(pvdfile; append=true) do pvd
