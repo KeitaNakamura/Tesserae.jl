@@ -32,6 +32,7 @@ mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 @inline _neighbornodes(sppat::SpPattern, space::MPSpace, i::Int) =
     (@_propagate_inbounds_meta; Iterators.map(I -> NonzeroIndex(I, @inbounds(sppat.indices[I])), space.nodeinds[i]))
 set_gridindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
+# nonzeroindices
 
 # reorder_particles!
 function reorder_particles!(particles::Particles, ptspblk::Array)

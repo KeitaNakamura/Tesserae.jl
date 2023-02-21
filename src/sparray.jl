@@ -117,26 +117,26 @@ end
     A
 end
 
-struct NonzeroIndex{dim}
-    parent::CartesianIndex{dim}
+struct NonzeroIndex{I}
+    parent::I
     i::Int
 end
-@inline function Base.getindex(A::SpArray, i::NonzeroIndex)
-    @boundscheck checkbounds(nonzeros(A), i.i)
-    @inbounds nonzeros(A)[i.i]
+@inline function Base.getindex(A::SpArray, nz::NonzeroIndex)
+    @boundscheck checkbounds(nonzeros(A), nz.i)
+    @inbounds nonzeros(A)[nz.i]
 end
-@inline function Base.setindex!(A::SpArray, v, i::NonzeroIndex)
-    @boundscheck checkbounds(nonzeros(A), i.i)
-    @inbounds nonzeros(A)[i.i] = v
+@inline function Base.setindex!(A::SpArray, v, nz::NonzeroIndex)
+    @boundscheck checkbounds(nonzeros(A), nz.i)
+    @inbounds nonzeros(A)[nz.i] = v
     A
 end
-@inline function Base.getindex(A::AbstractArray, i::NonzeroIndex)
-    @boundscheck checkbounds(A, i.parent)
-    @inbounds A[i.parent]
+@inline function Base.getindex(A::AbstractArray, nz::NonzeroIndex)
+    @boundscheck checkbounds(A, nz.parent)
+    @inbounds A[nz.parent]
 end
-@inline function Base.setindex!(A::AbstractArray, v, i::NonzeroIndex)
-    @boundscheck checkbounds(A, i.parent)
-    @inbounds A[i.parent] = v
+@inline function Base.setindex!(A::AbstractArray, v, nz::NonzeroIndex)
+    @boundscheck checkbounds(A, nz.parent)
+    @inbounds A[nz.parent] = v
     A
 end
 
