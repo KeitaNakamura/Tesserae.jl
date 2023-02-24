@@ -32,15 +32,23 @@ function value(::BSpline{4}, ξ::Real)
     ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
     ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
-@inline value(bspline::BSpline, ξ::Vec) = prod(value.(bspline, ξ))
-function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec)
+@generated function value(bspline::BSpline, ξ::Vec{dim}) where {dim}
+    quote
+        @_inline_meta
+        prod(@ntuple $dim i -> value(bspline, ξ[i]))
+    end
+end
+@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec)
     @_propagate_inbounds_meta
     xi = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
     ξ = (xp - xi) * dx⁻¹
     value(bspline, ξ)
 end
-@inline value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, pt) = value(bspline, lattice, I, getx(pt))
+@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, pt)
+    @_propagate_inbounds_meta
+    value(bspline, lattice, I, getx(pt))
+end
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
@@ -78,8 +86,14 @@ function value(spline::BSpline{3}, ξ::Real, pos::Int)::typeof(ξ)
         value(spline, ξ)
     end
 end
-@inline value(bspline::BSpline, ξ::Vec, pos::Tuple{Vararg{Int}}) = prod(value.(bspline, ξ, pos))
-function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
+@generated function value(bspline::BSpline, ξ::Vec{dim}, pos::Tuple{Vararg{Int, dim}}) where {dim}
+    quote
+        @_inline_meta
+        prod(@ntuple $dim i -> value(bspline, ξ[i], pos[i]))
+    end
+end
+@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec, ::Symbol) # last argument is p
+    @_propagate_inbounds_meta
     xi = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
     ξ = (xp - xi) * dx⁻¹
