@@ -36,11 +36,25 @@ mpvalue(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
 end
 set_gridindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
 # nonzeroindices
-nonzeroindices(space::MPSpace, inds) = _nonzeroindices(get_gridsppat(space), inds)
+struct NonzeroIndices{I, dim, A <: AbstractArray{I, dim}} <: AbstractArray{NonzeroIndex{I}, dim}
+    parent::A
+    nzinds::Array{Int, dim}
+end
+Base.size(x::NonzeroIndices) = size(x.parent)
+@inline function Base.getindex(x::NonzeroIndices, I...)
+    @boundscheck checkbounds(x, I...)
+    @inbounds begin
+        index = x.parent[I...]
+        nzindex = x.nzinds[index]
+    end
+    @boundscheck @assert nzindex != -1
+    NonzeroIndex(index, nzindex)
+end
+@inline nonzeroindices(space::MPSpace, inds) = (@_propagate_inbounds_meta; _nonzeroindices(get_gridsppat(space), inds))
 _nonzeroindices(::Trues, inds) = inds
 @inline function _nonzeroindices(sppat::SpPattern, inds)
     @boundscheck checkbounds(sppat, inds)
-    Iterators.map(i -> NonzeroIndex(i, @inbounds(sppat.indices[i])), inds)
+    NonzeroIndices(inds, get_spindices(sppat))
 end
 
 # reorder_particles!
