@@ -175,6 +175,6 @@ end
 blocksize(gridsize::Tuple{Vararg{Int}}) = (ncells = gridsize .- 1; @. (ncells - 1) >> BLOCK_UNIT + 1)
 
 function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
-    starts = AxisArray(nfill([1,2], Val(dim)))
-    vec(map(st -> map(CartesianIndex{dim}, AxisArray(StepRange.(st, 2, blocksize))), starts))
+    starts = AxisArray(nfill(1:2, Val(dim)))
+    vec(map(st -> map(CartesianIndex{dim}, AxisArray(StepRange.(st, 2, blocksize)))::Array{CartesianIndex{dim}, dim}, starts))
 end
