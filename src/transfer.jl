@@ -54,6 +54,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
 
     lattice = get_lattice(grid)
     parallel_each_particle(space) do p
+        @_inline_meta
         @inbounds begin
             mp = mpvalue(space, p)
 
