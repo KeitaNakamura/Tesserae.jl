@@ -46,7 +46,7 @@ function update_mpvalue!(mp::WLSValue, lattice::Lattice, sppat::AbstractArray{Bo
     M = zero(mp.Minv)
     xp = getx(pt)
 
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         xi = lattice[i]
         w = value(F, lattice, i, pt) * sppat[i]
         p = value(P, xi - xp)
@@ -56,7 +56,7 @@ function update_mpvalue!(mp::WLSValue, lattice::Lattice, sppat::AbstractArray{Bo
 
     Minv = inv(M)
 
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         xi = lattice[i]
         q = Minv ⋅ value(P, xi - xp)
         wq = mp.w[j] * q
@@ -92,7 +92,7 @@ function fast_update_mpvalue!(mp::WLSValue{dim, T}, lattice::Lattice, sppat::Abs
     D = zero(Vec{dim, T}) # diagonal entries
     values_gradients!(mp.w, reinterpret(reshape, T, mp.∇N), F, lattice, xp)
 
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         xi = lattice[i]
         w = mp.w[j]
         D += w * (xi - xp) .* (xi - xp)
@@ -111,7 +111,7 @@ function fast_update_mpvalue_nearbounds!(mp::WLSValue, lattice::Lattice, sppat::
     xp = getx(pt)
     M = zero(mp.Minv)
 
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         xi = lattice[i]
         w = value(F, lattice, i, xp) * sppat[i]
         p = value(P, xi - xp)
@@ -121,7 +121,7 @@ function fast_update_mpvalue_nearbounds!(mp::WLSValue, lattice::Lattice, sppat::
 
     Minv = inv(M)
 
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         xi = lattice[i]
         q = Minv ⋅ value(P, xi - xp)
         wq = mp.w[j] * q

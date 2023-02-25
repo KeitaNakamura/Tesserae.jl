@@ -56,7 +56,7 @@ num_nodes(mp::uGIMPValue) = length(mp.N)
     resize!(mp.N, n)
     resize!(mp.∇N, n)
 
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,pt.l), getx(pt), :all)
     end
 

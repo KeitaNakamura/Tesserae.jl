@@ -223,7 +223,7 @@ num_nodes(mp::BSplineValue) = length(mp.N)
 end
 
 function update_mpvalue_nearbounds!(mp::BSplineValue, lattice::Lattice, indices, pt)
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,:steffen), getx(pt), :all)
     end
 end

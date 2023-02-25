@@ -30,7 +30,7 @@ num_nodes(mp::KernelCorrectionValue) = length(mp.N)
     resize!(mp.∇N, n)
 
     if isfullyinside && @inbounds alltrue(sppat, indices)
-        @inbounds for (j, i) in enumerate(indices)
+        @inbounds for (j, i) in pairs(IndexLinear(), indices)
             mp.N[j], mp.∇N[j] = value_gradient(get_kernel(mp.itp), lattice, i, pt)
         end
     else
@@ -67,7 +67,7 @@ end
     F = get_kernel(mp.itp)
     xp = getx(pt)
     M = zero(Mat{dim+1, dim+1, T})
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         xi = lattice[i]
         w = value(F, lattice, i, pt) * sppat[i]
         P = [1; xi - xp]
@@ -78,7 +78,7 @@ end
     C1 = Minv[1,1]
     C2 = @Tensor Minv[2:end,1]
     C3 = @Tensor Minv[2:end,2:end]
-    @inbounds for (j, i) in enumerate(indices)
+    @inbounds for (j, i) in pairs(IndexLinear(), indices)
         xi = lattice[i]
         w = mp.N[j]
         mp.N[j] = (C1 + C2 ⋅ (xi - xp)) * w
