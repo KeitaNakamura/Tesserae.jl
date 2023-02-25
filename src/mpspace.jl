@@ -143,22 +143,21 @@ end
 
 # block-wise rough sparsity pattern for grid-state
 # Don't use "exact" sparsity pattern because it requires iteraion over all particles
-function update_sparsity_pattern!(space::MPSpace)
+# CubicBSpline is still ok with rng=1
+function update_sparsity_pattern!(space::MPSpace, rng::Int = 1)
     sppat = fillzero!(get_sppat(space))
     ptspblk = get_pointsperblock(space)
     @inbounds for I in CartesianIndices(ptspblk)
         blk = ptspblk[I]
         if !isempty(blk)
-            inds = neighbornodes_from_blockindex(gridsize(space), I, 1)
+            inds = neighbornodes_from_blockindex(gridsize(space), I, rng)
             sppat[inds] .= true
         end
     end
 end
 @inline function neighbornodes_from_blockindex(gridsize::Dims, blk::CartesianIndex, i::Int)
-    lo = blk.I .- i
-    hi = blk.I .+ i
-    start = @. max((lo-1) << BLOCK_UNIT + 1, 1)
-    stop = @. min(hi << BLOCK_UNIT + 1, gridsize)
+    start = @. max((blk.I-1) << BLOCK_UNIT + 1 - i, 1)
+    stop = @. min(blk.I << BLOCK_UNIT + 1 + i, gridsize)
     CartesianIndex(start):CartesianIndex(stop)
 end
 
