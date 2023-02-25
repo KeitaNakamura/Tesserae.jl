@@ -52,7 +52,6 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
     check_grid(grid, space)
     check_particles(particles, space)
 
-    lattice = get_lattice(grid)
     parallel_each_particle(space) do p
         @_inline_meta
         @inbounds begin
@@ -87,7 +86,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                         Dₚ = zero(Mat{dim, dim, T})
                         for (j, i) in enumerate(neighbornodes(space, p))
                             N = shape_value(mp, j)
-                            xᵢ = lattice[i]
+                            xᵢ = grid.x[i]
                             Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
                         end
                         mₚCₚ = particles.m[p] * particles.B[p] ⋅ inv(Dₚ)
@@ -120,7 +119,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
 
                 # grid momentum depends on transfer algorithms
                 if :mv in names
-                    xᵢ = lattice[i]
+                    xᵢ = grid.x[i]
                     if alg isa DefaultTransfer && mp isa WLSValue
                         grid.mv[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
                     elseif alg isa AffineTransfer
@@ -191,7 +190,6 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
             end
         end
 
-        lattice = get_lattice(grid)
         for (j, i) in enumerate(neighbornodes(space, p))
             N = shape_value(mp, j)
             ∇N = shape_gradient(mp, j)
@@ -216,7 +214,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                     dvₚ += N * dvᵢ
                 end
                 if alg isa AffineTransfer
-                    xᵢ = lattice[i]
+                    xᵢ = grid.x[i]
                     Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
                 end
             end
