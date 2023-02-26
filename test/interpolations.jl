@@ -13,11 +13,11 @@
                     mp = MPValue{dim, T}(KernelCorrection(itp))
                     x = rand(Vec{dim, T})
                     # fast version
-                    N = Vector{T}(undef, len^dim)
-                    ∇N = Vector{Vec{dim, T}}(undef, len^dim)
+                    N = Array{T}(undef, fill(len, dim)...)
+                    ∇N = Array{Vec{dim, T}}(undef, fill(len, dim)...)
                     Marble.values_gradients!(N, reinterpret(reshape, T, ∇N), itp, lattice, x)
-                    @test N ≈ getvals(itp, lattice, x)
-                    @test ∇N ≈ getgrads(itp, lattice, x)
+                    @test vec(N) ≈ getvals(itp, lattice, x)
+                    @test vec(∇N) ≈ getgrads(itp, lattice, x)
                 end
             end
         end
@@ -58,11 +58,12 @@ end # Kernel
                     x = rand(Vec{dim, T})
                     _, isfullyinside = neighbornodes(itp, lattice, x)
                     indices = update!(mp, lattice, x)
-                    @test sum(mp.N) ≈ 1
-                    @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
+                    CI = CartesianIndices(indices)
+                    @test sum(mp.N[CI]) ≈ 1
+                    @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
                     if isfullyinside
-                        @test mapreduce((N,∇N,i) -> N*lattice[i], +, mp.N, mp.∇N, indices) ≈ x atol=TOL
-                        @test mapreduce((N,∇N,i) -> lattice[i]⊗∇N, +, mp.N, mp.∇N, indices) ≈ I atol=TOL
+                        @test mapreduce((j,i) -> mp.N[j]*lattice[i], +, CI, indices) ≈ x atol=TOL
+                        @test mapreduce((j,i) -> lattice[i]⊗mp.∇N[j], +, CI, indices) ≈ I atol=TOL
                     end
                 end
             end
@@ -89,10 +90,11 @@ end
                             pt = x
                         end
                         indices = update!(mp, lattice, pt)
-                        @test sum(mp.N) ≈ 1
-                        @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                        @test mapreduce((N,∇N,i) -> N*lattice[i], +, mp.N, mp.∇N, indices) ≈ x atol=TOL
-                        @test mapreduce((N,∇N,i) -> lattice[i]⊗∇N, +, mp.N, mp.∇N, indices) ≈ I atol=TOL
+                        CI = CartesianIndices(indices)
+                        @test sum(mp.N[CI]) ≈ 1
+                        @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
+                        @test mapreduce((j,i) -> mp.N[j]*lattice[i], +, CI, indices) ≈ x atol=TOL
+                        @test mapreduce((j,i) -> lattice[i]⊗mp.∇N[j], +, CI, indices) ≈ I atol=TOL
                     end
                 end
             end
@@ -117,10 +119,11 @@ end
                     _, isfullyinside = neighbornodes(itp, lattice, pt)
                     if isfullyinside
                         indices = update!(mp, lattice, pt)
-                        @test sum(mp.N) ≈ 1
-                        @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                        @test mapreduce((N,∇N,i) -> N*lattice[i], +, mp.N, mp.∇N, indices) ≈ x atol=TOL
-                        @test mapreduce((N,∇N,i) -> lattice[i]⊗∇N, +, mp.N, mp.∇N, indices) ≈ I atol=TOL
+                        CI = CartesianIndices(indices)
+                        @test sum(mp.N[CI]) ≈ 1
+                        @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
+                        @test mapreduce((j,i) -> mp.N[j]*lattice[i], +, CI, indices) ≈ x atol=TOL
+                        @test mapreduce((j,i) -> lattice[i]⊗mp.∇N[j], +, CI, indices) ≈ I atol=TOL
                     end
                 end
             end
@@ -145,10 +148,11 @@ end
                         pt = x
                     end
                     indices = update!(mp, lattice, pt)
-                    @test sum(mp.N) ≈ 1
-                    @test sum(mp.∇N) ≈ zero(Vec{dim}) atol=TOL
-                    @test mapreduce((N,∇N,i) -> N*lattice[i], +, mp.N, mp.∇N, indices) ≈ x atol=TOL
-                    @test mapreduce((N,∇N,i) -> lattice[i]⊗∇N, +, mp.N, mp.∇N, indices) ≈ I atol=TOL
+                    CI = CartesianIndices(indices)
+                    @test sum(mp.N[CI]) ≈ 1
+                    @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
+                    @test mapreduce((j,i) -> mp.N[j]*lattice[i], +, CI, indices) ≈ x atol=TOL
+                    @test mapreduce((j,i) -> lattice[i]⊗mp.∇N[j], +, CI, indices) ≈ I atol=TOL
                 end
             end
         end
@@ -168,8 +172,8 @@ end
             xp2 = xp1 .+ 2
             update!(mp1, lattice, xp1)
             update!(mp2, lattice, sppat, xp2)
-            @test mp1.N ≈ filter(!iszero, mp2.N)
-            @test mp1.∇N ≈ filter(!iszero, mp2.∇N)
+            @test mp1.N[1:2, 1:2] ≈ mp2.N[2:3, 2:3]
+            @test mp1.∇N[1:2, 1:2] ≈ mp2.∇N[2:3, 2:3]
         end
     end
 end

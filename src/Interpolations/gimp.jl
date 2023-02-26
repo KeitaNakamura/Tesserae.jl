@@ -1,5 +1,7 @@
 struct uGIMP <: Kernel end
 
+gridsize(::uGIMP) = 3
+
 @inline function neighbornodes(::uGIMP, lattice::Lattice, pt)
     dx⁻¹ = spacing_inv(lattice)
     neighbornodes(lattice, pt.x, 1+(pt.l/2)*dx⁻¹)
@@ -35,28 +37,21 @@ end
 
 struct uGIMPValue{dim, T} <: MPValue{dim, T}
     itp::uGIMP
-    N::Vector{T}
-    ∇N::Vector{Vec{dim, T}}
+    N::Array{T, dim}
+    ∇N::Array{Vec{dim, T}, dim}
 end
 
 function MPValue{dim, T}(itp::uGIMP) where {dim, T}
-    N = Vector{T}(undef, 0)
-    ∇N = Vector{Vec{dim, T}}(undef, 0)
+    dims = nfill(gridsize(itp), Val(dim))
+    N = Array{T}(undef, dims)
+    ∇N = Array{Vec{dim, T}}(undef, dims)
     uGIMPValue(itp, N, ∇N)
 end
-
-num_nodes(mp::uGIMPValue) = length(mp.N)
-@inline shape_value(mp::uGIMPValue, j::Int) = (@_propagate_inbounds_meta; mp.N[j])
-@inline shape_gradient(mp::uGIMPValue, j::Int) = (@_propagate_inbounds_meta; mp.∇N[j])
 
 @inline function update_mpvalue!(mp::uGIMPValue, lattice::Lattice, pt)
     indices, _ = neighbornodes(mp.itp, lattice, pt)
 
-    n = length(indices)
-    resize!(mp.N, n)
-    resize!(mp.∇N, n)
-
-    @inbounds for (j, i) in pairs(IndexLinear(), indices)
+    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
         mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,pt.l), getx(pt), :all)
     end
 

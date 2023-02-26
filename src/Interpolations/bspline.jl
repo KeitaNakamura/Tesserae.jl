@@ -6,6 +6,10 @@ const LinearBSpline    = BSpline{1}
 const QuadraticBSpline = BSpline{2}
 const CubicBSpline     = BSpline{3}
 
+gridsize(::BSpline{1}) = 2
+gridsize(::BSpline{2}) = 3
+gridsize(::BSpline{3}) = 4
+
 @inline neighbornodes(::BSpline{1}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.0)
 @inline neighbornodes(::BSpline{2}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.5)
 @inline neighbornodes(::BSpline{3}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 2.0)
@@ -92,7 +96,7 @@ end
         prod(@ntuple $dim i -> value(bspline, ξ[i], pos[i]))
     end
 end
-@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec, ::Symbol) # last argument is p
+@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
     @_propagate_inbounds_meta
     xi = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
@@ -161,55 +165,39 @@ end
 # 2D
 @inline function _values_gradients!(N, ∇N, (Vx, Vy)::NTuple{2}, (∇Vx, ∇Vy)::NTuple{2})
     n = length(Vx)
-    @turbo for j in 1:n
-        offset = n*(j-1)
-        for i in 1:n
-            N[offset+i] = Vx[i] * Vy[j]
-            ∇N[1, offset+i] = ∇Vx[i] *  Vy[j]
-            ∇N[2, offset+i] =  Vx[i] * ∇Vy[j]
-        end
+    @turbo for j in 1:n, i in 1:n
+        N[i,j] = Vx[i] * Vy[j]
+        ∇N[1,i,j] = ∇Vx[i] *  Vy[j]
+        ∇N[2,i,j] =  Vx[i] * ∇Vy[j]
     end
 end
 
 # 3D
 @inline function _values_gradients!(N, ∇N, (Vx, Vy, Vz)::NTuple{3}, (∇Vx, ∇Vy, ∇Vz)::NTuple{3})
     n = length(Vx)
-    @turbo for k in 1:n
-        offset_j = n*n*(k-1)
-        for j in 1:n
-            offset_i = offset_j + n*(j-1)
-            for i in 1:n
-                N[offset_i+i] = Vx[i] * Vy[j] * Vz[k]
-                ∇N[1, offset_i+i] = ∇Vx[i] *  Vy[j] *  Vz[k]
-                ∇N[2, offset_i+i] =  Vx[i] * ∇Vy[j] *  Vz[k]
-                ∇N[3, offset_i+i] =  Vx[i] *  Vy[j] * ∇Vz[k]
-            end
-        end
+    @turbo for k in 1:n, j in 1:n, i in 1:n
+        N[i,j,k] = Vx[i] * Vy[j] * Vz[k]
+        ∇N[1,i,j,k] = ∇Vx[i] *  Vy[j] *  Vz[k]
+        ∇N[2,i,j,k] =  Vx[i] * ∇Vy[j] *  Vz[k]
+        ∇N[3,i,j,k] =  Vx[i] *  Vy[j] * ∇Vz[k]
     end
 end
 
 struct BSplineValue{dim, T, order} <: MPValue{dim, T}
     itp::BSpline{order}
-    N::Vector{T}
-    ∇N::Vector{Vec{dim, T}}
+    N::Array{T, dim}
+    ∇N::Array{Vec{dim, T}, dim}
 end
 
 function MPValue{dim, T}(itp::BSpline{order}) where {dim, T, order}
-    N = Vector{T}(undef, 0)
-    ∇N = Vector{Vec{dim, T}}(undef, 0)
+    dims = nfill(gridsize(itp), Val(dim))
+    N = Array{T}(undef, dims)
+    ∇N = Array{Vec{dim, T}}(undef, dims)
     BSplineValue(itp, N, ∇N)
 end
 
-num_nodes(mp::BSplineValue) = length(mp.N)
-@inline shape_value(mp::BSplineValue, j::Int) = (@_propagate_inbounds_meta; mp.N[j])
-@inline shape_gradient(mp::BSplineValue, j::Int) = (@_propagate_inbounds_meta; mp.∇N[j])
-
 @inline function update_mpvalue!(mp::BSplineValue{<: Any, T}, lattice::Lattice, pt) where {T}
     indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
-
-    n = length(indices)
-    resize!(mp.N, n)
-    resize!(mp.∇N, n)
 
     if isfullyinside
         N = mp.N
@@ -223,7 +211,7 @@ num_nodes(mp::BSplineValue) = length(mp.N)
 end
 
 function update_mpvalue_nearbounds!(mp::BSplineValue, lattice::Lattice, indices, pt)
-    @inbounds for (j, i) in pairs(IndexLinear(), indices)
+    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
         mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,:steffen), getx(pt), :all)
     end
 end

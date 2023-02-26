@@ -45,14 +45,12 @@ end
 @inline function update!(mp::MPValue, lattice::Lattice, pt)
     indices = update_mpvalue!(mp, lattice, pt)
     indices isa CartesianIndices || error("`update_mpvalue` must return `CartesianIndices`")
-    @assert length(indices) == num_nodes(mp)
     indices
 end
 @inline function update!(mp::MPValue, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
     @assert size(lattice) == size(sppat)
     indices = update_mpvalue!(mp, lattice, sppat, pt)
     indices isa CartesianIndices || error("`update_mpvalue` must return `CartesianIndices`")
-    @assert length(indices) == num_nodes(mp)
     indices
 end
 

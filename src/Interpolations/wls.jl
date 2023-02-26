@@ -12,41 +12,34 @@ get_kernel(::WLS{B, W}) where {B, W} = W()
 
 mutable struct WLSValue{dim, T, B, K, L, L²} <: MPValue{dim, T}
     itp::WLS{B, K}
-    w::Vector{T}
-    N::Vector{T}
-    ∇N::Vector{Vec{dim, T}}
+    w::Array{T, dim}
+    N::Array{T, dim}
+    ∇N::Array{Vec{dim, T}, dim}
     Minv::Mat{L, L, T, L²}
 end
 
 function MPValue{dim, T}(itp::WLS{B, K}) where {dim, T, B, K}
+    dims = nfill(gridsize(get_kernel(itp)), Val(dim))
     L = length(value(get_basis(itp), zero(Vec{dim, T})))
-    w = Vector{T}(undef, 0)
-    N = Vector{T}(undef, 0)
-    ∇N = Vector{Vec{dim, T}}(undef, 0)
+    w = Array{T}(undef, dims)
+    N = Array{T}(undef, dims)
+    ∇N = Array{Vec{dim, T}}(undef, dims)
     Minv = zero(Mat{L, L, T})
     WLSValue(itp, w, N, ∇N, Minv)
 end
 
-num_nodes(mp::WLSValue) = length(mp.N)
 get_basis(mp::WLSValue) = get_basis(mp.itp)
-@inline shape_value(mp::WLSValue, j::Int) = (@_propagate_inbounds_meta; mp.N[j])
-@inline shape_gradient(mp::WLSValue, j::Int) = (@_propagate_inbounds_meta; mp.∇N[j])
 
 # general version
 function update_mpvalue!(mp::WLSValue, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
     indices, _ = neighbornodes(mp.itp, lattice, pt)
-
-    n = length(indices)
-    resize!(mp.N, n)
-    resize!(mp.∇N, n)
-    resize!(mp.w, n)
 
     F = get_kernel(mp.itp)
     P = get_basis(mp.itp)
     M = zero(mp.Minv)
     xp = getx(pt)
 
-    @inbounds for (j, i) in pairs(IndexLinear(), indices)
+    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
         xi = lattice[i]
         w = value(F, lattice, i, pt) * sppat[i]
         p = value(P, xi - xp)
@@ -56,7 +49,7 @@ function update_mpvalue!(mp::WLSValue, lattice::Lattice, sppat::AbstractArray{Bo
 
     Minv = inv(M)
 
-    @inbounds for (j, i) in pairs(IndexLinear(), indices)
+    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
         xi = lattice[i]
         q = Minv ⋅ value(P, xi - xp)
         wq = mp.w[j] * q
@@ -71,11 +64,6 @@ end
 # fast version for `LinearWLS(BSpline{order}())`
 function update_mpvalue!(mp::WLSValue{<: Any, <: Any, PolynomialBasis{1}, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
     indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
-
-    n = length(indices)
-    resize!(mp.N, n)
-    resize!(mp.∇N, n)
-    resize!(mp.w, n)
 
     if isfullyinside && @inbounds alltrue(sppat, indices)
         fast_update_mpvalue!(mp, lattice, sppat, indices, pt)
@@ -92,7 +80,7 @@ function fast_update_mpvalue!(mp::WLSValue{dim, T}, lattice::Lattice, sppat::Abs
     D = zero(Vec{dim, T}) # diagonal entries
     values_gradients!(mp.w, reinterpret(reshape, T, mp.∇N), F, lattice, xp)
 
-    @inbounds for (j, i) in pairs(IndexLinear(), indices)
+    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
         xi = lattice[i]
         w = mp.w[j]
         D += w * (xi - xp) .* (xi - xp)
@@ -111,7 +99,7 @@ function fast_update_mpvalue_nearbounds!(mp::WLSValue, lattice::Lattice, sppat::
     xp = getx(pt)
     M = zero(mp.Minv)
 
-    @inbounds for (j, i) in pairs(IndexLinear(), indices)
+    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
         xi = lattice[i]
         w = value(F, lattice, i, xp) * sppat[i]
         p = value(P, xi - xp)
@@ -121,7 +109,7 @@ function fast_update_mpvalue_nearbounds!(mp::WLSValue, lattice::Lattice, sppat::
 
     Minv = inv(M)
 
-    @inbounds for (j, i) in pairs(IndexLinear(), indices)
+    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
         xi = lattice[i]
         q = Minv ⋅ value(P, xi - xp)
         wq = mp.w[j] * q
