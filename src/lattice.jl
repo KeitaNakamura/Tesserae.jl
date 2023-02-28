@@ -31,8 +31,8 @@ julia> Lattice(1.0, (0,3), (1,4))
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct Lattice{dim, T} <: AbstractArray{Vec{dim, T}, dim}
-    axisarray::AxisArray{dim, T, Vector{T}}
+struct Lattice{dim, T, V <: AbstractVector{T}} <: AbstractArray{Vec{dim, T}, dim}
+    axisarray::AxisArray{dim, T, V}
     dx::T
     dx_inv::T
 end
