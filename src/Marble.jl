@@ -52,10 +52,9 @@ export
     Interpolation,
     LinearWLS,
     KernelCorrection,
-    MPValue,
+    MPValues,
 # MPSpace
     MPSpace,
-    mpvalue,
     neighbornodes,
 # Transfer
     particle_to_grid!,
@@ -85,7 +84,7 @@ include("lattice.jl")
 
 include("grid.jl")
 include("particles.jl")
-include("Interpolations/mpvalue.jl")
+include("Interpolations/mpvalues.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
 include("Interpolations/polybasis.jl")

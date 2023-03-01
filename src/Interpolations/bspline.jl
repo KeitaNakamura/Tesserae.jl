@@ -152,7 +152,7 @@ end
         @nexprs $dim d -> (V_d, ∇V_d) = values_gradients(bspline, x[d])
         V_tuple = @ntuple $dim d -> SVector(V_d)
         ∇V_tuple = @ntuple $dim d -> SVector(∇V_d*dx⁻¹)
-        _values_gradients!(N, ∇N, V_tuple, ∇V_tuple)
+        _values_gradients!(N, reinterpret(reshape, eltype(eltype(∇N)), ∇N), V_tuple, ∇V_tuple)
     end
 end
 
@@ -183,35 +183,27 @@ end
     end
 end
 
-struct BSplineValue{dim, T, order} <: MPValue{dim, T}
-    itp::BSpline{order}
-    N::Array{T, dim}
-    ∇N::Array{Vec{dim, T}, dim}
-end
-
-function MPValue{dim, T}(itp::BSpline{order}) where {dim, T, order}
+function InterpolationInfo{dim, T}(itp::BSpline{order}) where {dim, T, order}
     dims = nfill(gridsize(itp), Val(dim))
-    N = Array{T}(undef, dims)
-    ∇N = Array{Vec{dim, T}}(undef, dims)
-    BSplineValue(itp, N, ∇N)
+    values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
+    sizes = (dims, dims)
+    InterpolationInfo{dim, T}(values, sizes)
 end
 
-@inline function update_mpvalue!(mp::BSplineValue{<: Any, T}, lattice::Lattice, pt) where {T}
-    indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
+@inline function update_mpvalues!(mp::MPValues, itp::BSpline, lattice::Lattice, pt)
+    indices, isfullyinside = neighbornodes(itp, lattice, pt)
 
     if isfullyinside
-        N = mp.N
-        ∇N = reinterpret(reshape, T, mp.∇N)
-        values_gradients!(N, ∇N, mp.itp, lattice, pt)
+        values_gradients!(mp.N, mp.∇N, itp, lattice, pt)
     else
-        update_mpvalue_nearbounds!(mp, lattice, indices, pt)
+        update_mpvalue_nearbounds!(mp.N, mp.∇N, itp, lattice, indices, pt)
     end
 
     indices
 end
 
-function update_mpvalue_nearbounds!(mp::BSplineValue, lattice::Lattice, indices, pt)
+function update_mpvalue_nearbounds!(N, ∇N, itp::BSpline, lattice::Lattice, indices, pt)
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,:steffen), getx(pt), :all)
+        ∇N[j], N[j] = gradient(x->value(itp,lattice,i,x,:steffen), getx(pt), :all)
     end
 end

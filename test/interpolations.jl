@@ -10,7 +10,7 @@
                 for T in (Float32, Float64)
                     lattice = Lattice(T, 1, ntuple(i->(-10,10), Val(dim))...)
                     # wrap by KernelCorrection because `BSpline` uses only fast version
-                    mp = MPValue{dim, T}(KernelCorrection(itp))
+                    mp = MPValues{dim, T}(KernelCorrection(itp), 1)[1]
                     x = rand(Vec{dim, T})
                     # fast version
                     N = Array{T}(undef, fill(len, dim)...)
@@ -45,19 +45,19 @@
 end
 end # Kernel
 
-@testset "MPValue" begin
-@testset "BSplineValue" begin
+@testset "MPValues" begin
+@testset "BSpline" begin
     for T in (Float32, Float64)
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
             lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
             for itp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),)
-                mp = MPValue{dim, T}(itp)
+                mp = MPValues{dim, T}(itp, 1)[1]
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     _, isfullyinside = neighbornodes(itp, lattice, x)
-                    indices = update!(mp, lattice, x)
+                    indices = update!(mp, itp, lattice, x)
                     CI = CartesianIndices(indices)
                     @test sum(mp.N[CI]) ≈ 1
                     @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
@@ -71,7 +71,7 @@ end # Kernel
     end
 end
 
-@testset "WLSValue" begin
+@testset "WLS" begin
     for T in (Float32, Float64)
         Random.seed!(1234)
         TOL = sqrt(eps(T))
@@ -81,7 +81,8 @@ end
             for kernel in (QuadraticBSpline(), CubicBSpline(), uGIMP())
                 for WLS in (LinearWLS, Marble.BilinearWLS)
                     WLS == Marble.BilinearWLS && dim != 2 && continue
-                    mp = MPValue{dim, T}(WLS(kernel))
+                    itp = WLS(kernel)
+                    mp = MPValues{dim, T}(itp, 1)[1]
                     for _ in 1:100
                         x = rand(Vec{dim, T})
                         if kernel isa uGIMP
@@ -89,7 +90,7 @@ end
                         else
                             pt = x
                         end
-                        indices = update!(mp, lattice, pt)
+                        indices = update!(mp, itp, lattice, pt)
                         CI = CartesianIndices(indices)
                         @test sum(mp.N[CI]) ≈ 1
                         @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
@@ -102,14 +103,14 @@ end
     end
 end
 
-@testset "uGIMPValue" begin
+@testset "uGIMP" begin
     for T in (Float32, Float64)
         Random.seed!(1234)
         TOL = sqrt(eps(T))
         for dim in 1:3
             lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
             for itp in (uGIMP(),)
-                mp = MPValue{dim, T}(itp)
+                mp = MPValues{dim, T}(itp, 1)[1]
                 l = spacing(lattice) / 2
                 # uGIMP doesn't have pertition of unity when closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
@@ -118,7 +119,7 @@ end
                     pt = (;x,l)
                     _, isfullyinside = neighbornodes(itp, lattice, pt)
                     if isfullyinside
-                        indices = update!(mp, lattice, pt)
+                        indices = update!(mp, itp, lattice, pt)
                         CI = CartesianIndices(indices)
                         @test sum(mp.N[CI]) ≈ 1
                         @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
@@ -133,13 +134,14 @@ end
 
 @testset "KernelCorrectionValue" begin
     @testset "$kernel" for kernel in (QuadraticBSpline(), CubicBSpline(), uGIMP())
+        itp = KernelCorrection(kernel)
         for T in (Float32, Float64)
             Random.seed!(1234)
             TOL = sqrt(eps(T))
             for dim in 1:3
                 lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
                 l = spacing(lattice) / 2
-                mp = MPValue{dim, T}(KernelCorrection(kernel))
+                mp = MPValues{dim, T}(itp, 1)[1]
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     if kernel isa uGIMP
@@ -147,7 +149,7 @@ end
                     else
                         pt = x
                     end
-                    indices = update!(mp, lattice, pt)
+                    indices = update!(mp, itp, lattice, pt)
                     CI = CartesianIndices(indices)
                     @test sum(mp.N[CI]) ≈ 1
                     @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
@@ -162,21 +164,22 @@ end
 @testset "LinearWLS/KernelCorrection with sparsity pattern" begin
     for kernel in (QuadraticBSpline(), CubicBSpline())
         for Modifier in (LinearWLS, KernelCorrection)
-            mp1 = MPValue{2}(Modifier(kernel))
-            mp2 = MPValue{2}(Modifier(kernel))
+            itp = Modifier(kernel)
+            mp1 = MPValues{2}(itp, 1)[1]
+            mp2 = MPValues{2}(itp, 1)[1]
             lattice = Lattice(1, (0,10), (0,10))
             sppat = trues(size(lattice))
             sppat[1:2, :] .= false
             sppat[:, 1:2] .= false
             xp1 = Vec(0.12,0.13)
             xp2 = xp1 .+ 2
-            update!(mp1, lattice, xp1)
-            update!(mp2, lattice, sppat, xp2)
+            update!(mp1, itp, lattice, xp1)
+            update!(mp2, itp, lattice, sppat, xp2)
             @test mp1.N[1:2, 1:2] ≈ mp2.N[2:3, 2:3]
             @test mp1.∇N[1:2, 1:2] ≈ mp2.∇N[2:3, 2:3]
         end
     end
 end
-end # MPValue
+end # MPValues
 
 end # Interpolations

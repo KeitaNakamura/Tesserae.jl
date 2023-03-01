@@ -34,25 +34,18 @@ end
     N, ∇N
 end
 
-
-struct uGIMPValue{dim, T} <: MPValue{dim, T}
-    itp::uGIMP
-    N::Array{T, dim}
-    ∇N::Array{Vec{dim, T}, dim}
-end
-
-function MPValue{dim, T}(itp::uGIMP) where {dim, T}
+function InterpolationInfo{dim, T}(itp::uGIMP) where {dim, T}
     dims = nfill(gridsize(itp), Val(dim))
-    N = Array{T}(undef, dims)
-    ∇N = Array{Vec{dim, T}}(undef, dims)
-    uGIMPValue(itp, N, ∇N)
+    values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
+    sizes = (dims, dims)
+    InterpolationInfo{dim, T}(values, sizes)
 end
 
-@inline function update_mpvalue!(mp::uGIMPValue, lattice::Lattice, pt)
-    indices, _ = neighbornodes(mp.itp, lattice, pt)
+@inline function update_mpvalues!(mp::MPValues, itp::uGIMP, lattice::Lattice, pt)
+    indices, _ = neighbornodes(itp, lattice, pt)
 
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        mp.∇N[j], mp.N[j] = gradient(x->value(mp.itp,lattice,i,x,pt.l), getx(pt), :all)
+        mp.∇N[j], mp.N[j] = gradient(x->value(itp,lattice,i,x,pt.l), getx(pt), :all)
     end
 
     indices

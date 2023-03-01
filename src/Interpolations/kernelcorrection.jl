@@ -5,55 +5,43 @@ KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
 get_kernel(::KernelCorrection{K}) where {K} = K()
 @inline neighbornodes(kc::KernelCorrection, lattice::Lattice, pt) = neighbornodes(get_kernel(kc), lattice, pt)
 
-struct KernelCorrectionValue{dim, T, K} <: MPValue{dim, T}
-    itp::KernelCorrection{K}
-    N::Array{T, dim}
-    ∇N::Array{Vec{dim, T}, dim}
-end
-
-function MPValue{dim, T}(itp::KernelCorrection{K}) where {dim, T, K}
+function InterpolationInfo{dim, T}(itp::KernelCorrection) where {dim, T}
     dims = nfill(gridsize(get_kernel(itp)), Val(dim))
-    N = Array{T}(undef, dims)
-    ∇N = Array{Vec{dim, T}}(undef, dims)
-    KernelCorrectionValue(itp, N, ∇N)
+    values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
+    sizes = (dims, dims)
+    InterpolationInfo{dim, T}(values, sizes)
 end
 
 # general version
-@inline function update_mpvalue!(mp::KernelCorrectionValue, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
+@inline function update_mpvalues!(mp::MPValues, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    indices, isfullyinside = neighbornodes(itp, lattice, pt)
 
     if isfullyinside && @inbounds alltrue(sppat, indices)
         @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-            mp.N[j], mp.∇N[j] = value_gradient(get_kernel(mp.itp), lattice, i, pt)
+            mp.N[j], mp.∇N[j] = value_gradient(get_kernel(itp), lattice, i, pt)
         end
     else
-        update_mpvalue_nearbounds!(mp, lattice, sppat, indices, pt)
+        update_mpvalue_nearbounds!(mp, itp, lattice, sppat, indices, pt)
     end
 
     indices
 end
 
 # fast version for B-spline kernels
-@inline function update_mpvalue!(mp::KernelCorrectionValue{<: Any, <: Any, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, isfullyinside = neighbornodes(mp.itp, lattice, pt)
+@inline function update_mpvalues!(mp::MPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    indices, isfullyinside = neighbornodes(itp, lattice, pt)
 
     if isfullyinside && @inbounds alltrue(sppat, indices)
-        fast_update_mpvalue!(mp, lattice, sppat, indices, pt)
+        values_gradients!(mp.N, mp.∇N, get_kernel(itp), lattice, pt)
     else
-        update_mpvalue_nearbounds!(mp, lattice, sppat, indices, pt)
+        update_mpvalue_nearbounds!(mp, itp, lattice, sppat, indices, pt)
     end
 
     indices
 end
 
-@inline function fast_update_mpvalue!(mp::KernelCorrectionValue{<: Any, T}, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {T}
-    N = mp.N
-    ∇N = reinterpret(reshape, T, mp.∇N)
-    values_gradients!(N, ∇N, get_kernel(mp.itp), lattice, pt)
-end
-
-@inline function update_mpvalue_nearbounds!(mp::KernelCorrectionValue{dim, T}, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
-    F = get_kernel(mp.itp)
+@inline function update_mpvalue_nearbounds!(mp::MPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
+    F = get_kernel(itp)
     xp = getx(pt)
     M = zero(Mat{dim+1, dim+1, T})
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)

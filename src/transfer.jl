@@ -52,10 +52,12 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
     check_grid(grid, space)
     check_particles(particles, space)
 
+    itp = get_interpolation(space)
+    P = x -> value(get_basis(itp), x)
     parallel_each_particle(space) do p
         @_inline_meta
         @inbounds begin
-            mp = mpvalue(space, p)
+            mp = values(space, p)
 
             if :m in names
                 mₚ = particles.m[p]
@@ -73,8 +75,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
 
             # grid momentum depends on transfer algorithms
             if :mv in names
-                if alg isa DefaultTransfer && mp isa WLSValue
-                    P = x -> value(get_basis(mp), x)
+                if alg isa DefaultTransfer && itp isa WLS
                     xₚ = particles.x[p]
                     mₚCₚ = particles.m[p] * particles.C[p]
                 else
@@ -120,7 +121,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                 # grid momentum depends on transfer algorithms
                 if :mv in names
                     xᵢ = grid.x[i]
-                    if alg isa DefaultTransfer && mp isa WLSValue
+                    if alg isa DefaultTransfer && itp isa WLS
                         grid.mv[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
                     elseif alg isa AffineTransfer
                         grid.mv[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
@@ -161,7 +162,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
     check_particles(particles, space)
 
     @threaded for p in 1:num_particles(space)
-        mp = mpvalue(space, p)
+        mp = values(space, p)
 
         # there is no difference along with transfer algorithms for calculating `:∇v` and `:x`
         if :∇v in names
@@ -253,31 +254,33 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
 end
 
 # special default transfer for `WLS` interpolation
-function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLSValue}, dt::Real) where {names, dim}
+function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLS}, dt::Real) where {names, dim}
     check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
     check_particles(particles, space)
 
+    itp = get_interpolation(space)
+    basis = get_basis(itp)
+    P = x -> value(basis, x)
+    p0 = value(basis, zero(Vec{dim, Int}))
+    ∇p0 = gradient(basis, zero(Vec{dim, Int}))
     @threaded for p in 1:num_particles(space)
-        mp = mpvalue(space, p)
+        mp = values(space, p)
 
         xₚ = particles.x[p]
         Cₚ = zero(eltype(particles.C))
-        P = x -> value(get_basis(mp), x)
 
         for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
             w = mp.w[j]
-            Minv = mp.Minv
+            Minv = mp.Minv[]
             vᵢ = grid.v[i]
             xᵢ = grid.x[i]
             Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xᵢ - xₚ))
         end
 
-        p0 = value(get_basis(mp), zero(Vec{dim, Int}))
         vₚ = Cₚ ⋅ p0
 
         if :∇v in names
-            ∇p0 = gradient(get_basis(mp), zero(Vec{dim, Int}))
             ∇vₚ = Cₚ ⋅ ∇p0
             T_∇v = eltype(particles.∇v)
             if system isa Axisymmetric
@@ -336,7 +339,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
 
     parallel_each_particle(space) do p
         @inbounds begin
-            mp = mpvalue(space, p)
+            mp = values(space, p)
             for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
                 N = mp.N[j]
                 P = value(basis, xₚ[p] - grid.x[i])
@@ -351,7 +354,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
 
     @threaded for p in 1:num_particles(space)
         val = zero(eltype(vals))
-        mp = mpvalue(space, p)
+        mp = values(space, p)
         for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
             N = mp.N[j]
             P = value(basis, xₚ[p] - grid.x[i])
