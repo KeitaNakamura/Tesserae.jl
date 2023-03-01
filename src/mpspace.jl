@@ -28,7 +28,7 @@ get_gridsppat(space::MPSpace) = space.gridsppat
 
 # values
 Base.values(space::MPSpace) = space.mpvals
-Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; space.mpvals[i])
+Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; values(space.mpvals, i))
 # set/get gridindices
 @inline function neighbornodes(space::MPSpace, i::Integer)
     @boundscheck checkbounds(space.nodeinds, i)

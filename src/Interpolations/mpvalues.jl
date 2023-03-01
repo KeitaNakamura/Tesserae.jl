@@ -54,20 +54,20 @@ Base.values(mps::MPValues) = getfield(mps, :values)
 Base.propertynames(mps::MPValues) = propertynames(values(mps))
 @inline Base.getproperty(mps::MPValues, name::Symbol) = getproperty(values(mps), name)
 
-# getindex inferface for `isparent=true`
+# getindex-like inferface for `isparent=true`
 function Base.length(mps::MPValues{<: Any, <: Any, true})
     A = first(values(mps))
     size(A, ndims(A))
 end
-@generated function Base.getindex(mps::MPValues{dim, T, true, <: NamedTuple{names}}, i::Integer) where {dim, T, names}
-    exps = [:(_getarray(mps.$name, i)) for name in names]
+@generated function Base.values(mps::MPValues{dim, T, true, <: NamedTuple{names}}, i::Integer) where {dim, T, names}
+    exps = [:(_getview(mps.$name, i)) for name in names]
     quote
         @_propagate_inbounds_meta
         values = NamedTuple{names}(tuple($(exps...)))
         MPValues{dim, T, false}(values)
     end
 end
-@generated function _getarray(arr::AbstractArray{<: Any, N}, i::Integer) where {N}
+@generated function _getview(arr::AbstractArray{<: Any, N}, i::Integer) where {N}
     colons = fill(:, N-1)
     quote
         @_inline_meta

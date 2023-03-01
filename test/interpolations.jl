@@ -10,7 +10,7 @@
                 for T in (Float32, Float64)
                     lattice = Lattice(T, 1, ntuple(i->(-10,10), Val(dim))...)
                     # wrap by KernelCorrection because `BSpline` uses only fast version
-                    mp = MPValues{dim, T}(KernelCorrection(itp), 1)[1]
+                    mp = values(MPValues{dim, T}(KernelCorrection(itp), 1), 1)
                     x = rand(Vec{dim, T})
                     # fast version
                     N = Array{T}(undef, fill(len, dim)...)
@@ -53,7 +53,7 @@ end # Kernel
         for dim in 1:3
             lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
             for itp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),)
-                mp = MPValues{dim, T}(itp, 1)[1]
+                mp = values(MPValues{dim, T}(itp, 1), 1)
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     _, isfullyinside = neighbornodes(itp, lattice, x)
@@ -82,7 +82,7 @@ end
                 for WLS in (LinearWLS, Marble.BilinearWLS)
                     WLS == Marble.BilinearWLS && dim != 2 && continue
                     itp = WLS(kernel)
-                    mp = MPValues{dim, T}(itp, 1)[1]
+                    mp = values(MPValues{dim, T}(itp, 1), 1)
                     for _ in 1:100
                         x = rand(Vec{dim, T})
                         if kernel isa uGIMP
@@ -110,7 +110,7 @@ end
         for dim in 1:3
             lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
             for itp in (uGIMP(),)
-                mp = MPValues{dim, T}(itp, 1)[1]
+                mp = values(MPValues{dim, T}(itp, 1), 1)
                 l = spacing(lattice) / 2
                 # uGIMP doesn't have pertition of unity when closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
@@ -141,7 +141,7 @@ end
             for dim in 1:3
                 lattice = Lattice(T, 0.1, ntuple(i->(0,1), Val(dim))...)
                 l = spacing(lattice) / 2
-                mp = MPValues{dim, T}(itp, 1)[1]
+                mp = values(MPValues{dim, T}(itp, 1), 1)
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     if kernel isa uGIMP
@@ -165,8 +165,8 @@ end
     for kernel in (QuadraticBSpline(), CubicBSpline())
         for Modifier in (LinearWLS, KernelCorrection)
             itp = Modifier(kernel)
-            mp1 = MPValues{2}(itp, 1)[1]
-            mp2 = MPValues{2}(itp, 1)[1]
+            mp1 = values(MPValues{2}(itp, 1), 1)
+            mp2 = values(MPValues{2}(itp, 1), 1)
             lattice = Lattice(1, (0,10), (0,10))
             sppat = trues(size(lattice))
             sppat[1:2, :] .= false
