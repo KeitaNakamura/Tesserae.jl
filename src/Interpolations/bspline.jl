@@ -165,21 +165,27 @@ end
 # 2D
 @inline function _values_gradients!(N, ∇N, (Vx, Vy)::NTuple{2}, (∇Vx, ∇Vy)::NTuple{2})
     n = length(Vx)
-    @turbo for j in 1:n, i in 1:n
-        N[i,j] = Vx[i] * Vy[j]
-        ∇N[1,i,j] = ∇Vx[i] *  Vy[j]
-        ∇N[2,i,j] =  Vx[i] * ∇Vy[j]
+    @inbounds for j in 1:n
+        @simd for i in 1:n
+            N[i,j] = Vx[i] * Vy[j]
+            ∇N[1,i,j] = ∇Vx[i] *  Vy[j]
+            ∇N[2,i,j] =  Vx[i] * ∇Vy[j]
+        end
     end
 end
 
 # 3D
 @inline function _values_gradients!(N, ∇N, (Vx, Vy, Vz)::NTuple{3}, (∇Vx, ∇Vy, ∇Vz)::NTuple{3})
     n = length(Vx)
-    @turbo for k in 1:n, j in 1:n, i in 1:n
-        N[i,j,k] = Vx[i] * Vy[j] * Vz[k]
-        ∇N[1,i,j,k] = ∇Vx[i] *  Vy[j] *  Vz[k]
-        ∇N[2,i,j,k] =  Vx[i] * ∇Vy[j] *  Vz[k]
-        ∇N[3,i,j,k] =  Vx[i] *  Vy[j] * ∇Vz[k]
+    @inbounds for k in 1:n
+        for j in 1:n
+            @simd for i in 1:n
+                N[i,j,k] = Vx[i] * Vy[j] * Vz[k]
+                ∇N[1,i,j,k] = ∇Vx[i] *  Vy[j] *  Vz[k]
+                ∇N[2,i,j,k] =  Vx[i] * ∇Vy[j] *  Vz[k]
+                ∇N[3,i,j,k] =  Vx[i] *  Vy[j] * ∇Vz[k]
+            end
+        end
     end
 end
 
