@@ -1,5 +1,5 @@
-struct SpPattern{dim} <: AbstractArray{Bool, dim}
-    indices::Array{Int, dim}
+struct SpPattern{dim, A <: AbstractArray{Int, dim}} <: AbstractArray{Bool, dim}
+    indices::A
 end
 
 SpPattern(dims::Tuple{Vararg{Int}}) = SpPattern(fill(-1, dims))
@@ -71,9 +71,9 @@ julia> A[1,1] = 2; A[1,1]
 2.0
 ```
 """
-struct SpArray{T, dim} <: AbstractArray{T, dim}
-    data::Vector{T}
-    sppat::SpPattern{dim}
+struct SpArray{T, dim, V <: AbstractVector{T}, A} <: AbstractArray{T, dim}
+    data::V
+    sppat::SpPattern{dim, A}
     shared_sppat::Bool
 end
 
