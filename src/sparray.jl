@@ -9,7 +9,7 @@ Base.size(sppat::SpPattern) = size(sppat.indices)
 Base.IndexStyle(::Type{<: SpPattern}) = IndexLinear()
 
 @inline get_spindices(x::SpPattern) = x.indices
-@inline Base.getindex(sppat::SpPattern, i::Int) = (@_propagate_inbounds_meta; sppat.indices[i] !== -1)
+@inline Base.getindex(sppat::SpPattern, i::Integer) = (@_propagate_inbounds_meta; sppat.indices[i] !== -1)
 
 function update_sparsity_pattern!(sppat::SpPattern, mask::AbstractArray{Bool})
     @assert size(sppat) == size(mask)
@@ -96,7 +96,7 @@ nonzeros(A::SpArray) = A.data
 get_sppat(A::SpArray) = A.sppat
 
 # return zero if the index is not active
-@inline function Base.getindex(A::SpArray, i::Int)
+@inline function Base.getindex(A::SpArray, i::Integer)
     @boundscheck checkbounds(A, i)
     sppat = get_sppat(A)
     @inbounds begin
@@ -106,7 +106,7 @@ get_sppat(A::SpArray) = A.sppat
 end
 
 # do nothing if the index is not active (don't throw error!!)
-@inline function Base.setindex!(A::SpArray, v, i::Int)
+@inline function Base.setindex!(A::SpArray, v, i::Integer)
     @boundscheck checkbounds(A, i)
     sppat = get_sppat(A)
     @inbounds begin
@@ -206,7 +206,7 @@ struct ShowSpArray{T, N, A <: AbstractArray{T, N}} <: AbstractArray{T, N}
 end
 Base.size(x::ShowSpArray) = size(x.parent)
 Base.axes(x::ShowSpArray) = axes(x.parent)
-@inline function Base.getindex(x::ShowSpArray, i::Int...)
+@inline function Base.getindex(x::ShowSpArray, i::Integer...)
     @_propagate_inbounds_meta
     p = x.parent
     get_sppat(p)[i...] ? maybecustomshow(p[i...]) : CDot()

@@ -3,7 +3,7 @@ struct AxisArray{dim, T, V <:AbstractVector{T}} <: AbstractArray{NTuple{dim, T},
 end
 get_axes(A::AxisArray) = A.axes
 Base.size(A::AxisArray) = map(length, A.axes)
-@generated function Base.getindex(A::AxisArray{dim}, i::Vararg{Int, dim}) where {dim}
+@generated function Base.getindex(A::AxisArray{dim}, i::Vararg{Integer, dim}) where {dim}
     quote
         @_inline_meta
         @_propagate_inbounds_meta
@@ -43,7 +43,7 @@ Base.size(x::Lattice) = size(get_axisarray(x))
 spacing(x::Lattice) = x.dx
 spacing_inv(x::Lattice) = x.dx_inv
 get_axes(x::Lattice) = get_axes(x.axisarray)
-get_axes(x::Lattice, i::Int) = (@_propagate_inbounds_meta; get_axes(x)[i])
+get_axes(x::Lattice, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
 
 function Lattice(::Type{T}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
     @assert all(map(issorted, minmax))
@@ -53,7 +53,7 @@ function Lattice(::Type{T}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) wh
 end
 Lattice(dx::Real, minmax::Tuple{Real, Real}...) = Lattice(Float64, dx, minmax...)
 
-@inline function Base.getindex(lattice::Lattice{dim}, i::Vararg{Int, dim}) where {dim}
+@inline function Base.getindex(lattice::Lattice{dim}, i::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(lattice, i...)
     @inbounds Vec(get_axisarray(lattice)[i...])
 end

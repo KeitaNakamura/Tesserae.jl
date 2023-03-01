@@ -59,7 +59,7 @@ function Base.length(mps::MPValues{<: Any, <: Any, true})
     A = first(values(mps))
     size(A, ndims(A))
 end
-@generated function Base.getindex(mps::MPValues{dim, T, true, <: NamedTuple{names}}, i::Int) where {dim, T, names}
+@generated function Base.getindex(mps::MPValues{dim, T, true, <: NamedTuple{names}}, i::Integer) where {dim, T, names}
     exps = [:(_getarray(mps.$name, i)) for name in names]
     quote
         @_propagate_inbounds_meta
@@ -67,7 +67,7 @@ end
         MPValues{dim, T, false}(values)
     end
 end
-@generated function _getarray(arr::AbstractArray{<: Any, N}, i::Int) where {N}
+@generated function _getarray(arr::AbstractArray{<: Any, N}, i::Integer) where {N}
     colons = fill(:, N-1)
     quote
         @_inline_meta

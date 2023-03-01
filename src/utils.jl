@@ -64,7 +64,7 @@ struct Trues{N} <: AbstractArray{Bool, N}
 end
 Base.size(t::Trues) = t.dims
 Base.IndexStyle(::Type{<: Trues}) = IndexLinear()
-@inline function Base.getindex(t::Trues, i::Int)
+@inline function Base.getindex(t::Trues, i::Integer)
     @boundscheck checkbounds(t, i)
     true
 end

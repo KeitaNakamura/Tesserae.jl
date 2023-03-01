@@ -28,16 +28,16 @@ get_gridsppat(space::MPSpace) = space.gridsppat
 
 # values
 Base.values(space::MPSpace) = space.mpvals
-Base.values(space::MPSpace, i::Int) = (@_propagate_inbounds_meta; space.mpvals[i])
+Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; space.mpvals[i])
 # set/get gridindices
-@inline function neighbornodes(space::MPSpace, i::Int)
+@inline function neighbornodes(space::MPSpace, i::Integer)
     @boundscheck checkbounds(space.nodeinds, i)
     @inbounds begin
         inds = space.nodeinds[i]
         nonzeroindices(space, inds)
     end
 end
-set_gridindices!(space::MPSpace, i::Int, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
+set_gridindices!(space::MPSpace, i::Integer, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
 # nonzeroindices
 struct NonzeroIndices{I, dim, A <: AbstractArray{I, dim}} <: AbstractArray{NonzeroIndex{I}, dim}
     parent::A
