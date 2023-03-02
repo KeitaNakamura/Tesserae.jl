@@ -41,12 +41,12 @@ function MPValuesInfo{dim, T}(itp::uGIMP) where {dim, T}
     MPValuesInfo{dim, T}(values, sizes)
 end
 
-@inline function update_mpvalues!(mp::SubMPValues, itp::uGIMP, lattice::Lattice, pt)
+@inline function update!(mp::SubMPValues, itp::uGIMP, lattice::Lattice, pt)
     indices, _ = neighbornodes(itp, lattice, pt)
 
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
         mp.∇N[j], mp.N[j] = gradient(x->value(itp,lattice,i,x,pt.l), getx(pt), :all)
     end
 
-    indices
+    set_neighbornodes!(mp, indices)
 end

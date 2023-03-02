@@ -49,26 +49,17 @@ Base.propertynames(mps::MPValues) = propertynames(values(mps))
 @inline Base.getproperty(mps::MPValues, name::Symbol) = getproperty(values(mps), name)
 
 # getindex-like inferface
-function Base.length(mps::MPValues{<: Any, <: Any})
+function Base.length(mps::MPValues)
     A = first(values(mps))
     size(A, ndims(A))
 end
-@inline function neighbornodes(mps::MPValues{<: Any, <: Any}, i::Integer)
+@inline function neighbornodes(mps::MPValues, i::Integer)
     @_propagate_inbounds_meta
     getfield(mps, :indices)[i]
 end
-@inline function set_neighbornodes!(mps::MPValues{<: Any, <: Any}, i::Integer, inds)
-    @_propagate_inbounds_meta
-    getfield(mps, :indices)[i] = inds
-end
-@generated function Base.values(mps::MPValues{dim, T, <: NamedTuple{names}}, i::Integer) where {dim, T, names}
-    exps = [:(viewcol(mps.$name, i)) for name in names]
-    quote
-        @_propagate_inbounds_meta
-        values = NamedTuple{names}(tuple($(exps...)))
-        indices = neighbornodes(mps, i)
-        SubMPValues{dim, T}(values, indices)
-    end
+@inline function Base.values(mps::MPValues, i::Integer)
+    @boundscheck @assert 1 ≤ i ≤ length(mps)
+    SubMPValues(mps, i)
 end
 @inline function viewcol(A::AbstractArray, i::Integer)
     @boundscheck checkbounds(axes(A, ndims(A)), i)
@@ -76,17 +67,30 @@ end
     @inbounds view(A, colons..., i)
 end
 
-struct SubMPValues{dim, T, V <: NamedTuple}
-    values::V
-    indices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
+struct SubMPValues{dim, T, V, VI, I}
+    parent::MPValues{dim, T, V, VI}
+    index::I
 end
 
-SubMPValues{dim, T}(values::V, indices) where {dim, T, V} = SubMPValues{dim, T, V}(values, indices)
+Base.parent(mp::SubMPValues) = getfield(mp, :parent)
+Base.propertynames(mp::SubMPValues) = propertynames(parent(mp))
 
-Base.values(mps::SubMPValues) = getfield(mps, :values)
-Base.propertynames(mps::SubMPValues) = propertynames(values(mps))
-@inline Base.getproperty(mps::SubMPValues, name::Symbol) = getproperty(values(mps), name)
-@inline neighbornodes(mps::SubMPValues) = getfield(mps, :indices)
+# `checkbounds` must already be done when constructing SubMPValues
+# Then, there is no need to `checkbounds` because `SubMPValues` is
+# immutable and its `parent` arrays can not be resized (because
+# they are all multidimensional arrays)
+@inline function Base.getproperty(mp::SubMPValues, name::Symbol)
+    index = getfield(mp, :index)
+    @inbounds viewcol(getproperty(parent(mp), name), index)
+end
+@inline function neighbornodes(mp::SubMPValues)
+    index = getfield(mp, :index)
+    @inbounds getfield(parent(mp), :indices)[index]
+end
+@inline function set_neighbornodes!(mp::SubMPValues, inds)
+    index = getfield(mp, :index)
+    @inbounds getfield(parent(mp), :indices)[index] = inds
+end
 
 ###########
 # update! #
@@ -106,36 +110,23 @@ end
     true
 end
 
-# isparent=true
+# MPValues
 function update!(mps::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
     @assert length(mps) == length(particles)
     @assert size(lattice) == size(sppat)
     @threaded for p in 1:length(mps)
-        indices = update!(values(mps, p), itp, lattice, sppat, LazyRow(particles, p))
-        set_neighbornodes!(mps, p, indices)
+        update!(values(mps, p), itp, lattice, sppat, LazyRow(particles, p))
     end
 end
 function update!(mps::MPValues, itp::Interpolation, lattice::Lattice, particles::Particles)
     update!(mps, itp, lattice, Trues(size(lattice)), particles)
 end
 
-# isparent=false
+# SubMPValues
 @inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt)
-    indices = update_mpvalues!(mp, itp, lattice, pt)
-    indices isa CartesianIndices || error("`update_mpvalues` must return `CartesianIndices`")
-    indices
+    update!(mp, itp, lattice, Trues(size(lattice)), pt)
 end
-@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    @assert size(lattice) == size(sppat)
-    indices = update_mpvalues!(mp, itp, lattice, sppat, pt)
-    indices isa CartesianIndices || error("`update_mpvalues` must return `CartesianIndices`")
-    indices
-end
-
-@inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt)
-    update_mpvalues!(mp, itp, lattice, Trues(size(lattice)), pt)
-end
-@inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray, pt)
-    sppat isa Trues || @warn "Sparsity pattern on grid is not supported in `$(typeof(mp))`, just ignored" maxlog=1
-    update_mpvalues!(mp, itp, lattice, pt)
+@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray, pt)
+    sppat isa Trues || @warn "Sparsity pattern on grid is not supported in `$itp`, just ignored" maxlog=1
+    update!(mp, itp, lattice, pt)
 end
