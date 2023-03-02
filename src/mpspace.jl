@@ -13,8 +13,7 @@ function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVec
     sppat = fill(false, size(lattice))
     MPSpace(itp, mpvals, pointsperblock(lattice, xₚ), sppat, gridsppat)
 end
-MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, Trues(size(grid)))
-MPSpace(itp::Interpolation, grid::SpGrid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
+MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
 
 # helper functions
 gridsize(space::MPSpace) = size(space.sppat)

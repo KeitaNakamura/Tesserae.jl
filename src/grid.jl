@@ -4,6 +4,7 @@
 
 const Grid{N, T, C <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I} = StructArray{T, N, C, I}
 
+get_sppat(A::Grid) = Trues(size(A))
 get_lattice(grid::Grid) = grid.x
 spacing(grid::Grid) = spacing(get_lattice(grid))
 
