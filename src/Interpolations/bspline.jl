@@ -189,11 +189,11 @@ end
     end
 end
 
-function InterpolationInfo{dim, T}(itp::BSpline{order}) where {dim, T, order}
+function MPValuesInfo{dim, T}(itp::BSpline{order}) where {dim, T, order}
     dims = nfill(gridsize(itp), Val(dim))
     values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
     sizes = (dims, dims)
-    InterpolationInfo{dim, T}(values, sizes)
+    MPValuesInfo{dim, T}(values, sizes)
 end
 
 @inline function update_mpvalues!(mp::MPValues, itp::BSpline, lattice::Lattice, pt)

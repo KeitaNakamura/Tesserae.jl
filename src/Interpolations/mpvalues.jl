@@ -4,21 +4,22 @@ abstract type Kernel <: Interpolation end
 Broadcast.broadcastable(interp::Interpolation) = (interp,)
 
 # used for constructing `MPValues`
-struct InterpolationInfo{dim, T, V <: NamedTuple, S <: Tuple{Vararg{Dims}}}
+struct MPValuesInfo{dim, T, V <: NamedTuple, S <: Tuple{Vararg{Dims}}}
     values::V
     sizes::S
 end
-function InterpolationInfo{dim, T}(values::NamedTuple, sizes::Tuple{Vararg{Dims}}) where {dim, T}
+function MPValuesInfo{dim, T}(values::NamedTuple, sizes::Tuple{Vararg{Dims}}) where {dim, T}
     @assert length(values) == length(sizes)
-    InterpolationInfo{dim, T, typeof(values), typeof(sizes)}(values, sizes)
+    MPValuesInfo{dim, T, typeof(values), typeof(sizes)}(values, sizes)
 end
 
 """
     MPValues{dim}(interpolation, length)
     MPValues{dim, T}(interpolation, length)
 """
-struct MPValues{dim, T, isparent, V <: NamedTuple}
+struct MPValues{dim, T, V <: NamedTuple, VI <: AbstractVector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}}
     values::V
+    indices::VI
 end
 
 ################
@@ -27,7 +28,7 @@ end
 
 MPValues{dim, T, isparent}(values::V) where {dim, T, isparent, V} = MPValues{dim, T, isparent::Bool, V}(values)
 
-@generated function MPValues(info::InterpolationInfo{dim, T, <: NamedTuple{names}}, len::Int) where {dim, T, names}
+@generated function MPValues(info::MPValuesInfo{dim, T, <: NamedTuple{names}}, len::Int) where {dim, T, names}
     arrays = map(1:length(names)) do i
         name = names[i]
         dims = :((info.sizes[$i]..., len))
@@ -41,7 +42,7 @@ end
 
 # use these constructors
 function MPValues{dim, T}(itp::Interpolation, len::Int) where {dim, T}
-    info = InterpolationInfo{dim, T}(itp)
+    info = MPValuesInfo{dim, T}(itp)
     MPValues(info, len)
 end
 MPValues{dim}(itp::Interpolation, len::Int) where {dim} = MPValues{dim, Float64}(itp, len)

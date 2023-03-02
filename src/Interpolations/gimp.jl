@@ -34,11 +34,11 @@ end
     N, ∇N
 end
 
-function InterpolationInfo{dim, T}(itp::uGIMP) where {dim, T}
+function MPValuesInfo{dim, T}(itp::uGIMP) where {dim, T}
     dims = nfill(gridsize(itp), Val(dim))
     values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
     sizes = (dims, dims)
-    InterpolationInfo{dim, T}(values, sizes)
+    MPValuesInfo{dim, T}(values, sizes)
 end
 
 @inline function update_mpvalues!(mp::MPValues, itp::uGIMP, lattice::Lattice, pt)
