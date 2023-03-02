@@ -1,7 +1,6 @@
-struct MPSpace{dim, T, It <: Interpolation, Mv <: MPValues{dim, T}, Gs <: Union{Trues, SpPattern}}
+struct MPSpace{dim, T, It <: Interpolation, V, VI, Gs <: Union{Trues, SpPattern}}
     interp::It
-    mpvals::Mv
-    nodeinds::Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}
+    mpvals::MPValues{dim, T, V, VI}
     ptspblk::Array{PushVector{Int}, dim}
     sppat::Array{Bool, dim}
     gridsppat::Gs # sppat used in SpGrid
@@ -11,9 +10,8 @@ end
 function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec{dim}}, gridsppat) where {dim, T}
     npts = length(xₚ)
     mpvals = MPValues{dim, T}(itp, npts)
-    nodeinds = [CartesianIndices(nfill(1:0, Val(dim))) for _ in 1:npts]
     sppat = fill(false, size(lattice))
-    MPSpace(itp, mpvals, nodeinds, pointsperblock(lattice, xₚ), sppat, gridsppat)
+    MPSpace(itp, mpvals, pointsperblock(lattice, xₚ), sppat, gridsppat)
 end
 MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, Trues(size(grid)))
 MPSpace(itp::Interpolation, grid::SpGrid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
@@ -31,13 +29,12 @@ Base.values(space::MPSpace) = space.mpvals
 Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; values(space.mpvals, i))
 # set/get gridindices
 @inline function neighbornodes(space::MPSpace, i::Integer)
-    @boundscheck checkbounds(space.nodeinds, i)
+    @_propagate_inbounds_meta
     @inbounds begin
-        inds = space.nodeinds[i]
+        inds = neighbornodes(space.mpvals, i)
         nonzeroindices(space, inds)
     end
 end
-set_gridindices!(space::MPSpace, i::Integer, x) = (@_propagate_inbounds_meta; space.nodeinds[i] = x)
 # nonzeroindices
 struct NonzeroIndices{I, dim, A <: AbstractArray{I, dim}} <: AbstractArray{NonzeroIndex{I}, dim}
     parent::A
@@ -169,7 +166,7 @@ function update_mpvalues_neighbornodes!(space::MPSpace, lattice::Lattice, partic
     @assert length(particles) == num_particles(space)
 
     if filter === nothing
-        update_mpvalues_neighbornodes!(space, lattice, Trues(size(lattice)), particles)
+        update!(values(space), get_interpolation(space), lattice, particles)
     else
         # handle excluded domain
         sppat = get_sppat(space)
@@ -180,16 +177,10 @@ function update_mpvalues_neighbornodes!(space::MPSpace, lattice::Lattice, partic
                 sppat[inds] .= true
             end
         end
-        update_mpvalues_neighbornodes!(space, lattice, sppat, particles)
+        update!(values(space), get_interpolation(space), lattice, sppat, particles)
     end
 
     space
-end
-function update_mpvalues_neighbornodes!(space::MPSpace, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
-    @threaded for p in 1:num_particles(space)
-        indices = update!(values(space, p), get_interpolation(space), lattice, sppat, LazyRow(particles, p))
-        set_gridindices!(space, p, indices)
-    end
 end
 
 function update_sparsity_pattern!(grid::SpGrid, space::MPSpace)

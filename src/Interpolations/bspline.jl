@@ -196,7 +196,7 @@ function MPValuesInfo{dim, T}(itp::BSpline{order}) where {dim, T, order}
     MPValuesInfo{dim, T}(values, sizes)
 end
 
-@inline function update_mpvalues!(mp::MPValues, itp::BSpline, lattice::Lattice, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::BSpline, lattice::Lattice, pt)
     indices, isfullyinside = neighbornodes(itp, lattice, pt)
 
     if isfullyinside

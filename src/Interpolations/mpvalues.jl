@@ -22,12 +22,8 @@ struct MPValues{dim, T, V <: NamedTuple, VI <: AbstractVector{CartesianIndices{d
     indices::VI
 end
 
-################
-# constructors #
-################
-
-MPValues{dim, T, isparent}(values::V) where {dim, T, isparent, V} = MPValues{dim, T, isparent::Bool, V}(values)
-
+# constructors
+MPValues{dim, T}(values::V, indices::CI) where {dim, T, V, CI} = MPValues{dim, T, V, CI}(values, indices)
 @generated function MPValues(info::MPValuesInfo{dim, T, <: NamedTuple{names}}, len::Int) where {dim, T, names}
     arrays = map(1:length(names)) do i
         name = names[i]
@@ -36,46 +32,61 @@ MPValues{dim, T, isparent}(values::V) where {dim, T, isparent, V} = MPValues{dim
     end
     quote
         values = NamedTuple{names}(tuple($(arrays...)))
-        MPValues{dim, T, true}(values)
+        indices = Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}(undef, len)
+        MPValues{dim, T}(values, indices)
     end
 end
-
-# use these constructors
+# basically use these constructors
 function MPValues{dim, T}(itp::Interpolation, len::Int) where {dim, T}
     info = MPValuesInfo{dim, T}(itp)
     MPValues(info, len)
 end
 MPValues{dim}(itp::Interpolation, len::Int) where {dim} = MPValues{dim, Float64}(itp, len)
 
-###########
-# methods #
-###########
-
+# basic
 Base.values(mps::MPValues) = getfield(mps, :values)
 Base.propertynames(mps::MPValues) = propertynames(values(mps))
 @inline Base.getproperty(mps::MPValues, name::Symbol) = getproperty(values(mps), name)
 
-# getindex-like inferface for `isparent=true`
-function Base.length(mps::MPValues{<: Any, <: Any, true})
+# getindex-like inferface
+function Base.length(mps::MPValues{<: Any, <: Any})
     A = first(values(mps))
     size(A, ndims(A))
 end
-@generated function Base.values(mps::MPValues{dim, T, true, <: NamedTuple{names}}, i::Integer) where {dim, T, names}
-    exps = [:(_getview(mps.$name, i)) for name in names]
+@inline function neighbornodes(mps::MPValues{<: Any, <: Any}, i::Integer)
+    @_propagate_inbounds_meta
+    getfield(mps, :indices)[i]
+end
+@inline function set_neighbornodes!(mps::MPValues{<: Any, <: Any}, i::Integer, inds)
+    @_propagate_inbounds_meta
+    getfield(mps, :indices)[i] = inds
+end
+@generated function Base.values(mps::MPValues{dim, T, <: NamedTuple{names}}, i::Integer) where {dim, T, names}
+    exps = [:(viewcol(mps.$name, i)) for name in names]
     quote
         @_propagate_inbounds_meta
         values = NamedTuple{names}(tuple($(exps...)))
-        MPValues{dim, T, false}(values)
+        indices = neighbornodes(mps, i)
+        SubMPValues{dim, T}(values, indices)
     end
 end
-@generated function _getview(arr::AbstractArray{<: Any, N}, i::Integer) where {N}
-    colons = fill(:, N-1)
-    quote
-        @_inline_meta
-        @boundscheck checkbounds(axes(arr, N), i)
-        @inbounds view(arr, $(colons...), i)
-    end
+@inline function viewcol(A::AbstractArray, i::Integer)
+    @boundscheck checkbounds(axes(A, ndims(A)), i)
+    colons = nfill(:, Val(ndims(A)-1))
+    @inbounds view(A, colons..., i)
 end
+
+struct SubMPValues{dim, T, V <: NamedTuple}
+    values::V
+    indices::CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
+end
+
+SubMPValues{dim, T}(values::V, indices) where {dim, T, V} = SubMPValues{dim, T, V}(values, indices)
+
+Base.values(mps::SubMPValues) = getfield(mps, :values)
+Base.propertynames(mps::SubMPValues) = propertynames(values(mps))
+@inline Base.getproperty(mps::SubMPValues, name::Symbol) = getproperty(values(mps), name)
+@inline neighbornodes(mps::SubMPValues) = getfield(mps, :indices)
 
 ###########
 # update! #
@@ -95,22 +106,36 @@ end
     true
 end
 
-@inline function update!(mp::MPValues{<: Any, <: Any, false}, itp::Interpolation, lattice::Lattice, pt)
+# isparent=true
+function update!(mps::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
+    @assert length(mps) == length(particles)
+    @assert size(lattice) == size(sppat)
+    @threaded for p in 1:length(mps)
+        indices = update!(values(mps, p), itp, lattice, sppat, LazyRow(particles, p))
+        set_neighbornodes!(mps, p, indices)
+    end
+end
+function update!(mps::MPValues, itp::Interpolation, lattice::Lattice, particles::Particles)
+    update!(mps, itp, lattice, Trues(size(lattice)), particles)
+end
+
+# isparent=false
+@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt)
     indices = update_mpvalues!(mp, itp, lattice, pt)
     indices isa CartesianIndices || error("`update_mpvalues` must return `CartesianIndices`")
     indices
 end
-@inline function update!(mp::MPValues{<: Any, <: Any, false}, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
     @assert size(lattice) == size(sppat)
     indices = update_mpvalues!(mp, itp, lattice, sppat, pt)
     indices isa CartesianIndices || error("`update_mpvalues` must return `CartesianIndices`")
     indices
 end
 
-@inline function update_mpvalues!(mp::MPValues, itp::Interpolation, lattice::Lattice, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt)
     update_mpvalues!(mp, itp, lattice, Trues(size(lattice)), pt)
 end
-@inline function update_mpvalues!(mp::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray, pt)
     sppat isa Trues || @warn "Sparsity pattern on grid is not supported in `$(typeof(mp))`, just ignored" maxlog=1
     update_mpvalues!(mp, itp, lattice, pt)
 end

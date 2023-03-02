@@ -19,7 +19,7 @@ function MPValuesInfo{dim, T}(itp::WLS) where {dim, T}
 end
 
 # general version
-function update_mpvalues!(mp::MPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+function update_mpvalues!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
     indices, _ = neighbornodes(itp, lattice, pt)
 
     F = get_kernel(itp)
@@ -50,7 +50,7 @@ function update_mpvalues!(mp::MPValues, itp::WLS, lattice::Lattice, sppat::Abstr
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_mpvalues!(mp::MPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+function update_mpvalues!(mp::SubMPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
     indices, isfullyinside = neighbornodes(itp, lattice, pt)
 
     if isfullyinside && @inbounds alltrue(sppat, indices)
@@ -62,7 +62,7 @@ function update_mpvalues!(mp::MPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}
     indices
 end
 
-function fast_update_mpvalues!(mp::MPValues{dim, T}, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
+function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
     F = get_kernel(itp)
     xp = getx(pt)
     D = zero(Vec{dim, T}) # diagonal entries
@@ -81,7 +81,7 @@ function fast_update_mpvalues!(mp::MPValues{dim, T}, itp::WLS, lattice::Lattice,
     mp.Minv[] = diagm(vcat(1, D⁻¹))
 end
 
-function fast_update_mpvalue_nearbounds!(mp::MPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt)
+function fast_update_mpvalue_nearbounds!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt)
     F = get_kernel(itp)
     P = get_basis(itp)
     xp = getx(pt)

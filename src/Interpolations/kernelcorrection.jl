@@ -13,7 +13,7 @@ function MPValuesInfo{dim, T}(itp::KernelCorrection) where {dim, T}
 end
 
 # general version
-@inline function update_mpvalues!(mp::MPValues, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
     indices, isfullyinside = neighbornodes(itp, lattice, pt)
 
     if isfullyinside && @inbounds alltrue(sppat, indices)
@@ -28,7 +28,7 @@ end
 end
 
 # fast version for B-spline kernels
-@inline function update_mpvalues!(mp::MPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
     indices, isfullyinside = neighbornodes(itp, lattice, pt)
 
     if isfullyinside && @inbounds alltrue(sppat, indices)
@@ -40,7 +40,7 @@ end
     indices
 end
 
-@inline function update_mpvalue_nearbounds!(mp::MPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
+@inline function update_mpvalue_nearbounds!(mp::SubMPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
     F = get_kernel(itp)
     xp = getx(pt)
     M = zero(Mat{dim+1, dim+1, T})
