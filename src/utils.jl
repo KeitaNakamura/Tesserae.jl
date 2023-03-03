@@ -97,7 +97,6 @@ end
 ########
 
 @inline SIMD.Vec(x::Vec) = SVec(Tuple(x))
-@inline StaticArrays.SVector(x::SVec) = SVector(Tuple(x))
 
 ##############
 # PushVector #

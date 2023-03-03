@@ -1,13 +1,13 @@
 module Marble
 
-using Base: RefValue, @_inline_meta, @_propagate_inbounds_meta
+using Base: @_inline_meta, @_propagate_inbounds_meta
 using Base.Broadcast: Broadcasted, ArrayStyle, DefaultArrayStyle
 using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using Reexport
 @reexport using Tensorial
 @reexport using WriteVTK
-using StructArrays, StaticArrays
+using StructArrays
 
 # SIMD
 import SIMD

@@ -150,16 +150,16 @@ end
         dx⁻¹ = spacing_inv(lattice)
         x = (xp - first(lattice)) * dx⁻¹
         @nexprs $dim d -> (V_d, ∇V_d) = values_gradients(bspline, x[d])
-        V_tuple = @ntuple $dim d -> SVector(V_d)
-        ∇V_tuple = @ntuple $dim d -> SVector(∇V_d*dx⁻¹)
+        V_tuple = @ntuple $dim d -> V_d
+        ∇V_tuple = @ntuple $dim d -> ∇V_d*dx⁻¹
         _values_gradients!(N, reinterpret(reshape, eltype(eltype(∇N)), ∇N), V_tuple, ∇V_tuple)
     end
 end
 
 # 1D
 @inline function _values_gradients!(N, ∇N, (Vx,)::NTuple{1}, (∇Vx,)::NTuple{1})
-    N .= Vx
-    ∇N .= ∇Vx
+    N .= Tuple(Vx)
+    ∇N .= Tuple(∇Vx)
 end
 
 # 2D
