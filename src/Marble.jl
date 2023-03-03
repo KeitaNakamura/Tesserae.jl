@@ -39,9 +39,6 @@ export
     generate_particles,
 # interpolations
     update!,
-    num_nodes,
-    shape_value,
-    shape_gradient,
     Kernel,
     BSpline,
     LinearBSpline,
