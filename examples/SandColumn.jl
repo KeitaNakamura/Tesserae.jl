@@ -100,7 +100,7 @@ function SandColumn(
         end
 
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, dt; alg)
-        Marble.@threaded for p in LazyRows(particles)
+        Marble.@threaded_inbounds for p in LazyRows(particles)
             ∇v = p.∇v
             σ_n = p.σ
 

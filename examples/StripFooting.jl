@@ -121,7 +121,7 @@ function StripFooting(
             Marble.smooth_particle_state!(particles.tr∇v, particles.x, particles.V, grid, space)
         end
 
-        Marble.@threaded for p in LazyRows(particles)
+        Marble.@threaded_inbounds for p in LazyRows(particles)
             ∇v = p.∇v
             σ_n = p.σ
 

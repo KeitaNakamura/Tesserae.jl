@@ -161,7 +161,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
     check_grid(grid, space)
     check_particles(particles, space)
 
-    @threaded for p in 1:num_particles(space)
+    @threaded_inbounds for p in 1:num_particles(space)
         mp = values(space, p)
 
         # there is no difference along with transfer algorithms for calculating `:∇v` and `:x`
@@ -264,7 +264,7 @@ function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{na
     P = x -> value(basis, x)
     p0 = value(basis, zero(Vec{dim, Int}))
     ∇p0 = gradient(basis, zero(Vec{dim, Int}))
-    @threaded for p in 1:num_particles(space)
+    @threaded_inbounds for p in 1:num_particles(space)
         mp = values(space, p)
 
         xₚ = particles.x[p]
@@ -352,7 +352,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
 
     @. grid.poly_coef = safe_inv(grid.poly_mat) ⋅ grid.poly_coef
 
-    @threaded for p in 1:num_particles(space)
+    @threaded_inbounds for p in 1:num_particles(space)
         val = zero(eltype(vals))
         mp = values(space, p)
         for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))

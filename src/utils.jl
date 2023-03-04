@@ -73,7 +73,7 @@ end
 # @threaded #
 #############
 
-macro threaded(expr)
+macro threaded_inbounds(expr)
     @assert Meta.isexpr(expr, :for)
     # insert @inbounds macro
     expr.args[2] = quote

@@ -84,7 +84,7 @@ function DamBreak(
 
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, dt; alg)
 
-        Marble.@threaded for p in LazyRows(particles)
+        Marble.@threaded_inbounds for p in LazyRows(particles)
             m = p.m
             V = p.V
             ∇v = p.∇v
