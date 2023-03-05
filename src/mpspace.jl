@@ -1,7 +1,7 @@
-struct MPSpace{dim, T, It <: Interpolation, V, VI, B <: BlockSpace, GS <: Union{Trues, SpPattern}}
+struct MPSpace{dim, T, It <: Interpolation, V, VI, GS <: Union{Trues, SpPattern}}
     interp::It
     mpvals::MPValues{dim, T, V, VI}
-    blkspace::B
+    blkspace::BlockSpace{dim}
     sppat::Array{Bool, dim}
     gridsppat::GS # sppat used in SpGrid
 end
@@ -64,7 +64,7 @@ function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filte
 
     update!(get_blockspace(space), get_lattice(grid), particles.x)
     #
-    # Following `update_mpvalues!` updates `space.sppat` and use it when `filter` is given.
+    # When `filter` is given, following `update_mpvalues!` updates `space.sppat`, too.
     # This consideration of sparsity pattern is necessary in some `Interpolation`s such as `WLS` and `KernelCorrection`.
     # However, this updated sparsity pattern is not used for updating sparsity pattern of grid-state because
     # the inactive nodes also need their values (even zero) for `NonzeroIndex` used in P2G.
