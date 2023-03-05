@@ -70,19 +70,19 @@ end
 end
 
 function reorder_particles!(particles::Particles, blkspace::BlockSpace)
-    _reorder_particles!(particles, PointsInBlocksArray(blkspace))
+    _reorder_particles!(particles, ParticlesInBlocksArray(blkspace))
 end
 
-struct PointsInBlocksArray{dim, T} <: AbstractArray{T, dim}
+struct ParticlesInBlocksArray{dim, T} <: AbstractArray{T, dim}
     parent::BlockSpace{dim}
 end
-function PointsInBlocksArray(parent::BlockSpace{dim}) where {dim}
+function ParticlesInBlocksArray(parent::BlockSpace{dim}) where {dim}
     T = Base._return_type(particleindices, Tuple{typeof(parent), Int})
-    PointsInBlocksArray{dim, T}(parent)
+    ParticlesInBlocksArray{dim, T}(parent)
 end
-Base.parent(x::PointsInBlocksArray) = x.parent
-Base.size(x::PointsInBlocksArray) = blocksize(parent(x))
-Base.getindex(x::PointsInBlocksArray, index...) = particleindices(parent(x), index...)
+Base.parent(x::ParticlesInBlocksArray) = x.parent
+Base.size(x::ParticlesInBlocksArray) = blocksize(parent(x))
+Base.getindex(x::ParticlesInBlocksArray, index...) = (@_propagate_inbounds_meta; particleindices(parent(x), index...))
 
 ####################
 # block operations #
