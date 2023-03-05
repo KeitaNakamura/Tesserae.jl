@@ -116,11 +116,11 @@ function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filte
 
     update!(get_particlesinblocks(space), get_lattice(grid), particles.x)
     #
-    # Following `update_mpvalues_neighbornodes!` update `space.sppat` and use it when `filter` is given.
+    # Following `update_mpvalues!` update `space.sppat` and use it when `filter` is given.
     # This consideration of sparsity pattern is necessary in some `Interpolation`s such as `WLS` and `KernelCorrection`.
     # However, this updated sparsity pattern is not used for updating sparsity pattern of grid-state because
     # the inactive nodes also need their values (even zero) for `NonzeroIndex` used in P2G.
-    # Thus, `update_sparsity_pattern!` must be executed after `update_mpvalues_neighbornodes!`.
+    # Thus, `update_sparsity_pattern!` must be executed after `update_mpvalues!`.
     #
     #            |      |      |                             |      |      |
     #         ---×------×------×---                       ---●------●------●---
@@ -134,7 +134,7 @@ function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filte
     #
     #   < Sparsity pattern for `MPValue` >     < Sparsity pattern for Grid-state (`SpArray`) >
     #
-    update_mpvalues_neighbornodes!(space, get_lattice(grid), particles, filter)
+    update_mpvalues!(space, get_lattice(grid), particles, filter)
     update_sparsity_pattern!(space)
     unsafe_update_sparsity_pattern!(grid, get_sppat(space))
 
@@ -161,7 +161,7 @@ end
     CartesianIndex(start):CartesianIndex(stop)
 end
 
-function update_mpvalues_neighbornodes!(space::MPSpace, lattice::Lattice, particles::Particles, filter::Union{Nothing, AbstractArray{Bool}})
+function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles, filter::Union{Nothing, AbstractArray{Bool}})
     @assert gridsize(space) == size(lattice)
     @assert length(particles) == num_particles(space)
 
