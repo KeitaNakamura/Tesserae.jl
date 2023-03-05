@@ -84,7 +84,7 @@ include("Interpolations/gimp.jl")
 include("Interpolations/polybasis.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
-include("blocks.jl")
+include("blockspace.jl")
 include("mpspace.jl")
 include("transfer.jl")
 

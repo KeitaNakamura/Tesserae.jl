@@ -9,6 +9,7 @@ include("sparray.jl")
 include("lattice.jl")
 include("particles.jl")
 include("interpolations.jl")
+include("blockspace.jl")
 include("transfer.jl")
 
 const FIX_RESULTS = false
