@@ -17,8 +17,6 @@ const SIMDTypes = Union{Float16, Float32, Float64}
 # reexport from StructArrays
 export LazyRow, LazyRows
 
-const BLOCK_UNIT = unsigned(3) # 2^3
-
 export
 # utils
     fillzero!,
@@ -86,6 +84,7 @@ include("Interpolations/gimp.jl")
 include("Interpolations/polybasis.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
+include("blocks.jl")
 include("mpspace.jl")
 include("transfer.jl")
 

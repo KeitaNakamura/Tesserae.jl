@@ -36,10 +36,10 @@
         # ParticlesInBlocks
         @test Marble.blocksize(size(lattice)) == (2, 3)
         xₚ = Vec{2,T}[(2,2), (8.5, 18), (8.5, 21), (4.3, 18), (5, 14)]
-        pb = Marble.ParticlesInBlocks(Marble.blocksize(size(lattice)), length(xₚ))
-        update!(pb, lattice, xₚ)
-        @test pb == reshape([[1], [5], [4],
-                             [ ], [ ], [2]], 3,2) |> permutedims
+        ptsinblks = Marble.ParticlesInBlocks(Marble.blocksize(size(lattice)), length(xₚ))
+        Marble.update_sparsity_pattern!(ptsinblks, lattice, xₚ)
+        @test ptsinblks == reshape([[1], [5], [4],
+                                    [ ], [ ], [2]], 3,2) |> permutedims
     end
 
     # threadsafe_blocks
