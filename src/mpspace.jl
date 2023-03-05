@@ -1,7 +1,7 @@
-struct MPSpace{dim, T, It <: Interpolation, V, VI, B <: ParticlesInBlocks, GS <: Union{Trues, SpPattern}}
+struct MPSpace{dim, T, It <: Interpolation, V, VI, B <: BlockSpace, GS <: Union{Trues, SpPattern}}
     interp::It
     mpvals::MPValues{dim, T, V, VI}
-    ptsinblks::B
+    blkspace::B
     sppat::Array{Bool, dim}
     gridsppat::GS # sppat used in SpGrid
 end
@@ -10,9 +10,9 @@ end
 function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec{dim}}, gridsppat) where {dim, T}
     npts = length(xₚ)
     mpvals = MPValues{dim, T}(itp, npts)
-    ptsinblks = ParticlesInBlocks(blocksize(lattice), npts)
+    blkspace = BlockSpace(blocksize(lattice), npts)
     sppat = fill(false, size(lattice))
-    MPSpace(itp, mpvals, ptsinblks, sppat, gridsppat)
+    MPSpace(itp, mpvals, blkspace, sppat, gridsppat)
 end
 MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
 
@@ -20,11 +20,11 @@ MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get
 gridsize(space::MPSpace) = size(space.sppat)
 num_particles(space::MPSpace) = length(space.mpvals)
 get_interpolation(space::MPSpace) = space.interp
-get_particlesinblocks(space::MPSpace) = space.ptsinblks
+get_blockspace(space::MPSpace) = space.blkspace
 get_sppat(space::MPSpace) = space.sppat
 get_gridsppat(space::MPSpace) = space.gridsppat
 
-reorder_particles!(particles::Particles, space::MPSpace) = _reorder_particles!(particles, get_particlesinblocks(space))
+reorder_particles!(particles::Particles, space::MPSpace) = reorder_particles!(particles, get_blockspace(space))
 
 # values
 Base.values(space::MPSpace) = space.mpvals
@@ -62,7 +62,7 @@ end
 function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
     @assert num_particles(space) == length(particles)
 
-    update_sparsity_pattern!(get_particlesinblocks(space), get_lattice(grid), particles.x)
+    update!(get_blockspace(space), get_lattice(grid), particles.x)
     #
     # Following `update_mpvalues!` updates `space.sppat` and use it when `filter` is given.
     # This consideration of sparsity pattern is necessary in some `Interpolation`s such as `WLS` and `KernelCorrection`.
@@ -83,7 +83,7 @@ function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filte
     #   < Sparsity pattern for `MPValue` >     < Sparsity pattern for Grid-state (`SpArray`) >
     #
     update_mpvalues!(space, get_lattice(grid), particles, filter)
-    update_sparsity_pattern!(get_sppat(space), get_particlesinblocks(space))
+    update_sparsity_pattern!(get_sppat(space), get_blockspace(space))
     unsafe_update_sparsity_pattern!(grid, get_sppat(space))
 
     space
@@ -111,15 +111,6 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
     space
 end
 
-# block-wise parallel computation
-function parallel_each_particle(f, ptsinblks::AbstractArray)
-    for blocks in threadsafe_blocks(size(ptsinblks))
-        ptsinblks′ = filter(!isempty, view(ptsinblks, blocks))
-        @threaded_inbounds for pinds in ptsinblks′
-            foreach(f, pinds)
-        end
-    end
-end
 function parallel_each_particle(f, space::MPSpace)
-    parallel_each_particle(f, get_particlesinblocks(space))
+    parallel_each_particle(f, get_blockspace(space))
 end

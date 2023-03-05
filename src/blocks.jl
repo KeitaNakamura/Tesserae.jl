@@ -1,50 +1,50 @@
 const BLOCKFACTOR = unsigned(3) # 2^3
 
-struct ParticlesInBlocks{T, dim} <: AbstractArray{T, dim}
+struct BlockSpace{dim}
     particleindices::Vector{Int}
     # for blocks
-    counts::Array{Int, dim}
+    nparticles::Array{Int, dim}
     stops::Array{Int, dim}
     # for particles
     blockindices::Vector{Int}
     localindices::Vector{Int}
 end
-function ParticlesInBlocks(blocksize::Dims{dim}, npts::Int) where {dim}
+function BlockSpace(blocksize::Dims{dim}, npts::Int) where {dim}
     particleindices = Vector{Int}(undef, npts)
-    counts = zeros(Int, blocksize)
+    nparticles = zeros(Int, blocksize)
     stops = zeros(Int, blocksize)
     blockindices = Vector{Int}(undef, npts)
     localindices = Vector{Int}(undef, npts)
-    T = typeof(view(particleindices, 1:0))
-    ParticlesInBlocks{T, dim}(particleindices, counts, stops, blockindices, localindices)
+    BlockSpace(particleindices, nparticles, stops, blockindices, localindices)
 end
 
-Base.IndexStyle(::Type{<: ParticlesInBlocks}) = IndexLinear()
-Base.size(pb::ParticlesInBlocks) = size(pb.counts)
-function Base.getindex(pb::ParticlesInBlocks, i::Integer)
-    @boundscheck checkbounds(pb, i)
+blocksize(bs::BlockSpace) = size(bs.nparticles)
+num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; bs.nparticles[index...])
+
+function particleindices(bs::BlockSpace, index...)
+    @boundscheck checkbounds(CartesianIndices(blocksize(bs)), index...)
     @inbounds begin
-        stop = pb.stops[i]
-        start = stop - pb.counts[i] + 1
-        view(pb.particleindices, start:stop)
+        stop = bs.stops[index...]
+        start = stop - bs.nparticles[index...] + 1
+        view(bs.particleindices, start:stop)
     end
 end
 
-function update_sparsity_pattern!(pb::ParticlesInBlocks, lattice::Lattice, xₚ::AbstractVector)
-    fillzero!(pb.counts)
+function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector)
+    fillzero!(bs.nparticles)
     @inbounds for p in eachindex(xₚ)
-        blk = sub2ind(size(pb), whichblock(lattice, xₚ[p]))
-        pb.blockindices[p] = blk
-        pb.localindices[p] = iszero(blk) ? 0 : (pb.counts[blk] += 1)
+        blk = sub2ind(blocksize(bs), whichblock(lattice, xₚ[p]))
+        bs.blockindices[p] = blk
+        bs.localindices[p] = iszero(blk) ? 0 : (bs.nparticles[blk] += 1)
     end
-    cumsum!(vec(pb.stops), vec(pb.counts))
+    cumsum!(vec(bs.stops), vec(bs.nparticles))
     @threaded_inbounds for p in eachindex(xₚ)
-        blk = pb.blockindices[p]
+        blk = bs.blockindices[p]
         if !iszero(blk)
-            i = pb.localindices[p]
-            stop = pb.stops[blk]
-            len = pb.counts[blk]
-            pb.particleindices[stop-len+i] = p
+            i = bs.localindices[p]
+            stop = bs.stops[blk]
+            len = bs.nparticles[blk]
+            bs.particleindices[stop-len+i] = p
         end
     end
 end
@@ -53,11 +53,11 @@ sub2ind(::Dims, ::Nothing)::Int = 0
 
 # block-wise rough sparsity pattern
 # CubicBSpline is still ok with rng=1
-function update_sparsity_pattern!(sppat::AbstractArray{Bool}, pb::ParticlesInBlocks, rng::Int = 1)
-    @assert blocksize(size(sppat)) ==  size(pb)
+function update_sparsity_pattern!(sppat::AbstractArray{Bool}, bs::BlockSpace, rng::Int = 1)
+    @assert blocksize(size(sppat)) ==  blocksize(bs)
     fillzero!(sppat)
-    @inbounds for I in CartesianIndices(pb)
-        if !isempty(pb[I])
+    @inbounds for I in CartesianIndices(blocksize(bs))
+        if !iszero(num_particles(bs, I))
             inds = neighbornodes_from_blockindex(size(sppat), I, rng)
             sppat[inds] .= true
         end
@@ -68,6 +68,21 @@ end
     stop = @. min(blk.I << BLOCKFACTOR + 1 + i, gridsize)
     CartesianIndex(start):CartesianIndex(stop)
 end
+
+function reorder_particles!(particles::Particles, blkspace::BlockSpace)
+    _reorder_particles!(particles, PointsInBlocksArray(blkspace))
+end
+
+struct PointsInBlocksArray{dim, T} <: AbstractArray{T, dim}
+    parent::BlockSpace{dim}
+end
+function PointsInBlocksArray(parent::BlockSpace{dim}) where {dim}
+    T = Base._return_type(particleindices, Tuple{typeof(parent), Int})
+    PointsInBlocksArray{dim, T}(parent)
+end
+Base.parent(x::PointsInBlocksArray) = x.parent
+Base.size(x::PointsInBlocksArray) = blocksize(parent(x))
+Base.getindex(x::PointsInBlocksArray, index...) = particleindices(parent(x), index...)
 
 ####################
 # block operations #
@@ -112,4 +127,14 @@ end
 function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
     starts = AxisArray(nfill(1:2, Val(dim)))
     vec(map(st -> map(CartesianIndex{dim}, AxisArray(StepRange.(st, 2, blocksize)))::Array{CartesianIndex{dim}, dim}, starts))
+end
+
+# block-wise parallel computation
+function parallel_each_particle(f, blkspace::BlockSpace)
+    for blocks in threadsafe_blocks(blocksize(blkspace))
+        blocks′ = filter(I -> !iszero(num_particles(blkspace, I)), blocks)
+        @threaded_inbounds for blk in blocks′
+            foreach(f, particleindices(blkspace, blk))
+        end
+    end
 end
