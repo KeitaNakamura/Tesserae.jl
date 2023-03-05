@@ -8,6 +8,8 @@ get_sppat(A::Grid) = Trues(size(A))
 get_lattice(grid::Grid) = grid.x
 spacing(grid::Grid) = spacing(get_lattice(grid))
 
+unsafe_update_sparsity_pattern!(grid::Grid, ::AbstractArray{Bool}) = nothing
+
 ##########
 # SpGrid #
 ##########

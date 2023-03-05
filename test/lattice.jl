@@ -33,11 +33,13 @@
         @test (Marble.whichblock(lattice, Vec{2,T}( 8.8,4.6)))::CartesianIndex == CartesianIndex(2, 1)
         @test (Marble.whichblock(lattice, Vec{2,T}(-8.8,4.6)))::Nothing == nothing
 
-        # pointsperblock
+        # ParticlesInBlocks
         @test Marble.blocksize(size(lattice)) == (2, 3)
         xₚ = Vec{2,T}[(2,2), (8.5, 18), (8.5, 21), (4.3, 18), (5, 14)]
-        @test Marble.pointsperblock(lattice, xₚ) == reshape([[1], [5], [4],
-                                                             [ ], [ ], [2]], 3,2) |> permutedims
+        pb = Marble.ParticlesInBlocks(Marble.blocksize(size(lattice)), length(xₚ))
+        update!(pb, lattice, xₚ)
+        @test pb == reshape([[1], [5], [4],
+                             [ ], [ ], [2]], 3,2) |> permutedims
     end
 
     # threadsafe_blocks

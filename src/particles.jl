@@ -56,7 +56,7 @@ function generate_particles(
         particles.l .= l
     end
 
-    reorder_particles!(particles, pointsperblock(lattice, particles.x))
+    reorder_particles!(particles, lattice)
     particles
 end
 
@@ -98,4 +98,46 @@ function minimum_particle_state(::Val{dim}, ::Type{T}) where {dim, T}
         V::T
         l::T
     end
+end
+
+# reorder_particles!
+function _reorder_particles!(particles::Particles, ptsinblks::AbstractArray)
+    inds = Vector{Int}(undef, sum(length, ptsinblks))
+
+    cnt = 1
+    for blocks in threadsafe_blocks(size(ptsinblks))
+        @inbounds for blockindex in blocks
+            particleindices = ptsinblks[blockindex]
+            for i in eachindex(particleindices)
+                inds[cnt] = particleindices[i]
+                particleindices[i] = cnt
+                cnt += 1
+            end
+        end
+    end
+
+    # keep missing particles aside
+    if length(inds) != length(particles) # some points are missing
+        missed = particles[setdiff(1:length(particles), inds)]
+    end
+
+    # reorder particles
+    @inbounds particles[1:length(inds)] .= view(particles, inds)
+
+    # assign missing particles to the end part of `particles`
+    if length(inds) != length(particles)
+        @inbounds particles[length(inds)+1:end] .= missed
+    end
+
+    particles
+end
+
+function reorder_particles!(particles::Particles, lattice::Lattice)
+    xₚ = particles.x
+    ptsinblks = map(_->Int[], lattice)
+    @inbounds for p in eachindex(xₚ)
+        I = whichblock(lattice, xₚ[p])
+        I === nothing || push!(ptsinblks[I], p)
+    end
+    _reorder_particles!(particles, ptsinblks)
 end
