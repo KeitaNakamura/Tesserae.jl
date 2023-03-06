@@ -85,7 +85,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                     if alg isa AffineTransfer
                         xₚ = particles.x[p]
                         Dₚ = zero(Mat{dim, dim, T})
-                        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
+                        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
                             N = mp.N[j]
                             xᵢ = grid.x[i]
                             Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
@@ -98,7 +98,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
                 end
             end
 
-            for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
+            for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
                 N = mp.N[j]
                 ∇N = mp.∇N[j]
 
@@ -191,7 +191,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
             end
         end
 
-        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
+        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
             N = mp.N[j]
             ∇N = mp.∇N[j]
 
@@ -270,7 +270,7 @@ function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{na
         xₚ = particles.x[p]
         Cₚ = zero(eltype(particles.C))
 
-        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
+        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
             w = mp.w[j]
             Minv = mp.Minv[]
             vᵢ = grid.v[i]
@@ -340,7 +340,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
     parallel_each_particle(space) do p
         @inbounds begin
             mp = values(space, p)
-            for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
+            for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
                 N = mp.N[j]
                 P = value(basis, xₚ[p] - grid.x[i])
                 VP = (N * Vₚ[p]) * P
@@ -355,7 +355,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
     @threaded_inbounds for p in 1:num_particles(space)
         val = zero(eltype(vals))
         mp = values(space, p)
-        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, p))
+        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
             N = mp.N[j]
             P = value(basis, xₚ[p] - grid.x[i])
             val += N * (P ⋅ grid.poly_coef[i])

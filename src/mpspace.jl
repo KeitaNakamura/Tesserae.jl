@@ -29,35 +29,10 @@ reorder_particles!(particles::Particles, space::MPSpace) = reorder_particles!(pa
 # values
 Base.values(space::MPSpace) = space.mpvals
 Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; values(space.mpvals, i))
-# set/get gridindices
-@inline function neighbornodes(space::MPSpace, i::Integer)
-    @_propagate_inbounds_meta
-    @inbounds begin
-        inds = neighbornodes(space.mpvals, i)
-        nonzeroindices(space, inds)
-    end
-end
-# nonzeroindices
-struct NonzeroIndices{I, dim, A <: AbstractArray{I, dim}} <: AbstractArray{NonzeroIndex{I}, dim}
-    parent::A
-    nzinds::Array{Int, dim}
-end
-Base.size(x::NonzeroIndices) = size(x.parent)
-@inline function Base.getindex(x::NonzeroIndices, I...)
-    @boundscheck checkbounds(x, I...)
-    @inbounds begin
-        index = x.parent[I...]
-        nzindex = x.nzinds[index]
-    end
-    @boundscheck @assert nzindex != -1
-    NonzeroIndex(index, nzindex)
-end
-@inline nonzeroindices(space::MPSpace, inds) = (@_propagate_inbounds_meta; _nonzeroindices(get_gridsppat(space), inds))
-_nonzeroindices(::Trues, inds) = inds
-@inline function _nonzeroindices(sppat::SpPattern, inds)
-    @boundscheck checkbounds(sppat, inds)
-    NonzeroIndices(inds, get_spindices(sppat))
-end
+# neighbornodes
+@inline neighbornodes(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), i))
+@inline neighbornodes(space::MPSpace, ::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(space, i))
+@inline neighbornodes(space::MPSpace, grid::SpGrid, i::Integer) = (@_propagate_inbounds_meta; nonzeroindices(get_sppat(grid), neighbornodes(space, i)))
 
 function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
     @assert num_particles(space) == length(particles)

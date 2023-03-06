@@ -1,5 +1,5 @@
-struct SpPattern{dim, A <: AbstractArray{Int, dim}} <: AbstractArray{Bool, dim}
-    indices::A
+struct SpPattern{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Bool, dim}
+    indices::Tindices
 end
 
 SpPattern(dims::Tuple{Vararg{Int}}) = SpPattern(fill(-1, dims))
@@ -20,7 +20,6 @@ function update_sparsity_pattern!(sppat::SpPattern, mask::AbstractArray{Bool})
     end
     count
 end
-
 
 """
     SpArray{T}(dims...)
@@ -117,6 +116,24 @@ end
     A
 end
 
+fillzero!(A::SpArray) = (fillzero!(A.data); A)
+
+function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
+    A.shared_sppat && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
+    unsafe_update_sparsity_pattern!(A, sppat)
+end
+
+function unsafe_update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
+    @assert size(A) == size(sppat)
+    n = update_sparsity_pattern!(get_sppat(A), sppat)
+    resize!(nonzeros(A), n)
+    A
+end
+
+###############################
+# NonzeroIndex/NonzeroIndices #
+###############################
+
 struct NonzeroIndex{I}
     parent::I
     i::Int
@@ -140,18 +157,23 @@ end
     A
 end
 
-fillzero!(A::SpArray) = (fillzero!(A.data); A)
-
-function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
-    A.shared_sppat && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
-    unsafe_update_sparsity_pattern!(A, sppat)
+struct NonzeroIndices{I, dim, Tparent <: AbstractArray{I, dim}, Tnzinds <: AbstractArray{<: Integer, dim}} <: AbstractArray{NonzeroIndex{I}, dim}
+    parent::Tparent
+    nzinds::Tnzinds
 end
-
-function unsafe_update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
-    @assert size(A) == size(sppat)
-    n = update_sparsity_pattern!(get_sppat(A), sppat)
-    resize!(nonzeros(A), n)
-    A
+Base.parent(x::NonzeroIndices) = x.parent
+Base.size(x::NonzeroIndices) = size(parent(x))
+@inline function Base.getindex(x::NonzeroIndices, I...)
+    @boundscheck checkbounds(x, I...)
+    @inbounds begin
+        index = parent(x)[I...]
+        nzindex = x.nzinds[index]
+    end
+    NonzeroIndex(index, nzindex)
+end
+@inline function nonzeroindices(sppat::SpPattern, inds)
+    @boundscheck checkbounds(sppat, inds)
+    NonzeroIndices(inds, get_spindices(sppat))
 end
 
 #############
