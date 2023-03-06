@@ -7,13 +7,13 @@ struct MPSpace{dim, T, It <: Interpolation, V, VI}
 end
 
 # constructors
-function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
-    npts = length(xₚ)
+function MPSpace{dim, T}(itp::Interpolation, gridsize::Dims, npts::Integer) where {dim, T}
     mpvals = MPValues{dim, T}(itp, npts)
-    blkspace = BlockSpace(blocksize(lattice), npts)
-    sppat = fill(false, size(lattice))
+    blkspace = BlockSpace(blocksize(gridsize), npts)
+    sppat = fill(false, gridsize)
     MPSpace(itp, mpvals, blkspace, sppat, Ref{Any}())
 end
+MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector) where {dim, T} = MPSpace{dim, T}(itp, size(lattice), length(xₚ))
 MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x)
 
 # helper functions
