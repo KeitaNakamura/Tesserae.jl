@@ -1,20 +1,20 @@
-struct MPSpace{dim, T, It <: Interpolation, V, VI, GS <: Union{Trues, SpPattern}}
+struct MPSpace{dim, T, It <: Interpolation, V, VI}
     interp::It
     mpvals::MPValues{dim, T, V, VI}
     blkspace::BlockSpace{dim}
     sppat::Array{Bool, dim}
-    gridsppat::GS # sppat used in SpGrid
+    gridsppat::Base.RefValue{Any}
 end
 
 # constructors
-function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec{dim}}, gridsppat) where {dim, T}
+function MPSpace(itp::Interpolation, lattice::Lattice{dim, T}, xₚ::AbstractVector{<: Vec{dim}}) where {dim, T}
     npts = length(xₚ)
     mpvals = MPValues{dim, T}(itp, npts)
     blkspace = BlockSpace(blocksize(lattice), npts)
     sppat = fill(false, size(lattice))
-    MPSpace(itp, mpvals, blkspace, sppat, gridsppat)
+    MPSpace(itp, mpvals, blkspace, sppat, Ref{Any}())
 end
-MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x, get_sppat(grid))
+MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get_lattice(grid), particles.x)
 
 # helper functions
 gridsize(space::MPSpace) = size(space.sppat)
@@ -22,7 +22,8 @@ num_particles(space::MPSpace) = length(space.mpvals)
 get_interpolation(space::MPSpace) = space.interp
 get_blockspace(space::MPSpace) = space.blkspace
 get_sppat(space::MPSpace) = space.sppat
-get_gridsppat(space::MPSpace) = space.gridsppat
+get_gridsppat(space::MPSpace) = space.gridsppat[]
+set_gridsppat!(space::MPSpace, sppat) = space.gridsppat[] = sppat
 
 reorder_particles!(particles::Particles, space::MPSpace) = reorder_particles!(particles, get_blockspace(space))
 
@@ -60,6 +61,7 @@ function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filte
     update_mpvalues!(space, get_lattice(grid), particles, filter)
     update_sparsity_pattern!(get_sppat(space), get_blockspace(space))
     unsafe_update_sparsity_pattern!(grid, get_sppat(space))
+    set_gridsppat!(space, get_sppat(grid))
 
     space
 end
