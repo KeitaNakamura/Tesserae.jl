@@ -23,7 +23,11 @@ struct MPValues{dim, T, V <: NamedTuple, VI <: AbstractVector{CartesianIndices{d
 end
 
 # constructors
-MPValues{dim, T}(values::V, indices::CI) where {dim, T, V, CI} = MPValues{dim, T, V, CI}(values, indices)
+function MPValues{dim, T}(values::NamedTuple, indices::AbstractVector) where {dim, T}
+    MPValuesBaseType = get_mpvalues_basetype(values.N, values.∇N)
+    @assert MPValuesBaseType == MPValues{dim, T}
+    MPValuesBaseType{typeof(values), typeof(indices)}(values, indices)
+end
 @generated function MPValues(info::MPValuesInfo{dim, T, <: NamedTuple{names}}, len::Int) where {dim, T, names}
     arrays = map(1:length(names)) do i
         name = names[i]
@@ -42,6 +46,7 @@ function MPValues{dim, T}(itp::Interpolation, len::Int) where {dim, T}
     MPValues(info, len)
 end
 MPValues{dim}(itp::Interpolation, len::Int) where {dim} = MPValues{dim, Float64}(itp, len)
+get_mpvalues_basetype(N::AbstractArray{<: T}, ∇N::AbstractArray{<: Vec{dim, T}}) where {dim, T} = MPValues{dim, T}
 
 # basic
 Base.values(mps::MPValues) = getfield(mps, :values)
