@@ -49,6 +49,7 @@ export
     MPValues,
 # MPSpace
     MPSpace,
+    num_particles,
     neighbornodes,
 # Transfer
     particle_to_grid!,

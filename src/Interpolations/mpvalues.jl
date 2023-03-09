@@ -49,24 +49,24 @@ MPValues{dim}(itp::Interpolation, len::Int) where {dim} = MPValues{dim, Float64}
 get_mpvalues_basetype(N::AbstractArray{<: T}, ∇N::AbstractArray{<: Vec{dim, T}}) where {dim, T} = MPValues{dim, T}
 
 # basic
-Base.values(mps::MPValues) = getfield(mps, :values)
-Base.propertynames(mps::MPValues) = propertynames(values(mps))
-@inline Base.getproperty(mps::MPValues, name::Symbol) = getproperty(values(mps), name)
+Base.values(mpvalues::MPValues) = getfield(mpvalues, :values)
+Base.propertynames(mpvalues::MPValues) = propertynames(values(mpvalues))
+@inline Base.getproperty(mpvalues::MPValues, name::Symbol) = getproperty(values(mpvalues), name)
 
-# getindex-like inferface
-function Base.length(mps::MPValues)
-    A = first(values(mps))
+# values/neighbornodes
+function num_particles(mpvalues::MPValues)
+    A = first(values(mpvalues))
     size(A, ndims(A))
 end
-@inline function neighbornodes(mps::MPValues, i::Integer)
+@inline function neighbornodes(mpvalues::MPValues, i::Integer)
     @_propagate_inbounds_meta
-    getfield(mps, :indices)[i]
+    getfield(mpvalues, :indices)[i]
 end
-@inline neighbornodes(mps::MPValues, ::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(mps, i))
-@inline neighbornodes(mps::MPValues, grid::SpGrid, i::Integer) = (@_propagate_inbounds_meta; nonzeroindices(get_sppat(grid), neighbornodes(mps, i)))
-@inline function Base.values(mps::MPValues, i::Integer)
-    @boundscheck @assert 1 ≤ i ≤ length(mps)
-    SubMPValues(mps, i)
+@inline neighbornodes(mpvalues::MPValues, ::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(mpvalues, i))
+@inline neighbornodes(mpvalues::MPValues, grid::SpGrid, i::Integer) = (@_propagate_inbounds_meta; nonzeroindices(get_sppat(grid), neighbornodes(mpvalues, i)))
+@inline function Base.values(mpvalues::MPValues, p::Integer)
+    @boundscheck @assert 1 ≤ p ≤ num_particles(mpvalues)
+    SubMPValues(mpvalues, p)
 end
 @inline function viewcol(A::AbstractArray, i::Integer)
     @boundscheck checkbounds(axes(A, ndims(A)), i)
@@ -122,15 +122,15 @@ end
 end
 
 # MPValues
-function update!(mps::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
-    @assert length(mps) == length(particles)
+function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
+    @assert num_particles(mpvalues) == length(particles)
     @assert size(lattice) == size(sppat)
-    @threaded_inbounds for p in 1:length(mps)
-        update!(values(mps, p), itp, lattice, sppat, LazyRow(particles, p))
+    @threaded_inbounds for p in 1:num_particles(mpvalues)
+        update!(values(mpvalues, p), itp, lattice, sppat, LazyRow(particles, p))
     end
 end
-function update!(mps::MPValues, itp::Interpolation, lattice::Lattice, particles::Particles)
-    update!(mps, itp, lattice, Trues(size(lattice)), particles)
+function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, particles::Particles)
+    update!(mpvalues, itp, lattice, Trues(size(lattice)), particles)
 end
 
 # SubMPValues

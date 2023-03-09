@@ -18,7 +18,7 @@ MPSpace(itp::Interpolation, grid::Grid, particles::Particles) = MPSpace(itp, get
 
 # helper functions
 gridsize(space::MPSpace) = size(space.sppat)
-num_particles(space::MPSpace) = length(space.mpvals)
+num_particles(space::MPSpace) = num_particles(values(space))
 get_interpolation(space::MPSpace) = space.interp
 get_blockspace(space::MPSpace) = space.blkspace
 get_sppat(space::MPSpace) = space.sppat
