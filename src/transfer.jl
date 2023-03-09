@@ -53,7 +53,6 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
     check_particles(particles, space)
 
     itp = get_interpolation(space)
-    P = x -> value(get_basis(itp), x)
     parallel_each_particle(space) do p
         @_inline_meta
         @inbounds begin
@@ -76,6 +75,7 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
             # grid momentum depends on transfer algorithms
             if :mv in names
                 if alg isa DefaultTransfer && itp isa WLS
+                    P = x -> value(get_basis(itp), x)
                     xₚ = particles.x[p]
                     mₚCₚ = particles.m[p] * particles.C[p]
                 else
