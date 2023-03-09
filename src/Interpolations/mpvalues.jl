@@ -92,7 +92,11 @@ Base.propertynames(mp::SubMPValues) = propertynames(parent(mp))
 end
 @inline function neighbornodes(mp::SubMPValues)
     index = getfield(mp, :index)
-    @inbounds getfield(parent(mp), :indices)[index]
+    @inbounds neighbornodes(parent(mp), index)
+end
+@inline function neighbornodes(mp::SubMPValues, grid::Grid)
+    index = getfield(mp, :index)
+    @inbounds neighbornodes(parent(mp), grid, index)
 end
 @inline function set_neighbornodes!(mp::SubMPValues, inds)
     index = getfield(mp, :index)

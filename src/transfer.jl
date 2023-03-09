@@ -46,96 +46,95 @@ function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::
     particle_to_grid!(alg, system, Val(names), grid, particles, space)
 end
 
-# don't use dispatch and all transfer algorithms are writtein in this function to reduce a lot of deplicated code
-function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace{dim, T}) where {names, dim, T}
+function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace) where {names}
     check_statenames(names, (:m, :mv, :f))
     check_grid(grid, space)
     check_particles(particles, space)
-
-    itp = get_interpolation(space)
     parallel_each_particle(space) do p
         @_inline_meta
-        @inbounds begin
-            mp = values(space, p)
+        @inbounds particle_to_grid!(alg, system, Val(names), grid, LazyRow(particles, p), get_interpolation(space), values(space, p))
+    end
+    grid
+end
 
-            if :m in names
-                mₚ = particles.m[p]
-            end
+# don't use dispatch and all transfer algorithms are writtein in this function to reduce a lot of deplicated code
+@inline function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, pt, itp::Interpolation, mp::SubMPValues{dim, T}) where {names, dim, T}
+    @_propagate_inbounds_meta
 
-            if :f in names
-                Vₚσₚ = particles.V[p] * particles.σ[p]
-                if hasproperty(particles, :b)
-                    mₚbₚ = particles.m[p] * particles.b[p]
-                end
-                if system isa Axisymmetric
-                    rₚ = particles.x[p][1]
-                end
-            end
+    if :m in names
+        mₚ = pt.m
+    end
 
-            # grid momentum depends on transfer algorithms
-            if :mv in names
-                if alg isa DefaultTransfer && itp isa WLS
-                    P = x -> value(get_basis(itp), x)
-                    xₚ = particles.x[p]
-                    mₚCₚ = particles.m[p] * particles.C[p]
-                else
-                    mₚvₚ = particles.m[p] * particles.v[p]
+    if :f in names
+        Vₚσₚ = pt.V * pt.σ
+        if hasproperty(pt, :b)
+            mₚbₚ = pt.m * pt.b
+        end
+        if system isa Axisymmetric
+            rₚ = pt.x[1]
+        end
+    end
 
-                    # additional term from high order approximation
-                    if alg isa AffineTransfer
-                        xₚ = particles.x[p]
-                        Dₚ = zero(Mat{dim, dim, T})
-                        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
-                            N = mp.N[j]
-                            xᵢ = grid.x[i]
-                            Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
-                        end
-                        mₚCₚ = particles.m[p] * particles.B[p] ⋅ inv(Dₚ)
-                    elseif alg isa TaylorTransfer
-                        xₚ = particles.x[p]
-                        mₚ∇vₚ = particles.m[p] * @Tensor(particles.∇v[p][1:dim, 1:dim])
-                    end
-                end
-            end
+    # grid momentum depends on transfer algorithms
+    if :mv in names
+        if alg isa DefaultTransfer && itp isa WLS
+            P = x -> value(get_basis(itp), x)
+            xₚ = pt.x
+            mₚCₚ = pt.m * pt.C
+        else
+            mₚvₚ = pt.m * pt.v
 
-            for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
-                N = mp.N[j]
-                ∇N = mp.∇N[j]
-
-                if :m in names
-                    grid.m[i] += N*mₚ
-                end
-
-                if :f in names
-                    if system isa Axisymmetric
-                        f = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
-                    else
-                        f = -calc_fint(system, ∇N, Vₚσₚ)
-                    end
-                    if hasproperty(particles, :b)
-                        f += N*mₚbₚ
-                    end
-                    grid.f[i] += f
-                end
-
-                # grid momentum depends on transfer algorithms
-                if :mv in names
+            # additional term from high order approximation
+            if alg isa AffineTransfer
+                xₚ = pt.x
+                Dₚ = zero(Mat{dim, dim, T})
+                for (j, i) in pairs(IndexCartesian(), neighbornodes(mp, grid))
+                    N = mp.N[j]
                     xᵢ = grid.x[i]
-                    if alg isa DefaultTransfer && itp isa WLS
-                        grid.mv[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
-                    elseif alg isa AffineTransfer
-                        grid.mv[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
-                    elseif alg isa TaylorTransfer
-                        grid.mv[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
-                    else
-                        grid.mv[i] += N*mₚvₚ
-                    end
+                    Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
                 end
+                mₚCₚ = pt.m * pt.B ⋅ inv(Dₚ)
+            elseif alg isa TaylorTransfer
+                xₚ = pt.x
+                mₚ∇vₚ = pt.m * @Tensor(pt.∇v[1:dim, 1:dim])
             end
         end
     end
 
-    grid
+    for (j, i) in pairs(IndexCartesian(), neighbornodes(mp, grid))
+        N = mp.N[j]
+        ∇N = mp.∇N[j]
+
+        if :m in names
+            grid.m[i] += N*mₚ
+        end
+
+        if :f in names
+            if system isa Axisymmetric
+                f = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
+            else
+                f = -calc_fint(system, ∇N, Vₚσₚ)
+            end
+            if hasproperty(pt, :b)
+                f += N*mₚbₚ
+            end
+            grid.f[i] += f
+        end
+
+        # grid momentum depends on transfer algorithms
+        if :mv in names
+            xᵢ = grid.x[i]
+            if alg isa DefaultTransfer && itp isa WLS
+                grid.mv[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
+            elseif alg isa AffineTransfer
+                grid.mv[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
+            elseif alg isa TaylorTransfer
+                grid.mv[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
+            else
+                grid.mv[i] += N*mₚvₚ
+            end
+        end
+    end
 end
 
 # 1D
@@ -160,147 +159,139 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
     check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
     check_particles(particles, space)
-
     @threaded_inbounds for p in 1:num_particles(space)
-        mp = values(space, p)
+        grid_to_particle!(alg, system, Val(names), LazyRow(particles, p), grid, get_interpolation(space), values(space, p), dt)
+    end
+    particles
+end
 
-        # there is no difference along with transfer algorithms for calculating `:∇v` and `:x`
+@inline function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::Interpolation, mp::SubMPValues{dim}, dt::Real) where {names, dim}
+    @_propagate_inbounds_meta
+
+    # there is no difference along with transfer algorithms for calculating `:∇v` and `:x`
+    if :∇v in names
+        ∇vₚ = @Tensor zero(pt.∇v)[1:dim, 1:dim]
+        if system isa Axisymmetric
+            vₚ = zero(pt.v)
+        end
+    end
+
+    if :x in names
+        vₚ = zero(pt.v)
+    end
+
+    # particle velocity depends on transfer algorithms
+    if :v in names
+        if alg isa FLIPGroup
+            dvₚ = zero(pt.v)
+        else
+            @assert alg isa PICGroup
+            vₚ = zero(pt.v)
+        end
+        if alg isa AffineTransfer
+            # Bₚ is always calculated when `:v` is specified
+            xₚ = pt.x
+            Bₚ = zero(pt.B)
+        end
+    end
+
+    for (j, i) in pairs(IndexCartesian(), neighbornodes(mp, grid))
+        N = mp.N[j]
+        ∇N = mp.∇N[j]
+
+        # 100% used
+        vᵢ = grid.v[i]
+
         if :∇v in names
-            ∇vₚ = @Tensor zero(eltype(particles.∇v))[1:dim, 1:dim]
-            if system isa Axisymmetric
-                vₚ = zero(eltype(particles.v))
-            end
+            ∇vₚ += vᵢ ⊗ ∇N
         end
 
-        if :x in names
-            vₚ = zero(eltype(particles.v))
+        # use `@isdefined` to avoid complicated check
+        # for `:v` in `PIC` is also calculated here
+        if @isdefined vₚ
+            vₚ += vᵢ * N
         end
 
         # particle velocity depends on transfer algorithms
         if :v in names
             if alg isa FLIPGroup
-                dvₚ = zero(eltype(particles.v))
-            else
-                @assert alg isa PICGroup
-                vₚ = zero(eltype(particles.v))
+                dvᵢ = vᵢ - grid.vⁿ[i]
+                dvₚ += N * dvᵢ
             end
             if alg isa AffineTransfer
-                # Bₚ is always calculated when `:v` is specified
-                xₚ = particles.x[p]
-                Bₚ = zero(eltype(particles.B))
-            end
-        end
-
-        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
-            N = mp.N[j]
-            ∇N = mp.∇N[j]
-
-            # 100% used
-            vᵢ = grid.v[i]
-
-            if :∇v in names
-                ∇vₚ += vᵢ ⊗ ∇N
-            end
-
-            # use `@isdefined` to avoid complicated check
-            # for `:v` in `PIC` is also calculated here
-            if @isdefined vₚ
-                vₚ += vᵢ * N
-            end
-
-            # particle velocity depends on transfer algorithms
-            if :v in names
-                if alg isa FLIPGroup
-                    dvᵢ = vᵢ - grid.vⁿ[i]
-                    dvₚ += N * dvᵢ
-                end
-                if alg isa AffineTransfer
-                    xᵢ = grid.x[i]
-                    Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
-                end
-            end
-        end
-
-        if :∇v in names
-            T_∇v = eltype(particles.∇v)
-            if system isa Axisymmetric
-                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ, vₚ[1], particles.x[p][1])
-            else
-                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ)
-            end
-        end
-
-        if :x in names
-            particles.x[p] += vₚ * dt
-        end
-
-        # particle velocity depends on transfer algorithms
-        if :v in names
-            if alg isa FLIPGroup
-                particles.v[p] += dvₚ
-            else
-                @assert alg isa PICGroup
-                particles.v[p] = vₚ
-            end
-            if alg isa AffineTransfer
-                # additional quantity for affine transfers
-                # Bₚ is always calculated when `:v` is specified
-                particles.B[p] = Bₚ
+                xᵢ = grid.x[i]
+                Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
             end
         end
     end
 
-    particles
+    if :∇v in names
+        if system isa Axisymmetric
+            pt.∇v = calc_∇v(system, typeof(pt.∇v), ∇vₚ, vₚ[1], pt.x[1])
+        else
+            pt.∇v = calc_∇v(system, typeof(pt.∇v), ∇vₚ)
+        end
+    end
+
+    if :x in names
+        pt.x += vₚ * dt
+    end
+
+    # particle velocity depends on transfer algorithms
+    if :v in names
+        if alg isa FLIPGroup
+            pt.v += dvₚ
+        else
+            @assert alg isa PICGroup
+            pt.v = vₚ
+        end
+        if alg isa AffineTransfer
+            # additional quantity for affine transfers
+            # Bₚ is always calculated when `:v` is specified
+            pt.B = Bₚ
+        end
+    end
 end
 
 # special default transfer for `WLS` interpolation
-function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim, <: Any, <: WLS}, dt::Real) where {names, dim}
-    check_statenames(names, (:v, :∇v, :x))
-    check_grid(grid, space)
-    check_particles(particles, space)
+@inline function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::WLS, mp::SubMPValues{dim}, dt::Real) where {names, dim}
+    @_propagate_inbounds_meta
 
-    itp = get_interpolation(space)
     basis = get_basis(itp)
     P = x -> value(basis, x)
     p0 = value(basis, zero(Vec{dim, Int}))
     ∇p0 = gradient(basis, zero(Vec{dim, Int}))
-    @threaded_inbounds for p in 1:num_particles(space)
-        mp = values(space, p)
 
-        xₚ = particles.x[p]
-        Cₚ = zero(eltype(particles.C))
+    xₚ = pt.x
+    Cₚ = zero(pt.C)
 
-        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
-            w = mp.w[j]
-            Minv = mp.Minv[]
-            vᵢ = grid.v[i]
-            xᵢ = grid.x[i]
-            Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xᵢ - xₚ))
-        end
+    for (j, i) in pairs(IndexCartesian(), neighbornodes(mp, grid))
+        w = mp.w[j]
+        Minv = mp.Minv[]
+        vᵢ = grid.v[i]
+        xᵢ = grid.x[i]
+        Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xᵢ - xₚ))
+    end
 
-        vₚ = Cₚ ⋅ p0
+    vₚ = Cₚ ⋅ p0
 
-        if :∇v in names
-            ∇vₚ = Cₚ ⋅ ∇p0
-            T_∇v = eltype(particles.∇v)
-            if system isa Axisymmetric
-                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ, vₚ[1], particles.x[p][1])
-            else
-                particles.∇v[p] = calc_∇v(system, T_∇v, ∇vₚ)
-            end
-        end
-
-        if :x in names
-            particles.x[p] += vₚ * dt
-        end
-
-        if :v in names
-            particles.v[p] = vₚ
-            particles.C[p] = Cₚ # always update when velocity is updated
+    if :∇v in names
+        ∇vₚ = Cₚ ⋅ ∇p0
+        if system isa Axisymmetric
+            pt.∇v = calc_∇v(system, typeof(pt.∇v), ∇vₚ, vₚ[1], pt.x[1])
+        else
+            pt.∇v = calc_∇v(system, typeof(pt.∇v), ∇vₚ)
         end
     end
 
-    particles
+    if :x in names
+        pt.x += vₚ * dt
+    end
+
+    if :v in names
+        pt.v = vₚ
+        pt.C = Cₚ # always update when velocity is updated
+    end
 end
 
 # 1D
