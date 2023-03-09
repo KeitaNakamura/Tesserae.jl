@@ -32,8 +32,7 @@ Base.values(space::MPSpace) = space.mpvals
 Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; values(space.mpvals, i))
 # neighbornodes
 @inline neighbornodes(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), i))
-@inline neighbornodes(space::MPSpace, ::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(space, i))
-@inline neighbornodes(space::MPSpace, grid::SpGrid, i::Integer) = (@_propagate_inbounds_meta; nonzeroindices(get_sppat(grid), neighbornodes(space, i)))
+@inline neighbornodes(space::MPSpace, grid::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), grid, i))
 
 function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
     @assert num_particles(space) == length(particles)

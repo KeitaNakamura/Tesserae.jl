@@ -62,6 +62,8 @@ end
     @_propagate_inbounds_meta
     getfield(mps, :indices)[i]
 end
+@inline neighbornodes(mps::MPValues, ::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(mps, i))
+@inline neighbornodes(mps::MPValues, grid::SpGrid, i::Integer) = (@_propagate_inbounds_meta; nonzeroindices(get_sppat(grid), neighbornodes(mps, i)))
 @inline function Base.values(mps::MPValues, i::Integer)
     @boundscheck @assert 1 ≤ i ≤ length(mps)
     SubMPValues(mps, i)
