@@ -50,9 +50,18 @@ function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
     check_statenames(names, (:m, :mv, :f))
     check_grid(grid, space)
     check_particles(particles, space)
-    parallel_each_particle(space) do p
-        @_inline_meta
-        @inbounds particle_to_grid!(alg, system, Val(names), grid, LazyRow(particles, p), get_interpolation(space), values(space, p))
+    particle_to_grid!(alg, system, Val(names), grid, particles, get_interpolation(space), values(space), get_blockspace(space))
+    grid
+end
+
+#------------+
+# scattering |
+#------------+
+
+# never check bounds!!
+function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, names::Val, grid::Grid, particles::Particles, itp::Interpolation, mpvalues::MPValues, blkspace::BlockSpace)
+    parallel_each_particle(blkspace) do p
+        @inbounds particle_to_grid!(alg, system, names, grid, LazyRow(particles, p), itp, values(mpvalues, p))
     end
     grid
 end
