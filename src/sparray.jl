@@ -138,6 +138,7 @@ struct NonzeroIndex{I}
     parent::I
     i::Int
 end
+Base.parent(nz::NonzeroIndex) = nz.parent
 @inline function Base.getindex(A::SpArray, nz::NonzeroIndex)
     @boundscheck checkbounds(nonzeros(A), nz.i)
     @inbounds nonzeros(A)[nz.i]
@@ -148,32 +149,37 @@ end
     A
 end
 @inline function Base.getindex(A::AbstractArray, nz::NonzeroIndex)
-    @boundscheck checkbounds(A, nz.parent)
-    @inbounds A[nz.parent]
+    @boundscheck checkbounds(A, parent(nz))
+    @inbounds A[parent(nz)]
 end
 @inline function Base.setindex!(A::AbstractArray, v, nz::NonzeroIndex)
-    @boundscheck checkbounds(A, nz.parent)
-    @inbounds A[nz.parent] = v
+    @boundscheck checkbounds(A, parent(nz))
+    @inbounds A[parent(nz)] = v
     A
 end
 
-struct NonzeroIndices{I, dim, Tparent <: AbstractArray{I, dim}, Tnzinds <: AbstractArray{<: Integer, dim}} <: AbstractArray{NonzeroIndex{I}, dim}
+@inline function nonzeroindex(sppat::SpPattern, I)
+    @boundscheck checkbounds(sppat, I)
+    @inbounds NonzeroIndex(I, get_spindices(sppat)[I])
+end
+
+struct NonzeroIndices{I, dim, Tparent <: AbstractArray{I, dim}, Tsppat <: SpPattern{dim}} <: AbstractArray{NonzeroIndex{I}, dim}
     parent::Tparent
-    nzinds::Tnzinds
+    sppat::Tsppat
 end
 Base.parent(x::NonzeroIndices) = x.parent
 Base.size(x::NonzeroIndices) = size(parent(x))
+get_sppat(x::NonzeroIndices) = x.sppat
 @inline function Base.getindex(x::NonzeroIndices, I...)
     @boundscheck checkbounds(x, I...)
     @inbounds begin
         index = parent(x)[I...]
-        nzindex = x.nzinds[index]
+        nonzeroindex(get_sppat(x), index)
     end
-    NonzeroIndex(index, nzindex)
 end
 @inline function nonzeroindices(sppat::SpPattern, inds)
     @boundscheck checkbounds(sppat, inds)
-    NonzeroIndices(inds, get_spindices(sppat))
+    NonzeroIndices(inds, sppat)
 end
 
 #############
