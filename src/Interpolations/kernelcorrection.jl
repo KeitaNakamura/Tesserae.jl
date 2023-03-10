@@ -3,10 +3,11 @@ end
 KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
 
 get_kernel(::KernelCorrection{K}) where {K} = K()
+gridsize(kc::KernelCorrection) = gridsize(get_kernel(kc))
 @inline neighbornodes(kc::KernelCorrection, lattice::Lattice, pt) = neighbornodes(get_kernel(kc), lattice, pt)
 
 function MPValuesInfo{dim, T}(itp::KernelCorrection) where {dim, T}
-    dims = nfill(gridsize(get_kernel(itp)), Val(dim))
+    dims = nfill(gridsize(itp), Val(dim))
     values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
     sizes = (dims, dims)
     MPValuesInfo{dim, T}(values, sizes)

@@ -8,10 +8,11 @@ WLS{B}(w::Kernel) where {B} = WLS{B, typeof(w)}()
 
 get_basis(::WLS{B}) where {B} = B()
 get_kernel(::WLS{B, W}) where {B, W} = W()
+gridsize(wls::WLS) = gridsize(get_kernel(wls))
 @inline neighbornodes(wls::WLS, lattice::Lattice, pt) = neighbornodes(get_kernel(wls), lattice, pt)
 
 function MPValuesInfo{dim, T}(itp::WLS) where {dim, T}
-    dims = nfill(gridsize(get_kernel(itp)), Val(dim))
+    dims = nfill(gridsize(itp), Val(dim))
     L = length(value(get_basis(itp), zero(Vec{dim, T})))
     values = (; w=zero(T), N=zero(T), ∇N=zero(Vec{dim, T}), Minv=zero(Mat{L, L, T}))
     sizes = (dims, dims, dims, (1,))
