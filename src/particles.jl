@@ -9,8 +9,11 @@ function generate_points_regularly(lattice::Lattice, n::Int)
     Lattice(2r, minmax.(axes, r)...)
 end
 
-function generate_points_randomly(lattice::Lattice, n::Int)
-    d = spacing(lattice) / n
+function generate_points_randomly(lattice::Lattice{dim}, n::Int) where {dim}
+    # Determine minimum distance `d` between particles for Poisson disk sampling
+    # so that the number of generated particles is almost the same as the grid sampling.
+    # This is empirical equation (see https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
+    d = spacing(lattice) / n / (1.7)^(1/dim)
     minmaxes = map((min,max)->(min,max), Tuple(first(lattice)), Tuple(last(lattice)))
     points = PoissonDiskSampling.generate(minmaxes...; r = only(unique(d)))
     map(eltype(lattice), points)
