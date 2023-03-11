@@ -73,23 +73,19 @@ end
 # @threaded #
 #############
 
-macro threaded_inbounds(expr)
-    @assert Meta.isexpr(expr, :for)
-    # insert @inbounds macro
-    expr.args[2] = quote
-        @inbounds begin
-            $(expr.args[2])
-        end
-    end
+macro threaded_inbounds(schedule::QuoteNode, ex)
+    @assert Meta.isexpr(ex, :for)
+    ex.args[2] = :(@inbounds begin $(ex.args[2]) end)
     quote
-        let
-            if Threads.nthreads() == 1
-                $(expr)
-            else
-                Threads.@threads $(expr)
-            end
+        if Threads.nthreads() == 1
+            $ex
+        else
+            Threads.@threads $schedule $ex
         end
     end |> esc
+end
+macro threaded_inbounds(ex)
+    esc(:(Marble.@threaded_inbounds :dynamic $ex))
 end
 
 ########
