@@ -3,7 +3,7 @@ const BLOCKFACTOR = unsigned(3) # 2^3
 struct BlockSpace{dim}
     particleindices::Vector{Int}
     # for blocks
-    nparticles::Array{Int, dim}
+    nparticles::Vector{Array{Int, dim}}
     stops::Array{Int, dim}
     # for particles
     blockindices::Vector{Int}
@@ -11,39 +11,45 @@ struct BlockSpace{dim}
 end
 function BlockSpace(blocksize::Dims{dim}, npts::Int) where {dim}
     particleindices = Vector{Int}(undef, npts)
-    nparticles = zeros(Int, blocksize)
+    nparticles = [zeros(Int, blocksize) for _ in 1:Threads.nthreads()]
     stops = zeros(Int, blocksize)
     blockindices = Vector{Int}(undef, npts)
     localindices = Vector{Int}(undef, npts)
     BlockSpace(particleindices, nparticles, stops, blockindices, localindices)
 end
 
-blocksize(bs::BlockSpace) = size(bs.nparticles)
-num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; bs.nparticles[index...])
+blocksize(bs::BlockSpace) = size(bs.stops)
+num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; last(bs.nparticles)[index...])
 
 function particleindices(bs::BlockSpace, index...)
     @boundscheck checkbounds(CartesianIndices(blocksize(bs)), index...)
     @inbounds begin
         stop = bs.stops[index...]
-        start = stop - bs.nparticles[index...] + 1
+        start = stop - num_particles(bs, index...) + 1
         view(bs.particleindices, start:stop)
     end
 end
 
 function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector)
-    fillzero!(bs.nparticles)
-    @inbounds for p in eachindex(xₚ)
+    fillzero!.(bs.nparticles)
+    @threaded_inbounds :static for p in eachindex(xₚ)
+        id = Threads.threadid()
         blk = sub2ind(blocksize(bs), whichblock(lattice, xₚ[p]))
         bs.blockindices[p] = blk
-        bs.localindices[p] = iszero(blk) ? 0 : (bs.nparticles[blk] += 1)
+        bs.localindices[p] = iszero(blk) ? 0 : (bs.nparticles[id][blk] += 1)
     end
-    cumsum!(vec(bs.stops), vec(bs.nparticles))
-    @threaded_inbounds for p in eachindex(xₚ)
+    for i in 1:Threads.nthreads()-1
+        @inbounds broadcast!(+, bs.nparticles[i+1], bs.nparticles[i+1], bs.nparticles[i])
+    end
+    cumsum!(vec(bs.stops), vec(last(bs.nparticles)))
+    @threaded_inbounds :static for p in eachindex(xₚ)
         blk = bs.blockindices[p]
         if !iszero(blk)
-            i = bs.localindices[p]
+            id = Threads.threadid()
+            offset = id==1 ? 0 : bs.nparticles[id-1][blk]
+            i = offset + bs.localindices[p]
             stop = bs.stops[blk]
-            len = bs.nparticles[blk]
+            len = last(bs.nparticles)[blk]
             bs.particleindices[stop-len+i] = p
         end
     end
