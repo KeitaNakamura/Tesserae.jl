@@ -28,6 +28,16 @@ Base.size(x::ParticlesInBlocksArray) = size(x.stops)
     end
 end
 
+# block-wise parallel computation
+function parallel_each_particle(f, blkarray::ParticlesInBlocksArray)
+    for blocks in threadsafe_blocks(size(blkarray))
+        blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
+        @threaded_inbounds for blk in blocks′
+            foreach(f, blkarray[blk])
+        end
+    end
+end
+
 struct BlockSpace{dim, BA <: ParticlesInBlocksArray{dim}}
     blkarray::BA
     nparticles::Vector{Array{Int, dim}}
@@ -44,11 +54,6 @@ end
 
 blocksize(bs::BlockSpace) = size(bs.blkarray)
 num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; last(bs.nparticles)[index...])
-
-@inline function particleindices(bs::BlockSpace, index...)
-    @_propagate_inbounds_meta
-    bs.blkarray[index...]
-end
 
 function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector)
     blkarray = bs.blkarray
@@ -97,9 +102,8 @@ end
     CartesianIndex(start):CartesianIndex(stop)
 end
 
-function reorder_particles!(particles::Particles, blkspace::BlockSpace)
-    _reorder_particles!(particles, blkspace.blkarray)
-end
+reorder_particles!(particles::Particles, blkspace::BlockSpace) = _reorder_particles!(particles, blkspace.blkarray)
+parallel_each_particle(f, blkspace::BlockSpace) = parallel_each_particle(f, blkspace.blkarray)
 
 ####################
 # block operations #
@@ -144,14 +148,4 @@ end
 function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
     starts = AxisArray(nfill(1:2, Val(dim)))
     vec(map(st -> map(CartesianIndex{dim}, AxisArray(StepRange.(st, 2, blocksize)))::Array{CartesianIndex{dim}, dim}, starts))
-end
-
-# block-wise parallel computation
-function parallel_each_particle(f, blkspace::BlockSpace)
-    for blocks in threadsafe_blocks(blocksize(blkspace))
-        blocks′ = filter(I -> !iszero(num_particles(blkspace, I)), blocks)
-        @threaded_inbounds for blk in blocks′
-            foreach(f, particleindices(blkspace, blk))
-        end
-    end
 end
