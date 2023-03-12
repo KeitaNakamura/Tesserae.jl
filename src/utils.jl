@@ -73,9 +73,13 @@ end
 # @threaded #
 #############
 
-macro threaded_inbounds(schedule::QuoteNode, ex)
+function insert_inbounds!(ex)
     @assert Meta.isexpr(ex, :for)
     ex.args[2] = :(@inbounds begin $(ex.args[2]) end)
+    ex
+end
+macro threaded_inbounds(schedule::QuoteNode, ex)
+    insert_inbounds!(ex)
     quote
         if Threads.nthreads() == 1
             $ex
@@ -85,7 +89,16 @@ macro threaded_inbounds(schedule::QuoteNode, ex)
     end |> esc
 end
 macro threaded_inbounds(ex)
-    esc(:(Marble.@threaded_inbounds :dynamic $ex))
+    insert_inbounds!(ex)
+    quote
+        if Threads.nthreads() == 1
+            $ex
+        else
+            Threads.@threads $ex
+        end
+    end |> esc
+    # following code is not ok for julia < v1.8 because of `:dynamic` scheduler.
+    # esc(:(Marble.@threaded_inbounds :dynamic $ex))
 end
 
 ########
