@@ -1,36 +1,57 @@
 const BLOCKFACTOR = unsigned(3) # 2^3
 
-struct BlockSpace{dim}
-    particleindices::Vector{Int}
-    # for blocks
-    nparticles::Vector{Array{Int, dim}}
-    stops::Array{Int, dim}
-    # for particles
-    blockindices::Vector{Int}
-    localindices::Vector{Int}
+struct ParticlesInBlocksArray{dim, T, Tinds <: AbstractVector{Int}, Tstops <: AbstractArray{Int, dim}} <: AbstractArray{T, dim}
+    particleindices::Tinds
+    stops::Tstops
 end
-function BlockSpace(blocksize::Dims{dim}, npts::Int) where {dim}
+
+function ParticlesInBlocksArray(particleindices::AbstractVector, stops::AbstractArray)
+    dim = ndims(stops)
+    T = typeof(view(particleindices, 1:1))
+    ParticlesInBlocksArray{dim, T, typeof(particleindices), typeof(stops)}(particleindices, stops)
+end
+
+function ParticlesInBlocksArray(blocksize::Dims{dim}, npts::Int) where {dim}
     particleindices = Vector{Int}(undef, npts)
-    nparticles = [zeros(Int, blocksize) for _ in 1:Threads.nthreads()]
     stops = zeros(Int, blocksize)
-    blockindices = Vector{Int}(undef, npts)
-    localindices = Vector{Int}(undef, npts)
-    BlockSpace(particleindices, nparticles, stops, blockindices, localindices)
+    ParticlesInBlocksArray(particleindices, stops)
 end
 
-blocksize(bs::BlockSpace) = size(bs.stops)
-num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; last(bs.nparticles)[index...])
-
-function particleindices(bs::BlockSpace, index...)
-    @boundscheck checkbounds(CartesianIndices(blocksize(bs)), index...)
+Base.IndexStyle(::Type{<: ParticlesInBlocksArray}) = IndexLinear()
+Base.size(x::ParticlesInBlocksArray) = size(x.stops)
+@inline function Base.getindex(x::ParticlesInBlocksArray, i::Int)
+    @boundscheck checkbounds(x, i)
     @inbounds begin
-        stop = bs.stops[index...]
-        start = stop - num_particles(bs, index...) + 1
-        view(bs.particleindices, start:stop)
+        stop = x.stops[i]
+        start = i==1 ? 1 : x.stops[i-1]+1
+        view(x.particleindices, start:stop)
     end
 end
 
+struct BlockSpace{dim, BA <: ParticlesInBlocksArray{dim}}
+    blkarray::BA
+    nparticles::Vector{Array{Int, dim}}
+    blockindices::Vector{Int}
+    localindices::Vector{Int}
+end
+function BlockSpace(blocksize::Dims, npts::Int)
+    blkarray = ParticlesInBlocksArray(blocksize, npts)
+    nparticles = [zeros(Int, blocksize) for _ in 1:Threads.nthreads()]
+    blockindices = Vector{Int}(undef, npts)
+    localindices = Vector{Int}(undef, npts)
+    BlockSpace(blkarray, nparticles, blockindices, localindices)
+end
+
+blocksize(bs::BlockSpace) = size(bs.blkarray)
+num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; last(bs.nparticles)[index...])
+
+@inline function particleindices(bs::BlockSpace, index...)
+    @_propagate_inbounds_meta
+    bs.blkarray[index...]
+end
+
 function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector)
+    blkarray = bs.blkarray
     fillzero!.(bs.nparticles)
     @threaded_inbounds :static for p in eachindex(xₚ)
         id = Threads.threadid()
@@ -41,16 +62,17 @@ function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector)
     for i in 1:Threads.nthreads()-1
         @inbounds broadcast!(+, bs.nparticles[i+1], bs.nparticles[i+1], bs.nparticles[i])
     end
-    cumsum!(vec(bs.stops), vec(last(bs.nparticles)))
+    nptsinblks = last(bs.nparticles)
+    cumsum!(vec(blkarray.stops), vec(nptsinblks))
     @threaded_inbounds :static for p in eachindex(xₚ)
         blk = bs.blockindices[p]
         if !iszero(blk)
             id = Threads.threadid()
             offset = id==1 ? 0 : bs.nparticles[id-1][blk]
             i = offset + bs.localindices[p]
-            stop = bs.stops[blk]
-            len = last(bs.nparticles)[blk]
-            bs.particleindices[stop-len+i] = p
+            stop = blkarray.stops[blk]
+            len = nptsinblks[blk]
+            blkarray.particleindices[stop-len+i] = p
         end
     end
 end
@@ -76,19 +98,8 @@ end
 end
 
 function reorder_particles!(particles::Particles, blkspace::BlockSpace)
-    _reorder_particles!(particles, ParticlesInBlocksArray(blkspace))
+    _reorder_particles!(particles, blkspace.blkarray)
 end
-
-struct ParticlesInBlocksArray{dim, T} <: AbstractArray{T, dim}
-    parent::BlockSpace{dim}
-end
-function ParticlesInBlocksArray(parent::BlockSpace{dim}) where {dim}
-    T = Base._return_type(particleindices, Tuple{typeof(parent), Int})
-    ParticlesInBlocksArray{dim, T}(parent)
-end
-Base.parent(x::ParticlesInBlocksArray) = x.parent
-Base.size(x::ParticlesInBlocksArray) = blocksize(parent(x))
-Base.getindex(x::ParticlesInBlocksArray, index...) = (@_propagate_inbounds_meta; particleindices(parent(x), index...))
 
 ####################
 # block operations #
