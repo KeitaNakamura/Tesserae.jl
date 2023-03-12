@@ -52,11 +52,12 @@ function BlockSpace(blocksize::Dims, npts::Int)
     BlockSpace(blkarray, nparticles, blockindices, localindices)
 end
 
-blocksize(bs::BlockSpace) = size(bs.blkarray)
+blocksize(bs::BlockSpace) = size(particlesinblocks(bs))
 num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; last(bs.nparticles)[index...])
+particlesinblocks(bs::BlockSpace) = bs.blkarray
 
 function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector)
-    blkarray = bs.blkarray
+    blkarray = particlesinblocks(bs)
     fillzero!.(bs.nparticles)
     @threaded_inbounds :static for p in eachindex(xₚ)
         id = Threads.threadid()
@@ -102,8 +103,8 @@ end
     CartesianIndex(start):CartesianIndex(stop)
 end
 
-reorder_particles!(particles::Particles, blkspace::BlockSpace) = _reorder_particles!(particles, blkspace.blkarray)
-parallel_each_particle(f, blkspace::BlockSpace) = parallel_each_particle(f, blkspace.blkarray)
+reorder_particles!(particles::Particles, blkspace::BlockSpace) = _reorder_particles!(particles, particlesinblocks(blkspace))
+parallel_each_particle(f, blkspace::BlockSpace) = parallel_each_particle(f, particlesinblocks(blkspace))
 
 ####################
 # block operations #
