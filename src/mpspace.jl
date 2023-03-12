@@ -1,7 +1,7 @@
-struct MPSpace{dim, T, It <: Interpolation, V, VI}
+struct MPSpace{dim, T, It <: Interpolation, V, VI, BS <: BlockSpace{dim}}
     interp::It
     mpvals::MPValues{dim, T, V, VI}
-    blkspace::BlockSpace{dim}
+    blkspace::BS
     sppat::Array{Bool, dim}
     gridsppat::Base.RefValue{Any}
 end
