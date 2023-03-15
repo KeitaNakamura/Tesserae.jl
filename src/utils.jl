@@ -3,7 +3,6 @@ nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
 isapproxzero(x::Number) = abs(x) < sqrt(eps(typeof(x)))
 
 # zero_recursive
-zero_recursive(::Type{Array{T, N}}) where {T, N} = Array{T, N}(undef, nfill(0, Val(N)))
 @generated function zero_recursive(::Type{T}) where {T}
     if Base._return_type(zero, Tuple{T}) == Union{}
         exps = [:(zero_recursive($t)) for t in fieldtypes(T)]
