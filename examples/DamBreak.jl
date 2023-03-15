@@ -39,7 +39,7 @@ function DamBreak(
 
     grid = generate_grid(GridState, dx, (0,3.22), (0,4.0))
     particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid)
-    space = MPSpace(interp, grid, particles)
+    space = MPSpace(interp, size(grid), length(particles))
     model = NewtonianFluid(MorrisWaterEOS(; c, ρ_ref=ρ₀); μ)
 
     @. particles.σ = zero(particles.σ)

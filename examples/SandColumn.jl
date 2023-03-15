@@ -42,7 +42,7 @@ function SandColumn(
 
     grid = generate_grid(GridState, dx, (0,1), (0,1))
     particles = generate_particles((x,y) -> 0.4<x<0.6 && y<h, ParticleState, grid)
-    space = MPSpace(interp, grid, particles)
+    space = MPSpace(interp, size(grid), length(particles))
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c=0, ϕ, ψ, tensioncutoff=0)
 

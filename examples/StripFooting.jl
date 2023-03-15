@@ -49,7 +49,7 @@ function StripFooting(
 
     grid = generate_grid(GridState, dx, (0,5), (0,5))
     particles = generate_particles((x,y) -> y < h, ParticleState, grid)
-    space = MPSpace(interp, grid, particles)
+    space = MPSpace(interp, size(grid), length(particles))
     elastic = LinearElastic(; E, ν)
     model = DruckerPrager(elastic, :planestrain; c, ϕ, ψ, tensioncutoff=false)
 
