@@ -6,7 +6,6 @@ function SandColumn(
         alg::TransferAlgorithm = DefaultTransfer();
         dx::Real               = 0.01,
         CFL::Real              = 1.0,
-        showprogress::Bool     = true,
         outdir::String         = joinpath(@__DIR__, "SandColumn.tmp"),
         output::Bool           = true,
     )

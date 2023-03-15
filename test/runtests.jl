@@ -20,7 +20,7 @@ function check_example(testname::String, case, interp, transfer=DefaultTransfer(
         rm(outdir; recursive = true, force = true)
 
         include(joinpath("../examples", "$testname.jl"))
-        @eval $(Symbol(testname))($interp, $transfer; showprogress=false, outdir=$outdir, $kwargs...)
+        @eval $(Symbol(testname))($interp, $transfer; outdir=$outdir, $kwargs...)
 
         result_file = joinpath(
             outdir,

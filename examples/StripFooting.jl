@@ -8,7 +8,6 @@ function StripFooting(
         dx::Real               = 0.1,
         CFL::Real              = 1.0,
         lockingfree::Bool      = false,
-        showprogress::Bool     = true,
         outdir::String         = joinpath(@__DIR__, "StripFooting.tmp"),
         output::Bool           = true,
     )

@@ -7,7 +7,6 @@ function DamBreak(
         t_stop::Real           = 2.0,  # 5.0
         dx::Real               = 0.07, # 0.014
         CFL::Real              = 0.1,
-        showprogress::Bool     = true,
         outdir::String         = joinpath(@__DIR__, "DamBreak.tmp"),
         output::Bool           = true,
     )
