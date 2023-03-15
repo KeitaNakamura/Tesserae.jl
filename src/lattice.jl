@@ -62,7 +62,7 @@ end
     @inbounds Lattice(get_axisarray(lattice)[ranges...], spacing(lattice), spacing_inv(lattice))
 end
 
-@inline function isinside(x::Vec{dim, T}, lattice::Lattice{dim, T}) where {dim, T}
+@inline function isinside(x::Vec, lattice::Lattice)
     axes = get_axes(lattice)
     @inbounds _isinside(SVec(map(first, axes)), SVec(map(last, axes)), SVec(x))
 end
@@ -131,7 +131,7 @@ julia> Marble.whichcell(lattice, Vec(1.5, 1.5))
 CartesianIndex(2, 2)
 ```
 """
-@inline function whichcell(lattice::Lattice{dim, T}, x::Vec{dim, T}) where {dim, T}
+@inline function whichcell(lattice::Lattice, x::Vec)
     isinside(x, lattice) || return nothing
     _whichcell(spacing_inv(lattice), SVec(first(lattice)), SVec(x))
 end

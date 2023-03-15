@@ -33,7 +33,8 @@ Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; values(spa
 @inline neighbornodes(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), i))
 @inline neighbornodes(space::MPSpace, grid::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), grid, i))
 
-function update!(space::MPSpace{dim, T}, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing) where {dim, T}
+function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing)
+    @assert gridsize(space) == size(grid)
     @assert num_particles(space) == length(particles)
 
     update!(get_blockspace(space), get_lattice(grid), particles.x)
