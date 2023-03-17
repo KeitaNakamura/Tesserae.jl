@@ -20,7 +20,7 @@ function value(::uGIMP, ξ::Real, l::Real) # `l` is normalized radius by dx
     ξ < 1+l/2 ? (2+l-2ξ)^2 / 8l       : zero(ξ)
 end
 @inline value(f::uGIMP, ξ::Vec, l::Real) = prod(value.(f, ξ, l))
-function value(f::uGIMP, lattice::Lattice, I::CartesianIndex, xp::Vec, lp::Real)
+@inline function value(f::uGIMP, lattice::Lattice, I::CartesianIndex, xp::Vec, lp::Real)
     @_propagate_inbounds_meta
     xi = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
@@ -30,7 +30,8 @@ end
 @inline value(f::uGIMP, lattice::Lattice, I::CartesianIndex, pt) = value(f, lattice, I, pt.x, pt.l)
 
 @inline function value_gradient(f::uGIMP, lattice::Lattice, I::CartesianIndex, pt)
-    ∇N, N = gradient(x -> value(f, lattice, I, x, pt.l), pt.x, :all)
+    @_propagate_inbounds_meta
+    ∇N, N = gradient(x -> (@_propagate_inbounds_meta; value(f, lattice, I, x, pt.l)), pt.x, :all)
     N, ∇N
 end
 
@@ -45,7 +46,7 @@ end
     indices, _ = neighbornodes(itp, lattice, pt)
 
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        mp.∇N[j], mp.N[j] = gradient(x->value(itp,lattice,i,x,pt.l), getx(pt), :all)
+        mp.N[j], mp.∇N[j] = value_gradient(itp, lattice, i, pt)
     end
 
     set_neighbornodes!(mp, indices)
