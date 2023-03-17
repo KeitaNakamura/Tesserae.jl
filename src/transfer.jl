@@ -160,21 +160,21 @@ end
 # G2P transfer #
 ################
 
-function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, dt::Real; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    grid_to_particle!(alg, system, Val(names), particles, grid, space, dt)
+function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
+    grid_to_particle!(alg, system, Val(names), particles, grid, space, only_dt...)
 end
 
-function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, dt::Real) where {names, dim}
+function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, only_dt...) where {names, dim}
     check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
     check_particles(particles, space)
     @threaded_inbounds for p in 1:num_particles(space)
-        grid_to_particle!(alg, system, Val(names), LazyRow(particles, p), grid, get_interpolation(space), values(space, p), dt)
+        grid_to_particle!(alg, system, Val(names), LazyRow(particles, p), grid, get_interpolation(space), values(space, p), only_dt...)
     end
     particles
 end
 
-@inline function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::Interpolation, mp::SubMPValues{dim}, dt::Real) where {names, dim}
+@inline function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::Interpolation, mp::SubMPValues{dim}, only_dt...) where {names, dim}
     @_propagate_inbounds_meta
 
     # there is no difference along with transfer algorithms for calculating `:∇v` and `:x`
@@ -243,6 +243,7 @@ end
     end
 
     if :x in names
+        dt = only(only_dt)
         pt.x += vₚ * dt
     end
 
