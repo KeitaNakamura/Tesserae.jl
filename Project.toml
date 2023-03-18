@@ -5,6 +5,7 @@ version = "1.2.1"
 
 [deps]
 PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 SIMD = "fdea26ae-647d-5447-a871-4b548cad5224"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"

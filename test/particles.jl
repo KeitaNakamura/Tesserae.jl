@@ -1,3 +1,5 @@
+using StableRNGs
+
 @testset "Generating particles" begin
     @testset "generation (random=$random)" for random in (false, true)
         # plane strain
@@ -15,6 +17,11 @@
         else
             @test sum(particles.V) ≈ 10^2/2 * 10 rtol=1e-2 # 1 radian
         end
+    end
+    @testset "Specify RNG" begin
+        lattice = Lattice(0.1, (0,10), (0,10))
+        particles = generate_particles((x,y) -> true, lattice; random=StableRNG(1234))
+        @test mean(particles.x) ≈ [4.985641459718793, 4.9856469624835285]
     end
     @testset "copied from existing particles" begin
         lattice = Lattice(0.1, (0,10), (0,10))

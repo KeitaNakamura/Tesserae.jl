@@ -1,22 +1,39 @@
-using PoissonDiskSampling
+import PoissonDiskSampling
+import Random
 
 const Particles = StructVector
 
-function generate_points_regularly(lattice::Lattice, n::Int)
+function grid_sampling(lattice::Lattice, n::Int)
     axes = get_axes(lattice)
     r = spacing(lattice) / 2n
     minmax(ax, r) = (first(ax)+r, last(ax)-r)
     Lattice(2r, minmax.(axes, r)...)
 end
 
-function generate_points_randomly(lattice::Lattice{dim}, n::Int) where {dim}
+function poisson_disk_sampling(rng, lattice::Lattice{dim}, n::Int) where {dim}
     # Determine minimum distance `d` between particles for Poisson disk sampling
     # so that the number of generated particles is almost the same as the grid sampling.
     # This is empirical equation (see https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
     d = spacing(lattice) / n / (1.7)^(1/dim)
     minmaxes = map((min,max)->(min,max), Tuple(first(lattice)), Tuple(last(lattice)))
-    points = PoissonDiskSampling.generate(minmaxes...; r = only(unique(d)))
+    points = PoissonDiskSampling.generate(rng, minmaxes...; r = only(unique(d)))
     map(eltype(lattice), points)
+end
+
+function point_sampling(random::Bool, lattice::Lattice, n::Int)
+    if random === true
+        poisson_disk_sampling(Random.GLOBAL_RNG, lattice, n)
+    else
+        grid_sampling(lattice, n)
+    end
+end
+point_sampling(rng, lattice::Lattice, n::Int) = poisson_disk_sampling(rng, lattice, n)
+
+function generate_particles(::Type{ParticleState}, points::AbstractArray{<: Vec}) where {ParticleState}
+    particles = StructVector{ParticleState}(undef, length(points))
+    fillzero!(particles)
+    @. particles.x = points
+    particles
 end
 
 function generate_particles(
@@ -24,25 +41,19 @@ function generate_particles(
         ::Type{ParticleState},
         lattice::Lattice{dim};
         n::Int = 2,
-        random::Bool = false,
+        random = false,
         system::CoordinateSystem = NormalSystem(),
     ) where {ParticleState, dim}
-    if random
-        allpoints = generate_points_randomly(lattice, n)
-    else
-        allpoints = generate_points_regularly(lattice, n)
-    end
+
+    allpoints = point_sampling(random, lattice, n)
+    mask = broadcast(Base.splat(isindomain), allpoints)
+    particles = generate_particles(ParticleState, view(allpoints, mask))
+
+    # currently points are generated in the entire domain
+    # so, simply deviding the total volume by the number of all points
+    # gives the volume of a particle.
     V = prod(last(lattice) - first(lattice)) / length(allpoints)
 
-    # find points `isindomain`
-    mask = broadcast(Base.splat(isindomain), allpoints)
-
-    particles = StructVector{ParticleState}(undef, count(mask))
-    fillzero!(particles)
-
-    if :x in propertynames(particles)
-        @. particles.x = allpoints[mask]
-    end
     if :V in propertynames(particles)
         if dim == 2 && system isa Axisymmetric
             @. particles.V = getindex(particles.x, 1) * V
@@ -51,10 +62,10 @@ function generate_particles(
         end
     end
     if :l in propertynames(particles)
-        if random
-            l = V^(1/dim)
-        else
+        if random === false
             l = spacing(lattice) / n
+        else
+            l = V^(1/dim)
         end
         particles.l .= l
     end
