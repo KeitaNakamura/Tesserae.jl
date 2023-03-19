@@ -8,6 +8,9 @@ get_sppat(A::Grid) = Trues(size(A))
 get_lattice(grid::Grid) = grid.x
 spacing(grid::Grid) = spacing(get_lattice(grid))
 
+generate_grid(lattice::Lattice) = StructArray((; x = lattice))
+generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Lattice(Float64, dx, minmax...))
+
 unsafe_update_sparsity_pattern!(grid::Grid, ::AbstractArray{Bool}) = nothing
 
 ##########
@@ -16,23 +19,26 @@ unsafe_update_sparsity_pattern!(grid::Grid, ::AbstractArray{Bool}) = nothing
 
 const SpGrid{N, T, C <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, C, I}
 
-# spgrid
-@generated function generate_grid(::Type{GridState}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridState, dim}
-    fieldname(GridState, 1) == :x || return :(error("generate_grid: first field name must be `:x`"))
+Base.@pure function infer_lattice_realtype(::Type{GridState}, ::Val{dim}) where {GridState, dim}
+    fieldname(GridState, 1) == :x || error("generate_grid: first field name must be `:x`")
     V = fieldtype(GridState, 1)
-    V <: Vec{dim} || return :(error("generate_grid: `fieldtype` of `:x` must be `<: Vec{$dim}`"))
+    V <: Vec{dim} || error("generate_grid: `fieldtype` of `:x` must be `<: Vec{$dim}`")
+    eltype(V)
+end
+
+# from lattice
+@generated function generate_grid(::Type{GridState}, lattice::Lattice{dim, T}) where {GridState, dim, T}
+    @assert infer_lattice_realtype(GridState, Val(dim)) == T
     exps = [:(SpArray{$T}(sppat)) for T in fieldtypes(GridState)[2:end]]
     quote
-        lattice = Lattice($(eltype(V)), dx, minmax...)
         sppat = SpPattern(size(lattice))
         StructArray{GridState}(tuple(lattice, $(exps...)))
     end
 end
-function generate_grid(::Type{T}, dx::Real, minmax::Vararg{Tuple{Real, Real}}) where {T <: Real}
-    lattice = Lattice(T, dx, minmax...)
-    StructArray((; x = lattice))
+function generate_grid(::Type{GridState}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridState, dim}
+    T = infer_lattice_realtype(GridState, Val(dim))
+    generate_grid(GridState, Lattice(T, dx, minmax...))
 end
-generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Float64, dx, minmax...)
 
 get_sppat(A::SpGrid) = get_sppat(getproperty(A, 2))
 
