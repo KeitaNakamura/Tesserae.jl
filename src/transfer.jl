@@ -30,7 +30,7 @@ function check_grid(grid::Grid, space::MPSpace)
 end
 function check_grid(grid::Union{SpGrid, SpArray}, space::MPSpace)
     @assert size(grid) == gridsize(space)
-    get_sppat(grid) !== get_gridsppat(space) &&
+    get_spinds(grid) !== get_gridspinds(space) &&
         error("Using different sparsity pattern between `MPSpace` and `Grid`")
 end
 

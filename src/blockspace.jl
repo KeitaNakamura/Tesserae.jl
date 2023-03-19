@@ -85,22 +85,15 @@ end
 sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
 sub2ind(::Dims, ::Nothing)::Int = 0
 
-# block-wise rough sparsity pattern
-# CubicBSpline is still ok with rng=1
-function update_sparsity_pattern!(sppat::AbstractArray{Bool}, bs::BlockSpace, rng::Int = 1)
-    @assert blocksize(size(sppat)) ==  blocksize(bs)
-    fillzero!(sppat)
-    @inbounds for I in CartesianIndices(blocksize(bs))
+function update_sparsity_pattern!(sppat::AbstractArray, bs::BlockSpace)
+    @assert size(sppat) ==  blocksize(bs)
+    CI = CartesianIndices(blocksize(bs))
+    @inbounds for I in CI
         if !iszero(num_particles(bs, I))
-            inds = neighbornodes_from_blockindex(size(sppat), I, rng)
-            sppat[inds] .= true
+            inds = (I - oneunit(I)):(I + oneunit(I))
+            sppat[inds ∩ CI] .= true
         end
     end
-end
-@inline function neighbornodes_from_blockindex(gridsize::Dims, blk::CartesianIndex, i::Int)
-    start = @. max((blk.I-1) << BLOCKFACTOR + 1 - i, 1)
-    stop = @. min(blk.I << BLOCKFACTOR + 1 + i, gridsize)
-    CartesianIndex(start):CartesianIndex(stop)
 end
 
 reorder_particles!(particles::Particles, blkspace::BlockSpace) = _reorder_particles!(particles, particlesinblocks(blkspace))
@@ -111,8 +104,7 @@ parallel_each_particle(f, blkspace::BlockSpace) = parallel_each_particle(f, part
 ####################
 
 blocksize(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCKFACTOR+1
-blocksize(lattice::Lattice) = blocksize(size(lattice))
-blocksize(grid::Grid) = blocksize(size(grid))
+blocksize(A::AbstractArray) = blocksize(size(A))
 
 """
     Marble.whichblock(lattice, x::Vec)

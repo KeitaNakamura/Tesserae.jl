@@ -3,7 +3,7 @@ struct MPSpace{dim, T, It <: Interpolation, V, VI, BS <: BlockSpace{dim}}
     mpvals::MPValues{dim, T, V, VI}
     blkspace::BS
     sppat::Array{Bool, dim}
-    gridsppat::Base.RefValue{Any}
+    gridspinds::Base.RefValue{Any}
 end
 
 # constructors
@@ -21,8 +21,8 @@ num_particles(space::MPSpace) = num_particles(values(space))
 get_interpolation(space::MPSpace) = space.interp
 get_blockspace(space::MPSpace) = space.blkspace
 get_sppat(space::MPSpace) = space.sppat
-get_gridsppat(space::MPSpace) = space.gridsppat[]
-set_gridsppat!(space::MPSpace, sppat) = space.gridsppat[] = sppat
+get_gridspinds(space::MPSpace) = space.gridspinds[]
+set_gridspinds!(space::MPSpace, spinds) = space.gridspinds[] = spinds
 
 reorder_particles!(particles::Particles, space::MPSpace) = reorder_particles!(particles, get_blockspace(space))
 
@@ -38,29 +38,15 @@ function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union
     @assert num_particles(space) == length(particles)
 
     update!(get_blockspace(space), get_lattice(grid), particles.x)
-    #
-    # When `filter` is given, following `update_mpvalues!` updates `space.sppat`, too.
-    # This consideration of sparsity pattern is necessary in some `Interpolation`s such as `WLS` and `KernelCorrection`.
-    # However, this updated sparsity pattern is not used for updating sparsity pattern of grid-state because
-    # the inactive nodes also need their values (even zero) for `NonzeroIndex` used in P2G.
-    # Thus, `update_sparsity_pattern!` must be executed after `update_mpvalues!`.
-    #
-    #            |      |      |                             |      |      |
-    #         ---×------×------×---                       ---●------●------●---
-    #            |      |      |                             |      |      |
-    #            |      |      |                             |      |      |
-    #         ---×------●------●---                       ---●------●------●---
-    #            |      |      |                             |      |      |
-    #            |      |      |                             |      |      |
-    #         ---●------●------●---                       ---●------●------●---
-    #            |      |      |                             |      |      |
-    #
-    #   < Sparsity pattern for `MPValue` >     < Sparsity pattern for Grid-state (`SpArray`) >
-    #
     update_mpvalues!(space, get_lattice(grid), particles, filter)
-    update_sparsity_pattern!(get_sppat(space), get_blockspace(space))
-    unsafe_update_sparsity_pattern!(grid, get_sppat(space))
-    set_gridsppat!(space, get_sppat(grid))
+
+    if grid isa SpGrid
+        update_sparsity_pattern!(reset_sparsity_pattern!(grid), get_blockspace(space))
+        update_sparsity_pattern!(grid)
+        set_gridspinds!(space, get_spinds(grid))
+    else
+        set_gridspinds!(space, nothing)
+    end
 
     space
 end

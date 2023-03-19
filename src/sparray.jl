@@ -1,24 +1,46 @@
-struct SpPattern{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Bool, dim}
-    indices::Tindices
+struct SpIndices{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Int, dim}
+    dims::Dims{dim}
+    blkinds::Tindices
 end
 
-SpPattern(dims::Tuple{Vararg{Int}}) = SpPattern(fill(-1, dims))
-SpPattern(dims::Int...) = SpPattern(dims)
+SpIndices(dims::Tuple{Vararg{Int}}) = SpIndices(dims, fill(UInt32(0), blocksize(dims)))
+SpIndices(dims::Int...) = SpIndices(dims)
 
-Base.size(sppat::SpPattern) = size(sppat.indices)
-Base.IndexStyle(::Type{<: SpPattern}) = IndexLinear()
+Base.size(sp::SpIndices) = sp.dims
+Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()
 
-@inline get_spindices(x::SpPattern) = x.indices
-@inline Base.getindex(sppat::SpPattern, i::Integer) = (@_propagate_inbounds_meta; sppat.indices[i] !== -1)
+@inline blockindices(sp::SpIndices) = sp.blkinds
 
-function update_sparsity_pattern!(sppat::SpPattern, mask::AbstractArray{Bool})
-    @assert size(sppat) == size(mask)
-    inds = get_spindices(sppat)
-    count = 0
-    @inbounds for i in eachindex(sppat, mask)
-        inds[i] = (mask[i] ? count += 1 : -1)
+@inline function _blocklocal(I::Vararg{Integer, dim}) where {dim}
+    j = I .- 1
+    blk = @. j >> BLOCKFACTOR + 1
+    lcl = @. j & (1<<BLOCKFACTOR - 1) + 1
+    blk, lcl
+end
+@inline function blocklocal(I::Vararg{Integer, dim}) where {dim}
+    blk, lcl = _blocklocal(I...)
+    LI = LinearIndices(nfill(1 .<< BLOCKFACTOR, Val(dim)))
+    @inbounds blk, LI[lcl...]
+end
+
+@inline function Base.getindex(sp::SpIndices{dim}, I::Vararg{Integer, dim}) where {dim}
+    @boundscheck checkbounds(sp, I...)
+    blk, lcl = blocklocal(I...)
+    @inbounds begin
+        n = blockindices(sp)[blk...]
+        index = (n-1) << (BLOCKFACTOR*dim) + lcl
+        ifelse(iszero(n), zero(index), index)
     end
-    count
+end
+
+reset_sparsity_pattern!(sp::SpIndices) = fillzero!(blockindices(sp))
+function update_sparsity_pattern!(sp::SpIndices{dim}) where {dim}
+    inds = blockindices(sp)
+    count = 0
+    @inbounds for i in eachindex(inds)
+        inds[i] = iszero(inds[i]) ? 0 : (count += 1)
+    end
+    count << (BLOCKFACTOR*dim)
 end
 
 """
@@ -72,45 +94,45 @@ julia> A[1,1] = 2; A[1,1]
 """
 struct SpArray{T, dim, V <: AbstractVector{T}, A} <: AbstractArray{T, dim}
     data::V
-    sppat::SpPattern{dim, A}
-    shared_sppat::Bool
+    spinds::SpIndices{dim, A}
+    shared_spinds::Bool
 end
 
 function SpArray{T}(dims::Tuple{Vararg{Int}}) where {T}
     data = Vector{T}(undef, 0)
-    sppat = SpPattern(dims)
-    SpArray(data, sppat, false)
+    spinds = SpIndices(dims)
+    SpArray(data, spinds, false)
 end
 SpArray{T}(dims::Int...) where {T} = SpArray{T}(dims)
 
-function SpArray{T}(sppat::SpPattern) where {T}
+function SpArray{T}(spinds::SpIndices) where {T}
     data = Vector{T}(undef, 0)
-    SpArray(data, sppat, true)
+    SpArray(data, spinds, true)
 end
 
-Base.IndexStyle(::Type{<: SpArray}) = IndexLinear()
-Base.size(A::SpArray) = size(A.sppat)
+Base.IndexStyle(::Type{<: SpArray}) = IndexCartesian()
+Base.size(A::SpArray) = size(A.spinds)
 
 nonzeros(A::SpArray) = A.data
-get_sppat(A::SpArray) = A.sppat
+get_spinds(A::SpArray) = A.spinds
 
 # return zero if the index is not active
-@inline function Base.getindex(A::SpArray, i::Integer)
-    @boundscheck checkbounds(A, i)
-    sppat = get_sppat(A)
+@inline function Base.getindex(A::SpArray{<: Any, dim}, I::Vararg{Integer, dim}) where {dim}
+    @boundscheck checkbounds(A, I...)
+    spinds = get_spinds(A)
     @inbounds begin
-        index = get_spindices(sppat)[i]
-        index !== -1 ? nonzeros(A)[index] : zero_recursive(eltype(A))
+        index = spinds[I...]
+        iszero(index) ? zero_recursive(eltype(A)) : nonzeros(A)[index]
     end
 end
 
 # do nothing if the index is not active (don't throw error!!)
-@inline function Base.setindex!(A::SpArray, v, i::Integer)
-    @boundscheck checkbounds(A, i)
-    sppat = get_sppat(A)
+@inline function Base.setindex!(A::SpArray{<: Any, dim}, v, I::Vararg{Integer, dim}) where {dim}
+    @boundscheck checkbounds(A, I...)
+    spinds = get_spinds(A)
     @inbounds begin
-        index = get_spindices(sppat)[i]
-        index === -1 && return A
+        index = spinds[I...]
+        iszero(index) && return A
         nonzeros(A)[index] = v
     end
     A
@@ -118,16 +140,23 @@ end
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
-function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
-    A.shared_sppat && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
-    unsafe_update_sparsity_pattern!(A, sppat)
+function reset_sparsity_pattern!(A::SpArray)
+    A.shared_spinds && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
+    unsafe_reset_sparsity_pattern!(A)
 end
 
-function unsafe_update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
-    @assert size(A) == size(sppat)
-    n = update_sparsity_pattern!(get_sppat(A), sppat)
+function update_sparsity_pattern!(A::SpArray)
+    A.shared_spinds && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
+    unsafe_update_sparsity_pattern!(A)
+end
+
+function unsafe_reset_sparsity_pattern!(A::SpArray)
+    reset_sparsity_pattern!(get_spinds(A))
+end
+function unsafe_update_sparsity_pattern!(A::SpArray)
+    n = update_sparsity_pattern!(get_spinds(A))
     resize!(nonzeros(A), n)
-    A
+    n
 end
 
 ###############################
@@ -158,28 +187,28 @@ end
     A
 end
 
-@inline function nonzeroindex(sppat::SpPattern, I)
-    @boundscheck checkbounds(sppat, I)
-    @inbounds NonzeroIndex(I, get_spindices(sppat)[I])
+@inline function nonzeroindex(inds::SpIndices, I)
+    @boundscheck checkbounds(inds, I)
+    @inbounds NonzeroIndex(I, inds[I])
 end
 
-struct NonzeroIndices{I, dim, Tparent <: AbstractArray{I, dim}, Tsppat <: SpPattern{dim}} <: AbstractArray{NonzeroIndex{I}, dim}
+struct NonzeroIndices{I, dim, Tparent <: AbstractArray{I, dim}, Tspinds <: SpIndices{dim}} <: AbstractArray{NonzeroIndex{I}, dim}
     parent::Tparent
-    sppat::Tsppat
+    spinds::Tspinds
 end
 Base.parent(x::NonzeroIndices) = x.parent
 Base.size(x::NonzeroIndices) = size(parent(x))
-get_sppat(x::NonzeroIndices) = x.sppat
+get_spinds(x::NonzeroIndices) = x.spinds
 @inline function Base.getindex(x::NonzeroIndices, I...)
     @boundscheck checkbounds(x, I...)
     @inbounds begin
         index = parent(x)[I...]
-        nonzeroindex(get_sppat(x), index)
+        nonzeroindex(get_spinds(x), index)
     end
 end
-@inline function nonzeroindices(sppat::SpPattern, inds)
-    @boundscheck checkbounds(sppat, inds)
-    NonzeroIndices(inds, sppat)
+@inline function nonzeroindices(spinds::SpIndices, inds)
+    @boundscheck checkbounds(spinds, inds)
+    NonzeroIndices(inds, spinds)
 end
 
 #############
@@ -197,8 +226,8 @@ end
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bcf = Broadcast.flatten(bc)
-    !identical_sppat(dest, bcf.args...) &&
-        error("SpArray: broadcast along with different `SpPattern`s is not supported")
+    !identical_spinds(dest, bcf.args...) &&
+        error("SpArray: broadcast along with different `SpIndices`s is not supported")
     Base.copyto!(_nonzeros(dest), _nonzeros(bc))
     dest
 end
@@ -212,13 +241,13 @@ _ok(::Type{<: AbstractArray}) = false
 _ok(::Type{<: SpArray})       = true
 _ok(::Type{<: Tensor})        = true
 _ok(::Type{<: Any})           = true
-@generated function identical_sppat(args...)
+@generated function identical_spinds(args...)
     all(_ok, args) || return :(false)
-    exps = [:(args[$i].sppat) for i in 1:length(args) if args[i] <: SpArray]
+    exps = [:(args[$i].spinds) for i in 1:length(args) if args[i] <: SpArray]
     n = length(exps)
     quote
-        sppats = tuple($(exps...))
-        @nall $n i -> sppats[1] === sppats[i]
+        spindss = tuple($(exps...))
+        @nall $n i -> spindss[1] === spindss[i]
     end
 end
 
@@ -237,7 +266,7 @@ Base.axes(x::ShowSpArray) = axes(x.parent)
 @inline function Base.getindex(x::ShowSpArray, i::Integer...)
     @_propagate_inbounds_meta
     p = x.parent
-    get_sppat(p)[i...] ? maybecustomshow(p[i...]) : CDot()
+    iszero(get_spinds(p)[i...]) ? CDot() : maybecustomshow(p[i...])
 end
 maybecustomshow(x) = x
 maybecustomshow(x::SpArray) = ShowSpArray(x)

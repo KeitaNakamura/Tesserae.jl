@@ -63,7 +63,7 @@ end
     getfield(mpvalues, :indices)[i]
 end
 @inline neighbornodes(mpvalues::MPValues, ::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(mpvalues, i))
-@inline neighbornodes(mpvalues::MPValues, grid::SpGrid, i::Integer) = (@_propagate_inbounds_meta; nonzeroindices(get_sppat(grid), neighbornodes(mpvalues, i)))
+@inline neighbornodes(mpvalues::MPValues, grid::SpGrid, i::Integer) = (@_propagate_inbounds_meta; nonzeroindices(get_spinds(grid), neighbornodes(mpvalues, i)))
 @inline function Base.values(mpvalues::MPValues, p::Integer)
     @boundscheck @assert 1 ≤ p ≤ num_particles(mpvalues)
     SubMPValues(mpvalues, p)
