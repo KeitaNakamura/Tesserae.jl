@@ -110,7 +110,7 @@ parallel_each_particle(f, blkspace::BlockSpace) = parallel_each_particle(f, part
 # block operations #
 ####################
 
-blocksize(gridsize::Tuple{Vararg{Int}}) = (ncells = gridsize .- 1; @. (ncells - 1) >> BLOCKFACTOR + 1)
+blocksize(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCKFACTOR+1
 blocksize(lattice::Lattice) = blocksize(size(lattice))
 blocksize(grid::Grid) = blocksize(size(grid))
 
