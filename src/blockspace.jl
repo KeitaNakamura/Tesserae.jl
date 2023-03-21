@@ -29,12 +29,16 @@ Base.size(x::ParticlesInBlocksArray) = size(x.stops)
 end
 
 # block-wise parallel computation
-function parallel_each_particle(f, blkarray::ParticlesInBlocksArray)
-    for blocks in threadsafe_blocks(size(blkarray))
-        blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
-        @threaded_inbounds for blk in blocks′
-            foreach(f, blkarray[blk])
+function parallel_each_particle(f, blkarray::ParticlesInBlocksArray, nparticles::Int; parallel::Bool)
+    if Threads.nthreads()>1 && parallel
+        for blocks in threadsafe_blocks(size(blkarray))
+            blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
+            @threaded_inbounds for blk in blocks′
+                foreach(f, blkarray[blk])
+            end
         end
+    else
+        foreach(f, 1:nparticles)
     end
 end
 
@@ -56,10 +60,10 @@ blocksize(bs::BlockSpace) = size(particlesinblocks(bs))
 num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; last(bs.nparticles)[index...])
 particlesinblocks(bs::BlockSpace) = bs.blkarray
 
-function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector)
+function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector; parallel::Bool)
     blkarray = particlesinblocks(bs)
     fillzero!.(bs.nparticles)
-    @threaded_inbounds :static for p in eachindex(xₚ)
+    @threaded_inbounds parallel :static for p in eachindex(xₚ)
         id = Threads.threadid()
         blk = sub2ind(blocksize(bs), whichblock(lattice, xₚ[p]))
         bs.blockindices[p] = blk
@@ -70,7 +74,7 @@ function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector)
     end
     nptsinblks = last(bs.nparticles)
     cumsum!(vec(blkarray.stops), vec(nptsinblks))
-    @threaded_inbounds :static for p in eachindex(xₚ)
+    @threaded_inbounds parallel :static for p in eachindex(xₚ)
         blk = bs.blockindices[p]
         if !iszero(blk)
             id = Threads.threadid()
@@ -97,7 +101,7 @@ function update_sparsity_pattern!(sppat::AbstractArray, bs::BlockSpace)
 end
 
 reorder_particles!(particles::Particles, blkspace::BlockSpace) = _reorder_particles!(particles, particlesinblocks(blkspace))
-parallel_each_particle(f, blkspace::BlockSpace) = parallel_each_particle(f, particlesinblocks(blkspace))
+parallel_each_particle(f, blkspace::BlockSpace, nparticles::Int; parallel::Bool) = parallel_each_particle(f, particlesinblocks(blkspace), nparticles; parallel)
 
 ####################
 # block operations #

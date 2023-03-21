@@ -5,7 +5,7 @@
         @test Marble.blocksize(size(lattice)) == (2, 3)
         xₚ = Vec{2,T}[(2,2), (8.5, 18), (8.5, 21), (4.3, 18), (5, 14)]
         blkspace = Marble.BlockSpace(Marble.blocksize(size(lattice)), length(xₚ))
-        update!(blkspace, lattice, xₚ)
+        update!(blkspace, lattice, xₚ; parallel=true)
         @test Marble.particlesinblocks(blkspace) == reshape([[1], [5], [4],
                                                              [ ], [ ], [2]], 3,2) |> permutedims
     end

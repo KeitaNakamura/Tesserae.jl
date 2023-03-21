@@ -33,12 +33,12 @@ Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; values(spa
 @inline neighbornodes(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), i))
 @inline neighbornodes(space::MPSpace, grid::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), grid, i))
 
-function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing)
+function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing, parallel::Bool=true)
     @assert gridsize(space) == size(grid)
     @assert num_particles(space) == length(particles)
 
-    update!(get_blockspace(space), get_lattice(grid), particles.x)
-    update_mpvalues!(space, get_lattice(grid), particles, filter)
+    update!(get_blockspace(space), get_lattice(grid), particles.x; parallel)
+    update_mpvalues!(space, get_lattice(grid), particles, filter; parallel)
 
     if grid isa SpGrid
         update_sparsity_pattern!(reset_sparsity_pattern!(grid), get_blockspace(space))
@@ -51,28 +51,28 @@ function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union
     space
 end
 
-function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles, filter::Union{Nothing, AbstractArray{Bool}})
+function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles, filter::Union{Nothing, AbstractArray{Bool}}; parallel::Bool)
     @assert gridsize(space) == size(lattice)
     @assert length(particles) == num_particles(space)
 
     if filter === nothing
-        update!(values(space), get_interpolation(space), lattice, particles)
+        update!(values(space), get_interpolation(space), lattice, particles; parallel)
     else
         # handle excluded domain
         sppat = get_sppat(space)
         sppat .= filter
-        parallel_each_particle(space) do p
+        parallel_each_particle(space; parallel) do p
             @inbounds begin
                 inds = neighbornodes(lattice, particles.x[p], 1)
                 sppat[inds] .= true
             end
         end
-        update!(values(space), get_interpolation(space), lattice, sppat, particles)
+        update!(values(space), get_interpolation(space), lattice, sppat, particles; parallel)
     end
 
     space
 end
 
-function parallel_each_particle(f, space::MPSpace)
-    parallel_each_particle(f, get_blockspace(space))
+function parallel_each_particle(f, space::MPSpace; parallel::Bool=true)
+    parallel_each_particle(f, get_blockspace(space), num_particles(space); parallel)
 end

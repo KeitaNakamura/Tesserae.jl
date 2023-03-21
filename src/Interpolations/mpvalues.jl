@@ -122,15 +122,15 @@ end
 end
 
 # MPValues
-function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles)
+function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles; parallel::Bool)
     @assert num_particles(mpvalues) == length(particles)
     @assert size(lattice) == size(sppat)
-    @threaded_inbounds for p in 1:num_particles(mpvalues)
+    @threaded_inbounds parallel for p in 1:num_particles(mpvalues)
         update!(values(mpvalues, p), itp, lattice, sppat, LazyRow(particles, p))
     end
 end
-function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, particles::Particles)
-    update!(mpvalues, itp, lattice, Trues(size(lattice)), particles)
+function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, particles::Particles; parallel::Bool)
+    update!(mpvalues, itp, lattice, Trues(size(lattice)), particles; parallel)
 end
 
 # SubMPValues

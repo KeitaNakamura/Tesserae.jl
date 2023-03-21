@@ -42,26 +42,16 @@ end
 # P2G transfer #
 ################
 
-function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    particle_to_grid!(alg, system, Val(names), grid, particles, space)
+function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+    particle_to_grid!(alg, system, Val(names), grid, particles, space; parallel)
 end
 
-function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace) where {names}
+function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace; parallel::Bool) where {names}
     check_statenames(names, (:m, :mv, :f))
     check_grid(grid, space)
     check_particles(particles, space)
-    particle_to_grid!(alg, system, Val(names), grid, particles, get_interpolation(space), values(space), get_blockspace(space))
-    grid
-end
-
-#------------+
-# scattering |
-#------------+
-
-# never check bounds!!
-function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, names::Val, grid::Grid, particles::Particles, itp::Interpolation, mpvalues::MPValues, blkspace::BlockSpace)
-    parallel_each_particle(blkspace) do p
-        @inbounds particle_to_grid!(alg, system, names, grid, LazyRow(particles, p), itp, values(mpvalues, p))
+    parallel_each_particle(space; parallel) do p
+        @inbounds particle_to_grid!(alg, system, Val(names), grid, LazyRow(particles, p), get_interpolation(space), values(space, p))
     end
     grid
 end
@@ -160,15 +150,15 @@ end
 # G2P transfer #
 ################
 
-function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem())
-    grid_to_particle!(alg, system, Val(names), particles, grid, space, only_dt...)
+function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+    grid_to_particle!(alg, system, Val(names), particles, grid, space, only_dt...; parallel)
 end
 
-function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, only_dt...) where {names, dim}
+function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, only_dt...; parallel::Bool) where {names, dim}
     check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
     check_particles(particles, space)
-    @threaded_inbounds for p in 1:num_particles(space)
+    @threaded_inbounds parallel for p in 1:num_particles(space)
         grid_to_particle!(alg, system, Val(names), LazyRow(particles, p), grid, get_interpolation(space), values(space, p), only_dt...)
     end
     particles
@@ -328,7 +318,7 @@ end
     end
 end
 
-function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::AbstractVector, grid::Grid, space::MPSpace)
+function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ::AbstractVector, grid::Grid, space::MPSpace; parallel::Bool=true)
     check_grid(grid, space)
     check_particles(vals, space)
     check_particles(xₚ, space)
@@ -338,7 +328,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
     fillzero!(grid.poly_coef)
     fillzero!(grid.poly_mat)
 
-    parallel_each_particle(space) do p
+    parallel_each_particle(space; parallel) do p
         @inbounds begin
             mp = values(space, p)
             for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
@@ -353,7 +343,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
 
     @. grid.poly_coef = safe_inv(grid.poly_mat) ⋅ grid.poly_coef
 
-    @threaded_inbounds for p in 1:num_particles(space)
+    @threaded_inbounds parallel for p in 1:num_particles(space)
         val = zero(eltype(vals))
         mp = values(space, p)
         for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
