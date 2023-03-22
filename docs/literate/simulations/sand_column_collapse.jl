@@ -49,6 +49,7 @@ function sand_column_collapse(
         b  :: Vec{2, Float64}
         l  :: Float64                          # for uGIMP
         B  :: SecondOrderTensor{2, Float64, 4} # for APIC
+        C  :: Mat{2, 3, Float64, 6}            # for WLS
     end
 
     ## grid
@@ -170,3 +171,5 @@ using Test                                                                      
 @test mean(sand_column_collapse(uGIMP(),                              FLIP(); output=false, test=true).x) ≈ [0.0026972982524636115, 0.13743177648166474] rtol=1e-5 #src
 @test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), TPIC(); output=false, test=true).x) ≈ [0.002198603580244651, 0.13051022570299914]  rtol=1e-5 #src
 @test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), APIC(); output=false, test=true).x) ≈ [0.0019303698611112309, 0.13037068196959958] rtol=1e-5 #src
+@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()),        TPIC(); output=false, test=true).x) ≈ [0.0018033853076878108, 0.13277634910726227] rtol=1e-5 #src
+@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()), WLSTransfer(); output=false, test=true).x) ≈ [0.0018033853076878108, 0.13277634910726227] rtol=1e-5 #src

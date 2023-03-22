@@ -47,6 +47,7 @@ function dam_break(
         b  :: Vec{2, Float64}
         l  :: Float64                          # for uGIMP
         B  :: SecondOrderTensor{2, Float64, 4} # for APIC
+        C  :: Mat{2, 3, Float64, 6}            # for WLS
     end
 
     ## grid
@@ -141,3 +142,5 @@ using Test                                                                      
 @test mean(dam_break(KernelCorrection(QuadraticBSpline()), TPIC(); output=false, test=true).x) ≈ [1.6289726447675077, 0.11321605792384627] rtol=1e-5 #src
 @test mean(dam_break(KernelCorrection(QuadraticBSpline()), APIC(); output=false, test=true).x) ≈ [1.6294993733786765, 0.11320682736922087] rtol=1e-5 #src
 @test mean(dam_break(KernelCorrection(QuadraticBSpline()), FLIP(); output=false, test=true).x) ≈ [1.482050336414871, 0.13076917336964955]  rtol=1e-5 #src
+@test mean(dam_break(LinearWLS(QuadraticBSpline()),        TPIC(); output=false, test=true).x) ≈ [1.637148881940021, 0.11354987067566219]  rtol=1e-5 #src
+@test mean(dam_break(LinearWLS(QuadraticBSpline()), WLSTransfer(); output=false, test=true).x) ≈ [1.637148881940021, 0.11354987067566219]  rtol=1e-5 #src
