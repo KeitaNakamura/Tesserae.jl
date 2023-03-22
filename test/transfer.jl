@@ -44,7 +44,7 @@
         for include_near_boundary in (true, false)
             for kernel in (QuadraticBSpline(), CubicBSpline())
                 interp = LinearWLS(kernel)
-                wls, apic, tpic = map((DefaultTransfer(), APIC(), TPIC())) do alg
+                wls, apic, tpic = map((WLSTransfer(), APIC(), TPIC())) do alg
                     dt = 0.002
 
                     if include_near_boundary
@@ -94,8 +94,8 @@
         for include_near_boundary in (true, false,)
             @testset "$kernel" for kernel in (QuadraticBSpline(), CubicBSpline())
                 @testset "$interp" for interp in (KernelCorrection(kernel), LinearWLS(kernel))
-                    @testset "$alg" for alg in (FLIP(), TPIC(), APIC(), DefaultTransfer())
-                        interp isa KernelCorrection && alg isa DefaultTransfer && continue
+                    @testset "$alg" for alg in (FLIP(), TPIC(), APIC(), WLSTransfer())
+                        interp isa KernelCorrection && alg isa WLSTransfer && continue
 
                         dt = 1.0
 

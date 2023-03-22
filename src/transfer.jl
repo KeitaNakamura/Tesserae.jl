@@ -6,7 +6,6 @@ Marble.jl supports following transfer algorithms:
 * Taylor transfers: [`TFLIP`](@ref), [`TPIC`](@ref)
 """
 abstract type TransferAlgorithm end
-struct DefaultTransfer <: TransferAlgorithm end
 
 """
     FLIP()
@@ -219,7 +218,9 @@ See [`TaylorTransfer`](@ref).
 """
 const TPIC  = TaylorTransfer{PIC}
 
-const FLIPGroup = Union{DefaultTransfer, FLIP, AFLIP, TFLIP}
+struct WLSTransfer <: TransferAlgorithm end
+
+const FLIPGroup = Union{FLIP, AFLIP, TFLIP}
 const PICGroup = Union{PIC, APIC, TPIC}
 
 ###########
@@ -261,7 +262,7 @@ transfer algorithms. See each algorithm in [`TransferAlgorithm`](@ref) for more 
     If you set `system = Axisymmetric()` in two dimensional case, `particles.x[p][1]`
     is used for the radius position of the particle `p`.
 """
-function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
     particle_to_grid!(alg, system, Val(names), grid, particles, space; parallel)
 end
 
@@ -295,7 +296,7 @@ end
 
     # grid momentum depends on transfer algorithms
     if :mv in names
-        if alg isa DefaultTransfer && itp isa WLS
+        if alg isa WLSTransfer && itp isa WLS
             P = x -> value(get_basis(itp), x)
             xₚ = pt.x
             mₚCₚ = pt.m * pt.C
@@ -346,7 +347,7 @@ end
         # grid momentum depends on transfer algorithms
         if :mv in names
             xᵢ = grid.x[i]
-            if alg isa DefaultTransfer && itp isa WLS
+            if alg isa WLSTransfer && itp isa WLS
                 grid.mv[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
             elseif alg isa AffineTransfer
                 grid.mv[i] += N*(mₚvₚ + mₚCₚ⋅(xᵢ-xₚ))
@@ -388,7 +389,7 @@ via `getproperty`, which depends on the transfer algorithms. See each algorithm 
     If you set `system = Axisymmetric()` in two dimensional case, `particles.x[p][1]`
     is used for the radius position of the particle `p`.
 """
-function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
     grid_to_particle!(alg, system, Val(names), particles, grid, space, only_dt...; parallel)
 end
 
@@ -491,8 +492,8 @@ end
     end
 end
 
-# special default transfer for `WLS` interpolation
-@inline function grid_to_particle!(::DefaultTransfer, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::WLS, mp::SubMPValues{dim}, dt::Real) where {names, dim}
+# special transfer for `WLS` interpolation
+@inline function grid_to_particle!(::WLSTransfer, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::WLS, mp::SubMPValues{dim}, dt::Real) where {names, dim}
     @_propagate_inbounds_meta
 
     basis = get_basis(itp)

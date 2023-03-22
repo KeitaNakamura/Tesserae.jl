@@ -56,7 +56,6 @@ export
     particle_to_grid!,
     grid_to_particle!,
     TransferAlgorithm,
-    DefaultTransfer,
     FLIP,
     PIC,
     AffineTransfer,
@@ -65,6 +64,7 @@ export
     TaylorTransfer,
     TFLIP,
     TPIC,
+    WLSTransfer,
 # VTK
     openvtk,
     openvtm,
