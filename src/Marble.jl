@@ -32,6 +32,7 @@ export
     SpGrid,
     generate_grid,
     spacing,
+    isnonzero,
 # Particles
     Particles,
     generate_particles,

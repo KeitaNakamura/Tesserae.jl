@@ -21,13 +21,17 @@ function poisson_disk_sampling(rng, lattice::Lattice{dim}, n::Int) where {dim}
 end
 
 function point_sampling(random::Bool, lattice::Lattice, n::Int)
-    if random === true
+    if random == true
         poisson_disk_sampling(Random.GLOBAL_RNG, lattice, n)
     else
         grid_sampling(lattice, n)
     end
 end
 point_sampling(rng, lattice::Lattice, n::Int) = poisson_disk_sampling(rng, lattice, n)
+
+Base.@pure function infer_particles_type(::Type{ParticleState}) where {ParticleState}
+    Base._return_type(StructVector{ParticleState}, Tuple{UndefInitializer, Int})
+end
 
 function generate_particles(::Type{ParticleState}, points::AbstractArray{<: Vec}) where {ParticleState}
     particles = StructVector{ParticleState}(undef, length(points))
@@ -79,7 +83,35 @@ function generate_particles(isindomain::Function, lattice::Lattice{dim, T}; kwar
     generate_particles(isindomain, ParticleState, lattice; kwargs...)
 end
 
-# for grid
+"""
+    generate_particles(isindomain, grid; <keyword arguments>)
+    generate_particles(isindomain, ParticleState, grid; <keyword arguments>)
+
+Generate particles (material points) with type `ParticleState`.
+
+`isindomain` is a function where particles are actually generated if `isindomain` returns `true`.
+The arguments of `isindomain` are the coordinates. For example, `isindomain(x,y)` in 2D and
+`isindomain(x,y,z)` in 3D.
+
+This function returns `StructVector` (see [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl)).
+It is strongly recommended that `ParticleState` is bits type, i.e., `isbitstype(ParticleState)`
+returns `true`. It is possible to use `NamedTuple` for `ParticleState`.
+
+# Properties
+
+Some property names have specific meaning and they are automatically initialized.
+
+* `x::Vec` : particle position
+* `V::Real` : particle volume
+* `l::Real` : particle size
+
+If `ParticleState` is not given, the `NamedTuple` including above properties is used.
+
+# Keyword arguments
+* `n::Int`: the number of particles in cell along with axis. So, when `n = 2` is given, the total number of particles per cell becomes `2`, `4` and `8` in 1D, 2D and 3D, respectively. `n = 2` is used by default.
+* `random::Bool`: Poisson disk sampling is used when `random = true` (`random = false` by default). In the random sampling, minimum distance between particles is set to `spacing(grid) / n`.
+* `system::CoordinateSystem`: use `Axisymmetric()` for axisymmetric simulations.
+"""
 generate_particles(isindomain::Function, ::Type{ParticleState}, grid::Grid; kwargs...) where {ParticleState} = generate_particles(isindomain, ParticleState, grid.x; kwargs...)
 generate_particles(isindomain::Function, grid::Grid; kwargs...) = generate_particles(isindomain, grid.x; kwargs...)
 

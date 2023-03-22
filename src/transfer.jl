@@ -1,17 +1,222 @@
+"""
+Marble.jl supports following transfer algorithms:
+
+* Basic transfers: [`FLIP`](@ref), [`PIC`](@ref)
+* Affine transfers: [`AFLIP`](@ref), [`APIC`](@ref)
+* Taylor transfers: [`TFLIP`](@ref), [`TPIC`](@ref)
+"""
 abstract type TransferAlgorithm end
 struct DefaultTransfer <: TransferAlgorithm end
-# classical
+
+"""
+    FLIP()
+
+FLIP (fluid-implicit-particle) transfer algorithm [^FLIP]. This algorithm is widely used as
+the standard MPM formulation. The FLIP transfer is less dissipative but also less stable
+than [`PIC`](@ref) (particle-in-cell) transfer.
+
+[^FLIP]: [Brackbill, J. U., & Ruppel, H. M. (1986). FLIP: A method for adaptively zoned, particle-in-cell calculations of fluid flows in two dimensions. *Journal of Computational physics*, 65(2), 314-343.](https://doi.org/10.1016/0021-9991(86)90211-1)
+
+# Particle-to-grid transfer
+
+```math
+\\begin{aligned}
+m_i^n &= \\sum_p N_{ip}^n m_p \\\\
+m_i^n \\bm{v}_i^n &= \\sum_p N_{ip}^n m_p \\bm{v}_p^n \\\\
+\\bm{f}_i^n &= -\\sum_p V_p^n \\bm{\\sigma}_p^n \\cdot \\nabla N_{ip}^n + \\sum_p N_{ip}^n m_p \\bm{b}_p \\\\
+\\end{aligned}
+```
+
+The required properties in [`particle_to_grid!`](@ref) are follows:
+
+- ``m_i^n`` : `grid.m :: Real`
+    * ``m_p`` : `particles.m :: Real`
+- ``m_i^n\\bm{v}_i^n`` : `grid.mv :: Vec`:
+    * ``m_p`` : `particles.m :: Real`
+    * ``\\bm{v}_p^n`` : `particles.v :: Vec`
+- ``\\bm{f}_i^n`` : `grid.f :: Vec`
+    * ``V_p^n`` : `particles.V :: Real`
+    * ``\\bm{\\sigma}_p^n`` :  `particles.σ :: SymmetricSecondOrderTensor`
+    * ``\\bm{b}_p`` (considered if exists) : `particles.b :: Vec`
+
+# Grid-to-particle transfer
+
+```math
+\\begin{aligned}
+\\bm{v}_p^{n+1} &= \\bm{v}_p^n + \\sum_i N_{ip}^n (\\bm{v}_i^{n+1} - \\bm{v}_i^n) \\\\
+\\nabla\\bm{v}_p^{n+1} &= \\sum_i \\bm{v}_i^{n+1} \\otimes \\nabla N_{ip}^n \\\\
+\\bm{x}_p^{n+1} &= \\bm{x}_p^n + \\Delta{t} \\sum_i N_{ip}^n \\bm{v}_i^{n+1}
+\\end{aligned}
+```
+
+The required properties in [`grid_to_particle!`](@ref) are follows:
+
+- ``\\bm{v}_p^{n+1}`` : `particles.v :: Vec`
+    * ``\\bm{v}_i^{n+1}`` : `grid.v :: Vec`
+    * ``\\bm{v}_i^{n}`` : `grid.vⁿ :: Vec` (type `v\\^n[tab]`)
+- ``\\nabla\\bm{v}_p^{n+1}`` : `particles.∇v :: Vec` (type `\\nabla[tab]` for `∇`)
+    * ``\\bm{v}_i^{n+1}`` : `grid.v :: Vec`
+- ``\\bm{x}_p^{n+1}`` : `particles.x :: Vec`
+    * ``\\bm{v}_i^{n+1}`` : `grid.v :: Vec`
+"""
 struct FLIP  <: TransferAlgorithm end
-struct PIC   <: TransferAlgorithm end
-# affine transfer
+
+"""
+    PIC()
+
+PIC (particle-in-cell) transfer algorithm [^PIC]. This algorithm is well known as the transfer
+from PIC method. The PIC transfer is more stable than [`FLIP`](@ref), but produces very
+dissipative behaviors. It is basically recommended to use PIC with [`AffineTransfer`](@ref)
+or [`TPIC`](@ref) transfers.
+
+[^PIC]: [Harlow, F. H. (1964). The particle-in-cell computing method for fluid dynamics. *Methods Comput. Phys.*, 3, 319-343.](https://doi.org/10.2172/4769185)
+
+# Particle-to-grid transfer
+
+```math
+\\begin{aligned}
+m_i^n &= \\sum_p N_{ip}^n m_p \\\\
+m_i^n \\bm{v}_i^n &= \\sum_p N_{ip}^n m_p \\bm{v}_p^n \\\\
+\\bm{f}_i^n &= -\\sum_p V_p^n \\bm{\\sigma}_p^n \\cdot \\nabla N_{ip}^n + \\sum_p N_{ip}^n m_p \\bm{b}_p
+\\end{aligned}
+```
+
+## Required properties in [`particle_to_grid!`](@ref)
+
+- ``m_i^n`` : `grid.m :: Real`
+    * ``m_p`` : `particles.m :: Real`
+- ``m_i^n\\bm{v}_i^n`` : `grid.mv :: Vec`:
+    * ``m_p`` : `particles.m :: Real`
+    * ``\\bm{v}_p^n`` : `particles.v :: Vec`
+- ``\\bm{f}_i^n`` : `grid.f :: Vec`
+    * ``V_p^n`` : `particles.V :: Real`
+    * ``\\bm{\\sigma}_p^n`` :  `particles.σ :: SymmetricSecondOrderTensor`
+    * ``\\bm{b}_p`` (considered if exists) : `particles.b :: Vec`
+
+# Grid-to-particle transfer
+
+```math
+\\begin{aligned}
+\\bm{v}_p^{n+1} &= \\sum_i N_{ip}^n \\bm{v}_i^{n+1} \\\\
+\\nabla\\bm{v}_p^{n+1} &= \\sum_i \\bm{v}_i^{n+1} \\otimes \\nabla N_{ip}^n \\\\
+\\bm{x}_p^{n+1} &= \\bm{x}_p^n + \\Delta{t} \\bm{v}_p^{n+1}
+\\end{aligned}
+```
+
+## Required properties in [`grid_to_particle!`](@ref)
+
+- ``\\bm{v}_p^{n+1}`` : `particles.v :: Vec`
+    * ``\\bm{v}_i^{n+1}`` : `grid.v :: Vec`
+- ``\\nabla\\bm{v}_p^{n+1}`` : `particles.∇v :: Vec` (type `\\nabla[tab]` for `∇`)
+    * ``\\bm{v}_i^{n+1}`` : `grid.v :: Vec`
+- ``\\bm{x}_p^{n+1}`` : `particles.x :: Vec`
+    * ``\\bm{v}_i^{n+1}`` : `grid.v :: Vec`
+"""
+struct PIC <: TransferAlgorithm end
+
+"""
+    AffineTransfer(basic)
+
+Affine transfer algorithm [^Affine]. Currently `basic` should be [`FLIP()`](@ref) or [`PIC()`](@ref).
+There are also abbreviated forms [`AFLIP()`](@ref) and [`APIC()`](@ref), respectively.
+Only differences with `basic` transfer are summarized below.
+
+[^Affine]: [Jiang, C., Schroeder, C., Selle, A., Teran, J., & Stomakhin, A. (2015). The affine particle-in-cell method. *ACM Transactions on Graphics (TOG)*, 34(4), 1-10.](https://doi.org/10.1145/2766996)
+
+# Particle-to-grid transfer
+
+```math
+m_i^n \\bm{v}_i^n = \\sum_p N_{ip}^n m_p \\left( \\bm{v}_p^n + \\bm{B}_p^n \\cdot (\\bm{D}_p^n)^{-1} \\cdot (\\bm{x}_i - \\bm{x}_p^n) \\right) \\\\
+```
+
+where
+
+```math
+\\bm{D}_p^n = \\sum_i N_{ip}^n (\\bm{x}_i - \\bm{x}_p^n) \\otimes (\\bm{x}_i - \\bm{x}_p^n)
+```
+
+## Required properties in [`particle_to_grid!`](@ref)
+
+- ``m_i^n\\bm{v}_i^n`` : `grid.mv :: Vec`:
+    * ``m_p`` : `particles.m :: Real`
+    * ``\\bm{v}_p^n`` : `particles.v :: Vec`
+    * ``\\bm{B}_p^n`` : `particles.B :: SecondOrderTensor`
+
+# Grid-to-particle transfer
+
+Addition to `basic` transfer, ``\\bm{B}_p`` must be updated as
+
+```math
+\\bm{B}_p^{n+1} = \\sum_i N_{ip}^n \\bm{v}_i^{n+1} \\otimes (\\bm{x}_i - \\bm{x}_p^n)
+```
+
+## Required properties in [`grid_to_particle!`](@ref)
+
+- ``\\bm{B}_p^{n+1}`` : `particles.B :: SecondOrderTensor`:
+    * ``\\bm{v}_i^{n+1}`` : `grid.v :: Vec`
+
+!!! note
+    ``\\bm{B}_p`` is automatically updated when ``\\bm{v}_p`` is updated.
+    Check also `basic` transfer.
+"""
 struct AffineTransfer{T <: Union{FLIP, PIC}} <: TransferAlgorithm end
 AffineTransfer(t::TransferAlgorithm) = AffineTransfer{typeof(t)}()
+
+"""
+    const AFLIP = AffineTransfer{FLIP}
+
+See [`AffineTransfer`](@ref).
+"""
 const AFLIP = AffineTransfer{FLIP}
+
+"""
+    const APIC = AffineTransfer{PIC}
+
+See [`AffineTransfer`](@ref).
+"""
 const APIC  = AffineTransfer{PIC}
-# Taylor transfer
+
+"""
+    TaylorTransfer(basic)
+
+Taylor transfer algorithm [^Taylor]. Currently `basic` should be [`FLIP()`](@ref) or [`PIC()`](@ref).
+There are also abbreviated forms [`TFLIP()`](@ref) and [`TPIC()`](@ref), respectively.
+Only different transfer equations with `basic` transfer are summarized below.
+
+[^Taylor]: [Nakamura, K., Matsumura, S., & Mizutani, T. (2023). Taylor particle-in-cell transfer and kernel correction for material point method. *Computer Methods in Applied Mechanics and Engineering*, 403, 115720.](https://doi.org/10.1016/j.cma.2022.115720)
+
+# Particle-to-grid transfer
+
+```math
+m_i^n \\bm{v}_i^n = \\sum_p N_{ip}^n m_p \\left( \\bm{v}_p^n + \\nabla\\bm{v}_p^n \\cdot (\\bm{x}_i - \\bm{x}_p^n) \\right)
+```
+
+## Required properties in [`particle_to_grid!`](@ref)
+
+- ``m_i^n\\bm{v}_i^n`` : `grid.mv :: Vec`:
+    * ``m_p`` : `particles.m :: Real`
+    * ``\\bm{v}_p^n`` : `particles.v :: Vec`
+    * ``\\nabla\\bm{v}_p^n`` : `particles.∇v :: SecondOrderTensor` (type `\\nabla[tab]` for `∇`)
+
+# Grid-to-particle transfer
+
+Same as the `basic` transfer.
+"""
 struct TaylorTransfer{T <: Union{FLIP, PIC}} <: TransferAlgorithm end
 TaylorTransfer(t::TransferAlgorithm) = TaylorTransfer{typeof(t)}()
+
+"""
+    const TFLIP = TaylorTransfer{FLIP}
+
+See [`TaylorTransfer`](@ref).
+"""
 const TFLIP = TaylorTransfer{FLIP}
+
+"""
+    const TPIC = TaylorTransfer{PIC}
+
+See [`TaylorTransfer`](@ref).
+"""
 const TPIC  = TaylorTransfer{PIC}
 
 const FLIPGroup = Union{DefaultTransfer, FLIP, AFLIP, TFLIP}
@@ -42,12 +247,26 @@ end
 # P2G transfer #
 ################
 
+"""
+    particle_to_grid!(list, grid, particles, space; alg::TransferAlgorithm, system)
+
+Transfer the particle states to the grid.
+
+`list` is a tuple of names that you want to transfer. The available state names are
+`:m` (mass), `:mv` (momentum) and `:f` (force). `grid` and `particles` have some
+required properties that will be accessed via `getproperty`, which depends on the
+transfer algorithms. See each algorithm in [`TransferAlgorithm`](@ref) for more details.
+
+!!! note "Axisymmetric case"
+    If you set `system = Axisymmetric()` in two dimensional case, `particles.x[p][1]`
+    is used for the radius position of the particle `p`.
+"""
 function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
     particle_to_grid!(alg, system, Val(names), grid, particles, space; parallel)
 end
 
 function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace; parallel::Bool) where {names}
-    check_statenames(names, (:m, :mv, :f))
+    check_statenames(names, (:m, :mv, :f, :∇m))
     check_grid(grid, space)
     check_particles(particles, space)
     parallel_each_particle(space; parallel) do p
@@ -60,7 +279,7 @@ end
 @inline function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, pt, itp::Interpolation, mp::SubMPValues{dim, T}) where {names, dim, T}
     @_propagate_inbounds_meta
 
-    if :m in names
+    if :m in names || :∇m in names
         mₚ = pt.m
     end
 
@@ -108,6 +327,10 @@ end
             grid.m[i] += N*mₚ
         end
 
+        if :∇m in names
+            grid.∇m[i] += ∇N*mₚ
+        end
+
         if :f in names
             if system isa Axisymmetric
                 f = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
@@ -150,6 +373,21 @@ end
 # G2P transfer #
 ################
 
+"""
+    grid_to_particle!(list, particles, grid, space[, dt]; alg::TransferAlgorithm, system)
+
+Transfer the grid states to the particles.
+
+`list` is a tuple of names that you want to transfer. The available state names are
+`:v` (velocity), `:∇v` (velocity gradient; type `\\nabla[tab]` for `∇`) and `:x`
+(position). `grid` and `particles` have some required properties that will be accessed
+via `getproperty`, which depends on the transfer algorithms. See each algorithm in
+[`TransferAlgorithm`](@ref) for more details.
+
+!!! note "Axisymmetric case"
+    If you set `system = Axisymmetric()` in two dimensional case, `particles.x[p][1]`
+    is used for the radius position of the particle `p`.
+"""
 function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = DefaultTransfer(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
     grid_to_particle!(alg, system, Val(names), particles, grid, space, only_dt...; parallel)
 end

@@ -3,5 +3,5 @@
 /test/Manifest.toml
 /docs/Manifest.toml
 /docs/build
-/docs/*.vtr
-/docs/*.vtu
+/docs/src/examples/simulations/*.md
+/docs/src/examples/models/*.md

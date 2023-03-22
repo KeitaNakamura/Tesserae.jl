@@ -1,5 +1,3 @@
-using StableRNGs
-
 @testset "Generating particles" begin
     @testset "generation (random=$random)" for random in (false, true)
         # plane strain

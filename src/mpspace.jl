@@ -1,3 +1,8 @@
+"""
+    MPSpace(interpolation, gridsize, num_particles)
+
+Create `interpolation` space.
+"""
 struct MPSpace{dim, T, It <: Interpolation, V, VI, BS <: BlockSpace{dim}}
     interp::It
     mpvals::MPValues{dim, T, V, VI}
@@ -33,6 +38,18 @@ Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; values(spa
 @inline neighbornodes(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), i))
 @inline neighbornodes(space::MPSpace, grid::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), grid, i))
 
+"""
+    update!(space::MPSpace, grid, particles)
+
+Update interpolation `space`.
+
+This must be done before calling [`particle_to_grid!`](@ref) and [`grid_to_particle!`](@ref).
+
+!!! note "Update of sparsity pattern of `SpArray` in `grid`"
+    If `grid` has [`SpArray`](@ref)s, their sparsity pattern is also updated based on the position of `particles`.
+    This updated sparsity pattern is block-wise rough pattern rather than precise pattern for the performance.
+    See also "[How to use grid](@ref)".
+"""
 function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing, parallel::Bool=true)
     @assert gridsize(space) == size(grid)
     @assert num_particles(space) == length(particles)

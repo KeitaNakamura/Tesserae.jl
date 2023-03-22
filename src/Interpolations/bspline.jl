@@ -2,9 +2,39 @@ struct BSpline{order} <: Kernel
     BSpline{order}() where {order} = new{order::Int}()
 end
 
-const LinearBSpline    = BSpline{1}
+"""
+    BSpline{1}()
+    LinearBSpline()
+
+Lienar B-spline kernel.
+
+It is also called the "tent" function.
+"""
+const LinearBSpline = BSpline{1}
+
+"""
+    BSpline{2}()
+    QuadraticBSpline()
+
+Quadratic B-spline kernel.
+
+The peaks of this funciton are centered on the grid nodes [^Steffen].
+
+[^Steffen]: [Steffen, M., Kirby, R. M., & Berzins, M. (2008). Analysis and reduction of quadrature errors in the material point method (MPM). *International journal for numerical methods in engineering*, 76(6), 922-948.](https://doi.org/10.1002/nme.2360)
+"""
 const QuadraticBSpline = BSpline{2}
-const CubicBSpline     = BSpline{3}
+
+"""
+    BSpline{3}()
+    CubicBSpline()
+
+Cubic B-spline kernel.
+
+The peaks of this funciton are centered on the grid nodes [^Steffen].
+
+[^Steffen]: [Steffen, M., Kirby, R. M., & Berzins, M. (2008). Analysis and reduction of quadrature errors in the material point method (MPM). *International journal for numerical methods in engineering*, 76(6), 922-948.](https://doi.org/10.1002/nme.2360)
+"""
+const CubicBSpline = BSpline{3}
 
 gridsize(::BSpline{1}) = 2
 gridsize(::BSpline{2}) = 3

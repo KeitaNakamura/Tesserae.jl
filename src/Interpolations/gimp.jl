@@ -1,3 +1,10 @@
+"""
+    uGIMP()
+
+The unchanged GIMP kernel [^uGIMP].
+
+[^uGIMP]: [Bardenhagen, S. G., & Kober, E. M. (2004). The generalized interpolation material point method. *Computer Modeling in Engineering and Sciences*, 5(6), 477-496.](https://doi.org/10.3970/cmes.2004.005.477)
+"""
 struct uGIMP <: Kernel end
 
 gridsize(::uGIMP) = 3

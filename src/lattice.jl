@@ -24,7 +24,7 @@ Construct `Lattice` with the spacing `dx`.
 # Examples
 ```jldoctest
 julia> Lattice(1.0, (0,3), (1,4))
-4×4 Lattice{2, Float64}:
+4×4 Lattice{2, Float64, Vector{Float64}}:
  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
@@ -82,7 +82,7 @@ the `lattice`.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,5))
-6-element Lattice{1, Float64}:
+6-element Lattice{1, Float64, Vector{Float64}}:
  [0.0]
  [1.0]
  [2.0]
@@ -91,10 +91,10 @@ julia> lattice = Lattice(1, (0,5))
  [5.0]
 
 julia> neighbornodes(lattice, Vec(1.5), 1)
-(CartesianIndices((2:3,)), false)
+(CartesianIndices((2:3,)), true)
 
 julia> neighbornodes(lattice, Vec(1.5), 3)
-(CartesianIndices((1:5,)), true)
+(CartesianIndices((1:5,)), false)
 ```
 """
 @inline function neighbornodes(lattice::Lattice{dim, T}, x::Vec{dim, T}, h::Real) where {dim, T}
@@ -119,7 +119,7 @@ Return cell index where `x` locates.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,5), (0,5))
-6×6 Lattice{2, Float64}:
+6×6 Lattice{2, Float64, Vector{Float64}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]

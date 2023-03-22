@@ -51,7 +51,7 @@ For example, trying to `setindex!` doesn't change anything without any errors as
 
 ```jldoctest sparray
 julia> A = Marble.SpArray{Float64}(5,5)
-5×5 Marble.SpArray{Float64, 2}:
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}:
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅

@@ -1,3 +1,14 @@
+"""
+    KernelCorrection(::Kernel)
+
+Kernel correction method [^KC].
+
+This modifies kernels to achive stable simulations near boundaries.
+Using kernel correction is preferred for [`QuadraticBSpline`](@ref) and [`CubicBSpline`](@ref),
+and almost necessary for [`AffineTransfer`](@ref) and [`TaylorTransfer`](@ref).
+
+[^KC]: [Nakamura, K., Matsumura, S., & Mizutani, T. (2023). Taylor particle-in-cell transfer and kernel correction for material point method. *Computer Methods in Applied Mechanics and Engineering*, 403, 115720.](https://doi.org/10.1016/j.cma.2022.115720)
+"""
 struct KernelCorrection{K <: Kernel} <: Interpolation
 end
 KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
