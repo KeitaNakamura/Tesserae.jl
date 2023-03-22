@@ -25,6 +25,8 @@ export
     CoordinateSystem,
     PlaneStrain,
     Axisymmetric,
+# SpArray
+    blocksize,
 # lattice
     Lattice,
 # Grid

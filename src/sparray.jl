@@ -46,7 +46,8 @@ end
 """
     SpArray{T}(dims...)
 
-`SpArray` is a kind of sparse array, but it is not allowed to freely change the value like `Array`.
+`SpArray` is a sparse array which has blockwise sparsity pattern.
+In `SpArray`, it is not allowed to freely change the value like built-in `Array`.
 For example, trying to `setindex!` doesn't change anything without any errors as
 
 ```jldoctest sparray
@@ -61,35 +62,43 @@ julia> A = Marble.SpArray{Float64}(5,5)
 julia> A[1,1]
 0.0
 
-julia> A[1,1] = 2
+julia> A[1,1] = 2 # no error
 2
 
-julia> A[1,1]
+julia> A[1,1] # still zero
 0.0
 ```
 
-This is because the index `(1,1)` is not activated yet.
-To activate the index, update sparsity pattern by `update_sparsity_pattern!(A, sppat)`.
+This is because the block where index `(1,1)` is located is not activated yet.
+To activate the block, update sparsity pattern by `update_sparsity_pattern!(A, sppat)`
+where `sppat` must have `blocksize(A)`.
 
-```jl sparray
-julia> sppat = falses(5,5); sppat[1,1] = true; sppat
-5×5 BitMatrix:
- 1  0  0  0  0
- 0  0  0  0  0
- 0  0  0  0  0
- 0  0  0  0  0
- 0  0  0  0  0
+```jldoctest sparray
+julia> sppat = falses(blocksize(A))
+1×1 BitMatrix:
+ 0
 
-julia> update_sparsity_pattern!(A, sppat)
-5×5 Marble.SpArray{Float64, 2}:
- 2.17321e-314  ⋅  ⋅  ⋅  ⋅
-  ⋅            ⋅  ⋅  ⋅  ⋅
-  ⋅            ⋅  ⋅  ⋅  ⋅
-  ⋅            ⋅  ⋅  ⋅  ⋅
-  ⋅            ⋅  ⋅  ⋅  ⋅
+julia> sppat[1,1] = true
+true
 
-julia> A[1,1] = 2; A[1,1]
-2.0
+julia> Marble.update_sparsity_pattern!(A, sppat)
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}:
+ 2.23145e-314  2.61586e-314  2.61723e-314  2.61675e-314  2.94553e-314
+ 2.37e-322     2.61623e-314  3.02298e-314  2.61586e-314  2.94543e-314
+ 2.7826e-318   2.61586e-314  2.94156e-314  2.61586e-314  3.05631e-314
+ 2.37e-322     2.61512e-314  2.94553e-314  2.61587e-314  2.61675e-314
+ 2.96e-322     2.61615e-314  2.94543e-314  2.61512e-314  2.61586e-314
+
+julia> A[1,1] = 2
+2
+
+julia> A
+5×5 Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}:
+ 2.0           2.61586e-314  2.61723e-314  2.61675e-314  2.94553e-314
+ 2.37e-322     2.61623e-314  3.02298e-314  2.61586e-314  2.94543e-314
+ 2.7826e-318   2.61586e-314  2.94156e-314  2.61586e-314  3.05631e-314
+ 2.37e-322     2.61512e-314  2.94553e-314  2.61587e-314  2.61675e-314
+ 2.96e-322     2.61615e-314  2.94543e-314  2.61512e-314  2.61586e-314
 ```
 """
 struct SpArray{T, dim, V <: AbstractVector{T}, A} <: AbstractArray{T, dim}
@@ -144,10 +153,15 @@ function reset_sparsity_pattern!(A::SpArray)
     A.shared_spinds && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
     unsafe_reset_sparsity_pattern!(A)
 end
-
 function update_sparsity_pattern!(A::SpArray)
     A.shared_spinds && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
     unsafe_update_sparsity_pattern!(A)
+end
+function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
+    @assert blocksize(A) == size(sppat)
+    reset_sparsity_pattern!(A) .= sppat
+    update_sparsity_pattern!(A)
+    A
 end
 
 function unsafe_reset_sparsity_pattern!(A::SpArray)
@@ -157,6 +171,12 @@ function unsafe_update_sparsity_pattern!(A::SpArray)
     n = update_sparsity_pattern!(get_spinds(A))
     resize!(nonzeros(A), n)
     n
+end
+function unsafe_update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
+    @assert blocksize(A) == size(sppat)
+    unsafe_reset_sparsity_pattern!(A) .= sppat
+    unsafe_update_sparsity_pattern!(A)
+    A
 end
 
 ###############################

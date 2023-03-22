@@ -58,8 +58,8 @@ function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union
     update_mpvalues!(space, get_lattice(grid), particles, filter; parallel)
 
     if grid isa SpGrid
-        update_sparsity_pattern!(reset_sparsity_pattern!(grid), get_blockspace(space))
-        update_sparsity_pattern!(grid)
+        update_sparsity_pattern!(unsafe_reset_sparsity_pattern!(grid), get_blockspace(space))
+        unsafe_update_sparsity_pattern!(grid)
         set_gridspinds!(space, get_spinds(grid))
     else
         set_gridspinds!(space, nothing)

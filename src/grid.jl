@@ -110,10 +110,10 @@ _fillzero!(x::AbstractArray) = fillzero!(x)
 
 # DON'T manually call these function
 # this should be called from `update!` in MPSpace
-function reset_sparsity_pattern!(A::SpGrid)
+function unsafe_reset_sparsity_pattern!(A::SpGrid)
     reset_sparsity_pattern!(get_spinds(A))
 end
-function update_sparsity_pattern!(A::SpGrid)
+function unsafe_update_sparsity_pattern!(A::SpGrid)
     n = update_sparsity_pattern!(get_spinds(A))
     StructArrays.foreachfield(a->_resize_nonzeros!(a,n), A)
     A
