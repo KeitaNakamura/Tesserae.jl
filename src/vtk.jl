@@ -17,12 +17,18 @@ function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractArray{
     vtk_point_data(vtk, vtk_format(data), name)
 end
 vtk_format(A::AbstractArray{<: Tensor}) = _vtk_format(A)
-function vtk_format(A::AbstractArray{<: Vec{2}})
-    _vtk_format(map(x->[x;0], A)) # extend to 3D to draw vector in Glyph
-end
 function _vtk_format(A::AbstractArray{<: Tensor})
     reinterpret(reshape, eltype(eltype(A)), A)
 end
+function vtk_format(A::AbstractArray{<: Vec{2}})
+    _vtk_format(Vec2ToVec3(A)) # extend to 3D to draw vector in Glyph
+end
+struct Vec2ToVec3{T, N, A <: AbstractArray{Vec{2, T}, N}} <: AbstractArray{Vec{3, T}, N}
+    array::A
+end
+Base.IndexStyle(::Type{<: Vec2ToVec3}) = IndexLinear()
+Base.size(x::Vec2ToVec3) = size(x.array)
+Base.getindex(x::Vec2ToVec3, i::Integer) = (@_propagate_inbounds_meta; [x.array[i];0])
 
 # open/close
 openvtk(args...; kwargs...) = vtk_grid(args...; kwargs...)
