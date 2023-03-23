@@ -218,6 +218,14 @@ See [`TaylorTransfer`](@ref).
 """
 const TPIC  = TaylorTransfer{PIC}
 
+"""
+    WLSTransfer()
+
+The special transfer for [`WLS`](@ref) interpolation.
+Using this transfer with [`WLS`](@ref) interpolation becomse the MLS-MPM [^MLSMPM].
+
+[^MLSMPM]: [Hu, Y., Fang, Y., Ge, Z., Qu, Z., Zhu, Y., Pradhana, A., & Jiang, C. (2018). A moving least squares material point method with displacement discontinuity and two-way rigid body coupling. *ACM Transactions on Graphics (TOG)*, 37(4), 1-14.](https://doi.org/10.1145/3197517.3201293)
+"""
 struct WLSTransfer <: TransferAlgorithm end
 
 const FLIPGroup = Union{FLIP, AFLIP, TFLIP}

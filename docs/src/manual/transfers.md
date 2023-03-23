@@ -11,6 +11,7 @@ This page explains MPM transfers between grid and particles.
 * [Basic transfers](@ref)
 * [Affine transfers](@ref)
 * [Taylor transfers](@ref)
+* [WLS transfer](@ref)
 
 ```@docs
 TransferAlgorithm
@@ -40,6 +41,12 @@ APIC
 TaylorTransfer
 TFLIP
 TPIC
+```
+
+### WLS transfer
+
+```@docs
+WLSTransfer
 ```
 
 ## Transfer functions

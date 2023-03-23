@@ -6,8 +6,9 @@ end
 
 WLS (weighted least squares) interpolation using the linear polynomial.
 
-This is referred to moving least squares material point method (MLS-MPM) [^MLSMPM],
-but we call WLS in Marble.jl because the formulation is fundamentally WLS scheme.
+This interpolation function is used in the moving least squares material point method (MLS-MPM) [^MLSMPM],
+but it is referred as the WLS in Marble.jl because the formulation is fundamentally WLS scheme.
+For the MLS-MPM formulation, use this `LinearWLS` with [`WLSTransfer`](@ref).
 
 [^MLSMPM]: [Hu, Y., Fang, Y., Ge, Z., Qu, Z., Zhu, Y., Pradhana, A., & Jiang, C. (2018). A moving least squares material point method with displacement discontinuity and two-way rigid body coupling. *ACM Transactions on Graphics (TOG)*, 37(4), 1-14.](https://doi.org/10.1145/3197517.3201293)
 """
