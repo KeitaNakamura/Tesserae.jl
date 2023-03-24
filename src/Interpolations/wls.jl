@@ -38,26 +38,26 @@ function update!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArr
     F = get_kernel(itp)
     P = get_basis(itp)
     M = zero(mp.Minv[])
-    xp = getx(pt)
+    xₚ = getx(pt)
 
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        xi = lattice[i]
+        xᵢ = lattice[i]
         w = value(F, lattice, i, pt) * sppat[i]
-        p = value(P, xi - xp)
+        p = value(P, xᵢ - xₚ)
         M += w * p ⊗ p
         mp.w[j] = w
     end
 
-    Minv = inv(M)
+    M⁻¹ = inv(M)
 
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        xi = lattice[i]
-        q = Minv ⋅ value(P, xi - xp)
+        xᵢ = lattice[i]
+        q = M⁻¹ ⋅ value(P, xᵢ - xₚ)
         wq = mp.w[j] * q
-        mp.N[j] = wq ⋅ value(P, xp - xp)
-        mp.∇N[j] = wq ⋅ gradient(P, xp - xp)
+        mp.N[j] = wq ⋅ value(P, xₚ - xₚ)
+        mp.∇N[j] = wq ⋅ gradient(P, xₚ - xₚ)
     end
-    mp.Minv[] = Minv
+    mp.Minv[] = M⁻¹
 
     set_neighbornodes!(mp, indices)
 end
@@ -77,16 +77,16 @@ end
 
 function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
     F = get_kernel(itp)
-    xp = getx(pt)
+    xₚ = getx(pt)
     D = zero(Vec{dim, T}) # diagonal entries
-    values_gradients!(mp.w, reinterpret(reshape, T, mp.∇N), F, lattice, xp)
+    values_gradients!(mp.w, reinterpret(reshape, T, mp.∇N), F, lattice, xₚ)
 
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        xi = lattice[i]
+        xᵢ = lattice[i]
         w = mp.w[j]
-        D += w * (xi - xp) .* (xi - xp)
+        D += w * (xᵢ - xₚ) .* (xᵢ - xₚ)
         mp.N[j] = w
-        mp.∇N[j] = w * (xi - xp)
+        mp.∇N[j] = w * (xᵢ - xₚ)
     end
 
     D⁻¹ = inv.(D)
@@ -97,27 +97,27 @@ end
 function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt)
     F = get_kernel(itp)
     P = get_basis(itp)
-    xp = getx(pt)
+    xₚ = getx(pt)
     M = zero(mp.Minv[])
 
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        xi = lattice[i]
-        w = value(F, lattice, i, xp) * sppat[i]
-        p = value(P, xi - xp)
+        xᵢ = lattice[i]
+        w = value(F, lattice, i, xₚ) * sppat[i]
+        p = value(P, xᵢ - xₚ)
         M += w * p ⊗ p
         mp.w[j] = w
     end
 
-    Minv = inv(M)
+    M⁻¹ = inv(M)
 
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        xi = lattice[i]
-        q = Minv ⋅ value(P, xi - xp)
+        xᵢ = lattice[i]
+        q = M⁻¹ ⋅ value(P, xᵢ - xₚ)
         wq = mp.w[j] * q
         mp.N[j] = wq[1]
         mp.∇N[j] = @Tensor wq[2:end]
     end
-    mp.Minv[] = Minv
+    mp.Minv[] = M⁻¹
 
     mp
 end

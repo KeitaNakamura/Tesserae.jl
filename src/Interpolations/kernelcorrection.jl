@@ -54,23 +54,23 @@ end
 
 @inline function update_mpvalues_nearbounds!(mp::SubMPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
     F = get_kernel(itp)
-    xp = getx(pt)
+    xₚ = getx(pt)
     M = zero(Mat{dim+1, dim+1, T})
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        xi = lattice[i]
+        xᵢ = lattice[i]
         w = value(F, lattice, i, pt) * sppat[i]
-        P = [1; xi - xp]
+        P = [1; xᵢ - xₚ]
         M += w * P ⊗ P
         mp.N[j] = w
     end
-    Minv = inv(M)
-    C1 = Minv[1,1]
-    C2 = @Tensor Minv[2:end,1]
-    C3 = @Tensor Minv[2:end,2:end]
+    M⁻¹ = inv(M)
+    C₁ = M⁻¹[1,1]
+    C₂ = @Tensor M⁻¹[2:end,1]
+    C₃ = @Tensor M⁻¹[2:end,2:end]
     @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        xi = lattice[i]
+        xᵢ = lattice[i]
         w = mp.N[j]
-        mp.N[j] = (C1 + C2 ⋅ (xi - xp)) * w
-        mp.∇N[j] = (C2 + C3 ⋅ (xi - xp)) * w
+        mp.N[j] = (C₁ + C₂ ⋅ (xᵢ - xₚ)) * w
+        mp.∇N[j] = (C₂ + C₃ ⋅ (xᵢ - xₚ)) * w
     end
 end

@@ -72,11 +72,11 @@ end
         prod(@ntuple $dim i -> value(bspline, ξ[i]))
     end
 end
-@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec)
+@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xₚ::Vec)
     @_propagate_inbounds_meta
-    xi = lattice[I]
+    xᵢ = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
-    ξ = (xp - xi) * dx⁻¹
+    ξ = (xₚ - xᵢ) * dx⁻¹
     value(bspline, ξ)
 end
 @inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, pt)
@@ -126,11 +126,11 @@ end
         prod(@ntuple $dim i -> value(bspline, ξ[i], pos[i]))
     end
 end
-@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xp::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
+@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xₚ::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
     @_propagate_inbounds_meta
-    xi = lattice[I]
+    xᵢ = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
-    ξ = (xp - xi) * dx⁻¹
+    ξ = (xₚ - xᵢ) * dx⁻¹
     value(bspline, ξ, node_position(lattice, I))
 end
 
@@ -174,11 +174,11 @@ end
 
 @inline values_gradients!(N, ∇N, bspline::BSpline, lattice::Lattice, pt) = values_gradients!(N, ∇N, bspline, lattice, getx(pt))
 
-@generated function values_gradients!(N, ∇N, bspline::BSpline, lattice::Lattice{dim}, xp::Vec{dim}) where {dim}
+@generated function values_gradients!(N, ∇N, bspline::BSpline, lattice::Lattice{dim}, xₚ::Vec{dim}) where {dim}
     quote
         @_inline_meta
         dx⁻¹ = spacing_inv(lattice)
-        x = (xp - first(lattice)) * dx⁻¹
+        x = (xₚ - first(lattice)) * dx⁻¹
         @nexprs $dim d -> (V_d, ∇V_d) = values_gradients(bspline, x[d])
         V_tuple = @ntuple $dim d -> V_d
         ∇V_tuple = @ntuple $dim d -> ∇V_d*dx⁻¹

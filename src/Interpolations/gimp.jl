@@ -27,12 +27,12 @@ function value(::uGIMP, ξ::Real, l::Real) # `l` is normalized radius by dx
     ξ < 1+l/2 ? (2+l-2ξ)^2 / 8l       : zero(ξ)
 end
 @inline value(f::uGIMP, ξ::Vec, l::Real) = prod(value.(f, ξ, l))
-@inline function value(f::uGIMP, lattice::Lattice, I::CartesianIndex, xp::Vec, lp::Real)
+@inline function value(f::uGIMP, lattice::Lattice, I::CartesianIndex, xₚ::Vec, lₚ::Real)
     @_propagate_inbounds_meta
-    xi = lattice[I]
+    xᵢ = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
-    ξ = (xp - xi) * dx⁻¹
-    value(f, ξ, lp*dx⁻¹)
+    ξ = (xₚ - xᵢ) * dx⁻¹
+    value(f, ξ, lₚ*dx⁻¹)
 end
 @inline value(f::uGIMP, lattice::Lattice, I::CartesianIndex, pt) = value(f, lattice, I, pt.x, pt.l)
 
