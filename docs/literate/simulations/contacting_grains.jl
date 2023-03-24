@@ -49,7 +49,7 @@ function contacting_grains(
     elastic = LinearElastic(; E=1e6, ν=0.3)
 
     ## lattice
-    lattice = Marble.Lattice(dx, (0,1), (0,1.04))
+    lattice = Lattice(dx, (0,1), (0,1.04))
 
     #==========
      Particles
