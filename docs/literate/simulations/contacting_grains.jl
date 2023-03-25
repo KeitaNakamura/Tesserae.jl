@@ -103,8 +103,10 @@ function contacting_grains(
      Outputs
     ========#
 
+    if output #src
     pvdfile = joinpath(mkpath("Output.tmp"), "contacting_grains")
     closepvd(openpvd(pvdfile))
+    end #src
 
     t = 0.0
     step = 0
@@ -281,6 +283,6 @@ end
 
 ## check the result                                                                                                                                           #src
 # using Test                                                                                                                                                  #src
-@test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); output=false, test=true).x) ≈ [0.49596144254590924, 0.19035546083774726] rtol=1e-5 #src
-@test mean(contacting_grains(uGIMP(),                              FLIP(); output=false, test=true).x) ≈ [0.4965723322423604, 0.1952811505974687]   rtol=1e-5 #src
-@test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); output=false, test=true).x) ≈ [0.49847095684954457, 0.18863522262119503] rtol=1e-5 #src
+@test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [0.49596144254590924, 0.19035546083774726] rtol=1e-5 #src
+@test mean(contacting_grains(uGIMP(),                              FLIP(); test=true).x) ≈ [0.4965723322423604, 0.1952811505974687]   rtol=1e-5 #src
+@test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.49847095684954457, 0.18863522262119503] rtol=1e-5 #src

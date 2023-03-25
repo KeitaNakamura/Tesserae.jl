@@ -80,8 +80,10 @@ function sand_column_collapse(
     space = MPSpace(itp, size(grid), length(particles))
 
     ## outputs
+    if output #src
     pvdfile = joinpath(mkpath("Output.tmp"), "sand_column_collapse")
     closepvd(openpvd(pvdfile))
+    end #src
 
     t = 0.0
     step = 0
@@ -167,9 +169,9 @@ end
 
 ## check the result                                                                                                                                                #src
 using Test                                                                                                                                                         #src
-@test mean(sand_column_collapse(QuadraticBSpline(),                   FLIP(); output=false, test=true).x) ≈ [0.0006330597405883035, 0.1312007490213257]  rtol=1e-5 #src
-@test mean(sand_column_collapse(uGIMP(),                              FLIP(); output=false, test=true).x) ≈ [0.0026972982524636115, 0.13743177648166474] rtol=1e-5 #src
-@test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), TPIC(); output=false, test=true).x) ≈ [0.002198603580244651, 0.13051022570299914]  rtol=1e-5 #src
-@test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), APIC(); output=false, test=true).x) ≈ [0.0019303698611112309, 0.13037068196959958] rtol=1e-5 #src
-@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()),        TPIC(); output=false, test=true).x) ≈ [0.0018033853076878108, 0.13277634910726227] rtol=1e-5 #src
-@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()), WLSTransfer(); output=false, test=true).x) ≈ [0.0018033853076878108, 0.13277634910726227] rtol=1e-5 #src
+@test mean(sand_column_collapse(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [0.0006330597405883035, 0.1312007490213257]  rtol=1e-5 #src
+@test mean(sand_column_collapse(uGIMP(),                              FLIP(); test=true).x) ≈ [0.0026972982524636115, 0.13743177648166474] rtol=1e-5 #src
+@test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.002198603580244651, 0.13051022570299914]  rtol=1e-5 #src
+@test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), APIC(); test=true).x) ≈ [0.0019303698611112309, 0.13037068196959958] rtol=1e-5 #src
+@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()),        TPIC(); test=true).x) ≈ [0.0018033853076878108, 0.13277634910726227] rtol=1e-5 #src
+@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()), WLSTransfer(); test=true).x) ≈ [0.0018033853076878108, 0.13277634910726227] rtol=1e-5 #src
