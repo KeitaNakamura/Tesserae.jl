@@ -39,7 +39,7 @@ function contacting_grains(
     t_stop = 1.2   # time for simulation
     ## use low resolution for testing purpose #src
     if test                                   #src
-        dx::Float64 = 0.02                    #src
+        dx::Float64 = 0.04                    #src
     else                                      #src
     dx     = 0.005 # grid spacing
     end                                       #src
@@ -279,8 +279,8 @@ function impose_boundary_condition!(grid::Grid)
     end
 end
 
-## check the result                                                                                                                                          #src
-using Test                                                                                                                                                   #src
-@test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); output=false, test=true).x) ≈ [0.5048420102799008, 0.19566451799876988] rtol=1e-5 #src
-@test mean(contacting_grains(uGIMP(),                              FLIP(); output=false, test=true).x) ≈ [0.5040194836126679, 0.19977121146265217] rtol=1e-5 #src
-@test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); output=false, test=true).x) ≈ [0.5047154135766159, 0.19560687006701782] rtol=1e-5 #src
+## check the result                                                                                                                                           #src
+# using Test                                                                                                                                                  #src
+@test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); output=false, test=true).x) ≈ [0.49596144254590924, 0.19035546083774726] rtol=1e-5 #src
+@test mean(contacting_grains(uGIMP(),                              FLIP(); output=false, test=true).x) ≈ [0.4965723322423604, 0.1952811505974687]   rtol=1e-5 #src
+@test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); output=false, test=true).x) ≈ [0.49847095684954457, 0.18863522262119503] rtol=1e-5 #src
