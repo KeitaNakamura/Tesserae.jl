@@ -7,25 +7,24 @@ struct MPSpace{dim, T, It <: Interpolation, V, VI, BS <: BlockSpace{dim}}
     interp::It
     mpvals::MPValues{dim, T, V, VI}
     blkspace::BS
-    sppat::Array{Bool, dim}
     gridspinds::Base.RefValue{Any}
+    tmpsppat::Array{Bool, dim} # used for filtering case
 end
 
 # constructors
 function MPSpace(::Type{T}, itp::Interpolation, gridsize::Dims{dim}, npts::Integer) where {dim, T}
     mpvals = MPValues{dim, T}(itp, npts)
     blkspace = BlockSpace(blocksize(gridsize), npts)
-    sppat = fill(false, gridsize)
-    MPSpace(itp, mpvals, blkspace, sppat, Ref{Any}())
+    tmpsppat = fill(false, gridsize)
+    MPSpace(itp, mpvals, blkspace, Ref{Any}(), tmpsppat)
 end
 MPSpace(itp::Interpolation, gridsize::Dims, npts::Integer) = MPSpace(Float64, itp, gridsize, npts)
 
 # helper functions
-gridsize(space::MPSpace) = size(space.sppat)
+gridsize(space::MPSpace) = size(space.tmpsppat)
 num_particles(space::MPSpace) = num_particles(values(space))
 get_interpolation(space::MPSpace) = space.interp
 get_blockspace(space::MPSpace) = space.blkspace
-get_sppat(space::MPSpace) = space.sppat
 get_gridspinds(space::MPSpace) = space.gridspinds[]
 set_gridspinds!(space::MPSpace, spinds) = space.gridspinds[] = spinds
 
@@ -50,7 +49,7 @@ This must be done before calling [`particle_to_grid!`](@ref) and [`grid_to_parti
     This updated sparsity pattern is block-wise rough pattern rather than precise pattern for the performance.
     See also "[How to use grid](@ref)".
 """
-function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}} = nothing, parallel::Bool=true)
+function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union{Nothing, AbstractArray{Bool}}=nothing, parallel::Bool=true)
     @assert gridsize(space) == size(grid)
     @assert num_particles(space) == length(particles)
 
@@ -76,7 +75,7 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
         update!(values(space), get_interpolation(space), lattice, particles; parallel)
     else
         # handle excluded domain
-        sppat = get_sppat(space)
+        sppat = space.tmpsppat
         sppat .= filter
         parallel_each_particle(space; parallel) do p
             @inbounds begin
