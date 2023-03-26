@@ -141,15 +141,9 @@ function generate_particles(
     reorder_particles!(particles, _get_lattice(grid))
     particles
 end
-function generate_particles(
-        isindomain::Function,
-        ::Type{ParticleState},
-        grid::Union{Grid, Lattice};
-        n::Int = 2,
-        alg::SamplingAlgorithm = GridSampling(),
-        system::CoordinateSystem = NormalSystem(),
-    ) where {ParticleState}
-    generate_particles(FunctionDomain(isindomain, BoxDomain(grid)), ParticleState, grid; n, alg, system)
+function generate_particles(isindomain::Function, ::Type{ParticleState}, grid::Union{Grid, Lattice}; kwargs...) where {ParticleState}
+    domain = FunctionDomain(isindomain, BoxDomain(grid))
+    generate_particles(domain, ParticleState, grid; kwargs...)
 end
 
 function generate_particles(domain, lattice::Lattice{dim, T}; kwargs...) where {dim, T}
