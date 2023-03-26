@@ -101,7 +101,7 @@ If `ParticleState` is not given, the `NamedTuple` including above properties is 
 
 # Keyword arguments
 * `n::Int`: the number of particles in cell along with axis. So, when `n = 2` is given, the total number of particles per cell becomes `2`, `4` and `8` in 1D, 2D and 3D, respectively. `n = 2` is used by default.
-* `alg::SamplingAlgorithm`: choose `GridSampling()` (default) or `PoissonDiskSampling()`.
+* `alg::SamplingAlgorithm`: choose `PoissonDiskSampling()` (default) or `GridSampling()`.
 * `system::CoordinateSystem`: use `Axisymmetric()` for axisymmetric simulations.
 """
 function generate_particles end
@@ -120,7 +120,7 @@ function generate_particles(
         ::Type{ParticleState},
         grid::Union{Grid{dim}, Lattice{dim}};
         n::Int = 2,
-        alg::SamplingAlgorithm = GridSampling(),
+        alg::SamplingAlgorithm = PoissonDiskSampling(),
         system::CoordinateSystem = NormalSystem(),
     ) where {ParticleState, dim}
 

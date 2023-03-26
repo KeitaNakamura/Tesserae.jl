@@ -150,7 +150,7 @@ function axial_vibration_of_bar(
     grid = generate_grid(GridState, L/ncells, (0,L))
 
     ## particles
-    particles = generate_particles(x->true, ParticleState, grid; n=PPC)
+    particles = generate_particles(x->true, ParticleState, grid; n=PPC, alg=GridSampling())
     @. particles.m = ρ * particles.V
     @. particles.v = v(particles.x, 0)
 

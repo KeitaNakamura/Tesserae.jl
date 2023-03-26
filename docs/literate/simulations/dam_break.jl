@@ -58,7 +58,7 @@ function dam_break(
         particles::Marble.infer_particles_type(ParticleState) =                                                        #src
             generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid; alg=PoissonDiskSampling(StableRNG(1234))) #src
     else                                                                                                               #src
-    particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid; alg=PoissonDiskSampling())
+    particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid)
     end                                                                                                                #src
     @. particles.m = ρ₀ * particles.V
     @. particles.b = Vec(0, -g)

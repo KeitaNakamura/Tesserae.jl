@@ -48,9 +48,9 @@
                     dt = 0.002
 
                     if include_near_boundary
-                        particles = generate_particles((x,y) -> true, ParticleState, grid)
+                        particles = generate_particles((x,y) -> true, ParticleState, grid; alg=PoissonDiskSampling(StableRNG(1234)))
                     else
-                        particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid)
+                        particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid; alg=PoissonDiskSampling(StableRNG(1234)))
                     end
                     @. particles.m = 1
                     x₀ = copy(particles.x)
@@ -100,9 +100,9 @@
                         dt = 1.0
 
                         if include_near_boundary
-                            particles = generate_particles((x,y) -> true, ParticleState, grid; alg=PoissonDiskSampling())
+                            particles = generate_particles((x,y) -> true, ParticleState, grid)
                         else
-                            particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid; alg=PoissonDiskSampling())
+                            particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid)
                         end
                         @. particles.m = 1
 
