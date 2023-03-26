@@ -24,6 +24,7 @@ abstract type SamplingDomain end
 struct BoxDomain{dim, T} <: SamplingDomain
     minmax::NTuple{dim, Tuple{T, T}}
 end
+BoxDomain(minmax::Tuple{T, T}...) where {T <: Real} = BoxDomain(minmax)
 BoxDomain(lattice::Lattice) = BoxDomain(tuple.(Tuple(first(lattice)), Tuple(last(lattice))))
 BoxDomain(grid::Grid) = BoxDomain(grid.x)
 

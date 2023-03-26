@@ -235,14 +235,8 @@ end
 
 function generate_grains(::Type{ParticleState}, lattice::Lattice; r, alg) where {ParticleState}
     grains = Marble.PDS.generate(alg.rng, (r,1-r), (r,1-r); r=2r)
-    particles = generate_particles(ParticleState, lattice; alg) do x, y
-        any(grains) do xc
-            norm(Vec(xc) - Vec(x,y)) < r
-        end
-    end
-    map(grains) do grain
-        xc = Vec(grain)
-        filter(pt->norm(pt.x-xc)<r, particles)
+    map(grains) do centroid
+        generate_particles(SphericalDomain(Vec(centroid), r), ParticleState, lattice; alg)
     end
 end
 
@@ -277,7 +271,7 @@ function impose_boundary_condition!(grid::Grid)
 end
 
 ## check the result                                                                                                                                           #src
-# using Test                                                                                                                                                  #src
-@test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [0.49596144254590924, 0.19035546083774726] rtol=1e-5 #src
-@test mean(contacting_grains(uGIMP(),                              FLIP(); test=true).x) ≈ [0.4965723322423604, 0.1952811505974687]   rtol=1e-5 #src
-@test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.49847095684954457, 0.18863522262119503] rtol=1e-5 #src
+using Test                                                                                                                                                  #src
+@test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [0.5036385008537854, 0.19079293004940925] rtol=1e-5 #src
+@test mean(contacting_grains(uGIMP(),                              FLIP(); test=true).x) ≈ [0.5035729551556197, 0.19486313891209753] rtol=1e-5 #src
+@test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.5038373871432336, 0.1898585728550991]  rtol=1e-5 #src

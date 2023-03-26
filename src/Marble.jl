@@ -40,6 +40,9 @@ export
     generate_particles,
     GridSampling,
     PoissonDiskSampling,
+    BoxDomain,
+    SphericalDomain,
+    FunctionDomain,
 # interpolations
     update!,
     Kernel,
