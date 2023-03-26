@@ -57,23 +57,23 @@ function contacting_grains(
 
     ## grains
     r = 0.06
-    if test                                                                    #src
-        grains::Vector{Marble.infer_particles_type(ParticleState)} =           #src
-            generate_grains(ParticleState, lattice; r, random=StableRNG(1234)) #src
-    else                                                                       #src
-    grains = generate_grains(ParticleState, lattice; r, random=true)
-    end                                                                        #src
+    if test                                                                                      #src
+        grains::Vector{Marble.infer_particles_type(ParticleState)} =                             #src
+            generate_grains(ParticleState, lattice; r, alg=PoissonDiskSampling(StableRNG(1234))) #src
+    else                                                                                         #src
+    grains = generate_grains(ParticleState, lattice; r, alg=PoissonDiskSampling())
+    end                                                                                          #src
     for grain in grains
         @. grain.m = 1e3 * grain.V
     end
 
     ## bar
-    if test                                                                            #src
-        bar::Marble.infer_particles_type(ParticleState) =                              #src
-        generate_particles((x,y)->y>1, ParticleState, lattice; random=StableRNG(1234)) #src
-    else                                                                               #src
-    bar = generate_particles((x,y)->y>1, ParticleState, lattice; random=true)
-    end                                                                                #src
+    if test                                                                                              #src
+        bar::Marble.infer_particles_type(ParticleState) =                                                #src
+        generate_particles((x,y)->y>1, ParticleState, lattice; alg=PoissonDiskSampling(StableRNG(1234))) #src
+    else                                                                                                 #src
+    bar = generate_particles((x,y)->y>1, ParticleState, lattice; alg=PoissonDiskSampling())
+    end                                                                                                  #src
     @. bar.v = Vec(0, -0.5)
     @. bar.m = 1 # dammy mass
 
@@ -233,14 +233,9 @@ function contacting_grains(
     reduce(vcat, grains) #src
 end
 
-function generate_grains(::Type{ParticleState}, lattice::Lattice; r, random) where {ParticleState}
-    if random isa Bool                                                          #src
-    grains = Marble.PoissonDiskSampling.generate((r,1-r), (r,1-r); r=2r)
-    else                                                                        #src
-        grains::Vector{Tuple{Float64,Float64}} =                                #src
-            Marble.PoissonDiskSampling.generate(random, (r,1-r), (r,1-r); r=2r) #src
-    end                                                                         #src
-    particles = generate_particles(ParticleState, lattice; random) do x, y
+function generate_grains(::Type{ParticleState}, lattice::Lattice; r, alg) where {ParticleState}
+    grains = Marble.PDS.generate(alg.rng, (r,1-r), (r,1-r); r=2r)
+    particles = generate_particles(ParticleState, lattice; alg) do x, y
         any(grains) do xc
             norm(Vec(xc) - Vec(x,y)) < r
         end

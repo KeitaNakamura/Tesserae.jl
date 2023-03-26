@@ -100,9 +100,9 @@
                         dt = 1.0
 
                         if include_near_boundary
-                            particles = generate_particles((x,y) -> true, ParticleState, grid; random=true)
+                            particles = generate_particles((x,y) -> true, ParticleState, grid; alg=PoissonDiskSampling())
                         else
-                            particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid; random=true)
+                            particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid; alg=PoissonDiskSampling())
                         end
                         @. particles.m = 1
 

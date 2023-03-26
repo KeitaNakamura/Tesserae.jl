@@ -1,86 +1,77 @@
-import PoissonDiskSampling
+import PoissonDiskSampling as PDS
 import Random
 
 const Particles = StructVector
 
-function grid_sampling(lattice::Lattice, n::Int)
-    axes = get_axes(lattice)
-    r = spacing(lattice) / 2n
-    minmax(ax, r) = (first(ax)+r, last(ax)-r)
-    Lattice(2r, minmax.(axes, r)...)
+#####################
+# SamplingAlgorithm #
+#####################
+
+abstract type SamplingAlgorithm end
+
+struct GridSampling <: SamplingAlgorithm end
+struct PoissonDiskSampling{RNG} <: SamplingAlgorithm
+    rng::RNG
+end
+PoissonDiskSampling() = PoissonDiskSampling(Random.GLOBAL_RNG)
+
+##################
+# SamplingDomain #
+##################
+
+abstract type SamplingDomain end
+
+struct BoxDomain{dim, T} <: SamplingDomain
+    minmax::NTuple{dim, Tuple{T, T}}
+end
+BoxDomain(lattice::Lattice) = BoxDomain(tuple.(Tuple(first(lattice)), Tuple(last(lattice))))
+BoxDomain(grid::Grid) = BoxDomain(grid.x)
+
+entire_volume(box::BoxDomain) = prod(x->x[2]-x[1], box.minmax)
+
+function point_sampling(::GridSampling, box::BoxDomain{dim, T}, l::T) where {dim, T}
+    r = l / 2
+    minmax((xmin,xmax), r) = (xmin+r, xmax-r)
+    points = Lattice(2r, minmax.(box.minmax, r)...)
+    points, entire_volume(box)/length(points)
 end
 
-function poisson_disk_sampling(rng, lattice::Lattice{dim}, n::Int) where {dim}
-    # Determine minimum distance `d` between particles for Poisson disk sampling
+function point_sampling(pds::PoissonDiskSampling, box::BoxDomain{dim, T}, l::T) where {dim, T}
+    # Determine minimum distance between particles for Poisson disk sampling
     # so that the number of generated particles is almost the same as the grid sampling.
     # This is empirical equation (see https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
-    d = spacing(lattice) / n / (1.7)^(1/dim)
-    minmaxes = map((min,max)->(min,max), Tuple(first(lattice)), Tuple(last(lattice)))
-    points = PoissonDiskSampling.generate(rng, minmaxes...; r = only(unique(d)))
-    map(eltype(lattice), points)
+    points = PDS.generate(pds.rng, box.minmax...; r = l / (1.7)^(1/dim))
+    reinterpret(Vec{dim,T}, points), entire_volume(box)/length(points)
 end
 
-function point_sampling(random::Bool, lattice::Lattice, n::Int)
-    if random == true
-        poisson_disk_sampling(Random.GLOBAL_RNG, lattice, n)
-    else
-        grid_sampling(lattice, n)
-    end
+struct FunctionDomain{F, D <: SamplingDomain} <: SamplingDomain
+    isindomain::F
+    entiredomain::D
 end
-point_sampling(rng, lattice::Lattice, n::Int) = poisson_disk_sampling(rng, lattice, n)
+
+entire_volume(domain::FunctionDomain) = entire_volume(domain.entiredomain)
+
+function point_sampling(alg::SamplingAlgorithm, domain::FunctionDomain, l::Real)
+    points, Vₚ = point_sampling(alg, domain.entiredomain, l)
+    mask = broadcast(Base.splat(domain.isindomain), points)
+    view(points, mask), Vₚ
+end
+
+function SphericalDomain(centroid::Vec{dim, T}, radius::T) where {dim, T}
+    minmax = ntuple(Val(dim)) do i
+        c = centroid[i]
+        r = radius
+        (c-r, c+r)
+    end
+    FunctionDomain((x...) -> norm(Vec(x)-centroid) < radius, BoxDomain(minmax))
+end
+
+######################
+# generate_particles #
+######################
 
 Base.@pure function infer_particles_type(::Type{ParticleState}) where {ParticleState}
     Base._return_type(StructVector{ParticleState}, Tuple{UndefInitializer, Int})
-end
-
-function generate_particles(::Type{ParticleState}, points::AbstractArray{<: Vec}) where {ParticleState}
-    particles = StructVector{ParticleState}(undef, length(points))
-    fillzero!(particles)
-    @. particles.x = points
-    particles
-end
-
-function generate_particles(
-        isindomain::Function,
-        ::Type{ParticleState},
-        lattice::Lattice{dim};
-        n::Int = 2,
-        random = false,
-        system::CoordinateSystem = NormalSystem(),
-    ) where {ParticleState, dim}
-
-    allpoints = point_sampling(random, lattice, n)
-    mask = broadcast(Base.splat(isindomain), allpoints)
-    particles = generate_particles(ParticleState, view(allpoints, mask))
-
-    # currently points are generated in the entire domain
-    # so, simply deviding the total volume by the number of all points
-    # gives the volume of a particle.
-    V = prod(last(lattice) - first(lattice)) / length(allpoints)
-
-    if :V in propertynames(particles)
-        if dim == 2 && system isa Axisymmetric
-            @. particles.V = getindex(particles.x, 1) * V
-        else
-            @. particles.V = V
-        end
-    end
-    if :l in propertynames(particles)
-        if random === false
-            l = spacing(lattice) / n
-        else
-            l = V^(1/dim)
-        end
-        particles.l .= l
-    end
-
-    reorder_particles!(particles, lattice)
-    particles
-end
-
-function generate_particles(isindomain::Function, lattice::Lattice{dim, T}; kwargs...) where {dim, T}
-    ParticleState = minimum_particle_state(Val(dim), T)
-    generate_particles(isindomain, ParticleState, lattice; kwargs...)
 end
 
 """
@@ -112,8 +103,61 @@ If `ParticleState` is not given, the `NamedTuple` including above properties is 
 * `random::Bool`: Poisson disk sampling is used when `random = true` (`random = false` by default). In the random sampling, minimum distance between particles is set to `spacing(grid) / n`.
 * `system::CoordinateSystem`: use `Axisymmetric()` for axisymmetric simulations.
 """
-generate_particles(isindomain::Function, ::Type{ParticleState}, grid::Grid; kwargs...) where {ParticleState} = generate_particles(isindomain, ParticleState, grid.x; kwargs...)
-generate_particles(isindomain::Function, grid::Grid; kwargs...) = generate_particles(isindomain, grid.x; kwargs...)
+function generate_particles end
+
+function generate_particles(::Type{ParticleState}, points::AbstractArray{<: Vec}) where {ParticleState}
+    particles = StructVector{ParticleState}(undef, length(points))
+    fillzero!(particles)
+    @. particles.x = points
+    particles
+end
+
+_get_lattice(lt::Lattice) = lt
+_get_lattice(gd::Grid) = gd.x
+function generate_particles(
+        domain::SamplingDomain,
+        ::Type{ParticleState},
+        grid::Union{Grid{dim}, Lattice{dim}};
+        n::Int = 2,
+        alg::SamplingAlgorithm = GridSampling(),
+        system::CoordinateSystem = NormalSystem(),
+    ) where {ParticleState, dim}
+
+    points, Vₚ = point_sampling(alg, domain, spacing(grid)/n)
+    particles = generate_particles(ParticleState, points)
+
+    if :V in propertynames(particles)
+        if dim == 2 && system isa Axisymmetric
+            @. particles.V = getindex(particles.x, 1) * Vₚ
+        else
+            @. particles.V = Vₚ
+        end
+    end
+    if :l in propertynames(particles)
+        l = Vₚ^(1/dim)
+        particles.l .= l
+    end
+
+    reorder_particles!(particles, _get_lattice(grid))
+    particles
+end
+function generate_particles(
+        isindomain::Function,
+        ::Type{ParticleState},
+        grid::Union{Grid, Lattice};
+        n::Int = 2,
+        alg::SamplingAlgorithm = GridSampling(),
+        system::CoordinateSystem = NormalSystem(),
+    ) where {ParticleState}
+    generate_particles(FunctionDomain(isindomain, BoxDomain(grid)), ParticleState, grid; n, alg, system)
+end
+
+function generate_particles(domain, lattice::Lattice{dim, T}; kwargs...) where {dim, T}
+    ParticleState = minimum_particle_state(Val(dim), T)
+    generate_particles(domain, ParticleState, lattice; kwargs...)
+end
+generate_particles(domain, grid::Grid; kwargs...) = generate_particles(domain, grid.x; kwargs...)
+
 
 function generate_particles(::Type{ParticleState}, particles_old::StructVector) where {ParticleState}
     particles = StructVector{ParticleState}(undef, length(particles_old))

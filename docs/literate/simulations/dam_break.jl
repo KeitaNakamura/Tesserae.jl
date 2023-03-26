@@ -54,12 +54,12 @@ function dam_break(
     grid = generate_grid(GridState, dx, (0,3.22), (0,4.0))
 
     ## particles
-    if test                                                                                          #src
-        particles::Marble.infer_particles_type(ParticleState) =                                      #src
-            generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid; random=StableRNG(1234)) #src
-    else                                                                                             #src
-    particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid; random=true)
-    end                                                                                              #src
+    if test                                                                                                            #src
+        particles::Marble.infer_particles_type(ParticleState) =                                                        #src
+            generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid; alg=PoissonDiskSampling(StableRNG(1234))) #src
+    else                                                                                                               #src
+    particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid; alg=PoissonDiskSampling())
+    end                                                                                                                #src
     @. particles.m = ρ₀ * particles.V
     @. particles.b = Vec(0, -g)
     @show length(particles)

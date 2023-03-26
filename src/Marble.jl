@@ -38,6 +38,8 @@ export
 # Particles
     Particles,
     generate_particles,
+    GridSampling,
+    PoissonDiskSampling,
 # interpolations
     update!,
     Kernel,
