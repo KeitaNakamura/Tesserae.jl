@@ -23,20 +23,4 @@
         particles = generate_particles((x,y) -> true, lattice; alg=PoissonDiskSampling(StableRNG(1234)))
         @test mean(particles.x) ≈ [4.985641459718793, 4.9856469624835285]
     end
-    @testset "copied from existing particles" begin
-        lattice = Lattice(0.1, (0,10), (0,10))
-        particles_old = generate_particles((x,y) -> true, lattice; alg=PoissonDiskSampling())
-        check_particles = particles_new -> begin
-            @test particles_new !== particles_old
-            @test particles_new.x !== particles_old.x
-            @test particles_new.V !== particles_old.V
-            @test particles_new.l !== particles_old.l
-            @test particles_new == particles_old
-            @test particles_new.x == particles_old.x
-            @test particles_new.V == particles_old.V
-            @test particles_new.l == particles_old.l
-        end
-        check_particles(@inferred generate_particles(eltype(particles_old), particles_old))
-        check_particles(@inferred generate_particles(particles_old))
-    end
 end

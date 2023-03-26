@@ -152,30 +152,6 @@ function generate_particles(domain, lattice::Lattice{dim, T}; kwargs...) where {
 end
 generate_particles(domain, grid::Grid; kwargs...) = generate_particles(domain, grid.x; kwargs...)
 
-
-function generate_particles(::Type{ParticleState}, particles_old::StructVector) where {ParticleState}
-    particles = StructVector{ParticleState}(undef, length(particles_old))
-    fillzero!(particles)
-
-    if :x in propertynames(particles)
-        particles.x .= particles_old.x
-    end
-    if :V in propertynames(particles)
-        particles.V .= particles_old.V
-    end
-    if :l in propertynames(particles)
-        particles.l .= particles_old.l
-    end
-
-    particles
-end
-
-function generate_particles(particles_old::StructVector)
-    T = eltype(particles_old.x)
-    ParticleState = minimum_particle_state(Val(length(T)), eltype(T))
-    generate_particles(ParticleState, particles_old)
-end
-
 function minimum_particle_state(::Val{dim}, ::Type{T}) where {dim, T}
     @NamedTuple begin
         x::Vec{dim, T}
