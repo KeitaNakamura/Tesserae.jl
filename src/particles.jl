@@ -1,6 +1,7 @@
 import PoissonDiskSampling as PDS
 import Random
 
+const poisson_disk_sampling = PDS.generate
 const Particles = StructVector
 
 #####################
@@ -41,7 +42,7 @@ function point_sampling(pds::PoissonDiskSampling, box::BoxDomain{dim, T}, l::T) 
     # Determine minimum distance between particles for Poisson disk sampling
     # so that the number of generated particles is almost the same as the grid sampling.
     # This is empirical equation (see https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
-    points = PDS.generate(pds.rng, box.minmax...; r = l / (1.7)^(1/dim))
+    points = poisson_disk_sampling(pds.rng, box.minmax...; r = l / (1.7)^(1/dim))
     reinterpret(Vec{dim,T}, points), entire_volume(box)/length(points)
 end
 

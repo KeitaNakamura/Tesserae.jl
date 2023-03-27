@@ -234,7 +234,7 @@ function contacting_grains(
 end
 
 function generate_grains(::Type{ParticleState}, r::Real, lattice::Lattice) where {ParticleState}
-    grains = Marble.PDS.generate((r,1-r), (r,1-r); r=2r)
+    grains = Marble.poisson_disk_sampling((r,1-r), (r,1-r); r=2r)
     map(grains) do centroid
         generate_particles(SphericalDomain(Vec(centroid), r), ParticleState, lattice)
     end
