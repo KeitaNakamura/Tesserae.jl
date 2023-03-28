@@ -143,7 +143,7 @@ function sand_column_collapse(
             Δϵ = symmetric(∇v*Δt)
             ΔW = skew(∇v*Δt)
 
-            σ = cauchy_compute_stress(model, σⁿ, Δϵ)
+            σ = compute_cauchy_stress(model, σⁿ, Δϵ)
             σ = σ + symmetric(ΔW⋅σⁿ - σⁿ⋅ΔW)
             pt.σ = σ
             pt.V *= 1 + tr(Δϵ)
