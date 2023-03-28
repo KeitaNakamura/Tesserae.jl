@@ -277,8 +277,8 @@ function impose_boundary_condition!(grid::Grid)
     end
 end
 
-## check the result                                                                                                                                           #src
-using Test                                                                                                                                                  #src
+## check the result                                                                                                                            #src
+using Test                                                                                                                                     #src
 @test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [0.5036385008537854, 0.19079293004940925] rtol=1e-5 #src
 @test mean(contacting_grains(uGIMP(),                              FLIP(); test=true).x) ≈ [0.5035729551556197, 0.19486313891209753] rtol=1e-5 #src
 @test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.5038373871432336, 0.1898585728550991]  rtol=1e-5 #src

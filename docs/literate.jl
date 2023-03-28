@@ -3,8 +3,10 @@ using Literate
 const SIMULATIONS = ["sand_column_collapse.jl",
                      "dam_break.jl",
                      "axial_vibration_of_bar.jl",
-                     "contacting_grains.jl"]
+                     "contacting_grains.jl",
+                     "hyperelastic_material.jl"]
 const MODELS = ["LinearElastic.jl",
+                "NeoHookean.jl",
                 "DruckerPrager.jl"]
 
 for filename in SIMULATIONS

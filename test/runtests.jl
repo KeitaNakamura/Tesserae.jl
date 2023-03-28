@@ -15,5 +15,6 @@ include("transfer.jl")
         include(joinpath(@__DIR__, "../docs/literate/simulations/dam_break.jl"))
         include(joinpath(@__DIR__, "../docs/literate/simulations/axial_vibration_of_bar.jl"))
         include(joinpath(@__DIR__, "../docs/literate/simulations/contacting_grains.jl"))
+        include(joinpath(@__DIR__, "../docs/literate/simulations/hyperelastic_material.jl"))
     end
 end

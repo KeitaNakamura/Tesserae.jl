@@ -167,8 +167,8 @@ function sand_column_collapse(
     particles #src
 end
 
-## check the result                                                                                                                                                #src
-using Test                                                                                                                                                         #src
+## check the result                                                                                                                                  #src
+using Test                                                                                                                                           #src
 @test mean(sand_column_collapse(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [0.0006330597405883035, 0.1312007490213257]  rtol=1e-5 #src
 @test mean(sand_column_collapse(uGIMP(),                              FLIP(); test=true).x) ≈ [0.0026972982524636115, 0.13743177648166474] rtol=1e-5 #src
 @test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.002198603580244651, 0.13051022570299914]  rtol=1e-5 #src
