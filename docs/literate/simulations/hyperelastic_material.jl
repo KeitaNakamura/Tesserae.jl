@@ -119,7 +119,6 @@ function hyperelastic_material(
         @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m)
 
         ## boundary conditions
-
         slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
         @inbounds for i in @view eachindex(grid)[:,[begin,end],:]
             grid.v[i] = slip(grid.v[i], Vec(0,1,0))
