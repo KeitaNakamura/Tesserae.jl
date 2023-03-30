@@ -273,6 +273,9 @@ transfer algorithms. See each algorithm in [`TransferAlgorithm`](@ref) for more 
 function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
     particle_to_grid!(alg, system, Val(names), grid, particles, space; parallel)
 end
+function particle_to_grid!(name::Symbol, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+    particle_to_grid!(alg, system, Val((name,)), grid, particles, space; parallel)
+end
 
 function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace; parallel::Bool) where {names}
     check_statenames(names, (:m, :mv, :f, :∇m))
@@ -399,6 +402,9 @@ via `getproperty`, which depends on the transfer algorithms. See each algorithm 
 """
 function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
     grid_to_particle!(alg, system, Val(names), particles, grid, space, only_dt...; parallel)
+end
+function grid_to_particle!(name::Symbol, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+    grid_to_particle!(alg, system, Val((name,)), particles, grid, space, only_dt...; parallel)
 end
 
 function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, only_dt...; parallel::Bool) where {names, dim}

@@ -55,11 +55,11 @@ function USF(grid::Grid, particles::Particles, space::MPSpace, E::Real, Δt::Rea
     impose_boundary_condition!(grid)
 
     ## update particle volume and stress first
-    grid_to_particle!((:∇v,), particles, grid, space)
+    grid_to_particle!(:∇v, particles, grid, space)
     update_stress!.(LazyRows(particles), E, Δt)
 
     ## update grid velocity from updated stress
-    particle_to_grid!((:f,), grid, particles, space)
+    particle_to_grid!(:f, grid, particles, space)
     @. grid.vⁿ = grid.v
     @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m)
     impose_boundary_condition!(grid)
@@ -93,12 +93,12 @@ function MUSL(grid::Grid, particles::Particles, space::MPSpace, E::Real, Δt::Re
 
     ## recalculate grid velocity
     fillzero!(grid.mv)
-    particle_to_grid!((:mv,), grid, particles, space)
+    particle_to_grid!(:mv, grid, particles, space)
     @. grid.v = grid.mv / grid.m
     impose_boundary_condition!(grid)
 
     ## update particle volume and stress
-    grid_to_particle!((:∇v,), particles, grid, space)
+    grid_to_particle!(:∇v, particles, grid, space)
     update_stress!.(LazyRows(particles), E, Δt)
 end
 
