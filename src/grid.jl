@@ -96,11 +96,7 @@ end
 
 get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
-@inline function isnonzero(A::SpGrid{dim}, I::Vararg{Integer, dim}) where {dim}
-    @boundscheck checkbounds(A, I...)
-    blkinds = blockindices(get_spinds(A))
-    @inbounds !iszero(blkinds[blocksize(I)...])
-end
+@inline isnonzero(A::SpGrid, I::Integer...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 @inline isnonzero(A::SpGrid, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(A, Tuple(I)...))
 
 # fillzero!

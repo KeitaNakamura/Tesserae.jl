@@ -33,6 +33,12 @@ end
     end
 end
 
+@inline function isnonzero(sp::SpIndices{dim}, I::Vararg{Integer, dim}) where {dim}
+    @boundscheck checkbounds(sp, I...)
+    blkinds = blockindices(sp)
+    @inbounds !iszero(blkinds[blocksize(I)...])
+end
+
 reset_sparsity_pattern!(sp::SpIndices) = fillzero!(blockindices(sp))
 function update_sparsity_pattern!(sp::SpIndices{dim}) where {dim}
     inds = blockindices(sp)
@@ -146,6 +152,9 @@ end
     end
     A
 end
+
+@inline isnonzero(A::SpArray, I::Integer...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
+@inline isnonzero(A::SpArray, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(A, Tuple(I)...))
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
