@@ -542,14 +542,14 @@ end
 end
 
 # 1D
-@inline calc_∇v(::NormalSystem, ::Type{<: SecondOrderTensor{1}}, ∇v::SecondOrderTensor{1}) = ∇v
+@inline calc_∇v(::NormalSystem, ::Type{<: SecondOrderTensor{1}}, ∇vₚ::SecondOrderTensor{1}) = ∇vₚ
 # plane-strain
-@inline calc_∇v(::Union{NormalSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{2}}, ∇v::SecondOrderTensor{2}) = ∇v
-@inline calc_∇v(::Union{NormalSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{3}}, ∇v::SecondOrderTensor{2}) = Tensorial.resizedim(∇v, Val(3))
+@inline calc_∇v(::Union{NormalSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{2}}, ∇vₚ::SecondOrderTensor{2}) = ∇vₚ
+@inline calc_∇v(::Union{NormalSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{2}) = Tensorial.resizedim(∇vₚ, Val(3))
 # axisymmetric
-@inline calc_∇v(::Axisymmetric, ::Type{<: SecondOrderTensor{3}}, ∇v::SecondOrderTensor{2}, v::Real, r::Real) = Tensorial.resizedim(∇v, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 v/r])
+@inline calc_∇v(::Axisymmetric, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{2}, vₚ::Real, rₚ::Real) = Tensorial.resizedim(∇vₚ, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 vₚ/rₚ])
 # 3D
-@inline calc_∇v(::NormalSystem, ::Type{<: SecondOrderTensor{3}}, ∇v::SecondOrderTensor{3}) = ∇v
+@inline calc_∇v(::NormalSystem, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{3}) = ∇vₚ
 
 ##########################
 # smooth_particle_state! #
