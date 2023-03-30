@@ -253,13 +253,14 @@ function impose_contact_condition!(grid::Grid, particles::Particles, v_cm::Abstr
     @inbounds for i in eachindex(grid)
         if isnonzero(grid, i) && grid.v[i] != v_cm[i]
             n = normalize(grid.∇m[i])
-            vʳ = grid.v[i] - v_cm[i]
+            vᵢ = grid.v[i]
+            vʳ = vᵢ - v_cm[i]
             isincontact = vʳ ⋅ n > 0
             if isincontact
                 v̄ₙ = vʳ ⋅ n
                 vₜ = vʳ - v̄ₙ*n
                 v̄ₜ = norm(vₜ)
-                grid.v[i] = grid.v[i] - (v̄ₙ*n + min(μ*v̄ₙ/v̄ₜ, 1) * vₜ)
+                grid.v[i] = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * vₜ/v̄ₜ)
             end
         end
     end
