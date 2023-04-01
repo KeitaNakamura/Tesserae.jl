@@ -60,7 +60,7 @@ function hyperelastic_material(
     r = 0.2
     if test                                                                                                                  #src
         RNG = StableRNG(1234)                                                                                                #src
-        centroids::Vector{NTuple{3, Float64}} = Marble.poisson_disk_sampling(RNG, (-0.8,0.8), (6,28), (-0.8,0.8); r=3r)      #src
+        centroids::Vector{NTuple{3, Float64}} = Marble.poisson_disk_sampling(RNG, 3r, (-0.8,0.8), (6,28), (-0.8,0.8))        #src
         particles::Marble.infer_particles_type(ParticleState) =                                                              #src
             mapreduce(vcat, centroids) do x                                                                                  #src
                 if rand(RNG, Bool)                                                                                           #src
@@ -70,7 +70,7 @@ function hyperelastic_material(
                 end                                                                                                          #src
             end                                                                                                              #src
     else                                                                                                                     #src
-    centroids = Marble.poisson_disk_sampling((-0.8,0.8), (6,28), (-0.8,0.8); r=3r)
+    centroids = Marble.poisson_disk_sampling(3r, (-0.8,0.8), (6,28), (-0.8,0.8))
     particles = mapreduce(vcat, centroids) do x
         if rand(Bool)
             generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid)

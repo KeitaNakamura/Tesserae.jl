@@ -234,18 +234,18 @@ function contacting_grains(
 end
 
 function generate_grains(::Type{ParticleState}, r::Real, lattice::Lattice) where {ParticleState}
-    grains = Marble.poisson_disk_sampling((r,1-r), (r,1-r); r=2r)
+    grains = Marble.poisson_disk_sampling(2r, (r,1-r), (r,1-r))
     map(grains) do centroid
         generate_particles(SphericalDomain(Vec(centroid), r), ParticleState, lattice)
     end
 end
-function generate_grains_stable(::Type{ParticleState}, r::Real, lattice::Lattice) where {ParticleState}                   #src
+function generate_grains_stable(::Type{ParticleState}, r::Real, lattice::Lattice) where {ParticleState}             #src
     rng = StableRNG(1234)                                                                                           #src
-    grains = Marble.PDS.generate(rng, (r,1-r), (r,1-r); r=2r)                                                       #src
+    grains = Marble.poisson_disk_sampling(rng, 2r, (r,1-r), (r,1-r))                                                #src
     map(grains) do centroid                                                                                         #src
         generate_particles(SphericalDomain(Vec(centroid), r), ParticleState, lattice; alg=PoissonDiskSampling(rng)) #src
     end                                                                                                             #src
-end
+end                                                                                                                 #src
 
 function impose_contact_condition!(grid::Grid, particles::Particles, v_cm::AbstractArray{<: Vec{2}}, μ::Real)
     @assert size(grid) == size(v_cm)
