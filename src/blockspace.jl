@@ -61,7 +61,6 @@ num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; last(bs.np
 particlesinblocks(bs::BlockSpace) = bs.blkarray
 
 function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector; parallel::Bool)
-    blkarray = particlesinblocks(bs)
     fillzero!.(bs.nparticles)
     @threaded_inbounds parallel :static for p in eachindex(xₚ)
         id = Threads.threadid()
@@ -72,7 +71,10 @@ function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector; paralle
     for i in 1:Threads.nthreads()-1
         @inbounds broadcast!(+, bs.nparticles[i+1], bs.nparticles[i+1], bs.nparticles[i])
     end
-    nptsinblks = last(bs.nparticles)
+    nptsinblks = last(bs.nparticles) # last entry has a complete list
+
+    # update `particlesinblocks`
+    blkarray = particlesinblocks(bs)
     cumsum!(vec(blkarray.stops), vec(nptsinblks))
     @threaded_inbounds parallel :static for p in eachindex(xₚ)
         blk = bs.blockindices[p]
