@@ -9,6 +9,7 @@ include("interpolations.jl")
 include("blockspace.jl")
 include("transfer.jl")
 
+const RUN_TESTS = true
 @testset "Examples" begin
     cd(tempdir()) do
         include(joinpath(@__DIR__, "../docs/literate/simulations/sand_column_collapse.jl"))

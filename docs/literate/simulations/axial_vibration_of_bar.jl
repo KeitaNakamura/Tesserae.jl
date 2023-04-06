@@ -215,12 +215,14 @@ Plots.plot(musl.t, [musl.Ek musl.Es musl.Ek+musl.Es], label=["kinetic" "strain" 
 
 ## check results                                                             #src
 using Test                                                                   #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                                        #src
 usl  = axial_vibration_of_bar(USL;  nmodes=1, ncells=16, PPC=2, t_stop=40.0) #src
 usf  = axial_vibration_of_bar(USF;  nmodes=1, ncells=16, PPC=2, t_stop=40.0) #src
 musl = axial_vibration_of_bar(MUSL; nmodes=1, ncells=16, PPC=2, t_stop=40.0) #src
 @test usl.v_num ≈ usl.v_exa rtol=0.025                                       #src
 @test usf.v_num ≈ usf.v_exa rtol=0.025                                       #src
 @test musl.v_num ≈ musl.v_exa rtol=0.025                                     #src
+end                                                                          #src
 
 # ## References
 #

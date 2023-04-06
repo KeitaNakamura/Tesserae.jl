@@ -141,8 +141,10 @@ end
 
 ## check the result                                                                                                                    #src
 using Test                                                                                                                             #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                  #src
 @test mean(dam_break(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [1.6289726447675077, 0.11321605792384627] rtol=1e-5 #src
 @test mean(dam_break(KernelCorrection(QuadraticBSpline()), APIC(); test=true).x) ≈ [1.6294993733786765, 0.11320682736922087] rtol=1e-5 #src
 @test mean(dam_break(KernelCorrection(QuadraticBSpline()), FLIP(); test=true).x) ≈ [1.482050336414871, 0.13076917336964955]  rtol=1e-5 #src
 @test mean(dam_break(LinearWLS(QuadraticBSpline()),        TPIC(); test=true).x) ≈ [1.637148881940021, 0.11354987067566219]  rtol=1e-5 #src
 @test mean(dam_break(LinearWLS(QuadraticBSpline()), WLSTransfer(); test=true).x) ≈ [1.637148881940021, 0.11354987067566219]  rtol=1e-5 #src
+end                                                                                                                                    #src
