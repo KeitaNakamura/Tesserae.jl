@@ -19,7 +19,7 @@ end
 
 Base.IndexStyle(::Type{<: ParticlesInBlocksArray}) = IndexLinear()
 Base.size(x::ParticlesInBlocksArray) = size(x.stops)
-@inline function Base.getindex(x::ParticlesInBlocksArray, i::Int)
+@inline function Base.getindex(x::ParticlesInBlocksArray, i::Integer)
     @boundscheck checkbounds(x, i)
     @inbounds begin
         stop = x.stops[i]
