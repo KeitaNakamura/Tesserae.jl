@@ -15,6 +15,25 @@ end
     AxisArray(map(getindex, A.axes, ranges))
 end
 
+struct LinAxis{T} <: AbstractVector{T}
+    dx::T
+    xmin::T
+    len::Int
+end
+function LinAxis{T}(dx::Real, (xmin,xmax)::Tuple{Real, Real}) where {T}
+    len = length(range(xmin, xmax; step=dx))
+    LinAxis{T}(dx, xmin, len)
+end
+function LinAxis(dx::Real, (xmin, xmax)::Tuple{Real, Real})
+    T = promote_type(typeof(dx), typeof(xmin), typeof(xmax))
+    LinAxis{T}(dx, (xmin, xmax))
+end
+Base.size(x::LinAxis) = (x.len,)
+@inline function Base.getindex(x::LinAxis, i::Integer)
+    @boundscheck checkbounds(x, i)
+    @inbounds muladd(x.dx, i-one(i), x.xmin)
+end
+
 """
     Lattice(dx, (xmin, xmax), (ymin, ymax)...)
     Lattice(T, dx, (xmin, xmax), (ymin, ymax)...)
@@ -47,8 +66,7 @@ get_axes(x::Lattice, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
 
 function Lattice(::Type{T}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
     @assert all(map(issorted, minmax))
-    axes = map(x->range(x...; step=dx), minmax)
-    axisarray = AxisArray(map(Vector{T}, axes))
+    axisarray = AxisArray(LinAxis{T}.(dx, minmax))
     Lattice(axisarray, T(dx), T(inv(dx)))
 end
 Lattice(dx::Real, minmax::Tuple{Real, Real}...) = Lattice(Float64, dx, minmax...)
