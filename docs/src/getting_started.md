@@ -65,7 +65,7 @@ space = MPSpace(LinearBSpline(), size(grid), length(particles))
     # update other particle states
     for p in 1:length(particles)
         Δϵ = Δt * symmetric(particles.∇v[p])
-        Δσ = λ*I*tr(Δϵ) + 2μ*Δϵ
+        Δσ = λ*tr(Δϵ)*I + 2μ*Δϵ
         particles.V[p] *= 1 + tr(Δϵ)
         particles.σ[p] += Δσ
     end
