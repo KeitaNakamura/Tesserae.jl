@@ -52,14 +52,14 @@ space = MPSpace(LinearBSpline(), size(grid), length(particles))
     # update interpolation space
     update!(space, grid, particles)
 
-    # P2G transfer
+    # P2G transfer (mass, momentum and force)
     particle_to_grid!((:m,:mv,:f), fillzero!(grid), particles, space)
 
     # solve momentum equation
     @. grid.vⁿ = grid.mv / grid.m
     @. grid.v  = grid.vⁿ + Δt * (grid.f/grid.m)
 
-    # G2P transfer
+    # G2P transfer (velocity, velocity gradient and position)
     grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt)
 
     # update other particle states
