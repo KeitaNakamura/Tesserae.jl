@@ -43,7 +43,8 @@ function point_sampling(pds::PoissonDiskSampling, box::BoxDomain{dim, T}, l::T) 
     # so that the number of generated particles is almost the same as the grid sampling.
     # This is empirical equation (see https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
     points = poisson_disk_sampling(pds.rng, l/(1.7)^(1/dim), box.minmax...)
-    reinterpret(Vec{dim,T}, points), entire_volume(box)/length(points)
+    U = eltype(eltype(points))
+    reinterpret(Vec{dim,U}, points), entire_volume(box)/length(points)
 end
 
 struct FunctionDomain{F, D <: SamplingDomain} <: SamplingDomain
