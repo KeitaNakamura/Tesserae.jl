@@ -134,7 +134,7 @@ end
     value(bspline, ξ, node_position(lattice, I))
 end
 
-@inline function node_position(ax::Vector, i::Int)
+@inline function node_position(ax::AbstractVector, i::Int)
     left = i - firstindex(ax)
     right = lastindex(ax) - i
     ifelse(left < right, left, -right)
