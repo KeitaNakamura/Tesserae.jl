@@ -19,9 +19,8 @@ zero_recursive(x) = zero_recursive(typeof(x))
 
 # fillzero!
 function fillzero!(x::AbstractArray)
-    @simd for i in eachindex(x)
-        @inbounds x[i] = zero_recursive(eltype(x))
-    end
+    @assert isbitstype(eltype(x))
+    fill!(x, zero_recursive(eltype(x)))
     x
 end
 
