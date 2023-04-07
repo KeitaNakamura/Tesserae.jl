@@ -7,6 +7,11 @@ const Grid{N, T, C <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}
 get_lattice(grid::Grid) = grid.x
 spacing(grid::Grid) = spacing(get_lattice(grid))
 
+# fillzero!
+fillzero!(A::Grid) = (StructArrays.foreachfield(_fillzero!, A); A)
+_fillzero!(x::Lattice) = x
+_fillzero!(x::AbstractArray) = fillzero!(x)
+
 generate_grid(lattice::Lattice) = StructArray((; x = lattice))
 generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Lattice(Float64, dx, minmax...))
 
@@ -98,11 +103,6 @@ get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
 @inline isnonzero(A::SpGrid, I::Integer...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 @inline isnonzero(A::SpGrid, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(A, Tuple(I)...))
-
-# fillzero!
-fillzero!(A::SpGrid) = (StructArrays.foreachfield(_fillzero!, A); A)
-_fillzero!(x::Lattice) = x
-_fillzero!(x::AbstractArray) = fillzero!(x)
 
 # DON'T manually call these function
 # this should be called from `update!` in MPSpace
