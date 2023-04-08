@@ -2,7 +2,7 @@
 # Grid #
 ########
 
-const Grid{N, T, C <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I} = StructArray{T, N, C, I}
+const Grid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I} = StructArray{T, N, NT, I}
 
 get_lattice(grid::Grid) = grid.x
 spacing(grid::Grid) = spacing(get_lattice(grid))
@@ -19,7 +19,7 @@ generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Latti
 # SpGrid #
 ##########
 
-const SpGrid{N, T, C <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, C, I}
+const SpGrid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
 
 Base.@pure function infer_lattice_realtype(::Type{GridState}, ::Val{dim}) where {GridState, dim}
     fieldname(GridState, 1) == :x || error("generate_grid: first field name must be `:x`")
