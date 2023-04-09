@@ -12,7 +12,7 @@ using StructArrays
 # SIMD
 import SIMD
 const SVec = SIMD.Vec
-const SIMDTypes = Union{Float16, Float32, Float64}
+const SIMDTypes = Union{SIMD.ScalarTypes, Bool}
 
 # reexport from StructArrays
 export LazyRow, LazyRows

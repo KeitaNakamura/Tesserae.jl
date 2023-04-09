@@ -80,9 +80,9 @@ end
     @inbounds Lattice(get_axisarray(lattice)[ranges...], spacing(lattice), spacing_inv(lattice))
 end
 
-@inline function isinside(x::Vec, lattice::Lattice)
+@inline function isinside(x::Vec, lattice::Lattice{dim, T}) where {dim, T}
     axes = get_axes(lattice)
-    @inbounds _isinside(SVec(map(first, axes)), SVec(map(last, axes)), SVec(x))
+    @inbounds _isinside(SVec{dim, T}(map(first, axes)), SVec{dim, T}(map(last, axes)), SVec{dim, T}(x))
 end
 @inline function _isinside(start::SVec{dim, T}, stop::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
     all(start ≤ x) && all(x ≤ stop)
@@ -115,9 +115,9 @@ julia> neighbornodes(lattice, Vec(1.5), 3)
 (CartesianIndices((1:5,)), false)
 ```
 """
-@inline function neighbornodes(lattice::Lattice{dim, T}, x::Vec{dim, T}, h::Real) where {dim, T}
+@inline function neighbornodes(lattice::Lattice{dim, T}, x::Vec, h::Real) where {dim, T}
     isinside(x, lattice) || return (CartesianIndices(nfill(1:0, Val(dim))), false)
-    _neighborindices(SVec(size(lattice)), spacing_inv(lattice), SVec(first(lattice)), SVec(x), convert(T, h))
+    _neighborindices(SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)), SVec{dim,T}(x), convert(T, h))
 end
 @inline function _neighborindices(dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}, h::T) where {dim, T}
     ξ = (x - xmin) * dx⁻¹
@@ -149,9 +149,9 @@ julia> Marble.whichcell(lattice, Vec(1.5, 1.5))
 CartesianIndex(2, 2)
 ```
 """
-@inline function whichcell(lattice::Lattice, x::Vec)
+@inline function whichcell(lattice::Lattice{dim, T}, x::Vec) where {dim, T}
     isinside(x, lattice) || return nothing
-    _whichcell(spacing_inv(lattice), SVec(first(lattice)), SVec(x))
+    _whichcell(spacing_inv(lattice), SVec{dim, T}(first(lattice)), SVec{dim, T}(x))
 end
 @inline function _whichcell(dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
     ξ = (x - xmin) * dx⁻¹

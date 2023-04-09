@@ -97,3 +97,5 @@ end
 ########
 
 @inline SIMD.Vec(x::Vec) = SVec(Tuple(x))
+@inline SIMD.Vec{dim,T}(x::Vec{dim,T}) where {dim,T<:SIMDTypes} = SVec(Tuple(x))
+@inline SIMD.Vec{dim,T}(x::Vec{dim,U}) where {dim,T<:SIMDTypes,U<:SIMDTypes} = SVec(convert(Vec{dim,T}, x))
