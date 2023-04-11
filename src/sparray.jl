@@ -178,7 +178,11 @@ function unsafe_reset_sparsity_pattern!(A::SpArray)
 end
 function unsafe_update_sparsity_pattern!(A::SpArray)
     n = update_sparsity_pattern!(get_spinds(A))
-    resize!(nonzeros(A), n)
+    nz = nonzeros(A)
+    len = length(nz)
+    if 10n < len || len < n
+        resize!(nz, 2n)
+    end
     n
 end
 function unsafe_update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})

@@ -36,7 +36,7 @@ end
     for (x, x_sppat) in ((A, A_sppat), (B, B_sppat))
         Marble.reset_sparsity_pattern!(x) .= x_sppat
         n = Marble.update_sparsity_pattern!(x)
-        @test n == length(x.data)
+        @test n ≤ length(x.data)
         @test all(LinearIndices(x)) do i
             x[i] = i
             isactive = !iszero(Marble.get_spinds(x)[i])
