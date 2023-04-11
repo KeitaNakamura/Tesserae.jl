@@ -6,8 +6,8 @@ using Marble: SpIndices, SpArray
 
     spinds = SpIndices(100,50)
     mask = rand(Bool, Marble.blocksize(spinds))
-    Marble.reset_sparsity_pattern!(spinds) .= mask
-    Marble.update_sparsity_pattern!(spinds)
+    Marble.blockindices(spinds) .= mask
+    Marble.numbering!(spinds)
 
     inds = LinearIndices(Marble.nfill(1<<Marble.BLOCKFACTOR, Val(2)))
     offset = Ref(0)
@@ -34,13 +34,12 @@ end
     B_sppat = rand(Bool, Marble.blocksize(B))
 
     for (x, x_sppat) in ((A, A_sppat), (B, B_sppat))
-        Marble.reset_sparsity_pattern!(x) .= x_sppat
-        n = Marble.update_sparsity_pattern!(x)
+        n = Marble.update_sparsity_pattern!(x, x_sppat)
+        CI = CartesianIndices(x)
         @test n ≤ length(x.data)
         @test all(LinearIndices(x)) do i
             x[i] = i
-            isactive = !iszero(Marble.get_spinds(x)[i])
-            x[i] == ifelse(isactive, i, zero(eltype(x)))
+            x[i] == ifelse(isnonzero(x, CI[i]), i, zero(eltype(x)))
         end
     end
 

@@ -104,19 +104,6 @@ get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 @inline isnonzero(A::SpGrid, I::Integer...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 @inline isnonzero(A::SpGrid, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(A, Tuple(I)...))
 
-# DON'T manually call these function
-# this should be called from `update!` in MPSpace
-function unsafe_reset_sparsity_pattern!(A::SpGrid)
-    reset_sparsity_pattern!(get_spinds(A))
-end
-function unsafe_update_sparsity_pattern!(A::SpGrid)
-    n = update_sparsity_pattern!(get_spinds(A))
-    StructArrays.foreachfield(a->_resize_nonzeros!(a,n), A)
-    A
-end
-_resize_nonzeros!(x::Lattice, n) = x
-_resize_nonzeros!(x::SpArray, n) = resize!(nonzeros(x), n)
-
 # unsafe becuase the returned index can be 0 if the SpIndices is not correctly updated
 @inline function unsafe_nonzeroindex(A::SpGrid, i)
     @boundscheck checkbounds(A, i)

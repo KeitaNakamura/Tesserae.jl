@@ -39,8 +39,7 @@ end
     @inbounds !iszero(blkinds[blocksize(I)...])
 end
 
-reset_sparsity_pattern!(sp::SpIndices) = fillzero!(blockindices(sp))
-function update_sparsity_pattern!(sp::SpIndices{dim}) where {dim}
+function numbering!(sp::SpIndices{dim}) where {dim}
     inds = blockindices(sp)
     count = 0
     @inbounds for i in eachindex(inds)
@@ -158,39 +157,25 @@ end
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
-function reset_sparsity_pattern!(A::SpArray)
-    A.shared_spinds && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
-    unsafe_reset_sparsity_pattern!(A)
-end
-function update_sparsity_pattern!(A::SpArray)
-    A.shared_spinds && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
-    unsafe_update_sparsity_pattern!(A)
-end
 function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
+    A.shared_spinds && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
     @assert blocksize(A) == size(sppat)
-    reset_sparsity_pattern!(A) .= sppat
-    update_sparsity_pattern!(A)
-    A
+    spinds = get_spinds(A)
+    blockindices(spinds) .= sppat
+    n = numbering!(spinds)
+    resize_nonzeros!(A, n)
+    n
 end
 
-function unsafe_reset_sparsity_pattern!(A::SpArray)
-    reset_sparsity_pattern!(get_spinds(A))
-end
-function unsafe_update_sparsity_pattern!(A::SpArray)
-    n = update_sparsity_pattern!(get_spinds(A))
+function resize_nonzeros!(A::SpArray, n::Integer)
     nz = nonzeros(A)
     len = length(nz)
     if 10n < len || len < n
         resize!(nz, 2n)
     end
-    n
-end
-function unsafe_update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
-    @assert blocksize(A) == size(sppat)
-    unsafe_reset_sparsity_pattern!(A) .= sppat
-    unsafe_update_sparsity_pattern!(A)
     A
 end
+resize_nonzeros!(A, n) = A
 
 ###############################
 # NonzeroIndex/NonzeroIndices #

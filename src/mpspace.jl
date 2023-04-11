@@ -57,9 +57,11 @@ function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union
     update_mpvalues!(space, get_lattice(grid), particles, filter; parallel)
 
     if grid isa SpGrid
-        update_sparsity_pattern!(unsafe_reset_sparsity_pattern!(grid), get_blockspace(space))
-        unsafe_update_sparsity_pattern!(grid)
-        set_gridspinds!(space, get_spinds(grid))
+        spinds = get_spinds(grid)
+        update_sparsity_pattern!(fillzero!(blockindices(spinds)), get_blockspace(space))
+        n = numbering!(spinds)
+        StructArrays.foreachfield(a->resize_nonzeros!(a,n), grid)
+        set_gridspinds!(space, spinds)
     else
         set_gridspinds!(space, nothing)
     end
