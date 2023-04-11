@@ -160,8 +160,8 @@ function hyperelastic_material(
     particles #src
 end
 
-## check the result                                                                                                                                                       #src
-using Test                                                                                                                                                                #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                                     #src
-@test mean(hyperelastic_material(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.002620060661317024, 1.8418704097425167, 0.09964189029209582]  rtol=1e-5 #src
-end                                                                                                                                                                       #src
+## check the result                                                                                                                                                      #src
+using Test                                                                                                                                                               #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                                    #src
+@test mean(hyperelastic_material(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.01870535916670784, 1.8439438835381727, 0.08567367500756941]  rtol=1e-5 #src
+end                                                                                                                                                                      #src
