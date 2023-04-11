@@ -291,6 +291,8 @@ end
 @inline function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, pt, itp::Interpolation, mp::SubMPValues{dim, T}) where {names, dim, T}
     @_propagate_inbounds_meta
 
+    gridindices = neighbornodes(mp, grid)
+
     if :m in names || :∇m in names
         mₚ = pt.m
     end
@@ -318,7 +320,8 @@ end
             if alg isa AffineTransfer
                 xₚ = pt.x
                 Dₚ = zero(Mat{dim, dim, T})
-                for (j, i) in pairs(IndexCartesian(), neighbornodes(mp, grid))
+                @simd for j in CartesianIndices(gridindices)
+                    i = gridindices[j]
                     N = mp.N[j]
                     xᵢ = grid.x[i]
                     Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
@@ -331,7 +334,8 @@ end
         end
     end
 
-    for (j, i) in pairs(IndexCartesian(), neighbornodes(mp, grid))
+    @simd for j in CartesianIndices(gridindices)
+        i = gridindices[j]
         N = mp.N[j]
         ∇N = mp.∇N[j]
 
@@ -447,7 +451,9 @@ end
         end
     end
 
-    for (j, i) in pairs(IndexCartesian(), neighbornodes(mp, grid))
+    gridindices = neighbornodes(mp, grid)
+    @simd for j in CartesianIndices(gridindices)
+        i = gridindices[j]
         N = mp.N[j]
         ∇N = mp.∇N[j]
 
@@ -518,7 +524,9 @@ end
     xₚ = pt.x
     Cₚ = zero(pt.C)
 
-    for (j, i) in pairs(IndexCartesian(), neighbornodes(mp, grid))
+    gridindices = neighbornodes(mp, grid)
+    @simd for j in CartesianIndices(gridindices)
+        i = gridindices[j]
         w = mp.w[j]
         Minv = mp.Minv[]
         vᵢ = grid.v[i]
@@ -584,7 +592,9 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
     parallel_each_particle(space; parallel) do p
         @inbounds begin
             mp = values(space, p)
-            for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
+            gridindices = neighbornodes(mp, grid)
+            @simd for j in CartesianIndices(gridindices)
+                i = gridindices[j]
                 N = mp.N[j]
                 P = value(basis, xₚ[p] - grid.x[i])
                 VP = (N * Vₚ[p]) * P
@@ -599,7 +609,9 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
     @threaded_inbounds parallel for p in 1:num_particles(space)
         val = zero(eltype(vals))
         mp = values(space, p)
-        for (j, i) in pairs(IndexCartesian(), neighbornodes(space, grid, p))
+        gridindices = neighbornodes(mp, grid)
+        @simd for j in CartesianIndices(gridindices)
+            i = gridindices[j]
             N = mp.N[j]
             P = value(basis, xₚ[p] - grid.x[i])
             val += N * (P ⋅ grid.poly_coef[i])
