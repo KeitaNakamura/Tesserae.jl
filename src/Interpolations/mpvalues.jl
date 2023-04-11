@@ -23,9 +23,8 @@ struct MPValues{dim, T, V <: NamedTuple, VI <: AbstractVector{CartesianIndices{d
 end
 
 # constructors
-function MPValues{dim, T}(values::NamedTuple, indices::AbstractVector) where {dim, T}
+function MPValues(values::NamedTuple, indices::AbstractVector)
     MPValuesBaseType = get_mpvalues_basetype(values.N, values.∇N)
-    @assert MPValuesBaseType == MPValues{dim, T}
     MPValuesBaseType{typeof(values), typeof(indices)}(values, indices)
 end
 @generated function MPValues(info::MPValuesInfo{dim, T, <: NamedTuple{names}}, len::Int) where {dim, T, names}
@@ -37,7 +36,7 @@ end
     quote
         values = NamedTuple{names}(tuple($(arrays...)))
         indices = Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}(undef, len)
-        MPValues{dim, T}(values, indices)
+        MPValues(values, indices)
     end
 end
 # basically use these constructors
