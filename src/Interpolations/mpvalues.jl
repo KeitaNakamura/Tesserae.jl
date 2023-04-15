@@ -124,7 +124,7 @@ end
 function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles; parallel::Bool)
     @assert num_particles(mpvalues) == length(particles)
     @assert size(lattice) == size(sppat)
-    @threaded_inbounds parallel for p in 1:num_particles(mpvalues)
+    @threads_inbounds parallel for p in 1:num_particles(mpvalues)
         update!(values(mpvalues, p), itp, lattice, sppat, LazyRow(particles, p))
     end
 end

@@ -111,7 +111,7 @@ function dam_break(
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
 
         ## update other particle states
-        Marble.@threaded_inbounds for pt in LazyRows(particles)
+        Marble.@threads_inbounds for pt in LazyRows(particles)
             d = symmetric(pt.∇v)
             V = pt.V * exp(tr(d)*Δt)
             ρ = pt.m / V

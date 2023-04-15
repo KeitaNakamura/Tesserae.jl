@@ -135,7 +135,7 @@ function contacting_grains(
         fillzero!.((m_cm, mv_cm))
 
         ## grains
-        Marble.@threaded_inbounds for i in eachindex(grains)
+        Marble.@threads_inbounds for i in eachindex(grains)
             grid = grain_grids[i]
             grain = grains[i]
             space = grain_spaces[i]
@@ -180,7 +180,7 @@ function contacting_grains(
         =============#
 
         ## grains
-        Marble.@threaded_inbounds for i in eachindex(grains)
+        Marble.@threads_inbounds for i in eachindex(grains)
             grid = grain_grids[i]
             grain = grains[i]
             space = grain_spaces[i]
@@ -190,7 +190,7 @@ function contacting_grains(
         grid_to_particle!((:x,), bar, bar_grid, bar_space, Δt; parallel=false)
 
         ## update stress and volume for grains
-        Marble.@threaded_inbounds for grain in grains
+        Marble.@threads_inbounds for grain in grains
             for pt in LazyRows(grain)
                 ∇v = pt.∇v
                 σⁿ = pt.σ

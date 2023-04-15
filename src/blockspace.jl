@@ -33,7 +33,7 @@ function parallel_each_particle(f, blkarray::ParticlesInBlocksArray, nparticles:
     if Threads.nthreads()>1 && parallel
         for blocks in threadsafe_blocks(size(blkarray))
             blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
-            @threaded_inbounds for blk in blocks′
+            @threads_inbounds for blk in blocks′
                 foreach(f, blkarray[blk])
             end
         end
@@ -62,7 +62,7 @@ particlesinblocks(bs::BlockSpace) = bs.blkarray
 
 function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector; parallel::Bool)
     fillzero!.(bs.nparticles)
-    @threaded_inbounds parallel :static for p in eachindex(xₚ)
+    @threads_inbounds parallel :static for p in eachindex(xₚ)
         id = Threads.threadid()
         blk = sub2ind(blocksize(bs), whichblock(lattice, xₚ[p]))
         bs.blockindices[p] = blk
@@ -76,7 +76,7 @@ function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector; paralle
     # update `particlesinblocks`
     blkarray = particlesinblocks(bs)
     cumsum!(vec(blkarray.stops), vec(nptsinblks))
-    @threaded_inbounds parallel :static for p in eachindex(xₚ)
+    @threads_inbounds parallel :static for p in eachindex(xₚ)
         blk = bs.blockindices[p]
         if !iszero(blk)
             id = Threads.threadid()

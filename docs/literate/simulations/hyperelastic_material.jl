@@ -134,7 +134,7 @@ function hyperelastic_material(
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
 
         ## update other particle states
-        Marble.@threaded_inbounds for pt in LazyRows(particles)
+        Marble.@threads_inbounds for pt in LazyRows(particles)
             F = (I + Δt*pt.∇v) ⋅ pt.F
             pt.σ = compute_cauchy_stress(elastic, F)
             pt.F = F

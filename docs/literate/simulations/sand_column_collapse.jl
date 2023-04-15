@@ -137,7 +137,7 @@ function sand_column_collapse(
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
 
         ## update other particle states
-        Marble.@threaded_inbounds for pt in LazyRows(particles)
+        Marble.@threads_inbounds for pt in LazyRows(particles)
             ∇v = pt.∇v
             σⁿ = pt.σ
             Δϵ = symmetric(∇v*Δt)
