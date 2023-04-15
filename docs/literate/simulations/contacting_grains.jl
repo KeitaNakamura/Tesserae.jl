@@ -39,9 +39,9 @@ function contacting_grains(
     t_stop = 1.2   # time for simulation
     ## use low resolution for testing purpose #src
     if test                                   #src
-        dx::Float64 = 0.04                    #src
+        Δx::Float64 = 0.04                    #src
     else                                      #src
-    dx     = 0.005 # grid spacing
+    Δx     = 0.005 # grid spacing
     end                                       #src
 
     ## material constants for grains
@@ -49,7 +49,7 @@ function contacting_grains(
     elastic = LinearElastic(; E=1e6, ν=0.3)
 
     ## lattice
-    lattice = Lattice(dx, (0,1), (0,1.04))
+    lattice = Lattice(Δx, (0,1), (0,1.04))
 
     #==========
      Particles

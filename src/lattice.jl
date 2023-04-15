@@ -35,10 +35,10 @@ Base.size(x::LinAxis) = (x.len,)
 end
 
 """
-    Lattice(dx, (xmin, xmax), (ymin, ymax)...)
-    Lattice(T, dx, (xmin, xmax), (ymin, ymax)...)
+    Lattice(Δx, (xmin, xmax), (ymin, ymax)...)
+    Lattice(T, Δx, (xmin, xmax), (ymin, ymax)...)
 
-Construct `Lattice` with the spacing `dx`.
+Construct `Lattice` with the spacing `Δx`.
 
 # Examples
 ```jldoctest
@@ -93,7 +93,7 @@ end
 
 Return `CartesianIndices` storing neighboring node `indices` around `x`.
 `h` denotes the range for searching area. In 1D, for example, the range `a`
-becomes ` x-h*dx < a < x+h*dx` where `dx` is `spacing(lattice)`.
+becomes ` x-h*Δx < a < x+h*Δx` where `Δx` is `spacing(lattice)`.
 `isfullyinside` is `true` if the neighboring nodes are completely inside of
 the `lattice`.
 

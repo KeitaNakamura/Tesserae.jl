@@ -20,9 +20,9 @@ function hyperelastic_material(
     t_stop = 6.0  # time for simulation
     ## use low resolution for testing purpose #src
     if test                                   #src
-        dx::Float64 = 0.25                    #src
+        Δx::Float64 = 0.25                    #src
     else                                      #src
-    dx     = 0.1 # grid spacing
+    Δx     = 0.1 # grid spacing
     end                                       #src
 
     ## material constants
@@ -54,7 +54,7 @@ function hyperelastic_material(
     end
 
     ## grid
-    grid = generate_grid(GridState, dx, (-2,2), (0,30), (-2,2))
+    grid = generate_grid(GridState, Δx, (-2,2), (0,30), (-2,2))
 
     ## particles
     r = 0.2

@@ -18,9 +18,9 @@ function dam_break(
     CFL    = 0.1   # Courant number
     ## use low resolution for testing purpose #src
     if test                                   #src
-        dx::Float64 = 0.07                    #src
+        Δx::Float64 = 0.07                    #src
     else                                      #src
-    dx     = 0.014 # grid spacing
+    Δx     = 0.014 # grid spacing
     end                                       #src
 
     ## material constants for water
@@ -51,7 +51,7 @@ function dam_break(
     end
 
     ## grid
-    grid = generate_grid(GridState, dx, (0,3.22), (0,4.0))
+    grid = generate_grid(GridState, Δx, (0,3.22), (0,4.0))
 
     ## particles
     if test                                                                                                            #src
@@ -83,7 +83,7 @@ function dam_break(
         Δt = CFL * minimum(LazyRows(particles)) do pt
             ρ = pt.m / pt.V
             ν = μ / ρ # kinemtatic viscosity
-            min(dx/(c+norm(pt.v)), dx^2/ν)
+            min(Δx/(c+norm(pt.v)), Δx^2/ν)
         end
 
         ## update interpolation space

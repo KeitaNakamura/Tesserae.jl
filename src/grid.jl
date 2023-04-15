@@ -29,8 +29,8 @@ Base.@pure function infer_lattice_realtype(::Type{GridState}, ::Val{dim}) where 
 end
 
 """
-    generate_grid(dx::Real, (xmin, xmax)::Tuple{Real, Real}...)
-    generate_grid(GridState, dx::Real, (xmin, xmax)::Tuple{Real, Real}...)
+    generate_grid(Δx::Real, (xmin, xmax)::Tuple{Real, Real}...)
+    generate_grid(GridState, Δx::Real, (xmin, xmax)::Tuple{Real, Real}...)
 
 Generate background grid with type `GridState`.
 

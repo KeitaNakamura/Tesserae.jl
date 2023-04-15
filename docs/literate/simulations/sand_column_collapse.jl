@@ -20,9 +20,9 @@ function sand_column_collapse(
     t_stop = 1.4  # time for simulation
     ## use low resolution for testing purpose #src
     if test                                   #src
-        dx::Float64 = 0.05                    #src
+        Δx::Float64 = 0.05                    #src
     else                                      #src
-    dx     = 0.01 # grid spacing
+    Δx     = 0.01 # grid spacing
     end                                       #src
 
     ## material constants for soil (Drucker-Prager model with linear elastic model)
@@ -53,7 +53,7 @@ function sand_column_collapse(
     end
 
     ## grid
-    grid = generate_grid(GridState, dx, (-1.5,1.5), (0,1))
+    grid = generate_grid(GridState, Δx, (-1.5,1.5), (0,1))
 
     ## particles
     h = 0.9 # height of sand column
