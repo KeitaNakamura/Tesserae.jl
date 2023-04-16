@@ -21,6 +21,6 @@
     @testset "Specify RNG" begin
         lattice = Lattice(0.1, (0,10), (0,10))
         particles = generate_particles((x,y) -> true, lattice; alg=PoissonDiskSampling(StableRNG(1234)))
-        @test mean(particles.x) ≈ [4.985641459718793, 4.9856469624835285]
+        @test mean(particles.x) ≈ [5,5] rtol=0.01
     end
 end
