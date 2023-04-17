@@ -14,6 +14,9 @@ import SIMD
 const SVec = SIMD.Vec
 const SIMDTypes = Union{SIMD.ScalarTypes, Bool}
 
+# progress bar
+import ProgressMeter
+
 # reexport from StructArrays
 export LazyRow, LazyRows
 

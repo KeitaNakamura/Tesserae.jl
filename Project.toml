@@ -5,6 +5,7 @@ version = "1.2.1"
 
 [deps]
 PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 SIMD = "fdea26ae-647d-5447-a871-4b548cad5224"

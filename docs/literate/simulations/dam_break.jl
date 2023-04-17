@@ -69,7 +69,7 @@ function dam_break(
 
     ## outputs
     if output #src
-    pvdfile = joinpath(mkpath("Output.tmp"), "dam_break")
+    pvdfile = joinpath(mkpath("output.tmp"), "dam_break")
     closepvd(openpvd(pvdfile))
     end #src
 
@@ -77,7 +77,7 @@ function dam_break(
     step = 0
     fps = 50
     savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
-    while t < t_stop
+    Marble.@showprogress while t < t_stop
 
         ## calculate timestep based on the Courant-Friedrichs-Lewy (CFL) condition
         Δt = CFL * minimum(LazyRows(particles)) do pt

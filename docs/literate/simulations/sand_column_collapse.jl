@@ -81,7 +81,7 @@ function sand_column_collapse(
 
     ## outputs
     if output #src
-    pvdfile = joinpath(mkpath("Output.tmp"), "sand_column_collapse")
+    pvdfile = joinpath(mkpath("output.tmp"), "sand_column_collapse")
     closepvd(openpvd(pvdfile))
     end #src
 

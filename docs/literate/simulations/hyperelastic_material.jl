@@ -90,7 +90,7 @@ function hyperelastic_material(
 
     ## outputs
     if output #src
-    pvdfile = joinpath(mkpath("Output.tmp"), "hyperelastic_material")
+    pvdfile = joinpath(mkpath("output.tmp"), "hyperelastic_material")
     closepvd(openpvd(pvdfile))
     end #src
 

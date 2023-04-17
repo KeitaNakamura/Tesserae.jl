@@ -104,7 +104,7 @@ function contacting_grains(
     ========#
 
     if output #src
-    pvdfile = joinpath(mkpath("Output.tmp"), "contacting_grains")
+    pvdfile = joinpath(mkpath("output.tmp"), "contacting_grains")
     closepvd(openpvd(pvdfile))
     end #src
 
