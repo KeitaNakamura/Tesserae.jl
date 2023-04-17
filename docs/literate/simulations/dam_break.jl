@@ -77,7 +77,7 @@ function dam_break(
     step = 0
     fps = 50
     savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
-    Marble.@showprogress while t < t_stop
+    while t < t_stop
 
         ## calculate timestep based on the Courant-Friedrichs-Lewy (CFL) condition
         Δt = CFL * minimum(LazyRows(particles)) do pt
@@ -139,12 +139,13 @@ function dam_break(
     particles #src
 end
 
-## check the result                                                                                                                    #src
-using Test                                                                                                                             #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                  #src
-@test mean(dam_break(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [1.6522676763262893, 0.1115480261473135]  rtol=1e-5 #src
-@test mean(dam_break(KernelCorrection(QuadraticBSpline()), APIC(); test=true).x) ≈ [1.6538004299702778, 0.11172790628398051] rtol=1e-5 #src
-@test mean(dam_break(KernelCorrection(QuadraticBSpline()), FLIP(); test=true).x) ≈ [1.5497107744352407, 0.12778882739325756] rtol=1e-5 #src
-@test mean(dam_break(LinearWLS(QuadraticBSpline()),        TPIC(); test=true).x) ≈ [1.659519955773533, 0.11205555141146771]  rtol=1e-5 #src
-@test mean(dam_break(LinearWLS(QuadraticBSpline()), WLSTransfer(); test=true).x) ≈ [1.6595199557735345, 0.11205555141146775] rtol=1e-5 #src
-end                                                                                                                                    #src
+## check the result                                                                                                                        #src
+using Test                                                                                                                                 #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                      #src
+@test mean(dam_break(KernelCorrection(QuadraticBSpline()),     TPIC(); test=true).x) ≈ [1.6522676763262893, 0.1115480261473135]  rtol=1e-5 #src
+@test mean(dam_break(KernelCorrection(QuadraticBSpline()),     APIC(); test=true).x) ≈ [1.6538004299702778, 0.11172790628398051] rtol=1e-5 #src
+@test mean(dam_break(KernelCorrection(QuadraticBSpline()),     FLIP(); test=true).x) ≈ [1.5497107744352407, 0.12778882739325756] rtol=1e-5 #src
+@test mean(dam_break(KernelCorrection(QuadraticBSpline()), FLIP(0.95); test=true).x) ≈ [1.72335800649885, 0.1129764722629284]    rtol=1e-5 #src
+@test mean(dam_break(LinearWLS(QuadraticBSpline()),            TPIC(); test=true).x) ≈ [1.659519955773533, 0.11205555141146771]  rtol=1e-5 #src
+@test mean(dam_break(LinearWLS(QuadraticBSpline()),     WLSTransfer(); test=true).x) ≈ [1.6595199557735345, 0.11205555141146775] rtol=1e-5 #src
+end                                                                                                                                        #src

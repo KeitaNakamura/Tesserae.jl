@@ -58,7 +58,13 @@ The required properties in [`grid_to_particle!`](@ref) are follows:
 - ``\\bm{x}_p^{n+1}`` : `particles.x :: Vec`
     * ``\\bm{v}_i^{n+1}`` : `grid.v :: Vec`
 """
-struct FLIP  <: TransferAlgorithm end
+struct FLIP <: TransferAlgorithm end
+
+struct FLIP_PIC_Blends <: TransferAlgorithm
+    α::Float64
+end
+
+FLIP(α::Real) = FLIP_PIC_Blends(α)
 
 """
     PIC()
@@ -421,7 +427,7 @@ function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::V
     particles
 end
 
-@inline function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::Interpolation, mp::SubMPValues{dim}, only_dt...) where {names, dim}
+@inline function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::Interpolation, mp::SubMPValues{dim, T}, only_dt...) where {names, dim, T}
     @_propagate_inbounds_meta
 
     # there is no difference along with transfer algorithms for calculating `:∇v` and `:x`
@@ -440,9 +446,13 @@ end
     if :v in names
         if alg isa FLIPGroup
             dvₚ = zero(pt.v)
-        else
-            @assert alg isa PICGroup
+        elseif alg isa PICGroup
             vₚ = zero(pt.v)
+        elseif alg isa FLIP_PIC_Blends
+            dvₚ = zero(pt.v)
+            vₚ = zero(pt.v)
+        else
+            error("unreachable")
         end
         if alg isa AffineTransfer
             # Bₚ is always calculated when `:v` is specified
@@ -472,7 +482,7 @@ end
 
         # particle velocity depends on transfer algorithms
         if :v in names
-            if alg isa FLIPGroup
+            if alg isa FLIPGroup || alg isa FLIP_PIC_Blends
                 dvᵢ = vᵢ - grid.vⁿ[i]
                 dvₚ += N * dvᵢ
             end
@@ -500,9 +510,15 @@ end
     if :v in names
         if alg isa FLIPGroup
             pt.v += dvₚ
-        else
-            @assert alg isa PICGroup
+        elseif alg isa PICGroup
             pt.v = vₚ
+        elseif alg isa FLIP_PIC_Blends
+            v_FLIP = pt.v + dvₚ
+            v_PIC = vₚ
+            α = convert(T, alg.α)
+            pt.v = α*v_FLIP + (1-α)*v_PIC
+        else
+            error("unreachable")
         end
         if alg isa AffineTransfer
             # additional quantity for affine transfers
