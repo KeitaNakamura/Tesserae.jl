@@ -102,7 +102,7 @@ Some property names have specific meaning and they are automatically initialized
 If `ParticleState` is not given, the `NamedTuple` including above properties is used.
 
 # Keyword arguments
-* `n::Int`: the number of particles in cell along with axis. So, when `n = 2` is given, the total number of particles per cell becomes `2`, `4` and `8` in 1D, 2D and 3D, respectively. `n = 2` is used by default.
+* `spacing::Real`: particle spacing in cell along with axis. When `spacing = 0.5` (default), the total number of particles per cell for `alg=GridSampling()` becomes `2`, `4` and `8` in 1D, 2D and 3D, respectively.
 * `alg::SamplingAlgorithm`: choose `PoissonDiskSampling()` (default) or `GridSampling()`.
 * `system::CoordinateSystem`: use `Axisymmetric()` for axisymmetric simulations.
 """
@@ -121,12 +121,12 @@ function generate_particles(
         domain::SamplingDomain,
         ::Type{ParticleState},
         grid::Union{Grid{dim}, Lattice{dim}};
-        n::Int = 2,
+        spacing::Real = 0.5,
         alg::SamplingAlgorithm = PoissonDiskSampling(),
         system::CoordinateSystem = NormalSystem(),
     ) where {ParticleState, dim}
 
-    points, Vₚ = point_sampling(alg, domain, spacing(grid)/n)
+    points, Vₚ = point_sampling(alg, domain, Marble.spacing(grid) * spacing)
     particles = generate_particles(ParticleState, points)
 
     if :V in propertynames(particles)
