@@ -27,7 +27,6 @@ struct BoxDomain{dim, T} <: SamplingDomain
 end
 BoxDomain(minmax::Tuple{T, T}...) where {T <: Real} = BoxDomain(minmax)
 BoxDomain(lattice::Lattice) = BoxDomain(tuple.(Tuple(first(lattice)), Tuple(last(lattice))))
-BoxDomain(grid::Grid) = BoxDomain(grid.x)
 
 entire_volume(box::BoxDomain) = prod(x->x[2]-x[1], box.minmax)
 
@@ -78,8 +77,8 @@ Base.@pure function infer_particles_type(::Type{ParticleState}) where {ParticleS
 end
 
 """
-    generate_particles(isindomain, grid; <keyword arguments>)
-    generate_particles(isindomain, ParticleState, grid; <keyword arguments>)
+    generate_particles(isindomain, lattice; <keyword arguments>)
+    generate_particles(isindomain, ParticleState, lattice; <keyword arguments>)
 
 Generate particles (material points) with type `ParticleState`.
 
@@ -115,18 +114,16 @@ function generate_particles(::Type{ParticleState}, points::AbstractArray{<: Vec}
     particles
 end
 
-_get_lattice(lt::Lattice) = lt
-_get_lattice(gd::Grid) = gd.x
 function generate_particles(
         domain::SamplingDomain,
         ::Type{ParticleState},
-        grid::Union{Grid{dim}, Lattice{dim}};
+        lattice::Lattice{dim};
         spacing::Real = 0.5,
         alg::SamplingAlgorithm = PoissonDiskSampling(),
         system::CoordinateSystem = NormalSystem(),
     ) where {ParticleState, dim}
 
-    points, Vₚ = point_sampling(alg, domain, Marble.spacing(grid) * spacing)
+    points, Vₚ = point_sampling(alg, domain, Marble.spacing(lattice) * spacing)
     particles = generate_particles(ParticleState, points)
 
     if :V in propertynames(particles)
@@ -141,19 +138,18 @@ function generate_particles(
         particles.l .= l
     end
 
-    reorder_particles!(particles, _get_lattice(grid))
+    reorder_particles!(particles, lattice)
     particles
 end
-function generate_particles(isindomain::Function, ::Type{ParticleState}, grid::Union{Grid, Lattice}; kwargs...) where {ParticleState}
-    domain = FunctionDomain(isindomain, BoxDomain(grid))
-    generate_particles(domain, ParticleState, grid; kwargs...)
+function generate_particles(isindomain::Function, ::Type{ParticleState}, lattice::Lattice; kwargs...) where {ParticleState}
+    domain = FunctionDomain(isindomain, BoxDomain(lattice))
+    generate_particles(domain, ParticleState, lattice; kwargs...)
 end
 
 function generate_particles(domain, lattice::Lattice{dim, T}; kwargs...) where {dim, T}
     ParticleState = minimum_particle_state(Val(dim), T)
     generate_particles(domain, ParticleState, lattice; kwargs...)
 end
-generate_particles(domain, grid::Grid; kwargs...) = generate_particles(domain, grid.x; kwargs...)
 
 function minimum_particle_state(::Val{dim}, ::Type{T}) where {dim, T}
     @NamedTuple begin

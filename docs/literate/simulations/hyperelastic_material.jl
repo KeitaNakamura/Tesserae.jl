@@ -58,27 +58,27 @@ function hyperelastic_material(
 
     ## particles
     r = 0.2
-    if test                                                                                                                  #src
-        RNG = StableRNG(1234)                                                                                                #src
-        centroids::Vector{NTuple{3, Float64}} = Marble.poisson_disk_sampling(RNG, 3r, (-0.8,0.8), (6,28), (-0.8,0.8))        #src
-        particles::Marble.infer_particles_type(ParticleState) =                                                              #src
-            mapreduce(vcat, centroids) do x                                                                                  #src
-                if rand(RNG, Bool)                                                                                           #src
-                    generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid; alg=PoissonDiskSampling(RNG))        #src
-                else                                                                                                         #src
-                    generate_particles(BoxDomain(tuple.((x.-r), (x.+r))), ParticleState, grid; alg=PoissonDiskSampling(RNG)) #src
-                end                                                                                                          #src
-            end                                                                                                              #src
-    else                                                                                                                     #src
+    if test                                                                                                                    #src
+        RNG = StableRNG(1234)                                                                                                  #src
+        centroids::Vector{NTuple{3, Float64}} = Marble.poisson_disk_sampling(RNG, 3r, (-0.8,0.8), (6,28), (-0.8,0.8))          #src
+        particles::Marble.infer_particles_type(ParticleState) =                                                                #src
+            mapreduce(vcat, centroids) do x                                                                                    #src
+                if rand(RNG, Bool)                                                                                             #src
+                    generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid.x; alg=PoissonDiskSampling(RNG))        #src
+                else                                                                                                           #src
+                    generate_particles(BoxDomain(tuple.((x.-r), (x.+r))), ParticleState, grid.x; alg=PoissonDiskSampling(RNG)) #src
+                end                                                                                                            #src
+            end                                                                                                                #src
+    else                                                                                                                       #src
     centroids = Marble.poisson_disk_sampling(3r, (-0.8,0.8), (6,28), (-0.8,0.8))
     particles = mapreduce(vcat, centroids) do x
         if rand(Bool)
-            generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid)
+            generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid.x)
         else
-            generate_particles(BoxDomain(tuple.((x.-r), (x.+r))), ParticleState, grid)
+            generate_particles(BoxDomain(tuple.((x.-r), (x.+r))), ParticleState, grid.x)
         end
     end
-    end                                                                                                                      #src
+    end                                                                                                                        #src
     @. particles.V₀ = particles.V
     @. particles.m  = ρ₀ * particles.V
     @. particles.F  = one(particles.F)

@@ -23,7 +23,7 @@
                 Random.seed!(1234)
                 # initialization
                 grid = generate_grid(GridState, 2.0, (0,10), (0,20))
-                particles = generate_particles((x,y) -> true, ParticleState, grid; system)
+                particles = generate_particles((x,y) -> true, ParticleState, grid.x; system)
                 space = MPSpace(interp, size(grid), length(particles))
                 v0 = rand(Vec{2})
                 ρ0 = 1.2e3
@@ -48,9 +48,9 @@
                     dt = 0.002
 
                     if include_near_boundary
-                        particles = generate_particles((x,y) -> true, ParticleState, grid; alg=PoissonDiskSampling(StableRNG(1234)))
+                        particles = generate_particles((x,y) -> true, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234)))
                     else
-                        particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid; alg=PoissonDiskSampling(StableRNG(1234)))
+                        particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234)))
                     end
                     @. particles.m = 1
                     x₀ = copy(particles.x)
@@ -100,9 +100,9 @@
                         dt = 1.0
 
                         if include_near_boundary
-                            particles = generate_particles((x,y) -> true, ParticleState, grid)
+                            particles = generate_particles((x,y) -> true, ParticleState, grid.x)
                         else
-                            particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid)
+                            particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid.x)
                         end
                         @. particles.m = 1
 

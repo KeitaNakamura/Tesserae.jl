@@ -57,12 +57,12 @@ function sand_column_collapse(
 
     ## particles
     h = 0.9 # height of sand column
-    if test                                                                                                               #src
-        particles::Marble.infer_particles_type(ParticleState) =                                                           #src
-            generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid; alg=PoissonDiskSampling(StableRNG(1234))) #src
-    else                                                                                                                  #src
-    particles = generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid)
-    end                                                                                                                   #src
+    if test                                                                                                                 #src
+        particles::Marble.infer_particles_type(ParticleState) =                                                             #src
+            generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234))) #src
+    else                                                                                                                    #src
+    particles = generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid.x)
+    end                                                                                                                     #src
     for pt in LazyRows(particles)
         ν = elastic.ν
         y = pt.x[2]
