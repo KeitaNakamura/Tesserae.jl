@@ -1,6 +1,9 @@
 # # Sand column collapse
 #
-# ![](https://user-images.githubusercontent.com/16015926/225799307-fcb85645-991d-49f3-ad56-d40384a4a3fc.gif)
+# ```@raw html
+# <img class="display-light-only" src="https://user-images.githubusercontent.com/16015926/233009892-d8d9265c-2b99-493b-943f-0246118cb5ec.mp4"/>
+# <img class="display-dark-only" src="https://user-images.githubusercontent.com/16015926/233009969-ded82325-0a62-4a49-89a7-bcf627d11fe2.mp4"/>
+# ```
 
 using Marble
 using StableRNGs #src
