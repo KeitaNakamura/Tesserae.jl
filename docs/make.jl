@@ -11,7 +11,10 @@ DocMeta.setdocmeta!(Marble, :DocTestSetup, :(using Marble); recursive=true)
 include("literate.jl")
 
 makedocs(;
-    format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == "true"),
+    format = Documenter.HTML(
+        prettyurls = get(ENV, "CI", nothing) == "true",
+        assets = ["assets/extra_styles.css"],
+    ),
     modules = [Marble],
     sitename = "Marble.jl",
     pages=[

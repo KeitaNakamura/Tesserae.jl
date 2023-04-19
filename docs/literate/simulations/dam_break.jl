@@ -1,6 +1,9 @@
 # # Dam-break
 #
-# ![](https://user-images.githubusercontent.com/16015926/225801067-2194bf27-2482-45c6-9750-b907cfa17497.gif)
+# ```@raw html
+# <img class="display-light-only" src="https://user-images.githubusercontent.com/16015926/232998791-c4347e90-4c55-4057-8a2d-5c681e5fbc65.mp4" alt="dam_break"/>
+# <img class="display-dark-only" src="https://user-images.githubusercontent.com/16015926/232999036-d5cef186-702e-4230-b403-059137cdebeb.mp4" alt="dam_break"/>
+# ```
 
 using Marble
 using StableRNGs #src
