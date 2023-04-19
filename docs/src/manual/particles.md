@@ -17,7 +17,7 @@ generate_particles
 ```@example particle
 using Marble, Plots
 grid = generate_grid(0.4, (-4,4), (-4,4))
-particles = generate_particles((x,y) -> 2^2 < x^2+y^2 < 3^2, grid; alg=GridSampling())
+particles = generate_particles((x,y) -> 2^2 < x^2+y^2 < 3^2, grid.x; alg=GridSampling())
 scatter(map(Tuple, particles.x),
         lims = (-4,4),
         ticks = -4:0.8:4,
@@ -27,7 +27,7 @@ scatter(map(Tuple, particles.x),
 ```
 
 ```@example particle
-particles = generate_particles((x,y) -> 2^2 < x^2+y^2 < 3^2, grid; alg=PoissonDiskSampling())
+particles = generate_particles((x,y) -> 2^2 < x^2+y^2 < 3^2, grid.x; alg=PoissonDiskSampling())
 scatter(map(Tuple, particles.x),
         lims = (-4,4),
         ticks = -4:0.8:4,
