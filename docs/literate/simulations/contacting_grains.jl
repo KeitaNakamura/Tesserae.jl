@@ -1,6 +1,9 @@
 # # Contacting grains
 #
-# ![](https://user-images.githubusercontent.com/16015926/226637268-78241ae9-1d5d-486f-b3b1-db343dfa8b69.gif)
+# ```@raw html
+# <img class="display-light-only" src="https://user-images.githubusercontent.com/16015926/233044430-c509015a-c395-4f99-b26a-573ef1cc36cc.mp4", width="600"/>
+# <img class="display-dark-only" src="https://user-images.githubusercontent.com/16015926/233044513-f8155746-1d9e-4325-a204-1c6f3e563477.mp4", width="600"/>
+# ```
 
 using Marble
 using StableRNGs #src
