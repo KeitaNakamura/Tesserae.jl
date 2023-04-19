@@ -121,7 +121,7 @@ The unit block size is `2^$BLOCKFACTOR` cells.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,10), (0,10))
-11×11 Lattice{2, Float64, Vector{Float64}}:
+11×11 Lattice{2, Float64, Marble.LinAxis{Float64}}:
  [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
  [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
  [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]

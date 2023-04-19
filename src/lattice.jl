@@ -43,7 +43,7 @@ Construct `Lattice` with the spacing `Δx`.
 # Examples
 ```jldoctest
 julia> Lattice(1.0, (0,3), (1,4))
-4×4 Lattice{2, Float64, Vector{Float64}}:
+4×4 Lattice{2, Float64, Marble.LinAxis{Float64}}:
  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
@@ -100,7 +100,7 @@ the `lattice`.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,5))
-6-element Lattice{1, Float64, Vector{Float64}}:
+6-element Lattice{1, Float64, Marble.LinAxis{Float64}}:
  [0.0]
  [1.0]
  [2.0]
@@ -137,7 +137,7 @@ Return cell index where `x` locates.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,5), (0,5))
-6×6 Lattice{2, Float64, Vector{Float64}}:
+6×6 Lattice{2, Float64, Marble.LinAxis{Float64}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]

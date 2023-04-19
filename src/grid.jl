@@ -52,7 +52,7 @@ julia> struct GridState{dim, T}
        end
 
 julia> grid = generate_grid(GridState{2,Float64}, 0.5, (0,3), (0,2))
-7×5 StructArray(::Lattice{2, Float64, Vector{Float64}}, ::Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}) with eltype GridState{2, Float64}:
+7×5 StructArray(::Lattice{2, Float64, Marble.LinAxis{Float64}}, ::Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}) with eltype GridState{2, Float64}:
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
@@ -65,7 +65,7 @@ julia> grid[1]
 GridState{2, Float64}([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
 
 julia> grid.x
-7×5 Lattice{2, Float64, Vector{Float64}}:
+7×5 Lattice{2, Float64, Marble.LinAxis{Float64}}:
  [0.0, 0.0]  [0.0, 0.5]  [0.0, 1.0]  [0.0, 1.5]  [0.0, 2.0]
  [0.5, 0.0]  [0.5, 0.5]  [0.5, 1.0]  [0.5, 1.5]  [0.5, 2.0]
  [1.0, 0.0]  [1.0, 0.5]  [1.0, 1.0]  [1.0, 1.5]  [1.0, 2.0]
