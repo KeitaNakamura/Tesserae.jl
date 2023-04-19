@@ -6,7 +6,7 @@ using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using Reexport
 @reexport using Tensorial
-@reexport using WriteVTK
+using WriteVTK
 using StructArrays
 
 # SIMD
