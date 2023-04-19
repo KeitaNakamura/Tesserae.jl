@@ -46,6 +46,10 @@ function point_sampling(pds::PoissonDiskSampling, box::BoxDomain{dim, T}, l::T) 
     reinterpret(Vec{dim,U}, points), entire_volume(box)/length(points)
 end
 
+function point_sampling(alg::SamplingAlgorithm, box::BoxDomain{dim, T}, l) where {dim, T}
+    point_sampling(alg, box, convert(T, l))
+end
+
 struct FunctionDomain{F, D <: SamplingDomain} <: SamplingDomain
     isindomain::F
     entiredomain::D
