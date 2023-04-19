@@ -1,6 +1,9 @@
 # # Hyperelastic material
 #
-# ![](https://user-images.githubusercontent.com/16015926/228130824-a0618058-885f-4c91-a3c7-a677bb24eecf.gif)
+# ```@raw html
+# <img class="display-light-only" src="https://user-images.githubusercontent.com/16015926/233059400-2204f758-97f4-442d-b26f-34ad827deddf.mp4" width="400"/>
+# <img class="display-dark-only" src="https://user-images.githubusercontent.com/16015926/233059452-acb6a044-2ba6-4bc3-933f-d770cc191689.mp4" width="400"/>
+# ```
 
 using Marble
 using StableRNGs #src
