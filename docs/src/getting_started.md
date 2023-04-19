@@ -34,8 +34,8 @@ grid = generate_grid(GridState, 0.05, (0,1), (0,1))
 
 # particles
 s = 1-r
-lhs = generate_particles((x,y) -> (x-r)^2 + (y-r)^2 < r^2, ParticleState, grid; alg=GridSampling()) # left disk
-rhs = generate_particles((x,y) -> (x-s)^2 + (y-s)^2 < r^2, ParticleState, grid; alg=GridSampling()) # right disk
+lhs = generate_particles((x,y) -> (x-r)^2 + (y-r)^2 < r^2, ParticleState, grid.x; alg=GridSampling()) # left disk
+rhs = generate_particles((x,y) -> (x-s)^2 + (y-s)^2 < r^2, ParticleState, grid.x; alg=GridSampling()) # right disk
 @. lhs.m = ρ * lhs.V
 @. rhs.m = ρ * rhs.V
 @. lhs.v = Vec( 0.1, 0.1)
