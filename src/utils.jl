@@ -61,6 +61,10 @@ function maparray(f::F, args...) where {F}
     A = Base._return_type(map, Tuple{F, Args...})
     MapArray{eltype(A), ndims(A), F, Tuple{Args...}}(f, args)
 end
+function maparray(f::Type{T}, args...) where {T}
+    Args = map(typeof, args)
+    MapArray{T, ndims(first(args)), Type{T}, Tuple{Args...}}(T, args)
+end
 Base.size(A::MapArray) = size(first(A.args))
 Base.IndexStyle(::Type{<: MapArray{<: Any, <: Any, F, Args}}) where {F, Args} = IndexStyle(Base._return_type(map, Tuple{F, Args.parameters...}))
 @inline function Base.getindex(A::MapArray, i::Integer...)
