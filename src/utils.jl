@@ -44,6 +44,30 @@ macro rename(src, list...)
     esc(:(Marble.rename($src, $before, $after)))
 end
 
+############
+# MapArray #
+############
+
+struct MapArray{T, N, F, Args <: Tuple} <: AbstractArray{T, N}
+    f::F
+    args::Args
+    function MapArray{T, N, F, Args}(f::F, args::Args) where {T, N, F, Args}
+        @assert all(x->size(x)==size(first(args)), args)
+        new{T, N, F, Args}(f, args)
+    end
+end
+function maparray(f::F, args...) where {F}
+    Args = map(typeof, args)
+    A = Base._return_type(map, Tuple{F, Args...})
+    MapArray{eltype(A), ndims(A), F, Tuple{Args...}}(f, args)
+end
+Base.size(A::MapArray) = size(first(A.args))
+Base.IndexStyle(::Type{<: MapArray{<: Any, <: Any, F, Args}}) where {F, Args} = IndexStyle(Base._return_type(map, Tuple{F, Args.parameters...}))
+@inline function Base.getindex(A::MapArray, i::Integer...)
+    @boundscheck checkbounds(A, i...)
+    @inbounds A.f(getindex.(A.args, i...)...)
+end
+
 ####################
 # CoordinateSystem #
 ####################
