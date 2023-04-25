@@ -14,7 +14,7 @@ function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractArray{
     WriteVTK.add_field_data(vtk, f32(data), name, loc; kwargs...)
 end
 function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractArray{<: Tensor}, name::AbstractString, loc::WriteVTK.AbstractFieldData; kwargs...)
-    WriteVTK.add_field_data(vtk, vtk_format(f32(data)), name, loc; kwargs...)
+    WriteVTK.add_field_data(vtk, f32(vtk_format(data)), name, loc; kwargs...)
 end
 vtk_format(A::AbstractArray{<: Tensor}) = _vtk_format(A)
 function _vtk_format(A::AbstractArray{<: Tensor})
