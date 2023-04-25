@@ -34,7 +34,7 @@ function point_sampling(::GridSampling, box::BoxDomain{dim, T}, l::T) where {dim
     r = l / 2
     minmax((xmin,xmax), r) = (xmin+r, xmax-r)
     points = Lattice(2r, minmax.(box.minmax, r)...)
-    points, entire_volume(box)/length(points)
+    vec(points), entire_volume(box)/length(points)
 end
 
 function point_sampling(pds::PoissonDiskSampling, box::BoxDomain{dim, T}, l::T) where {dim, T}
@@ -111,7 +111,7 @@ If `ParticleState` is not given, the `NamedTuple` including above properties is 
 """
 function generate_particles end
 
-function generate_particles(::Type{ParticleState}, points::AbstractArray{<: Vec}) where {ParticleState}
+function generate_particles(::Type{ParticleState}, points::AbstractVector{<: Vec}) where {ParticleState}
     particles = StructVector{ParticleState}(undef, length(points))
     fillzero!(particles)
     @. particles.x = points
