@@ -244,9 +244,15 @@ end
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bcf = Broadcast.flatten(bc)
-    !identical_spinds(dest, bcf.args...) &&
-        error("SpArray: broadcast along with different `SpIndices`s is not supported")
-    Base.copyto!(_nonzeros(dest), _nonzeros(bc))
+    if identical_spinds(dest, bcf.args...)
+        Base.copyto!(_nonzeros(dest), _nonzeros(bc))
+    else
+        @inbounds @simd for I in eachindex(dest)
+            if isnonzero(dest, I)
+                dest[I] = bc[I]
+            end
+        end
+    end
     dest
 end
 @inline _nonzeros(bc::Broadcasted{ArrayStyle{SpArray}}) = Broadcast.broadcasted(bc.f, map(_nonzeros, bc.args)...)
