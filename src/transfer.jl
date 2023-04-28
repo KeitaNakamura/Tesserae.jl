@@ -322,7 +322,7 @@ end
         else
             mₚvₚ = pt.m * pt.v
 
-            # additional term from high order approximation
+            # additional term for advanced approximation
             if alg isa AffineTransfer
                 xₚ = pt.x
                 Dₚ = zero(Mat{dim, dim, T})
