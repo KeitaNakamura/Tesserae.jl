@@ -1,11 +1,12 @@
 @testset "Generating particles" begin
     @testset "generation (alg=$alg)" for alg in (GridSampling(), PoissonDiskSampling())
         # plane strain
-        n = 3
         lattice = Lattice(0.1, (0,10), (0,10))
-        particles = generate_particles((x,y) -> true, lattice; alg, spacing=1/n)
+        particles = generate_particles((x,y) -> true, lattice; alg)
         @test sum(particles.V) ≈ 10*10
-        @test all(pt->pt.l==spacing(lattice)/n, particles)
+        @test all(particles) do pt
+            (pt.l)^2 ≈ pt.V
+        end
         # axisymmetric
         lattice = Lattice(0.1, (0,10), (0,10))
         particles = generate_particles((x,y) -> true, lattice; alg, system=Axisymmetric())

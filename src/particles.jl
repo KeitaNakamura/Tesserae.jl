@@ -41,7 +41,7 @@ function point_sampling(pds::PoissonDiskSampling, box::BoxDomain{dim, T}, l::T) 
     # Determine minimum distance between particles for Poisson disk sampling
     # so that the number of generated particles is almost the same as the grid sampling.
     # This empirical equation is slightly different from a previous work (https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
-    points = poisson_disk_sampling(pds.rng, l/(1.376)^(1/√dim), map(x->(x[1]+l/2, x[2]-l/2), box.minmax)...)
+    points = poisson_disk_sampling(pds.rng, l/(1.376)^(1/√dim), box.minmax...)
     U = eltype(eltype(points))
     reinterpret(Vec{dim,U}, points), entire_volume(box)/length(points)
 end
@@ -127,8 +127,7 @@ function generate_particles(
         system::CoordinateSystem = NormalSystem(),
     ) where {ParticleState, dim}
 
-    lₚ = Marble.spacing(lattice) * spacing
-    points, Vₚ = point_sampling(alg, domain, lₚ)
+    points, Vₚ = point_sampling(alg, domain, Marble.spacing(lattice) * spacing)
     particles = generate_particles(ParticleState, points)
 
     if :V in propertynames(particles)
@@ -139,7 +138,8 @@ function generate_particles(
         end
     end
     if :l in propertynames(particles)
-        particles.l .= lₚ
+        l = Vₚ^(1/dim)
+        particles.l .= l
     end
 
     reorder_particles!(particles, lattice)
