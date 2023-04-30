@@ -52,5 +52,5 @@ end
     @test @inferred(A .* B)::Array{Float64} == AA .* BB
     @test @inferred(broadcast(iszero, A))::BitArray == @. iszero(AA)
     @test @inferred(broadcast!(*, A, A, A))::SpArray{Float64} == broadcast!(*, AA, AA, AA)
-    @test_throws Exception broadcast!(*, A, A, B)
+    @test @inferred(broadcast!(*, A, A, B))::SpArray{Float64} == broadcast!(*, AA, AA, BB)
 end
