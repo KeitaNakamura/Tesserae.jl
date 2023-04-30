@@ -81,7 +81,7 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
         sppat .= filter
         parallel_each_particle(space; parallel) do p
             @inbounds begin
-                inds, _ = neighbornodes(lattice, particles.x[p], 1)
+                inds = neighbornodes(lattice, particles.x[p], 1)
                 sppat[inds] .= true
             end
         end
