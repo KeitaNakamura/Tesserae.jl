@@ -33,7 +33,8 @@ end
 
 # general version
 function update!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, _ = neighbornodes(itp, lattice, pt)
+    indices = neighbornodes(itp, lattice, pt)
+    set_neighbornodes!(mp, indices)
 
     F = get_kernel(itp)
     P = get_basis(itp)
@@ -58,21 +59,18 @@ function update!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArr
         mp.∇N[j] = wq ⋅ gradient(P, xₚ - xₚ)
     end
     mp.Minv[] = M⁻¹
-
-    set_neighbornodes!(mp, indices)
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
 function update!(mp::SubMPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, isfullyinside = neighbornodes(itp, lattice, pt)
+    indices = neighbornodes(itp, lattice, pt)
+    set_neighbornodes!(mp, indices)
 
-    if isfullyinside && @inbounds alltrue(sppat, indices)
+    if isfullyinside(mp) && @inbounds alltrue(sppat, indices)
         fast_update_mpvalues!(mp, itp, lattice, sppat, indices, pt)
     else
         fast_update_mpvalues_nearbounds!(mp, itp, lattice, sppat, indices, pt)
     end
-
-    set_neighbornodes!(mp, indices)
 end
 
 function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}

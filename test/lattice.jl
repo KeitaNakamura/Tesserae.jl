@@ -25,9 +25,9 @@
         @test_throws Exception Marble.isinside(Vec(1), lattice)
 
         # neighbornodes/whichcell/whichblock
-        @test @inferred(neighbornodes(lattice, Vec{2,T}( 1.6,8.8), 1))::Tuple{CartesianIndices, Bool} == (CartesianIndices((2:3, 8:9)), true)
-        @test @inferred(neighbornodes(lattice, Vec{2,T}( 0.6,8.8), 2))::Tuple{CartesianIndices, Bool} == (CartesianIndices((1:3, 7:10)), false)
-        @test @inferred(neighbornodes(lattice, Vec{2,T}(-0.6,8.8), 2))::Tuple{CartesianIndices, Bool} == (CartesianIndices((1:0, 1:0)), false)
+        @test @inferred(neighbornodes(lattice, Vec{2,T}( 1.6,8.8), 1))::CartesianIndices == CartesianIndices((2:3, 8:9))
+        @test @inferred(neighbornodes(lattice, Vec{2,T}( 0.6,8.8), 2))::CartesianIndices == CartesianIndices((1:3, 7:10))
+        @test @inferred(neighbornodes(lattice, Vec{2,T}(-0.6,8.8), 2))::CartesianIndices == CartesianIndices((1:0, 1:0))
         @test (Marble.whichcell(lattice, Vec{2,T}( 0.6,8.8)))::CartesianIndex == CartesianIndex(1, 8)
         @test (Marble.whichcell(lattice, Vec{2,T}(-0.6,8.8)))::Nothing == nothing
         @test (Marble.whichblock(lattice, Vec{2,T}( 8.8,4.6)))::CartesianIndex == CartesianIndex(2, 1)

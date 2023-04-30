@@ -26,30 +26,28 @@ end
 
 # general version
 @inline function update!(mp::SubMPValues, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, isfullyinside = neighbornodes(itp, lattice, pt)
+    indices = neighbornodes(itp, lattice, pt)
+    set_neighbornodes!(mp, indices)
 
-    if isfullyinside && @inbounds alltrue(sppat, indices)
+    if isfullyinside(mp) && @inbounds alltrue(sppat, indices)
         @inbounds for (j, i) in pairs(IndexCartesian(), indices)
             mp.N[j], mp.∇N[j] = value_gradient(get_kernel(itp), lattice, i, pt)
         end
     else
         update_mpvalues_nearbounds!(mp, itp, lattice, sppat, indices, pt)
     end
-
-    set_neighbornodes!(mp, indices)
 end
 
 # fast version for B-spline kernels
 @inline function update!(mp::SubMPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices, isfullyinside = neighbornodes(itp, lattice, pt)
+    indices = neighbornodes(itp, lattice, pt)
+    set_neighbornodes!(mp, indices)
 
-    if isfullyinside && @inbounds alltrue(sppat, indices)
+    if isfullyinside(mp) && @inbounds alltrue(sppat, indices)
         values_gradients!(mp.N, mp.∇N, get_kernel(itp), lattice, pt)
     else
         update_mpvalues_nearbounds!(mp, itp, lattice, sppat, indices, pt)
     end
-
-    set_neighbornodes!(mp, indices)
 end
 
 @inline function update_mpvalues_nearbounds!(mp::SubMPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}

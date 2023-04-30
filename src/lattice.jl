@@ -89,13 +89,11 @@ end
 end
 
 """
-    neighbornodes(lattice, x::Vec, h) -> (indices, isfullyinside)
+    neighbornodes(lattice, x::Vec, h)
 
-Return `CartesianIndices` storing neighboring node `indices` around `x`.
+Return `CartesianIndices` storing neighboring node around `x`.
 `h` denotes the range for searching area. In 1D, for example, the range `a`
 becomes ` x-h*Δx < a < x+h*Δx` where `Δx` is `spacing(lattice)`.
-`isfullyinside` is `true` if the neighboring nodes are completely inside of
-the `lattice`.
 
 # Examples
 ```jldoctest
@@ -109,14 +107,14 @@ julia> lattice = Lattice(1, (0,5))
  [5.0]
 
 julia> neighbornodes(lattice, Vec(1.5), 1)
-(CartesianIndices((2:3,)), true)
+CartesianIndices((2:3,))
 
 julia> neighbornodes(lattice, Vec(1.5), 3)
-(CartesianIndices((1:5,)), false)
+CartesianIndices((1:5,))
 ```
 """
 @inline function neighbornodes(lattice::Lattice{dim, T}, x::Vec, h::Real) where {dim, T}
-    isinside(x, lattice) || return (CartesianIndices(nfill(1:0, Val(dim))), false)
+    isinside(x, lattice) || return CartesianIndices(nfill(1:0, Val(dim)))
     _neighborindices(SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)), SVec{dim,T}(x), convert(T, h))
 end
 @inline function _neighborindices(dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}, h::T) where {dim, T}
@@ -125,8 +123,7 @@ end
     stop  = convert(SVec{dim, Int}, floor(ξ + h)) + 1
     imin = Tuple(max(start, 1))
     imax = Tuple(min(stop, dims))
-    isfullyinside = all(1 ≤ start) && all(stop ≤ dims)
-    CartesianIndices(UnitRange.(imin, imax)), isfullyinside
+    CartesianIndices(UnitRange.(imin, imax))
 end
 
 """

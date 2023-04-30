@@ -3,8 +3,8 @@
 @testset "Kernel" begin
 @testset "BSpline" begin
     @testset "Fast calculations" begin
-        getvals(itp, lattice, x) = [Marble.value(itp, lattice, I, x) for I in first(neighbornodes(itp, lattice, x))] |> vec
-        getgrads(itp, lattice, x) = [gradient(x->Marble.value(itp, lattice, I, x), x) for I in first(neighbornodes(itp, lattice, x))] |> vec
+        getvals(itp, lattice, x) = [Marble.value(itp, lattice, I, x) for I in neighbornodes(itp, lattice, x)] |> vec
+        getgrads(itp, lattice, x) = [gradient(x->Marble.value(itp, lattice, I, x), x) for I in neighbornodes(itp, lattice, x)] |> vec
         @testset "$itp" for (len,itp) in ((2,LinearBSpline()), (3,QuadraticBSpline()), (4,CubicBSpline()))
             @testset "dim=$dim" for dim in 1:3
                 for T in (Float32, Float64)
@@ -24,7 +24,7 @@
     end
     @testset "Consistency between `values_gradients` and `neighbornodes`" begin
         # check consistency between `values_gradients` and `neighbornodes` when a particle is exactly on the knot
-        getvalues(itp, lattice, pt) = [Marble.value(itp, lattice, I, pt) for I in first(neighbornodes(itp, lattice, pt))]
+        getvalues(itp, lattice, pt) = [Marble.value(itp, lattice, I, pt) for I in neighbornodes(itp, lattice, pt)]
         lattice = Lattice(1, (0,5))
         ## LinearBSpline
         itp = LinearBSpline()
@@ -56,12 +56,12 @@ end # Kernel
                 mp = values(MPValues{dim, T}(itp, 1), 1)
                 for _ in 1:100
                     x = rand(Vec{dim, T})
-                    _, isfullyinside = neighbornodes(itp, lattice, x)
-                    indices = update!(mp, itp, lattice, x)
+                    update!(mp, itp, lattice, x)
+                    indices = neighbornodes(mp)
                     CI = CartesianIndices(indices)
                     @test sum(mp.N[CI]) ≈ 1
                     @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
-                    if isfullyinside
+                    if Marble.isfullyinside(mp)
                         @test mapreduce((j,i) -> mp.N[j]*lattice[i], +, CI, indices) ≈ x atol=TOL
                         @test mapreduce((j,i) -> lattice[i]⊗mp.∇N[j], +, CI, indices) ≈ I atol=TOL
                     end
@@ -90,7 +90,8 @@ end
                         else
                             pt = x
                         end
-                        indices = update!(mp, itp, lattice, pt)
+                        update!(mp, itp, lattice, pt)
+                        indices = neighbornodes(mp)
                         CI = CartesianIndices(indices)
                         @test sum(mp.N[CI]) ≈ 1
                         @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
@@ -117,9 +118,9 @@ end
                 for _ in 1:100
                     x = rand(Vec{dim, T})
                     pt = (;x,l)
-                    _, isfullyinside = neighbornodes(itp, lattice, pt)
-                    if isfullyinside
-                        indices = update!(mp, itp, lattice, pt)
+                    update!(mp, itp, lattice, pt)
+                    if Marble.isfullyinside(mp)
+                        indices = neighbornodes(mp)
                         CI = CartesianIndices(indices)
                         @test sum(mp.N[CI]) ≈ 1
                         @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
@@ -149,7 +150,8 @@ end
                     else
                         pt = x
                     end
-                    indices = update!(mp, itp, lattice, pt)
+                    update!(mp, itp, lattice, pt)
+                    indices = neighbornodes(mp)
                     CI = CartesianIndices(indices)
                     @test sum(mp.N[CI]) ≈ 1
                     @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL

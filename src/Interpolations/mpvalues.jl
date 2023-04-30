@@ -102,6 +102,10 @@ end
     @inbounds getfield(parent(mp), :indices)[index] = inds
 end
 
+@inline function isfullyinside(mp::SubMPValues)
+    size(getproperty(mp, first(propertynames(mp)))) == size(neighbornodes(mp))
+end
+
 ###########
 # update! #
 ###########

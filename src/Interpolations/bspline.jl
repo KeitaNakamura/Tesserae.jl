@@ -227,15 +227,14 @@ function MPValuesInfo{dim, T}(itp::BSpline{order}) where {dim, T, order}
 end
 
 @inline function update!(mp::SubMPValues, itp::BSpline, lattice::Lattice, pt)
-    indices, isfullyinside = neighbornodes(itp, lattice, pt)
+    indices = neighbornodes(itp, lattice, pt)
+    set_neighbornodes!(mp, indices)
 
-    if isfullyinside
+    if isfullyinside(mp)
         values_gradients!(mp.N, mp.∇N, itp, lattice, pt)
     else
         update_mpvalues_nearbounds!(mp.N, mp.∇N, itp, lattice, indices, pt)
     end
-
-    set_neighbornodes!(mp, indices)
 end
 
 function update_mpvalues_nearbounds!(N, ∇N, itp::BSpline, lattice::Lattice, indices, pt)
