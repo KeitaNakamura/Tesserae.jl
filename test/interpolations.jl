@@ -61,7 +61,7 @@ end # Kernel
                     CI = CartesianIndices(indices)
                     @test sum(mp.N[CI]) ≈ 1
                     @test sum(mp.∇N[CI]) ≈ zero(Vec{dim}) atol=TOL
-                    if Marble.isfullyinside(mp)
+                    if !Marble.isnearbounds(mp)
                         @test mapreduce((j,i) -> mp.N[j]*lattice[i], +, CI, indices) ≈ x atol=TOL
                         @test mapreduce((j,i) -> lattice[i]⊗mp.∇N[j], +, CI, indices) ≈ I atol=TOL
                     end
@@ -119,7 +119,7 @@ end
                     x = rand(Vec{dim, T})
                     pt = (;x,l)
                     update!(mp, itp, lattice, pt)
-                    if Marble.isfullyinside(mp)
+                    if !Marble.isnearbounds(mp)
                         indices = neighbornodes(mp)
                         CI = CartesianIndices(indices)
                         @test sum(mp.N[CI]) ≈ 1

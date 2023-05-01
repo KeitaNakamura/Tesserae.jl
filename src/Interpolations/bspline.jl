@@ -226,19 +226,14 @@ function MPValuesInfo{dim, T}(itp::BSpline{order}) where {dim, T, order}
     MPValuesInfo{dim, T}(values, sizes)
 end
 
-@inline function update!(mp::SubMPValues, itp::BSpline, lattice::Lattice, pt)
-    indices = neighbornodes(itp, lattice, pt)
-    set_neighbornodes!(mp, indices)
-
-    if isfullyinside(mp)
-        values_gradients!(mp.N, mp.∇N, itp, lattice, pt)
+function update_mpvalues!(mp::SubMPValues, itp::BSpline, lattice::Lattice, pt)
+    if isnearbounds(mp)
+        indices = neighbornodes(mp)
+        @inbounds @simd for j in CartesianIndices(indices)
+            i = indices[j]
+            mp.∇N[j], mp.N[j] = gradient(x->value(itp,lattice,i,x,:steffen), getx(pt), :all)
+        end
     else
-        update_mpvalues_nearbounds!(mp.N, mp.∇N, itp, lattice, indices, pt)
-    end
-end
-
-function update_mpvalues_nearbounds!(N, ∇N, itp::BSpline, lattice::Lattice, indices, pt)
-    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
-        ∇N[j], N[j] = gradient(x->value(itp,lattice,i,x,:steffen), getx(pt), :all)
+        values_gradients!(mp.N, mp.∇N, itp, lattice, pt)
     end
 end

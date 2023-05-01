@@ -25,36 +25,34 @@ function MPValuesInfo{dim, T}(itp::KernelCorrection) where {dim, T}
 end
 
 # general version
-@inline function update!(mp::SubMPValues, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices = neighbornodes(itp, lattice, pt)
-    set_neighbornodes!(mp, indices)
-
-    if isfullyinside(mp) && @inbounds alltrue(sppat, indices)
-        @inbounds for (j, i) in pairs(IndexCartesian(), indices)
+@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    if isnearbounds(mp)
+        update_mpvalues_nearbounds!(mp, itp, lattice, sppat, pt)
+    else
+        indices = neighbornodes(mp)
+        @inbounds @simd for j in CartesianIndices(indices)
+            i = indices[j]
             mp.N[j], mp.∇N[j] = value_gradient(get_kernel(itp), lattice, i, pt)
         end
-    else
-        update_mpvalues_nearbounds!(mp, itp, lattice, sppat, indices, pt)
     end
 end
 
 # fast version for B-spline kernels
-@inline function update!(mp::SubMPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices = neighbornodes(itp, lattice, pt)
-    set_neighbornodes!(mp, indices)
-
-    if isfullyinside(mp) && @inbounds alltrue(sppat, indices)
-        values_gradients!(mp.N, mp.∇N, get_kernel(itp), lattice, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    if isnearbounds(mp)
+        update_mpvalues_nearbounds!(mp, itp, lattice, sppat, pt)
     else
-        update_mpvalues_nearbounds!(mp, itp, lattice, sppat, indices, pt)
+        values_gradients!(mp.N, mp.∇N, get_kernel(itp), lattice, pt)
     end
 end
 
-@inline function update_mpvalues_nearbounds!(mp::SubMPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
+@inline function update_mpvalues_nearbounds!(mp::SubMPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt) where {dim, T}
+    indices = neighbornodes(mp)
     F = get_kernel(itp)
     xₚ = getx(pt)
     M = zero(Mat{dim+1, dim+1, T})
-    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
+    @inbounds for j in CartesianIndices(indices)
+        i = indices[j]
         xᵢ = lattice[i]
         w = value(F, lattice, i, pt) * sppat[i]
         P = [1; xᵢ - xₚ]
@@ -65,7 +63,8 @@ end
     C₁ = M⁻¹[1,1]
     C₂ = @Tensor M⁻¹[2:end,1]
     C₃ = @Tensor M⁻¹[2:end,2:end]
-    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
+    @inbounds for j in CartesianIndices(indices)
+        i = indices[j]
         xᵢ = lattice[i]
         w = mp.N[j]
         mp.N[j] = (C₁ + C₂ ⋅ (xᵢ - xₚ)) * w

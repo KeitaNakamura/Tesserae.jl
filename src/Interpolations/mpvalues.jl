@@ -20,12 +20,13 @@ end
 struct MPValues{dim, T, V <: NamedTuple, VI <: AbstractVector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}}
     values::V
     indices::VI
+    isnearbounds::Vector{Bool}
 end
 
 # constructors
-function MPValues(values::NamedTuple, indices::AbstractVector)
+function MPValues(values::NamedTuple, indices::AbstractVector, isnearbounds::Vector{Bool})
     MPValuesBaseType = get_mpvalues_basetype(values.N, values.∇N)
-    MPValuesBaseType{typeof(values), typeof(indices)}(values, indices)
+    MPValuesBaseType{typeof(values), typeof(indices)}(values, indices, isnearbounds)
 end
 @generated function MPValues(info::MPValuesInfo{dim, T, <: NamedTuple{names}}, len::Int) where {dim, T, names}
     arrays = map(1:length(names)) do i
@@ -36,7 +37,7 @@ end
     quote
         values = NamedTuple{names}(tuple($(arrays...)))
         indices = Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}(undef, len)
-        MPValues(values, indices)
+        MPValues(values, indices, fill(false, len))
     end
 end
 # basically use these constructors
@@ -52,17 +53,11 @@ Base.values(mpvalues::MPValues) = getfield(mpvalues, :values)
 Base.propertynames(mpvalues::MPValues) = propertynames(values(mpvalues))
 @inline Base.getproperty(mpvalues::MPValues, name::Symbol) = getproperty(values(mpvalues), name)
 
-# values/neighbornodes
+# values
 function num_particles(mpvalues::MPValues)
     A = first(values(mpvalues))
     size(A, ndims(A))
 end
-@inline function neighbornodes(mpvalues::MPValues, i::Integer)
-    @_propagate_inbounds_meta
-    getfield(mpvalues, :indices)[i]
-end
-@inline neighbornodes(mpvalues::MPValues, ::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(mpvalues, i))
-@inline neighbornodes(mpvalues::MPValues, grid::SpGrid, i::Integer) = (@_propagate_inbounds_meta; nonzeroindices(get_spinds(grid), neighbornodes(mpvalues, i)))
 @inline function Base.values(mpvalues::MPValues, p::Integer)
     @boundscheck @assert 1 ≤ p ≤ num_particles(mpvalues)
     SubMPValues(mpvalues, p)
@@ -91,19 +86,21 @@ Base.propertynames(mp::SubMPValues) = propertynames(parent(mp))
 end
 @inline function neighbornodes(mp::SubMPValues)
     index = getfield(mp, :index)
-    @inbounds neighbornodes(parent(mp), index)
+    @inbounds getfield(parent(mp), :indices)[index]
 end
-@inline function neighbornodes(mp::SubMPValues, grid::Grid)
+@inline neighbornodes(mp::SubMPValues, grid::Grid) = neighbornodes(mp)
+@inline neighbornodes(mp::SubMPValues, grid::SpGrid) = nonzeroindices(get_spinds(grid), neighbornodes(mp))
+@inline function isnearbounds(mp::SubMPValues)
     index = getfield(mp, :index)
-    @inbounds neighbornodes(parent(mp), grid, index)
+    @inbounds getfield(parent(mp), :isnearbounds)[index]
 end
 @inline function set_neighbornodes!(mp::SubMPValues, inds)
     index = getfield(mp, :index)
     @inbounds getfield(parent(mp), :indices)[index] = inds
 end
-
-@inline function isfullyinside(mp::SubMPValues)
-    size(getproperty(mp, first(propertynames(mp)))) == size(neighbornodes(mp))
+@inline function set_isnearbounds!(mp::SubMPValues, isnearbounds)
+    index = getfield(mp, :index)
+    @inbounds getfield(parent(mp), :isnearbounds)[index] = isnearbounds
 end
 
 ###########
@@ -137,10 +134,20 @@ function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, parti
 end
 
 # SubMPValues
-@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt)
+@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    indices = neighbornodes(itp, lattice, pt)
+    isfullyinside = size(getproperty(mp, first(propertynames(mp)))) == size(indices)
+    isnearbounds = !isfullyinside || !(@inbounds alltrue(sppat, indices))
+    set_neighbornodes!(mp, indices)
+    set_isnearbounds!(mp, isnearbounds)
+    update_mpvalues!(mp, itp, lattice, sppat, pt)
+end
+@inline update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt) = update!(mp, itp, lattice, Trues(size(lattice)), pt)
+
+@inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt)
     update!(mp, itp, lattice, Trues(size(lattice)), pt)
 end
-@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray, pt)
     sppat isa Trues || @warn "Sparsity pattern on grid is not supported in `$itp`, just ignored" maxlog=1
-    update!(mp, itp, lattice, pt)
+    update_mpvalues!(mp, itp, lattice, pt)
 end

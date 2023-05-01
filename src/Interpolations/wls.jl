@@ -32,16 +32,16 @@ function MPValuesInfo{dim, T}(itp::WLS) where {dim, T}
 end
 
 # general version
-function update!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices = neighbornodes(itp, lattice, pt)
-    set_neighbornodes!(mp, indices)
+function update_mpvalues!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    indices = neighbornodes(mp)
 
     F = get_kernel(itp)
     P = get_basis(itp)
     M = zero(mp.Minv[])
     xₚ = getx(pt)
 
-    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
+    @inbounds @simd for j in CartesianIndices(indices)
+        i = indices[j]
         xᵢ = lattice[i]
         w = value(F, lattice, i, pt) * sppat[i]
         p = value(P, xᵢ - xₚ)
@@ -51,7 +51,8 @@ function update!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArr
 
     M⁻¹ = inv(M)
 
-    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
+    @inbounds @simd for j in CartesianIndices(indices)
+        i = indices[j]
         xᵢ = lattice[i]
         q = M⁻¹ ⋅ value(P, xᵢ - xₚ)
         wq = mp.w[j] * q
@@ -62,24 +63,23 @@ function update!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArr
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update!(mp::SubMPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
-    indices = neighbornodes(itp, lattice, pt)
-    set_neighbornodes!(mp, indices)
-
-    if isfullyinside(mp) && @inbounds alltrue(sppat, indices)
-        fast_update_mpvalues!(mp, itp, lattice, sppat, indices, pt)
+function update_mpvalues!(mp::SubMPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    if isnearbounds(mp)
+        fast_update_mpvalues_nearbounds!(mp, itp, lattice, sppat, pt)
     else
-        fast_update_mpvalues_nearbounds!(mp, itp, lattice, sppat, indices, pt)
+        fast_update_mpvalues!(mp, itp, lattice, sppat, pt)
     end
 end
 
-function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt) where {dim, T}
+function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt) where {dim, T}
+    indices = neighbornodes(mp)
     F = get_kernel(itp)
     xₚ = getx(pt)
     D = zero(Vec{dim, T}) # diagonal entries
     values_gradients!(mp.w, reinterpret(reshape, T, mp.∇N), F, lattice, xₚ)
 
-    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
+    @inbounds @simd for j in CartesianIndices(indices)
+        i = indices[j]
         xᵢ = lattice[i]
         w = mp.w[j]
         D += w * (xᵢ - xₚ) .* (xᵢ - xₚ)
@@ -92,13 +92,15 @@ function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Latti
     mp.Minv[] = diagm(vcat(1, D⁻¹))
 end
 
-function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, indices, pt)
+function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+    indices = neighbornodes(mp)
     F = get_kernel(itp)
     P = get_basis(itp)
     xₚ = getx(pt)
     M = zero(mp.Minv[])
 
-    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
+    @inbounds @simd for j in CartesianIndices(indices)
+        i = indices[j]
         xᵢ = lattice[i]
         w = value(F, lattice, i, xₚ) * sppat[i]
         p = value(P, xᵢ - xₚ)
@@ -108,7 +110,8 @@ function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::La
 
     M⁻¹ = inv(M)
 
-    @inbounds for (j, i) in pairs(IndexCartesian(), indices)
+    @inbounds @simd for j in CartesianIndices(indices)
+        i = indices[j]
         xᵢ = lattice[i]
         q = M⁻¹ ⋅ value(P, xᵢ - xₚ)
         wq = mp.w[j] * q
