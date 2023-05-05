@@ -114,7 +114,7 @@ end
 #
 # If the stress is outside of the yield function, the plastic corrector needs to be performed.
 
-function compute_cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, Δϵ::SymmetricSecondOrderTensor{3})
+function compute_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, Δϵ::SymmetricSecondOrderTensor{3})
     ## mean stress for tension limit
     p_t = model.p_t
 
