@@ -31,7 +31,7 @@ function sand_column_collapse(
     ## material constants for soil (Drucker-Prager model with linear elastic model)
     ρ₀      = 1.5e3 # initial density
     elastic = LinearElastic(; E=1e6, ν=0.3)
-    model   = DruckerPrager(elastic; c=0.0, ϕ=deg2rad(35), ψ=deg2rad(0))
+    model   = DruckerPrager(:plane_strain, elastic; c=0.0, ϕ=deg2rad(35), ψ=deg2rad(0))
 
     ## states for grid and particles
     GridState = @NamedTuple begin

@@ -3,71 +3,97 @@
 # The following Drucker--Prager model is applied for the material model of the sand:
 #
 # ```math
-# f(\bm{\sigma}) = \sqrt{J_2(\bm{\sigma)}} + \alpha I_1(\bm{\sigma}) - \kappa = 0,
+# f(\bm{\sigma}) = \| \bm{s} \| - (A - Bp),
 # ```
 #
-# where $J_2$ is the second deviatoric stress invariant, $I_1$ is the first stress invariant,
-# and $\alpha$ and $\kappa$ are the material parameters associated with the cohesion $c$ and
+# where $\bm{s}$ is the deviatoric stress, $p$ is the mean stress,
+# and $A$ and $B$ are the material parameters associated with the cohesion $c$ and
 # internal friction angle $\phi$ in the Morh--Coulomb model, respectively.
-# Under the plane-strain condition, the material parameters are caculated as follows:
-#
-# ```math
-# \alpha = \frac{\tan\phi}{\sqrt{9+12\tan^2\phi}},\quad
-# \kappa = \frac{3c}{\sqrt{9+12\tan^2\phi}}.
-# ```
 #
 # For the plastic flow rule, the following non-associative flow rule is employed:
 #
 # ```math
-# g(\bm{\sigma}) = \sqrt{J_2(\bm{\sigma})} + \beta I_1(\bm{\sigma})
+# g(\bm{\sigma}) = \| \bm{s} \| + bp
 # ```
 #
-# where $\beta$ is derived from the dilatancy angle $\psi$ as
+# where $b$ is derived from the dilatancy angle $\psi$.
+#
+# ## Plane-strain condition
+#
+# Under the plane-strain condition, the material parameters are caculated as follows:
 #
 # ```math
-# \beta = \frac{\tan\psi}{\sqrt{9+12\tan^2\psi}}
+# A = \frac{3\sqrt{2}c}{\sqrt{9+12\tan^2\phi}},\quad
+# B = \frac{3\sqrt{2}\tan\phi}{\sqrt{9+12\tan^2\phi}}.
+# ```
+#
+# For the plastic flow rule, $b$ is derived from the dilatancy angle $\psi$ as
+#
+# ```math
+# b = \frac{3\sqrt{2}\tan\psi}{\sqrt{9+12\tan^2\psi}}
+# ```
+#
+# ## Inner and outer edge approximation
+#
+# Conincidence at the inner/outer edges of the Mohr--Coulomb surface is obtained when
+#
+# ```math
+# A = \frac{2\sqrt{6}c\cos\phi}{3\pm\sin\phi},\quad
+# B = \frac{2\sqrt{6}\sin\phi}{3\pm\sin\phi}.
+# ```
+#
+# The parameter $b$ is given by
+#
+# ```math
+# b = \frac{2\sqrt{6}\sin\psi}{3\pm\sin\psi}.
 # ```
 
 include("LinearElastic.jl")
 
 struct DruckerPrager{T}
     elastic::LinearElastic{T}
-    α::T
-    κ::T
-    β::T
+    A::T
+    B::T
+    b::T
     p_t::T # mean stress for tension limit
 end
 
-function DruckerPrager(elastic::LinearElastic{T}; c::T, ϕ::T, ψ::T = ϕ, p_t::T = c/tan(ϕ)) where {T}
-    ## assuming plane strain condition
-    κ = 3c     / sqrt(9 + 12tan(ϕ)^2)
-    α = tan(ϕ) / sqrt(9 + 12tan(ϕ)^2)
-    β = tan(ψ) / sqrt(9 + 12tan(ψ)^2)
-    DruckerPrager{T}(elastic, α, κ, β, p_t)
+function DruckerPrager(type::Symbol, elastic::LinearElastic{T}; c::T, ϕ::T, ψ::T = ϕ, p_t::T = c/tan(ϕ)) where {T}
+    if type == :plane_strain
+        A = 3√2c      / sqrt(9+12tan(ϕ)^2)
+        B = 3√2tan(ϕ) / sqrt(9+12tan(ϕ)^2)
+        b = 3√2tan(ψ) / sqrt(9+12tan(ψ)^2)
+    elseif type == :outer
+        A = 2√6c*cos(ϕ) / (3-sin(ϕ))
+        B = 2√6sin(ϕ)   / (3-sin(ϕ))
+        b = 2√6sin(ψ)   / (3-sin(ψ))
+    elseif type == :inner
+        A = 2√6c*cos(ϕ) / (3+sin(ϕ))
+        B = 2√6sin(ϕ)   / (3+sin(ϕ))
+        b = 2√6sin(ψ)   / (3+sin(ψ))
+    else
+        error("$type is not supported, choose :plane_strain, :outer or :inner")
+    end
+
+    DruckerPrager{T}(elastic, A, B, b, p_t)
 end
 
 function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
-    α, κ = model.α, model.κ
+    A, B = model.A, model.B
+    p = mean(σ)
     s = dev(σ)
-    I₁ = tr(σ)
-    J₂ = s ⊡ s / 2
-    √J₂ + α*I₁ - κ
+    norm(s) - (A - B*p)
 end
 
 # We also define `plastic_flow` to compute the gradient of the plastic potential function
 # $\partial{g} / \partial\bm{\sigma}$:
 
-function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
-    β = model.β
+function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3, T}) where {T}
+    TOL = sqrt(eps(T))
+    b = model.b
     s = dev(σ)
-    I₁ = tr(σ)
-    J₂ = s ⊡ s / 2
-    if J₂ < eps(typeof(J₂))
-        dgdσ = β*one(σ)
-    else
-        dgdσ = 2s/√J₂ + β*one(σ)
-    end
-    dgdσ
+    s_norm = norm(s)
+    s/s_norm*!(s_norm<TOL) + b/3*I
 end
 
 # ## Return mapping
@@ -113,9 +139,9 @@ function compute_cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrder
         σ = p_t*I + s
         if yield_function(model, σ) > 0
             ## map to corner
-            α, κ = model.α, model.κ
+            A, B = model.A, model.B
             p = mean(σ)
-            σ = p_t*I + √2*(κ-α*p)*normalize(s)
+            σ = p_t*I + (A-B*p)*normalize(s)
         end
     end
 
