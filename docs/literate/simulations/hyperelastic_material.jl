@@ -92,10 +92,12 @@ function hyperelastic_material(
     space = MPSpace(itp, size(grid), length(particles))
 
     ## outputs
-    if output #src
-    pvdfile = joinpath(mkpath("output.tmp"), "hyperelastic_material")
+    if output                                                #src
+    outdir = joinpath("output.tmp", "hyperelastic_material")
+    rm(outdir; recursive=true, force=true)                   #src
+    pvdfile = joinpath(mkpath(outdir), "paraview")
     closepvd(openpvd(pvdfile))
-    end #src
+    end                                                      #src
 
     t = 0.0
     step = 0

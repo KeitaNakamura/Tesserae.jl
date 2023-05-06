@@ -106,10 +106,12 @@ function contacting_grains(
      Outputs
     ========#
 
-    if output #src
-    pvdfile = joinpath(mkpath("output.tmp"), "contacting_grains")
+    if output                                            #src
+    outdir = joinpath("output.tmp", "contacting_grains")
+    rm(outdir; recursive=true, force=true)               #src
+    pvdfile = joinpath(mkpath(outdir), "paraview")
     closepvd(openpvd(pvdfile))
-    end #src
+    end                                                  #src
 
     t = 0.0
     step = 0

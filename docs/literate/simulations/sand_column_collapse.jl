@@ -83,10 +83,12 @@ function sand_column_collapse(
     space = MPSpace(itp, size(grid), length(particles))
 
     ## outputs
-    if output #src
-    pvdfile = joinpath(mkpath("output.tmp"), "sand_column_collapse")
+    if output                                               #src
+    outdir = joinpath("output.tmp", "sand_column_collapse")
+    rm(outdir; recursive=true, force=true)                  #src
+    pvdfile = joinpath(mkpath(outdir), "paraview")
     closepvd(openpvd(pvdfile))
-    end #src
+    end                                                     #src
 
     t = 0.0
     step = 0
