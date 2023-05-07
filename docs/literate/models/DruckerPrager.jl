@@ -102,8 +102,12 @@ end
 # The trial elastic stress can be calculated as
 #
 # ```math
-# \bm{\sigma}^{\mathrm{tr}} = \bm{\sigma}^n + \bm{c}^\mathrm{e} : \Delta\bm{\epsilon}
+# \bm{\sigma}^{\mathrm{tr}}
+# = \bm{c}^\mathrm{e} : \bm{\epsilon}^\mathrm{e,tr}
+# = \bm{c}^\mathrm{e} : \left( \bm{\epsilon}^\mathrm{e}_n + \Delta\bm{\epsilon} \right),
 # ```
+#
+# where the constant elastic stiffness is assumed.
 #
 # If the stress is inside of the yield function, i.e., $f^\mathrm{tr} \le 0$, then the updated stress
 # $\bm{\sigma}^{n+1}$ is set to the trial elastic stress as
@@ -114,13 +118,12 @@ end
 #
 # If the stress is outside of the yield function, the plastic corrector needs to be performed.
 
-function compute_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, Δϵ::SymmetricSecondOrderTensor{3})
+function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::SymmetricSecondOrderTensor{3})
     ## mean stress for tension limit
     p_t = model.p_t
 
     ## elastic predictor
-    cᵉ = model.elastic.c
-    σᵗʳ = σⁿ + cᵉ ⊡ Δϵ
+    cᵉ, σᵗʳ = gradient(ϵᵉ->compute_stress(model.elastic, ϵᵉ), ϵᵉᵗʳ, :all)
     dfdσ, fᵗʳ = gradient(σ->yield_function(model, σ), σᵗʳ, :all)
     if fᵗʳ ≤ 0 && mean(σᵗʳ) ≤ p_t
         σ = σᵗʳ

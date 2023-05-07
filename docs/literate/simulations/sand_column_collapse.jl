@@ -147,8 +147,7 @@ function sand_column_collapse(
             σⁿ = pt.σ
             Δϵ = symmetric(∇v*Δt)
             ΔW = skew(∇v*Δt)
-
-            σ = compute_stress(model, σⁿ, Δϵ)
+            σ = compute_stress(model, compute_strain(elastic, σⁿ) + Δϵ)
             σ = σ + symmetric(ΔW⋅σⁿ - σⁿ⋅ΔW)
             pt.σ = σ
             pt.V *= 1 + tr(Δϵ)
