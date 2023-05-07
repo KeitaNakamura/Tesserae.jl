@@ -46,9 +46,12 @@ function sand_column_collapse(
         x  :: Vec{2, Float64}
         m  :: Float64
         V  :: Float64
+        V₀ :: Float64
         v  :: Vec{2, Float64}
         ∇v :: SecondOrderTensor{3, Float64, 9}
+        F  :: SecondOrderTensor{3, Float64, 9}
         σ  :: SymmetricSecondOrderTensor{3, Float64, 6}
+        bᵉ :: SymmetricSecondOrderTensor{3, Float64, 6}
         b  :: Vec{2, Float64}
         l  :: Float64                          # for uGIMP
         B  :: SecondOrderTensor{2, Float64, 4} # for APIC
@@ -76,6 +79,9 @@ function sand_column_collapse(
                                0   0   σ_x])
     end
     @. particles.m = ρ₀ * particles.V
+    @. particles.V₀ = particles.V
+    @. particles.F = one(particles.F)
+    @. particles.bᵉ = one(particles.bᵉ)
     @. particles.b = Vec(0, -g)
     @show length(particles)
 
@@ -143,14 +149,19 @@ function sand_column_collapse(
 
         ## update other particle states
         Marble.@threads_inbounds for pt in LazyRows(particles)
-            ∇v = pt.∇v
-            σⁿ = pt.σ
-            Δϵ = symmetric(∇v*Δt)
-            ΔW = skew(∇v*Δt)
-            σ = compute_stress(model, compute_strain(elastic, σⁿ) + Δϵ)
-            σ = σ + symmetric(ΔW⋅σⁿ - σⁿ⋅ΔW)
-            pt.σ = σ
-            pt.V *= 1 + tr(Δϵ)
+            f = I + Δt*pt.∇v                     # relative deformation gradient
+            bᵉᵗʳ = symmetric(f ⋅ pt.bᵉ ⋅ f', :U) # trial elastic left Cauchy-Green deformation tensor
+            λᵉᵗʳₐ², mₐ = to_principal(bᵉᵗʳ)
+            ϵᵉᵗʳ = log.(λᵉᵗʳₐ²) / 2              # Hencky strain
+            τₐ = compute_stress(model, ϵᵉᵗʳ)
+            τ = from_principal(τₐ, mₐ)           # Kirchhoff stress
+            bᵉ = from_principal(exp.(2*compute_strain(elastic, τₐ)), mₐ)
+            F = f ⋅ pt.F
+            J = det(F)
+            pt.σ = τ / J
+            pt.bᵉ = bᵉ
+            pt.F = F
+            pt.V = J * pt.V₀
         end
 
         t += Δt
@@ -171,14 +182,14 @@ function sand_column_collapse(
     particles #src
 end
 
-## check the result                                                                                                                                  #src
-using Test                                                                                                                                           #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                #src
-@test mean(sand_column_collapse(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [-0.005200135291629036, 0.13121478975513662] rtol=1e-5 #src
-@test mean(sand_column_collapse(QuadraticBSpline(),               FLIP(0.95); test=true).x) ≈ [-0.005674765938663493, 0.14500628912686417] rtol=1e-5 #src
-@test mean(sand_column_collapse(uGIMP(),                              FLIP(); test=true).x) ≈ [-0.00730333735180601, 0.13718864185942603]  rtol=1e-5 #src
-@test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [-0.007105884808737926, 0.13034912708862376] rtol=1e-5 #src
-@test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), APIC(); test=true).x) ≈ [-0.006958826887434974, 0.13029970110634176] rtol=1e-5 #src
-@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()),        TPIC(); test=true).x) ≈ [-0.008313504889429786, 0.1328920134070544]  rtol=1e-5 #src
-@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()), WLSTransfer(); test=true).x) ≈ [-0.008313504889429979, 0.1328920134070544]  rtol=1e-5 #src
-end                                                                                                                                                  #src
+## check the result                                                                                                                                          #src
+using Test                                                                                                                                                   #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                        #src
+@test mean(sand_column_collapse(QuadraticBSpline(),                   FLIP();        test=true).x) ≈ [-0.0059366892449459596, 0.13153478909049307] rtol=1e-5 #src
+@test mean(sand_column_collapse(QuadraticBSpline(),                   FLIP(0.95);    test=true).x) ≈ [-0.00607613350996749, 0.1445653303163141]    rtol=1e-5 #src
+@test mean(sand_column_collapse(uGIMP(),                              FLIP();        test=true).x) ≈ [-0.009581692129264583, 0.13801498191519823]  rtol=1e-5 #src
+@test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), TPIC();        test=true).x) ≈ [-0.006493412064508829, 0.1309018971554851]   rtol=1e-5 #src
+@test mean(sand_column_collapse(KernelCorrection(QuadraticBSpline()), APIC();        test=true).x) ≈ [-0.0068630033416736454, 0.1307412654691435]  rtol=1e-5 #src
+@test mean(sand_column_collapse(LinearWLS(QuadraticBSpline()),        TPIC();        test=true).x) ≈                                                         #src
+      mean(sand_column_collapse(LinearWLS(QuadraticBSpline()),        WLSTransfer(); test=true).x)                                                           #src
+end                                                                                                                                                          #src
