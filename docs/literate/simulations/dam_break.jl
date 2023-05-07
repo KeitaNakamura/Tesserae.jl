@@ -141,7 +141,7 @@ function dam_break(
         end
         end #src
     end
-    particles #src
+    ifelse(test, particles, nothing) #src
 end
 
 ## check the result                                                                                                                           #src

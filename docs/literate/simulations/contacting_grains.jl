@@ -235,7 +235,7 @@ function contacting_grains(
         end
         end #src
     end
-    reduce(vcat, grains) #src
+    ifelse(test, reduce(vcat, grains), nothing) #src
 end
 
 function generate_grains(::Type{ParticleState}, r::Real, lattice::Lattice) where {ParticleState}
