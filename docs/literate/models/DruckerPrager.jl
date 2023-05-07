@@ -48,6 +48,7 @@
 # b = \frac{2\sqrt{6}\sin\psi}{3\pm\sin\psi}.
 # ```
 
+include("utils.jl")
 include("LinearElastic.jl")
 
 struct DruckerPrager{T}
@@ -78,7 +79,7 @@ function DruckerPrager(type::Symbol, elastic::LinearElastic{T}; c::T, ϕ::T, ψ:
     DruckerPrager{T}(elastic, A, B, b, p_t)
 end
 
-function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
+function yield_function(model::DruckerPrager, σ::Union{SymmetricSecondOrderTensor{3}, Vec{3}})
     A, B = model.A, model.B
     p = mean(σ)
     s = dev(σ)
@@ -88,12 +89,13 @@ end
 # We also define `plastic_flow` to compute the gradient of the plastic potential function
 # $\partial{g} / \partial\bm{\sigma}$:
 
-function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3, T}) where {T}
+function plastic_flow(model::DruckerPrager, σ::Union{SymmetricSecondOrderTensor{3, T}, Vec{3, T}}) where {T}
+    δ = delta(σ)
     TOL = sqrt(eps(T))
     b = model.b
     s = dev(σ)
     s_norm = norm(s)
-    s/s_norm*!(s_norm<TOL) + b/3*I
+    s/s_norm*!(s_norm<TOL) + b/3*δ
 end
 
 # ## Return mapping
@@ -118,7 +120,7 @@ end
 #
 # If the stress is outside of the yield function, the plastic corrector needs to be performed.
 
-function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::SymmetricSecondOrderTensor{3})
+function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::Union{SymmetricSecondOrderTensor{3}, Vec{3}})
     ## mean stress for tension limit
     p_t = model.p_t
 
@@ -132,19 +134,20 @@ function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::SymmetricSecondOrderTe
 
     ## plastic corrector
     dgdσ = plastic_flow(model, σᵗʳ)
-    Δλ = fᵗʳ / (dfdσ ⊡ cᵉ ⊡ dgdσ)
+    Δλ = fᵗʳ / (dfdσ ⊙ cᵉ ⊙ dgdσ)
     Δϵᵖ = Δλ * dgdσ
-    σ = σᵗʳ - cᵉ ⊡ Δϵᵖ
+    σ = σᵗʳ - cᵉ ⊙ Δϵᵖ
 
     ## simple tension cutoff
     if !(mean(σ) < p_t)
+        δ = delta(σ)
         s = dev(σᵗʳ)
-        σ = p_t*I + s
+        σ = p_t*δ + s
         if yield_function(model, σ) > 0
             ## map to corner
             A, B = model.A, model.B
             p = mean(σ)
-            σ = p_t*I + (A-B*p)*normalize(s)
+            σ = p_t*δ + (A-B*p)*normalize(s)
         end
     end
 
