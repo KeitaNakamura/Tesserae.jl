@@ -33,9 +33,6 @@ reorder_particles!(particles::Particles, space::MPSpace) = reorder_particles!(pa
 # values
 Base.values(space::MPSpace) = space.mpvals
 Base.values(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; values(space.mpvals, i))
-# neighbornodes
-@inline neighbornodes(space::MPSpace, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), i))
-@inline neighbornodes(space::MPSpace, grid::Grid, i::Integer) = (@_propagate_inbounds_meta; neighbornodes(values(space), grid, i))
 
 """
     update!(space::MPSpace, grid, particles)
