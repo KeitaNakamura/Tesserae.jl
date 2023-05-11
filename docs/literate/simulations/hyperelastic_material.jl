@@ -120,8 +120,8 @@ function hyperelastic_material(
         particle_to_grid!((:m,:mv,:f), fillzero!(grid), particles, space; alg)
 
         ## solve momentum equation
-        @. grid.vⁿ = grid.mv / grid.m
-        @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m)
+        @. grid.vⁿ = grid.mv / grid.m * !iszero(grid.m)
+        @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m) * !iszero(grid.m)
 
         ## boundary conditions
         slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
