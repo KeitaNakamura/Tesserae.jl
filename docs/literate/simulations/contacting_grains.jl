@@ -254,7 +254,6 @@ end                                                                             
 
 function impose_contact_condition!(grid::Grid, particles::Particles, v_cm::AbstractArray{<: Vec{2}}, μ::Real)
     @assert size(grid) == size(v_cm)
-    xc = sum(particles.m .* particles.x) / sum(particles.m)
     @inbounds for i in eachindex(grid)
         if isnonzero(grid, i) && grid.v[i] != v_cm[i]
             n = normalize(grid.∇m[i])
