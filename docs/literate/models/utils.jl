@@ -17,10 +17,3 @@ end
 @inline delta(x::Type{<: Tensor{Tuple{3,3}}}) = one(x)
 @inline delta(x::Type{<: Tensor{Tuple{@Symmetry{3,3}}}}) = one(x)
 @inline delta(x::AbstractTensor) = delta(typeof(x))
-
-@inline ⊙(x::Union{SecondOrderTensor, SymmetricSecondOrderTensor}, y::Union{FourthOrderTensor, SymmetricFourthOrderTensor}) = x ⊡ y
-@inline ⊙(x::Union{FourthOrderTensor, SymmetricFourthOrderTensor}, y::Union{SecondOrderTensor, SymmetricSecondOrderTensor}) = x ⊡ y
-@inline ⊙(x::Union{SecondOrderTensor, SymmetricSecondOrderTensor}, y::Union{SecondOrderTensor, SymmetricSecondOrderTensor}) = x ⊡ y
-@inline ⊙(x::Vec, y::Union{SecondOrderTensor, SymmetricSecondOrderTensor}) = x ⋅ y
-@inline ⊙(x::Union{SecondOrderTensor, SymmetricSecondOrderTensor}, y::Vec) = x ⋅ y
-@inline ⊙(x::Vec, y::Vec) = x ⋅ y

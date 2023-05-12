@@ -120,7 +120,7 @@ end
 #
 # If the stress is outside of the yield function, the plastic corrector needs to be performed.
 
-function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::Union{SymmetricSecondOrderTensor{3}, Vec{3}})
+function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::Vec{3})
     ## mean stress for tension limit
     p_t = model.p_t
 
@@ -134,9 +134,9 @@ function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::Union{SymmetricSecondO
 
     ## plastic corrector
     dgdσ = plastic_flow(model, σᵗʳ)
-    Δλ = fᵗʳ / (dfdσ ⊙ cᵉ ⊙ dgdσ)
+    Δλ = fᵗʳ / (dfdσ ⋅ cᵉ ⋅ dgdσ)
     Δϵᵖ = Δλ * dgdσ
-    σ = σᵗʳ - cᵉ ⊙ Δϵᵖ
+    σ = σᵗʳ - cᵉ ⋅ Δϵᵖ
 
     ## simple tension cutoff
     if !(mean(σ) < p_t)
@@ -152,4 +152,10 @@ function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::Union{SymmetricSecondO
     end
 
     σ
+end
+
+function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::SymmetricSecondOrderTensor{3})
+    ϵᵉᵗʳₐ, mₐ = to_principal(ϵᵉᵗʳ)
+    σₐ = compute_stress(model, ϵᵉᵗʳₐ)
+    from_principal(σₐ, mₐ)
 end
