@@ -102,14 +102,11 @@ function dam_break(
         @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m) * !iszero(grid.m)
 
         ## boundary conditions
-        gridindices_floor = @view eachindex(grid)[:, begin]
-        gridindices_walls = @view eachindex(grid)[[begin, end],:]
-        slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
-        @inbounds for i in gridindices_floor
-            grid.v[i] = slip(grid.v[i], Vec(0,1))
+        @inbounds for i in @view eachindex(grid)[:,begin] # floor
+            grid.v[i] = grid.v[i] .* (true,false)
         end
-        @inbounds for i in gridindices_walls
-            grid.v[i] = slip(grid.v[i], Vec(1,0))
+        @inbounds for i in @view eachindex(grid)[[begin,end],:] # walls
+            grid.v[i] = grid.v[i] .* (false,true)
         end
 
         ## G2P transfer

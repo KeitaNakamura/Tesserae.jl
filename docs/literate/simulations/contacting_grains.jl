@@ -177,7 +177,12 @@ function contacting_grains(
 
         for (grid, grain) in zip(grain_grids, grains)
             impose_contact_condition!(grid, grain, v_cm, μ)
-            impose_boundary_condition!(grid)
+            @inbounds for i in @view eachindex(grid)[:,begin] # floor
+                grid.v[i] = grid.v[i] .* (true,false)
+            end
+            @inbounds for i in @view eachindex(grid)[[begin,end],:] # walls
+                grid.v[i] = grid.v[i] .* (false,true)
+            end
         end
 
         #=============
@@ -267,18 +272,6 @@ function impose_contact_condition!(grid::Grid, particles::Particles, v_cm::Abstr
                 grid.v[i] = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * vₜ/v̄ₜ)
             end
         end
-    end
-end
-
-function impose_boundary_condition!(grid::Grid)
-    gridindices_floor = @view eachindex(grid)[:, begin]
-    gridindices_walls = @view eachindex(grid)[[begin, end],:]
-    slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
-    @inbounds for i in gridindices_floor
-        grid.v[i] = slip(grid.v[i], Vec(0,1))
-    end
-    @inbounds for i in gridindices_walls
-        grid.v[i] = slip(grid.v[i], Vec(1,0))
     end
 end
 

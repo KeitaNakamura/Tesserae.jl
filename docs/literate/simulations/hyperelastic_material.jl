@@ -124,15 +124,14 @@ function hyperelastic_material(
         @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m) * !iszero(grid.m)
 
         ## boundary conditions
-        slip(vᵢ, n) = vᵢ - (vᵢ⋅n)*n
-        @inbounds for i in @view eachindex(grid)[:,[begin,end],:]
-            grid.v[i] = slip(grid.v[i], Vec(0,1,0))
+        @inbounds for i in @view eachindex(grid)[:,begin,:] # bottom
+            grid.v[i] = grid.v[i] .* (true,false,true)
         end
-        @inbounds for i in @view eachindex(grid)[[begin,end],:,:]
-            grid.v[i] = slip(grid.v[i], Vec(1,0,0))
+        @inbounds for i in @view eachindex(grid)[[begin,end],:,:] # left/right
+            grid.v[i] = grid.v[i] .* (false,true,true)
         end
-        @inbounds for i in @view eachindex(grid)[:,:,[begin,end]]
-            grid.v[i] = slip(grid.v[i], Vec(0,0,1))
+        @inbounds for i in @view eachindex(grid)[:,:,[begin,end]] # front/back
+            grid.v[i] = grid.v[i] .* (true,true,false)
         end
 
         ## G2P transfer

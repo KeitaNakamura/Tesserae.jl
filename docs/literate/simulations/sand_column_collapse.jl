@@ -123,8 +123,7 @@ function sand_column_collapse(
         ## boundary conditions
 
         ## consider friction on the floor
-        gridindices_floor = @view eachindex(grid)[:, begin]
-        @inbounds for i in gridindices_floor
+        @inbounds for i in @view eachindex(grid)[:,begin]
             μ = 0.4 # friction coefficient
             n = Vec(0,-1)
             vᵢ = grid.v[i]
@@ -137,11 +136,8 @@ function sand_column_collapse(
         end
 
         ## slip condition on the walls
-        gridindices_walls = @view eachindex(grid)[[begin, end],:]
-        @inbounds for i in gridindices_walls
-            n = Vec(1,0) # this is ok for left side as well
-            vᵢ = grid.v[i]
-            grid.v[i] = vᵢ - (vᵢ⋅n)*n
+        @inbounds for i in @view eachindex(grid)[[begin,end],:]
+            grid.v[i] = grid.v[i] .* (false,true)
         end
 
         ## G2P transfer
