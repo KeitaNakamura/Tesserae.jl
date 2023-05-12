@@ -90,7 +90,7 @@ end
 # $\partial{g} / \partial\bm{\sigma}$:
 
 function plastic_flow(model::DruckerPrager, σ::Union{SymmetricSecondOrderTensor{3, T}, Vec{3, T}}) where {T}
-    δ = delta(σ)
+    δ = krondelta(σ)
     TOL = sqrt(eps(T))
     b = model.b
     s = dev(σ)
@@ -140,7 +140,7 @@ function compute_stress(model::DruckerPrager, ϵᵉᵗʳ::Vec{3})
 
     ## simple tension cutoff
     if !(mean(σ) < p_t)
-        δ = delta(σ)
+        δ = krondelta(σ)
         s = dev(σᵗʳ)
         σ = p_t*δ + s
         if yield_function(model, σ) > 0

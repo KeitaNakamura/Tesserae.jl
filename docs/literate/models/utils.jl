@@ -13,7 +13,7 @@ end
     σ[1]*m₁ + σ[2]*m₂ + σ[3]*m₃
 end
 
-@inline delta(x::Type{<: Vec{3}}) = ones(x)
-@inline delta(x::Type{<: Tensor{Tuple{3,3}}}) = one(x)
-@inline delta(x::Type{<: Tensor{Tuple{@Symmetry{3,3}}}}) = one(x)
-@inline delta(x::AbstractTensor) = delta(typeof(x))
+@inline krondelta(x::Type{<: Vec{3}}) = ones(x)
+@inline krondelta(x::Type{<: Tensor{Tuple{3,3}}}) = one(x)
+@inline krondelta(x::Type{<: Tensor{Tuple{@Symmetry{3,3}}}}) = one(x)
+@inline krondelta(x::AbstractTensor) = krondelta(typeof(x))
