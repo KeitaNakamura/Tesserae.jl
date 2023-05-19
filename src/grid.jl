@@ -101,13 +101,13 @@ end
 
 get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
-function update_sparsity_pattern!(A::SpGrid, blkspace::AbstractArray{Bool})
-    n = update_sparsity_pattern!(get_spinds(A), blkspace)
+function update_sparsity!(A::SpGrid, blkspace::AbstractArray{Bool})
+    n = update_sparsity!(get_spinds(A), blkspace)
     StructArrays.foreachfield(a->resize_nonzeros!(a,n), A)
     A
 end
 
-get_block_sparsity_pattern(A::SpGrid) = get_block_sparsity_pattern(get_spinds(A))
+blocksparsity(A::SpGrid) = blocksparsity(get_spinds(A))
 
 @inline isnonzero(A::SpGrid, I::Integer...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 @inline isnonzero(A::SpGrid, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(A, Tuple(I)...))

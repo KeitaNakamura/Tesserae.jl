@@ -8,8 +8,8 @@ struct MPSpace{dim, T, It <: Interpolation, V, VI, BS <: BlockSpace{dim}}
     mpvals::MPValues{dim, T, V, VI}
     blkspace::BS
     gridspinds::Base.RefValue{Any}
-    tmp_sppat::Array{Bool, dim} # used for filtering case
-    tmp_sppat_blk::Array{Bool, dim}
+    tmp_spy::Array{Bool, dim} # used for filtering case
+    tmp_spy_blk::Array{Bool, dim}
 end
 
 # constructors
@@ -17,14 +17,14 @@ function MPSpace(::Type{T}, itp::Interpolation, gridsize::Dims{dim}, npts::Integ
     blksize = blocksize(gridsize)
     mpvals = MPValues{dim, T}(itp, npts)
     blkspace = BlockSpace(blksize, npts)
-    tmp_sppat = fill(false, gridsize)
-    tmp_sppat_blk = fill(false, blksize)
-    MPSpace(itp, mpvals, blkspace, Ref{Any}(), tmp_sppat, tmp_sppat_blk)
+    tmp_spy = fill(false, gridsize)
+    tmp_spy_blk = fill(false, blksize)
+    MPSpace(itp, mpvals, blkspace, Ref{Any}(), tmp_spy, tmp_spy_blk)
 end
 MPSpace(itp::Interpolation, gridsize::Dims, npts::Integer) = MPSpace(Float64, itp, gridsize, npts)
 
 # helper functions
-gridsize(space::MPSpace) = size(space.tmp_sppat)
+gridsize(space::MPSpace) = size(space.tmp_spy)
 num_particles(space::MPSpace) = num_particles(values(space))
 get_interpolation(space::MPSpace) = space.interp
 get_blockspace(space::MPSpace) = space.blkspace
@@ -57,9 +57,9 @@ function update!(space::MPSpace, grid::Grid, particles::Particles; filter::Union
     update_mpvalues!(space, get_lattice(grid), particles, filter; parallel)
 
     if grid isa SpGrid
-        sppat_blk = fillzero!(space.tmp_sppat_blk)
-        update_sparsity_pattern!(sppat_blk, get_blockspace(space))
-        update_sparsity_pattern!(grid, sppat_blk)
+        spy_blk = fillzero!(space.tmp_spy_blk)
+        update_sparsity!(spy_blk, get_blockspace(space))
+        update_sparsity!(grid, spy_blk)
         set_gridspinds!(space, get_spinds(grid))
     else
         set_gridspinds!(space, nothing)
@@ -76,15 +76,15 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
         update!(values(space), get_interpolation(space), lattice, particles; parallel)
     else
         # handle excluded domain
-        sppat = space.tmp_sppat
-        sppat .= filter
+        spy = space.tmp_spy
+        spy .= filter
         parallel_each_particle(space; parallel) do p
             @inbounds begin
                 inds = neighbornodes(lattice, particles.x[p], 1)
-                sppat[inds] .= true
+                spy[inds] .= true
             end
         end
-        update!(values(space), get_interpolation(space), lattice, sppat, particles; parallel)
+        update!(values(space), get_interpolation(space), lattice, spy, particles; parallel)
     end
 
     space

@@ -32,7 +32,7 @@ function MPValuesInfo{dim, T}(itp::WLS) where {dim, T}
 end
 
 # general version
-function update_mpvalues!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+function update_mpvalues!(mp::SubMPValues, itp::WLS, lattice::Lattice, spy::AbstractArray{Bool}, pt)
     indices = neighbornodes(mp)
 
     F = get_kernel(itp)
@@ -43,7 +43,7 @@ function update_mpvalues!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::Ab
     @inbounds @simd for j in CartesianIndices(indices)
         i = indices[j]
         xᵢ = lattice[i]
-        w = value(F, lattice, i, pt) * sppat[i]
+        w = value(F, lattice, i, pt) * spy[i]
         p = value(P, xᵢ - xₚ)
         M += w * p ⊗ p
         mp.w[j] = w
@@ -63,15 +63,15 @@ function update_mpvalues!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::Ab
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_mpvalues!(mp::SubMPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+function update_mpvalues!(mp::SubMPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}, lattice::Lattice, spy::AbstractArray{Bool}, pt)
     if isnearbounds(mp)
-        fast_update_mpvalues_nearbounds!(mp, itp, lattice, sppat, pt)
+        fast_update_mpvalues_nearbounds!(mp, itp, lattice, spy, pt)
     else
-        fast_update_mpvalues!(mp, itp, lattice, sppat, pt)
+        fast_update_mpvalues!(mp, itp, lattice, spy, pt)
     end
 end
 
-function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt) where {dim, T}
+function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Lattice, spy::AbstractArray{Bool}, pt) where {dim, T}
     indices = neighbornodes(mp)
     F = get_kernel(itp)
     xₚ = getx(pt)
@@ -92,7 +92,7 @@ function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Latti
     mp.Minv[] = diagm(vcat(1, D⁻¹))
 end
 
-function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::Lattice, spy::AbstractArray{Bool}, pt)
     indices = neighbornodes(mp)
     F = get_kernel(itp)
     P = get_basis(itp)
@@ -102,7 +102,7 @@ function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::La
     @inbounds @simd for j in CartesianIndices(indices)
         i = indices[j]
         xᵢ = lattice[i]
-        w = value(F, lattice, i, xₚ) * sppat[i]
+        w = value(F, lattice, i, xₚ) * spy[i]
         p = value(P, xᵢ - xₚ)
         M += w * p ⊗ p
         mp.w[j] = w

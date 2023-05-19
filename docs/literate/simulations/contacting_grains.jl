@@ -149,7 +149,7 @@ function contacting_grains(
         particle_to_grid!((:m,:mv), fillzero!(bar_grid), bar, bar_space; parallel=false)
 
         ## reinitialize center of mass grid
-        Marble.update_sparsity_pattern!(cm_grid, mapreduce(Marble.get_block_sparsity_pattern, .|, (bar_grid, grain_grids...)))
+        update_sparsity!(cm_grid, mapreduce(blocksparsity, .|, (bar_grid, grain_grids...)))
         fillzero!(cm_grid)
 
         for grid in grain_grids

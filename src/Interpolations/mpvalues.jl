@@ -122,11 +122,11 @@ end
 end
 
 # MPValues
-function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, particles::Particles; parallel::Bool)
+function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, spy::AbstractArray{Bool}, particles::Particles; parallel::Bool)
     @assert num_particles(mpvalues) == length(particles)
-    @assert size(lattice) == size(sppat)
+    @assert size(lattice) == size(spy)
     @threads_inbounds parallel for p in 1:num_particles(mpvalues)
-        update!(values(mpvalues, p), itp, lattice, sppat, LazyRow(particles, p))
+        update!(values(mpvalues, p), itp, lattice, spy, LazyRow(particles, p))
     end
 end
 function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, particles::Particles; parallel::Bool)
@@ -134,20 +134,20 @@ function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, parti
 end
 
 # SubMPValues
-@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+@inline function update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, spy::AbstractArray{Bool}, pt)
     indices = neighbornodes(itp, lattice, pt)
     isfullyinside = size(getproperty(mp, first(propertynames(mp)))) == size(indices)
-    isnearbounds = !isfullyinside || !(@inbounds alltrue(sppat, indices))
+    isnearbounds = !isfullyinside || !(@inbounds alltrue(spy, indices))
     set_neighbornodes!(mp, indices)
     set_isnearbounds!(mp, isnearbounds)
-    update_mpvalues!(mp, itp, lattice, sppat, pt)
+    update_mpvalues!(mp, itp, lattice, spy, pt)
 end
 @inline update!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt) = update!(mp, itp, lattice, Trues(size(lattice)), pt)
 
 @inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, pt)
     update!(mp, itp, lattice, Trues(size(lattice)), pt)
 end
-@inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, sppat::AbstractArray, pt)
-    sppat isa Trues || @warn "Sparsity pattern on grid is not supported in `$itp`, just ignored" maxlog=1
+@inline function update_mpvalues!(mp::SubMPValues, itp::Interpolation, lattice::Lattice, spy::AbstractArray, pt)
+    spy isa Trues || @warn "Sparsity pattern on grid is not supported in `$itp`, just ignored" maxlog=1
     update_mpvalues!(mp, itp, lattice, pt)
 end

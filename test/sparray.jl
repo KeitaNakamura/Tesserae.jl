@@ -34,7 +34,7 @@ end
     B_sppat = rand(Bool, Marble.blocksize(B))
 
     for (x, x_sppat) in ((A, A_sppat), (B, B_sppat))
-        n = Marble.update_sparsity_pattern!(x, x_sppat)
+        n = update_sparsity!(x, x_sppat)
         CI = CartesianIndices(x)
         @test n ≤ length(x.data)
         @test all(LinearIndices(x)) do i

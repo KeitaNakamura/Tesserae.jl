@@ -30,6 +30,8 @@ export
     Axisymmetric,
 # SpArray
     blocksize,
+    blocksparsity,
+    update_sparsity!,
 # lattice
     Lattice,
 # Grid

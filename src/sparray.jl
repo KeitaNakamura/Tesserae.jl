@@ -1,11 +1,16 @@
-struct SpBlkPattern{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Bool, dim}
+struct BlockSparsity{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Bool, dim}
     blkinds::Tindices
 end
-Base.size(sppat::SpBlkPattern) = size(sppat.blkinds)
-Base.IndexStyle(::Type{<: SpBlkPattern}) = IndexLinear()
-@inline function Base.getindex(sppat::SpBlkPattern, i::Integer)
-    @boundscheck checkbounds(sppat, i)
-    @inbounds !iszero(sppat.blkinds[i])
+Base.size(spy::BlockSparsity) = size(spy.blkinds)
+Base.IndexStyle(::Type{<: BlockSparsity}) = IndexLinear()
+@inline function Base.getindex(spy::BlockSparsity, i::Integer)
+    @boundscheck checkbounds(spy, i)
+    @inbounds !iszero(spy.blkinds[i])
+end
+@inline function Base.setindex!(spy::BlockSparsity, v, i::Integer)
+    @boundscheck checkbounds(spy, i)
+    @inbounds spy.blkinds[i] = convert(Bool, v)
+    spy
 end
 
 struct SpIndices{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Int, dim}
@@ -58,12 +63,12 @@ function numbering!(sp::SpIndices{dim}) where {dim}
     count << (BLOCKFACTOR*dim)
 end
 
-function update_sparsity_pattern!(sp::SpIndices, sppat_blk::AbstractArray{Bool})
-    blockindices(sp) .= sppat_blk
+function update_sparsity!(sp::SpIndices, spy_blk::AbstractArray{Bool})
+    blocksparsity(sp) .= spy_blk
     numbering!(sp)
 end
 
-get_block_sparsity_pattern(sp::SpIndices) = SpBlkPattern(blockindices(sp))
+blocksparsity(sp::SpIndices) = BlockSparsity(blockindices(sp))
 
 """
     SpArray{T}(dims...)
@@ -92,18 +97,18 @@ julia> A[1,1] # still zero
 ```
 
 This is because the block where index `(1,1)` is located is not activated yet.
-To activate the block, update sparsity pattern by `update_sparsity_pattern!(A, sppat)`
-where `sppat` must have `blocksize(A)`.
+To activate the block, update sparsity pattern by `update_sparsity!(A, spy)`
+where `spy` must have `blocksize(A)`.
 
 ```jldoctest sparray
-julia> sppat = falses(blocksize(A))
+julia> spy = falses(blocksize(A))
 1×1 BitMatrix:
  0
 
-julia> sppat[1,1] = true
+julia> spy[1,1] = true
 true
 
-julia> Marble.update_sparsity_pattern!(A, sppat)
+julia> update_sparsity!(A, spy)
 5×5 Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}:
  2.23145e-314  2.61586e-314  2.61723e-314  2.61675e-314  2.94553e-314
  2.37e-322     2.61623e-314  3.02298e-314  2.61586e-314  2.94543e-314
@@ -174,12 +179,9 @@ end
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
-function update_sparsity_pattern!(A::SpArray, sppat::AbstractArray{Bool})
-    A.shared_spinds && error("SpArray: `update_sparsity_pattern!` should be done in `update!` for `MPSpace`. Don't call this manually.")
-    @assert blocksize(A) == size(sppat)
-    spinds = get_spinds(A)
-    blockindices(spinds) .= sppat
-    n = numbering!(spinds)
+function update_sparsity!(A::SpArray, spy::AbstractArray{Bool})
+    A.shared_spinds && error("SpArray: `update_sparsity!` should be done in `update!` for `MPSpace`. Don't call this manually.")
+    n = update_sparsity!(get_spinds(A), spy)
     resize_nonzeros!(A, n)
     n
 end

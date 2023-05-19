@@ -91,13 +91,13 @@ end
 sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
 sub2ind(::Dims, ::Nothing)::Int = 0
 
-function update_sparsity_pattern!(sppat::AbstractArray, bs::BlockSpace)
-    @assert size(sppat) ==  blocksize(bs)
+function update_sparsity!(spy::AbstractArray, bs::BlockSpace)
+    @assert size(spy) ==  blocksize(bs)
     CI = CartesianIndices(blocksize(bs))
     @inbounds for I in CI
         if !iszero(num_particles(bs, I))
             inds = (I - oneunit(I)):(I + oneunit(I))
-            sppat[inds ∩ CI] .= true
+            spy[inds ∩ CI] .= true
         end
     end
 end

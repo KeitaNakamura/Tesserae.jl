@@ -25,9 +25,9 @@ function MPValuesInfo{dim, T}(itp::KernelCorrection) where {dim, T}
 end
 
 # general version
-@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection, lattice::Lattice, spy::AbstractArray{Bool}, pt)
     if isnearbounds(mp)
-        update_mpvalues_nearbounds!(mp, itp, lattice, sppat, pt)
+        update_mpvalues_nearbounds!(mp, itp, lattice, spy, pt)
     else
         indices = neighbornodes(mp)
         @inbounds @simd for j in CartesianIndices(indices)
@@ -38,15 +38,15 @@ end
 end
 
 # fast version for B-spline kernels
-@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, sppat::AbstractArray{Bool}, pt)
+@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, spy::AbstractArray{Bool}, pt)
     if isnearbounds(mp)
-        update_mpvalues_nearbounds!(mp, itp, lattice, sppat, pt)
+        update_mpvalues_nearbounds!(mp, itp, lattice, spy, pt)
     else
         values_gradients!(mp.N, mp.∇N, get_kernel(itp), lattice, pt)
     end
 end
 
-@inline function update_mpvalues_nearbounds!(mp::SubMPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, sppat::AbstractArray{Bool}, pt) where {dim, T}
+@inline function update_mpvalues_nearbounds!(mp::SubMPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, spy::AbstractArray{Bool}, pt) where {dim, T}
     indices = neighbornodes(mp)
     F = get_kernel(itp)
     xₚ = getx(pt)
@@ -54,7 +54,7 @@ end
     @inbounds for j in CartesianIndices(indices)
         i = indices[j]
         xᵢ = lattice[i]
-        w = value(F, lattice, i, pt) * sppat[i]
+        w = value(F, lattice, i, pt) * spy[i]
         P = [1; xᵢ - xₚ]
         M += w * P ⊗ P
         mp.N[j] = w
