@@ -48,6 +48,11 @@ function numbering!(sp::SpIndices{dim}) where {dim}
     count << (BLOCKFACTOR*dim)
 end
 
+function update_sparsity_pattern!(sp::SpIndices, sppat_blk::AbstractArray{Bool})
+    blockindices(sp) .= sppat_blk
+    numbering!(sp)
+end
+
 """
     SpArray{T}(dims...)
 
