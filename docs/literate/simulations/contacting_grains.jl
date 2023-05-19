@@ -91,9 +91,7 @@ function contacting_grains(
     ## bar
     bar_grid = generate_grid(GridState, lattice)
     ## center of mass
-    m_cm  = zeros(Float64, size(lattice))
-    mv_cm = zeros(Vec{2, Float64}, size(lattice))
-    v_cm  = zeros(Vec{2, Float64}, size(lattice))
+    cm_grid = generate_grid(@NamedTuple{x::Vec{2, Float64}, m::Float64, mv::Vec{2, Float64}, v::Vec{2, Float64}}, lattice)
 
     #=========
      MPSpaces
@@ -137,8 +135,6 @@ function contacting_grains(
          P2G transfer
         =============#
 
-        fillzero!.((m_cm, mv_cm))
-
         ## grains
         Marble.@threads_inbounds for i in eachindex(grains)
             grid = grain_grids[i]
@@ -147,27 +143,32 @@ function contacting_grains(
             update!(space, grid, grain; parallel=false)
             particle_to_grid!((:m,:mv,:f,:∇m), fillzero!(grid), grain, space; parallel=false)
         end
-        for (grid, grain, space) in zip(grain_grids, grains, grain_spaces)
+
+        ## bar
+        update!(bar_space, bar_grid, bar; parallel=false)
+        particle_to_grid!((:m,:mv), fillzero!(bar_grid), bar, bar_space; parallel=false)
+
+        ## reinitialize center of mass grid
+        Marble.update_sparsity_pattern!(cm_grid, mapreduce(Marble.get_block_sparsity_pattern, .|, (bar_grid, grain_grids...)))
+        fillzero!(cm_grid)
+
+        for grid in grain_grids
             @inbounds for i in eachindex(grid)
                 if isnonzero(grid, i)
-                    m_cm[i] += grid.m[i]
-                    mv_cm[i] += grid.mv[i] + Δt * grid.f[i]
+                    cm_grid.m[i] += grid.m[i]
+                    cm_grid.mv[i] += grid.mv[i] + Δt * grid.f[i]
                 end
             end
             @. grid.vⁿ = grid.mv / grid.m * !iszero(grid.m)
             @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m) * !iszero(grid.m)
         end
-
-        ## bar
-        update!(bar_space, bar_grid, bar; parallel=false)
-        particle_to_grid!((:m,:mv), fillzero!(bar_grid), bar, bar_space; parallel=false)
         @. bar_grid.v = bar_grid.vⁿ = bar_grid.mv / bar_grid.m * !iszero(bar_grid.m)
 
         ## center of mass
-        @. v_cm = mv_cm / m_cm
+        @. cm_grid.v = cm_grid.mv / cm_grid.m
         for i in eachindex(bar_grid)
             if !iszero(bar_grid.m[i])
-                v_cm[i] = bar_grid.v[i]
+                cm_grid.v[i] = bar_grid.v[i]
             end
         end
 
@@ -176,7 +177,7 @@ function contacting_grains(
         =======================================#
 
         for (grid, grain) in zip(grain_grids, grains)
-            impose_contact_condition!(grid, grain, v_cm, μ)
+            impose_contact_condition!(grid, grain, cm_grid.v, μ)
             @inbounds for i in @view eachindex(grid)[:,begin] # floor
                 grid.v[i] = grid.v[i] .* (true,false)
             end

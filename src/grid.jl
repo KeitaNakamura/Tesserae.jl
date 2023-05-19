@@ -107,6 +107,8 @@ function update_sparsity_pattern!(A::SpGrid, blkspace::AbstractArray{Bool})
     A
 end
 
+get_block_sparsity_pattern(A::SpGrid) = get_block_sparsity_pattern(get_spinds(A))
+
 @inline isnonzero(A::SpGrid, I::Integer...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 @inline isnonzero(A::SpGrid, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(A, Tuple(I)...))
 

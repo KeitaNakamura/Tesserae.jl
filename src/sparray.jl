@@ -1,3 +1,13 @@
+struct SpBlkPattern{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Bool, dim}
+    blkinds::Tindices
+end
+Base.size(sppat::SpBlkPattern) = size(sppat.blkinds)
+Base.IndexStyle(::Type{<: SpBlkPattern}) = IndexLinear()
+@inline function Base.getindex(sppat::SpBlkPattern, i::Integer)
+    @boundscheck checkbounds(sppat, i)
+    @inbounds !iszero(sppat.blkinds[i])
+end
+
 struct SpIndices{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Int, dim}
     dims::Dims{dim}
     blkinds::Tindices
@@ -52,6 +62,8 @@ function update_sparsity_pattern!(sp::SpIndices, sppat_blk::AbstractArray{Bool})
     blockindices(sp) .= sppat_blk
     numbering!(sp)
 end
+
+get_block_sparsity_pattern(sp::SpIndices) = SpBlkPattern(blockindices(sp))
 
 """
     SpArray{T}(dims...)
