@@ -71,12 +71,12 @@ function contacting_grains(
     end
 
     ## bar
-    if test                                                                                              #src
-        bar::Marble.infer_particles_type(ParticleState) =                                                #src
-        generate_particles((x,y)->y>1, ParticleState, lattice; alg=PoissonDiskSampling(StableRNG(1234))) #src
-    else                                                                                                 #src
+    if test                                                                                                  #src
+        bar::Marble.infer_particles_type(ParticleState) =                                                    #src
+            generate_particles((x,y)->y>1, ParticleState, lattice; alg=PoissonDiskSampling(StableRNG(1234))) #src
+    else                                                                                                     #src
     bar = generate_particles((x,y)->y>1, ParticleState, lattice)
-    end                                                                                                  #src
+    end                                                                                                      #src
     @. bar.v = Vec(0, -0.5)
     @. bar.m = 1 # dammy mass
 
@@ -228,7 +228,7 @@ function contacting_grains(
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, step)) do vtm
                     ## grains
-                    for (grain, grid) in zip(grains, grain_grids)
+                    for grain in grains
                         openvtk(vtm, grain.x) do vtk
                         end
                     end
