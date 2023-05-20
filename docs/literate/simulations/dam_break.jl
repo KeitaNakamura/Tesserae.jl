@@ -85,7 +85,7 @@ function dam_break(
     while t < t_stop
 
         ## calculate timestep based on the Courant-Friedrichs-Lewy (CFL) condition
-        Δt = CFL * minimum(LazyRows(particles)) do pt
+        Δt = CFL * minimum(eachparticle(particles)) do pt
             ρ = pt.m / pt.V
             ν = μ / ρ # kinemtatic viscosity
             min(Δx/(c+norm(pt.v)), Δx^2/ν)
@@ -113,7 +113,7 @@ function dam_break(
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
 
         ## update other particle states
-        Marble.@threads_inbounds for pt in LazyRows(particles)
+        Marble.@threads_inbounds for pt in eachparticle(particles)
             d = symmetric(pt.∇v)
             V = pt.V * exp(tr(d)*Δt)
             ρ = pt.m / V

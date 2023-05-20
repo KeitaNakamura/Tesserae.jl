@@ -33,7 +33,7 @@ function USL(grid::Grid, particles::Particles, space::MPSpace, E::Real, Δt::Rea
 
     ## update particle states
     grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt)
-    update_stress!.(LazyRows(particles), E, Δt)
+    update_stress!.(eachparticle(particles), E, Δt)
 end
 
 # ### Update Stress First (USF)
@@ -56,7 +56,7 @@ function USF(grid::Grid, particles::Particles, space::MPSpace, E::Real, Δt::Rea
 
     ## update particle volume and stress first
     grid_to_particle!(:∇v, particles, grid, space)
-    update_stress!.(LazyRows(particles), E, Δt)
+    update_stress!.(eachparticle(particles), E, Δt)
 
     ## update grid velocity from updated stress
     particle_to_grid!(:f, grid, particles, space)
@@ -99,7 +99,7 @@ function MUSL(grid::Grid, particles::Particles, space::MPSpace, E::Real, Δt::Re
 
     ## update particle volume and stress
     grid_to_particle!(:∇v, particles, grid, space)
-    update_stress!.(LazyRows(particles), E, Δt)
+    update_stress!.(eachparticle(particles), E, Δt)
 end
 
 # ## Simulation

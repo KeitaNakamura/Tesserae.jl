@@ -4,6 +4,8 @@ import Random
 const poisson_disk_sampling = PDS.generate
 const Particles = StructVector
 
+eachparticle(particles::Particles) = LazyRows(particles)
+
 #####################
 # SamplingAlgorithm #
 #####################

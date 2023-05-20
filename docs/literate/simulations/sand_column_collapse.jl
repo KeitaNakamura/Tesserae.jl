@@ -69,7 +69,7 @@ function sand_column_collapse(
     else                                                                                                                    #src
     particles = generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid.x)
     end                                                                                                                     #src
-    for pt in LazyRows(particles)
+    for pt in eachparticle(particles)
         ν = elastic.ν
         y = pt.x[2]
         σ_y = -ρ₀ * g * (h-y)
@@ -103,7 +103,7 @@ function sand_column_collapse(
     while t < t_stop
 
         ## calculate timestep based on the Courant-Friedrichs-Lewy (CFL) condition
-        Δt = CFL * spacing(grid) / maximum(LazyRows(particles)) do pt
+        Δt = CFL * spacing(grid) / maximum(eachparticle(particles)) do pt
             λ, μ = elastic.λ, elastic.μ
             ρ = pt.m / pt.V
             vc = √((λ+2μ) / ρ)
@@ -144,7 +144,7 @@ function sand_column_collapse(
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
 
         ## update other particle states
-        Marble.@threads_inbounds for pt in LazyRows(particles)
+        Marble.@threads_inbounds for pt in eachparticle(particles)
             f = I + Δt*pt.∇v                     # relative deformation gradient
             bᵉᵗʳ = symmetric(f ⋅ pt.bᵉ ⋅ f', :U) # trial elastic left Cauchy-Green deformation tensor
             λᵉᵗʳₐ², mₐ = to_principal(bᵉᵗʳ)

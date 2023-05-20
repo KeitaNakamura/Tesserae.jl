@@ -202,7 +202,7 @@ function contacting_grains(
 
         ## update stress and volume for grains
         Marble.@threads_inbounds for grain in grains
-            for pt in LazyRows(grain)
+            for pt in eachparticle(grain)
                 ∇v = pt.∇v
                 σⁿ = pt.σ
                 Δϵ = symmetric(∇v*Δt)

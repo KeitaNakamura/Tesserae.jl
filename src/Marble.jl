@@ -17,9 +17,6 @@ const SIMDTypes = Union{SIMD.ScalarTypes, Bool}
 # progress bar
 import ProgressMeter
 
-# reexport from StructArrays
-export LazyRow, LazyRows
-
 export
 # utils
     fillzero!,
@@ -42,6 +39,7 @@ export
     isnonzero,
 # Particles
     Particles,
+    eachparticle,
     generate_particles,
     GridSampling,
     PoissonDiskSampling,

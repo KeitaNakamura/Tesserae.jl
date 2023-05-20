@@ -106,7 +106,7 @@ function hyperelastic_material(
     while t < t_stop
 
         ## calculate timestep based on the Courant-Friedrichs-Lewy (CFL) condition
-        Δt = CFL * spacing(grid) / maximum(LazyRows(particles)) do pt
+        Δt = CFL * spacing(grid) / maximum(eachparticle(particles)) do pt
             λ, μ = elastic.λ, elastic.μ
             ρ = pt.m / pt.V
             vc = √((λ+2μ) / ρ)
@@ -138,7 +138,7 @@ function hyperelastic_material(
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
 
         ## update other particle states
-        Marble.@threads_inbounds for pt in LazyRows(particles)
+        Marble.@threads_inbounds for pt in eachparticle(particles)
             F = (I + Δt*pt.∇v) ⋅ pt.F
             pt.σ = compute_cauchy_stress(elastic, F)
             pt.F = F
