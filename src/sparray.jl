@@ -5,13 +5,16 @@ Base.size(spy::BlockSparsity) = size(spy.blkinds)
 Base.IndexStyle(::Type{<: BlockSparsity}) = IndexLinear()
 @inline function Base.getindex(spy::BlockSparsity, i::Integer)
     @boundscheck checkbounds(spy, i)
-    @inbounds !iszero(spy.blkinds[i])
+    @inbounds !isnullindex(spy.blkinds[i])
 end
 @inline function Base.setindex!(spy::BlockSparsity, v, i::Integer)
     @boundscheck checkbounds(spy, i)
     @inbounds spy.blkinds[i] = convert(Bool, v)
     spy
 end
+
+isnullindex(i::Integer) = iszero(i)
+nullindex(i::Integer) = zero(i)
 
 struct SpIndices{dim, Tindices <: AbstractArray{<: Integer, dim}} <: AbstractArray{Int, dim}
     dims::Dims{dim}
@@ -44,21 +47,21 @@ end
     @inbounds begin
         n = blockindices(sp)[blk...]
         index = (n-1) << (BLOCKFACTOR*dim) + lcl
-        ifelse(iszero(n), zero(index), index)
+        ifelse(isnullindex(n), nullindex(index), index)
     end
 end
 
 @inline function isnonzero(sp::SpIndices{dim}, I::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(sp, I...)
     blkinds = blockindices(sp)
-    @inbounds !iszero(blkinds[blocksize(I)...])
+    @inbounds !isnullindex(blkinds[blocksize(I)...])
 end
 
 function numbering!(sp::SpIndices{dim}) where {dim}
     inds = blockindices(sp)
     count = 0
     @inbounds for i in eachindex(inds)
-        inds[i] = iszero(inds[i]) ? 0 : (count += 1)
+        inds[i] = isnullindex(inds[i]) ? 0 : (count += 1)
     end
     count << (BLOCKFACTOR*dim)
 end
@@ -158,7 +161,7 @@ get_spinds(A::SpArray) = A.spinds
     spinds = get_spinds(A)
     @inbounds begin
         index = spinds[I...]
-        iszero(index) ? zero_recursive(eltype(A)) : nonzeros(A)[index]
+        isnullindex(index) ? zero_recursive(eltype(A)) : nonzeros(A)[index]
     end
 end
 
@@ -168,7 +171,7 @@ end
     spinds = get_spinds(A)
     @inbounds begin
         index = spinds[I...]
-        iszero(index) && return A
+        isnullindex(index) && return A
         nonzeros(A)[index] = v
     end
     A
@@ -309,7 +312,7 @@ Base.axes(x::ShowSpArray) = axes(x.parent)
 @inline function Base.getindex(x::ShowSpArray, i::Integer...)
     @_propagate_inbounds_meta
     p = x.parent
-    iszero(get_spinds(p)[i...]) ? CDot() : maybecustomshow(p[i...])
+    isnullindex(get_spinds(p)[i...]) ? CDot() : maybecustomshow(p[i...])
 end
 maybecustomshow(x) = x
 maybecustomshow(x::SpArray) = ShowSpArray(x)
