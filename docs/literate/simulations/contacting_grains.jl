@@ -148,24 +148,23 @@ function contacting_grains(
         update!(bar_space, bar_grid, bar; parallel=false)
         particle_to_grid!((:m,:mv), fillzero!(bar_grid), bar, bar_space; parallel=false)
 
-        ## reinitialize center of mass grid
-        update_sparsity!(cm_grid, mapreduce(blocksparsity, .|, (bar_grid, grain_grids...)))
+        ## center of mass
+        update_sparsity!(cm_grid, mapreduce(blocksparsity, .+, (bar_grid, grain_grids...)) .> 1)
         fillzero!(cm_grid)
-
         for grid in grain_grids
-            @inbounds for i in eachindex(grid)
-                if isnonzero(grid, i)
-                    cm_grid.m[i] += grid.m[i]
-                    cm_grid.mv[i] += grid.mv[i] + Δt * grid.f[i]
-                end
-            end
+            @. cm_grid.m += grid.m
+            @. cm_grid.mv += grid.mv + Δt * grid.f
+        end
+
+        ## solve momentum equation
+        for grid in grain_grids
             @. grid.vⁿ = grid.mv / grid.m * !iszero(grid.m)
             @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m) * !iszero(grid.m)
         end
         @. bar_grid.v = bar_grid.vⁿ = bar_grid.mv / bar_grid.m * !iszero(bar_grid.m)
+        @. cm_grid.v = cm_grid.mv / cm_grid.m * !iszero(cm_grid.m)
 
-        ## center of mass
-        @. cm_grid.v = cm_grid.mv / cm_grid.m
+        ## modify center of mass field by bar
         for i in eachindex(bar_grid)
             if !iszero(bar_grid.m[i])
                 cm_grid.v[i] = bar_grid.v[i]
@@ -258,10 +257,10 @@ function generate_grains_stable(::Type{ParticleState}, r::Real, lattice::Lattice
     end                                                                                                             #src
 end                                                                                                                 #src
 
-function impose_contact_condition!(grid::Grid, particles::Particles, v_cm::AbstractArray{<: Vec{2}}, μ::Real)
+function impose_contact_condition!(grid::Grid, particles::Particles, v_cm::SpArray{<: Vec{2}}, μ::Real)
     @assert size(grid) == size(v_cm)
     @inbounds for i in eachindex(grid)
-        if isnonzero(grid, i) && grid.v[i] != v_cm[i]
+        if isnonzero(v_cm, i) && grid.v[i] != v_cm[i]
             n = normalize(grid.∇m[i])
             vᵢ = grid.v[i]
             vʳ = vᵢ - v_cm[i]
