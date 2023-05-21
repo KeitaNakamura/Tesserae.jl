@@ -29,6 +29,7 @@ export
     PlaneStrain,
     Axisymmetric,
 # SpArray
+    SpArray,
     blocksize,
     blocksparsity,
     update_sparsity!,
