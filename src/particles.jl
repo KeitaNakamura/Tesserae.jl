@@ -27,7 +27,7 @@ abstract type SamplingDomain end
 struct BoxDomain{dim, T} <: SamplingDomain
     minmax::NTuple{dim, Tuple{T, T}}
 end
-BoxDomain(minmax::Tuple{T, T}...) where {T <: Real} = BoxDomain(minmax)
+BoxDomain(minmax::Vararg{Tuple{Real, Real}, dim}) where {dim} = BoxDomain{dim, float(mapreduce(eltype, promote_type, map(Base.splat(promote), minmax)))}(minmax)
 BoxDomain(lattice::Lattice) = BoxDomain(tuple.(Tuple(first(lattice)), Tuple(last(lattice))))
 
 entire_volume(box::BoxDomain) = prod(x->x[2]-x[1], box.minmax)
