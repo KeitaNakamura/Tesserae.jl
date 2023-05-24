@@ -38,6 +38,7 @@ export
 # Grid
     Grid,
     SpGrid,
+    eachnode,
     generate_grid,
     spacing,
     isnonzero,
