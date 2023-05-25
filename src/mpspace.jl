@@ -93,3 +93,10 @@ end
 function parallel_each_particle(f, space::MPSpace; parallel::Bool=true)
     parallel_each_particle(f, get_blockspace(space), num_particles(space); parallel)
 end
+
+function Base.show(io::IO, space::MPSpace)
+    print(io, "MPSpace:\n")
+    print(io, "  Interpolation: ", get_interpolation(space), "\n")
+    print(io, "  Grid size: ", gridsize(space), "\n")
+    print(io, "  Particles: ", num_particles(space))
+end
