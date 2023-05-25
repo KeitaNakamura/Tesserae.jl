@@ -68,6 +68,11 @@ end
     @inbounds view(A, colons..., i)
 end
 
+function Base.show(io::IO, mpvalues::MPValues{dim, T}) where {dim, T}
+    print(io, "MPValues{$dim, $T}: \n")
+    print(io, "  Particles: ", num_particles(mpvalues))
+end
+
 struct SubMPValues{dim, T, V, VI, I}
     parent::MPValues{dim, T, V, VI}
     index::I
@@ -101,6 +106,16 @@ end
 @inline function set_isnearbounds!(mp::SubMPValues, isnearbounds)
     index = getfield(mp, :index)
     @inbounds getfield(parent(mp), :isnearbounds)[index] = isnearbounds
+end
+
+function Base.show(io::IO, mp::SubMPValues)
+    print(io, "SubMPValues: \n")
+    print(io, "  Array size: ", size(mp.N), "\n")
+    print(io, "  Property names: ")
+    print(io, join(map(propertynames(mp)) do name
+        string(name, "::", eltype(typeof(getproperty(mp, name))))
+    end, ", "), "\n")
+    print(io, "  Neighbor nodes: ", neighbornodes(mp))
 end
 
 ###########
