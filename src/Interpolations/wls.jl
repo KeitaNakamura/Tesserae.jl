@@ -122,3 +122,5 @@ function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::La
 
     mp
 end
+
+Base.show(io::IO, wls::WLS{B}) where {B} = print(io, WLS{B}, "(", get_kernel(wls), ")")
