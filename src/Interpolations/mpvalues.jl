@@ -70,7 +70,7 @@ end
 
 function Base.show(io::IO, mpvalues::MPValues{dim, T}) where {dim, T}
     print(io, "MPValues{$dim, $T}: \n")
-    print(io, "  Particles: ", num_particles(mpvalues))
+    print(io, "  Particles: ", commas(num_particles(mpvalues)))
 end
 
 struct SubMPValues{dim, T, V, VI, I}

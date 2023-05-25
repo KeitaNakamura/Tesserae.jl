@@ -44,6 +44,9 @@ macro rename(src, list...)
     esc(:(Marble.rename($src, $before, $after)))
 end
 
+# commas
+commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")
+
 ############
 # MapArray #
 ############

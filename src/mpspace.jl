@@ -98,5 +98,5 @@ function Base.show(io::IO, space::MPSpace)
     print(io, "MPSpace:\n")
     print(io, "  Interpolation: ", get_interpolation(space), "\n")
     print(io, "  Grid size: ", gridsize(space), "\n")
-    print(io, "  Particles: ", num_particles(space))
+    print(io, "  Particles: ", commas(num_particles(space)))
 end
