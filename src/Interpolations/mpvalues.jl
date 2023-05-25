@@ -36,7 +36,7 @@ end
     end
     quote
         values = NamedTuple{names}(tuple($(arrays...)))
-        indices = Vector{CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}}(undef, len)
+        indices = fill(CartesianIndices(nfill(0:0, Val(dim))), len)
         MPValues(values, indices, fill(false, len))
     end
 end
