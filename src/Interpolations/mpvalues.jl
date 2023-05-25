@@ -115,7 +115,8 @@ function Base.show(io::IO, mp::SubMPValues)
     print(io, join(map(propertynames(mp)) do name
         string(name, "::", eltype(typeof(getproperty(mp, name))))
     end, ", "), "\n")
-    print(io, "  Neighbor nodes: ", neighbornodes(mp))
+    print(io, "  Neighbor nodes: ", neighbornodes(mp), "\n")
+    print(io, "  Is near bounds: ", isnearbounds(mp))
 end
 
 ###########
