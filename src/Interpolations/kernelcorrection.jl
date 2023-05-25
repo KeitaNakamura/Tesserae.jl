@@ -71,3 +71,5 @@ end
         mp.∇N[j] = (C₂ + C₃ ⋅ (xᵢ - xₚ)) * w
     end
 end
+
+Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", get_kernel(kc), ")")
