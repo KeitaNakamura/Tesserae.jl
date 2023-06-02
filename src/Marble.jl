@@ -24,6 +24,7 @@ export
 # utils
     fillzero!,
     @rename,
+    flatarray,
 # coordinate system
     CoordinateSystem,
     PlaneStrain,
