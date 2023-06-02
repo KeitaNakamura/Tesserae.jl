@@ -94,8 +94,16 @@ end
     index = getfield(mp, :index)
     @inbounds getfield(parent(mp), :indices)[index]
 end
-@inline neighbornodes(mp::SubMPValues, grid::Grid) = neighbornodes(mp)
-@inline neighbornodes(mp::SubMPValues, grid::SpGrid) = nonzeroindices(get_spinds(grid), neighbornodes(mp))
+@inline function neighbornodes(mp::SubMPValues, grid::Grid)
+    inds = neighbornodes(mp)
+    @boundscheck checkbounds(grid, inds)
+    inds
+end
+@inline function neighbornodes(mp::SubMPValues, grid::SpGrid)
+    inds = neighbornodes(mp)
+    @boundscheck checkbounds(grid, inds)
+    @inbounds nonzeroindices(get_spinds(grid), inds)
+end
 @inline function isnearbounds(mp::SubMPValues)
     index = getfield(mp, :index)
     @inbounds getfield(parent(mp), :isnearbounds)[index]
