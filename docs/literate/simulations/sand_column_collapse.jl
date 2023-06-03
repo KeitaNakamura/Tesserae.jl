@@ -141,23 +141,22 @@ function sand_column_collapse(
         end
 
         ## G2P transfer
-        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
-
-        ## update other particle states
-        Marble.@threads_inbounds for pt in eachparticle(particles)
-            f = I + Δt*pt.∇v                     # relative deformation gradient
-            bᵉᵗʳ = symmetric(f ⋅ pt.bᵉ ⋅ f', :U) # trial elastic left Cauchy-Green deformation tensor
-            λᵉᵗʳₐ², mₐ = to_principal(bᵉᵗʳ)
-            ϵᵉᵗʳ = log.(λᵉᵗʳₐ²) / 2              # Hencky strain
-            τₐ = compute_stress(model, ϵᵉᵗʳ)
-            τ = from_principal(τₐ, mₐ)           # Kirchhoff stress
-            bᵉ = from_principal(exp.(2*compute_strain(elastic, τₐ)), mₐ)
-            F = f ⋅ pt.F
-            J = det(F)
-            pt.σ = τ / J
-            pt.bᵉ = bᵉ
-            pt.F = F
-            pt.V = J * pt.V₀
+        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg) do pt
+            @inbounds begin
+                f = I + Δt*pt.∇v                     # relative deformation gradient
+                bᵉᵗʳ = symmetric(f ⋅ pt.bᵉ ⋅ f', :U) # trial elastic left Cauchy-Green deformation tensor
+                λᵉᵗʳₐ², mₐ = to_principal(bᵉᵗʳ)
+                ϵᵉᵗʳ = log.(λᵉᵗʳₐ²) / 2              # Hencky strain
+                τₐ = compute_stress(model, ϵᵉᵗʳ)
+                τ = from_principal(τₐ, mₐ)           # Kirchhoff stress
+                bᵉ = from_principal(exp.(2*compute_strain(elastic, τₐ)), mₐ)
+                F = f ⋅ pt.F
+                J = det(F)
+                pt.σ = τ / J
+                pt.bᵉ = bᵉ
+                pt.F = F
+                pt.V = J * pt.V₀
+            end
         end
 
         t += Δt

@@ -110,16 +110,15 @@ function dam_break(
         end
 
         ## G2P transfer
-        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
-
-        ## update other particle states
-        Marble.@threads_inbounds for pt in eachparticle(particles)
-            d = symmetric(pt.∇v)
-            V = pt.V * exp(tr(d)*Δt)
-            ρ = pt.m / V
-            p = c^2 * (ρ - ρ₀)
-            pt.σ = -p*I + 2μ*dev(d)
-            pt.V = V
+        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg) do pt
+            @inbounds begin
+                d = symmetric(pt.∇v)
+                V = pt.V * exp(tr(d)*Δt)
+                ρ = pt.m / V
+                p = c^2 * (ρ - ρ₀)
+                pt.σ = -p*I + 2μ*dev(d)
+                pt.V = V
+            end
         end
 
         t += Δt

@@ -135,14 +135,13 @@ function hyperelastic_material(
         end
 
         ## G2P transfer
-        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg)
-
-        ## update other particle states
-        Marble.@threads_inbounds for pt in eachparticle(particles)
-            F = (I + Δt*pt.∇v) ⋅ pt.F
-            pt.σ = compute_cauchy_stress(elastic, F)
-            pt.F = F
-            pt.V = det(F) * pt.V₀
+        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg) do pt
+            @inbounds begin
+                F = (I + Δt*pt.∇v) ⋅ pt.F
+                pt.σ = compute_cauchy_stress(elastic, F)
+                pt.F = F
+                pt.V = det(F) * pt.V₀
+            end
         end
 
         t += Δt
