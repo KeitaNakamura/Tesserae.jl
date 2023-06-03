@@ -82,6 +82,8 @@ export
     TFLIP,
     TPIC,
     WLSTransfer,
+# implicit
+    NewtonMethod,
 # VTK
     openvtk,
     openvtm,
@@ -106,6 +108,7 @@ include("Interpolations/kernelcorrection.jl")
 include("blockspace.jl")
 include("mpspace.jl")
 include("transfer.jl")
+include("implicit.jl")
 
 include("vtk.jl")
 

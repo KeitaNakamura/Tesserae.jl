@@ -49,10 +49,8 @@ function elastic_rings(
         f  :: Vec{2, Float64}
         v  :: Vec{2, Float64}
         vⁿ :: Vec{2, Float64}
-        # implicit method
-        R  :: Vec{2, Float64}
+        # for implicit method
         δv :: Vec{2, Float64}
-        δf :: Vec{2, Float64}
     end
     ParticleState = @NamedTuple begin
         x  :: Vec{2, Float64}
@@ -66,7 +64,7 @@ function elastic_rings(
         l  :: Float64                          # for uGIMP
         B  :: SecondOrderTensor{2, Float64, 4} # for APIC
         C  :: Mat{2, 3, Float64, 6}            # for WLS
-        # implicit
+        # for implicit method
         δσ :: SymmetricSecondOrderTensor{3, Float64, 6}
         Fⁿ :: SecondOrderTensor{3, Float64, 9}
         ℂ  :: Tensor{Tuple{@Symmetry{3,3}, 3,3}, Float64, 4, 54}
@@ -95,15 +93,12 @@ function elastic_rings(
     ## create interpolation space
     space = MPSpace(itp, size(grid), length(particles))
 
-    ## boundary conditions
-    fixedbc = falses(2, size(grid)...)
-    @inbounds for i in @view eachindex(grid)[[begin,end],:]
-        fixedbc[1,i] = true
-    end
-
     ## implicit method
-    R′ = Float64[]
-    δv′ = Float64[]
+    if implicit
+        solver = NewtonMethod()
+    else
+        solver = NewtonMethod(; maxiter=0)
+    end
 
     ## outputs
     if output                                                #src
@@ -138,46 +133,23 @@ function elastic_rings(
         @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m) * !iszero(grid.m)
 
         ## boundary conditions
-        flatarray(grid.v)[fixedbc] .= false
-
-        update_stress!(particles, grid, space, Δt, elastic, alg)
-
-        if implicit
-            freedofs = filter(CartesianIndices((2,size(grid)...))) do I
-                I′ = CartesianIndex(Base.tail(Tuple(I)))
-                @inbounds isnonzero(grid, I′) && !iszero(grid.m[I′]) && !fixedbc[I]
-            end
-
-            resize!(R′, length(freedofs))
-            resize!(δv′, length(freedofs))
-            Jδv′ = get_Jδv′(grid, particles, space, Δt, freedofs, alg)
-
-            @inbounds for k in 1:20 # Newton's method
-                ## compute grid force at k iterations
-                fillzero!(grid.f)
-                particle_to_grid!(:f, grid, particles, space; alg)
-
-                ## compute residual for Newton's method
-                @. grid.R = grid.v - grid.vⁿ - Δt * (grid.f/grid.m)
-                R′ .= view(flatarray(grid.R), freedofs)
-
-                ## solve linear equation
-                gmres!(fillzero!(δv′), Jδv′, R′; maxiter=20, initially_zero=true)
-
-                norm(δv′) < TOL && break
-
-                ## update grid velocity
-                v′ = view(flatarray(grid.v), freedofs)
-                @. v′ -= δv′
-
-                ## recompute particle stress
-                update_stress!(particles, grid, space, Δt, elastic, alg)
-            end
+        fixeddofs = falses(2, size(grid)...)
+        @inbounds for i in @view eachindex(grid)[[begin,end],:]
+            grid.v[i] = grid.v[i] .* (false,true)
+            fixeddofs[1,i] = true
         end
 
-        ## G2P transfer
-        grid_to_particle!((:v,:x), particles, grid, space, Δt; alg)
-        particles.Fⁿ .= particles.F
+        ## implicit G2P transfer
+        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver, fixeddofs; alg) do pt
+            @inbounds begin
+                F = (I + Δt*pt.∇v) ⋅ pt.Fⁿ
+                dσdF, σ = gradient(F->compute_cauchy_stress(elastic, F), F, :all)
+                pt.F = F
+                pt.V = det(F) * pt.V₀
+                pt.σ = σ
+                pt.ℂ = Δt * (σ ⊗ inv(F)' + dσdF) ⋅ pt.Fⁿ'
+            end
+        end
 
         t += Δt
         step += 1
@@ -196,41 +168,6 @@ function elastic_rings(
         end #src
     end
     ifelse(test, particles, nothing) #src
-end
-
-function get_Jδv′(grid, particles, space, Δt, freedofs, alg)
-    function compute_Jδv!(Jδv, δv)
-        @inbounds begin
-            # grid-to-particle for δv
-            flatarray(grid.δv)[freedofs] .= δv
-            grid_to_particle!(:∇v, particles, @rename(grid, δv=>v, v=>_), space; alg)
-
-            # compute stress increment
-            Marble.@threads_inbounds for pt in eachparticle(particles)
-                pt.δσ = pt.ℂ ⊡ pt.∇v
-            end
-
-            # back to grid
-            fillzero!(grid.δf)
-            particle_to_grid!(:f, @rename(grid, δf=>f, f=>_), @rename(particles, δσ=>σ, σ=>_), space; alg, parallel=false)
-
-            δa = view(flatarray(grid.δf ./= grid.m), freedofs)
-            @. Jδv = δv - Δt * δa
-        end
-    end
-    LinearMap(compute_Jδv!, length(freedofs))
-end
-
-function update_stress!(particles, grid, space, Δt, elastic, alg)
-    grid_to_particle!(:∇v, particles, grid, space; alg)
-    Marble.@threads_inbounds for pt in eachparticle(particles)
-        F = (I + Δt*pt.∇v) ⋅ pt.Fⁿ
-        dσdF, σ = gradient(F->compute_cauchy_stress(elastic, F), F, :all)
-        pt.F = F
-        pt.V = det(F) * pt.V₀
-        pt.σ = σ
-        pt.ℂ = Δt * (σ ⊗ inv(F)' + dσdF) ⋅ pt.Fⁿ'
-    end
 end
 
 ## check the result                                                                                                                                                       #src
