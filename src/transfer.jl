@@ -410,19 +410,25 @@ via `getproperty`, which depends on the transfer algorithms. See each algorithm 
     If you set `system = Axisymmetric()` in two dimensional case, `particles.x[p][1]`
     is used for the radius position of the particle `p`.
 """
-function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
-    grid_to_particle!(alg, system, Val(names), particles, grid, space, only_dt...; parallel)
-end
-function grid_to_particle!(name::Symbol, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
-    grid_to_particle!(alg, system, Val((name,)), particles, grid, space, only_dt...; parallel)
+function grid_to_particle!(names, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
+    grid_to_particle!(identity, names, particles, grid, space, only_dt...; alg, system, parallel)
 end
 
-function grid_to_particle!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, only_dt...; parallel::Bool) where {names, dim}
+function grid_to_particle!(do_particle!, names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
+    grid_to_particle!(do_particle!, alg, system, Val(names), particles, grid, space, only_dt...; parallel)
+end
+function grid_to_particle!(do_particle!, name::Symbol, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
+    grid_to_particle!(do_particle!, alg, system, Val((name,)), particles, grid, space, only_dt...; parallel)
+end
+
+function grid_to_particle!(do_particle!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, only_dt...; parallel::Bool) where {names, dim}
     check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
     check_particles(particles, space)
     @threads_inbounds parallel for p in 1:num_particles(space)
-        grid_to_particle!(alg, system, Val(names), LazyRow(particles, p), grid, get_interpolation(space), values(space, p), only_dt...)
+        pt = LazyRow(particles, p)
+        grid_to_particle!(alg, system, Val(names), pt, grid, get_interpolation(space), values(space, p), only_dt...)
+        do_particle!(pt)
     end
     particles
 end
