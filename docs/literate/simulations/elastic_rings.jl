@@ -9,7 +9,7 @@ using LinearMaps: LinearMap
 include(joinpath(pkgdir(Marble), "docs/literate/models/NeoHookean.jl"))
 
 function elastic_rings(
-        itp::Interpolation = KernelCorrection(QuadraticBSpline()),
+        itp::Interpolation = KernelCorrection(CubicBSpline()),
         alg::TransferAlgorithm = TPIC(),
         ;output::Bool = true, #src
         test::Bool = false,   #src
@@ -53,7 +53,6 @@ function elastic_rings(
         R  :: Vec{2, Float64}
         δv :: Vec{2, Float64}
         δf :: Vec{2, Float64}
-        δa :: Vec{2, Float64}
     end
     ParticleState = @NamedTuple begin
         x  :: Vec{2, Float64}
@@ -215,8 +214,7 @@ function get_Jδv′(grid, particles, space, Δt, freedofs, alg)
             fillzero!(grid.δf)
             particle_to_grid!(:f, @rename(grid, δf=>f, f=>_), @rename(particles, δσ=>σ, σ=>_), space; alg, parallel=false)
 
-            @. grid.δa = grid.δf / grid.m
-            δa = view(flatarray(grid.δa), freedofs)
+            δa = view(flatarray(grid.δf ./= grid.m), freedofs)
             @. Jδv = δv - Δt * δa
         end
     end
