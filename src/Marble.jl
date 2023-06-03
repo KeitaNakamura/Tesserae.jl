@@ -27,6 +27,7 @@ export
     flatarray,
 # coordinate system
     CoordinateSystem,
+    DefaultSystem,
     PlaneStrain,
     Axisymmetric,
 # SpArray

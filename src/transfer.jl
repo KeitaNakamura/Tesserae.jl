@@ -276,10 +276,10 @@ transfer algorithms. See each algorithm in [`TransferAlgorithm`](@ref) for more 
     If you set `system = Axisymmetric()` in two dimensional case, `particles.x[p][1]`
     is used for the radius position of the particle `p`.
 """
-function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
     particle_to_grid!(alg, system, Val(names), grid, particles, space; parallel)
 end
-function particle_to_grid!(name::Symbol, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+function particle_to_grid!(name::Symbol, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
     particle_to_grid!(alg, system, Val((name,)), grid, particles, space; parallel)
 end
 
@@ -382,14 +382,14 @@ end
 end
 
 # 1D
-@inline calc_fint(::NormalSystem, ∇N::Vec{1}, Vₚσₚ::SymmetricSecondOrderTensor{1}) = Vₚσₚ ⋅ ∇N
+@inline calc_fint(::DefaultSystem, ∇N::Vec{1}, Vₚσₚ::SymmetricSecondOrderTensor{1}) = Vₚσₚ ⋅ ∇N
 # plane-strain
-@inline calc_fint(::Union{NormalSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{3}) = @Tensor(Vₚσₚ[1:2,1:2]) ⋅ ∇N
-@inline calc_fint(::Union{NormalSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{2}) = Vₚσₚ ⋅ ∇N
+@inline calc_fint(::Union{DefaultSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{3}) = @Tensor(Vₚσₚ[1:2,1:2]) ⋅ ∇N
+@inline calc_fint(::Union{DefaultSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{2}) = Vₚσₚ ⋅ ∇N
 # axisymmetric
 @inline calc_fint(::Axisymmetric, N::Real, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{3}, rₚ::Real) = @Tensor(Vₚσₚ[1:2,1:2])⋅∇N + Vec(1,0)*Vₚσₚ[3,3]*N/rₚ
 # 3D
-@inline calc_fint(::NormalSystem, ∇N::Vec{3}, Vₚσₚ::SymmetricSecondOrderTensor{3}) = Vₚσₚ ⋅ ∇N
+@inline calc_fint(::DefaultSystem, ∇N::Vec{3}, Vₚσₚ::SymmetricSecondOrderTensor{3}) = Vₚσₚ ⋅ ∇N
 
 ################
 # G2P transfer #
@@ -410,10 +410,10 @@ via `getproperty`, which depends on the transfer algorithms. See each algorithm 
     If you set `system = Axisymmetric()` in two dimensional case, `particles.x[p][1]`
     is used for the radius position of the particle `p`.
 """
-function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+function grid_to_particle!(names::Tuple{Vararg{Symbol}}, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
     grid_to_particle!(alg, system, Val(names), particles, grid, space, only_dt...; parallel)
 end
-function grid_to_particle!(name::Symbol, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = NormalSystem(), parallel::Bool=true)
+function grid_to_particle!(name::Symbol, particles::Particles, grid::Grid, space::MPSpace, only_dt...; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
     grid_to_particle!(alg, system, Val((name,)), particles, grid, space, only_dt...; parallel)
 end
 
@@ -572,14 +572,14 @@ end
 end
 
 # 1D
-@inline calc_∇v(::NormalSystem, ::Type{<: SecondOrderTensor{1}}, ∇vₚ::SecondOrderTensor{1}) = ∇vₚ
+@inline calc_∇v(::DefaultSystem, ::Type{<: SecondOrderTensor{1}}, ∇vₚ::SecondOrderTensor{1}) = ∇vₚ
 # plane-strain
-@inline calc_∇v(::Union{NormalSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{2}}, ∇vₚ::SecondOrderTensor{2}) = ∇vₚ
-@inline calc_∇v(::Union{NormalSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{2}) = Tensorial.resizedim(∇vₚ, Val(3))
+@inline calc_∇v(::Union{DefaultSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{2}}, ∇vₚ::SecondOrderTensor{2}) = ∇vₚ
+@inline calc_∇v(::Union{DefaultSystem, PlaneStrain}, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{2}) = Tensorial.resizedim(∇vₚ, Val(3))
 # axisymmetric
 @inline calc_∇v(::Axisymmetric, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{2}, vₚ::Real, rₚ::Real) = Tensorial.resizedim(∇vₚ, Val(3)) + @Mat([0 0 0; 0 0 0; 0 0 vₚ/rₚ])
 # 3D
-@inline calc_∇v(::NormalSystem, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{3}) = ∇vₚ
+@inline calc_∇v(::DefaultSystem, ::Type{<: SecondOrderTensor{3}}, ∇vₚ::SecondOrderTensor{3}) = ∇vₚ
 
 ##########################
 # smooth_particle_state! #

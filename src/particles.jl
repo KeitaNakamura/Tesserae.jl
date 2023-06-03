@@ -125,7 +125,7 @@ function generate_particles(
         lattice::Lattice{dim};
         spacing::Real = 0.5,
         alg::SamplingAlgorithm = PoissonDiskSampling(),
-        system::CoordinateSystem = NormalSystem(),
+        system::CoordinateSystem = DefaultSystem(),
     ) where {ParticleState, dim}
 
     points, Vₚ = point_sampling(alg, domain, Marble.spacing(lattice) * spacing)

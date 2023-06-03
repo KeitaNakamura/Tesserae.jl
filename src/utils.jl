@@ -82,9 +82,9 @@ end
 ####################
 
 abstract type CoordinateSystem end
-struct NormalSystem <: CoordinateSystem end
-struct PlaneStrain  <: CoordinateSystem end
-struct Axisymmetric <: CoordinateSystem end
+struct DefaultSystem <: CoordinateSystem end
+struct PlaneStrain   <: CoordinateSystem end
+struct Axisymmetric  <: CoordinateSystem end
 
 #########
 # Trues #
