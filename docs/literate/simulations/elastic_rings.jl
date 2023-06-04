@@ -138,11 +138,12 @@ function elastic_rings(
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver, fixeddofs; alg) do pt
             @inbounds begin
                 F = (I + Δt*pt.∇v) ⋅ pt.Fⁿ
+                V = det(F) * pt.V⁰
                 dσdF, σ = gradient(F->compute_cauchy_stress(elastic, F), F, :all)
                 pt.F = F
-                pt.V = det(F) * pt.V⁰
+                pt.V = V
                 pt.σ = σ
-                pt.ℂ = Δt * (σ ⊗ inv(F)' + dσdF) ⋅ pt.Fⁿ'
+                pt.ℂ = Δt * V * (σ ⊗ inv(F)' + dσdF) ⋅ pt.Fⁿ'
             end
         end
         @. particles.Fⁿ = particles.F

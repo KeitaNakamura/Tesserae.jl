@@ -22,7 +22,7 @@ function get_Jδv(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, f
             grid_to_particle!(:∇v, particles, @rename(grid, δv=>v, v=>_), space; alg, system, parallel) do pt
                 @_inline_meta
                 δvₚ = pt.∇v
-                pt.δσ = pt.ℂ ⊡ δvₚ
+                pt.δσ = (pt.ℂ ⊡ δvₚ) / pt.V
             end
 
             # particle-to-grid to compute δfᵢ (i.e., ∂fᵢ∂δvᵢ ⋅ δvᵢ)
