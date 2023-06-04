@@ -17,7 +17,6 @@ function elastic_rings(
     )
 
     ## simulation parameters
-    TOL = sqrt(eps(Float64))
     if implicit
         CFL = 4.0   # Courant number
     else

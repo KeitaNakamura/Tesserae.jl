@@ -51,6 +51,8 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
     grid_to_particle!(update_stress!, :∇v, particles, grid, space; alg, system, parallel)
 
     if solver.maxiter != 0
+        isconverged(x::Real, p::Int) = x < eps(typeof(x))^(1/p)
+
         freedofs = filter(CartesianIndices(fixeddofs)) do I
             I′ = CartesianIndex(Base.tail(Tuple(I)))
             @inbounds isnonzero(grid, I′) && !iszero(grid.m[I′]) && !fixeddofs[I]
@@ -60,34 +62,33 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
         resize!(solver.δv, length(freedofs))
         Jδv = get_Jδv(particles, grid, space, Δt, freedofs; alg, system, parallel)
 
-        ok = false
-        r⁰ = T(NaN)
-        isconverged(x) = norm(x) < sqrt(eps(eltype(x)))
-        @inbounds for k in 1:solver.maxiter
-            # compute grid force at k iterations
-            fillzero!(grid.f)
-            particle_to_grid!(:f, grid, particles, space; alg, system, parallel)
+        vⁿ = view(flatarray(grid.vⁿ), freedofs)
+        if !isconverged(maximum(abs, vⁿ), 1)
+            ok = false
+            r⁰ = norm(vⁿ)
+            @inbounds for k in 1:solver.maxiter
+                # compute grid force at k iterations
+                fillzero!(grid.f)
+                particle_to_grid!(:f, grid, particles, space; alg, system, parallel)
 
-            # compute residual for Newton's method
-            R = grid.δv # reuse grid.δv
-            @. R = grid.v - grid.vⁿ - Δt * (grid.f/grid.m)
-            solver.R .= view(flatarray(R), freedofs)
+                # compute residual for Newton's method
+                R = grid.δv # reuse grid.δv
+                @. R = grid.v - grid.vⁿ - Δt * (grid.f/grid.m)
+                solver.R .= view(flatarray(R), freedofs)
+                isconverged(norm(solver.R) / r⁰, 2) && (ok=true; break)
 
-            k == 1 && (r⁰ = norm(solver.R))
-            isconverged(norm(solver.R) / r⁰) && (ok=true; break)
+                # solve linear equation
+                solver.linsolve(solver.δv, Jδv, rmul!(solver.R, -1))
 
-            # solve linear equation
-            solver.linsolve(solver.δv, Jδv, solver.R)
-            isconverged(solver.δv) && (ok=true; break)
+                # update grid velocity
+                v = view(flatarray(grid.v), freedofs)
+                @. v += solver.δv
 
-            # update grid velocity
-            v = view(flatarray(grid.v), freedofs)
-            @. v -= solver.δv
-
-            # recompute particle stress from grid velocity
-            grid_to_particle!(update_stress!, :∇v, particles, grid, space; alg, system, parallel)
+                # recompute particle stress from grid velocity
+                grid_to_particle!(update_stress!, :∇v, particles, grid, space; alg, system, parallel)
+            end
+            ok || @warn "not converged in Newton's method"
         end
-        ok || @warn "not converged in Newton's method"
     end
 
     particles.Fⁿ .= particles.F

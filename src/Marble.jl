@@ -5,8 +5,8 @@ using Base.Broadcast: Broadcasted, ArrayStyle, DefaultArrayStyle
 using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using Reexport
+using LinearAlgebra
 @reexport using Tensorial
-using WriteVTK
 using StructArrays
 
 # SIMD
@@ -14,7 +14,8 @@ import SIMD
 const SVec = SIMD.Vec
 const SIMDTypes = Union{SIMD.ScalarTypes, Bool}
 
-# progress bar
+# stream
+using WriteVTK
 import ProgressMeter
 
 # reexport from StructArrays
