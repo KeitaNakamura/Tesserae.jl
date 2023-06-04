@@ -44,7 +44,7 @@ function elastic_rings(
         f  :: Vec{2, Float64}
         v  :: Vec{2, Float64}
         vⁿ :: Vec{2, Float64}
-        # for implicit method
+        ## for implicit method
         δv :: Vec{2, Float64}
     end
     ParticleState = @NamedTuple begin
@@ -59,7 +59,7 @@ function elastic_rings(
         l  :: Float64                          # for uGIMP
         B  :: SecondOrderTensor{2, Float64, 4} # for APIC
         C  :: Mat{2, 3, Float64, 6}            # for WLS
-        # for implicit method
+        ## for implicit method
         δσ :: SymmetricSecondOrderTensor{3, Float64, 6}
         Fⁿ :: SecondOrderTensor{3, Float64, 9}
         ℂ  :: Tensor{Tuple{@Symmetry{3,3}, 3,3}, Float64, 4, 54}
