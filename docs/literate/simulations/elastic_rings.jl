@@ -3,39 +3,35 @@
 using Marble
 using StableRNGs #src
 
-using IterativeSolvers
-using LinearMaps: LinearMap
-
 include(joinpath(pkgdir(Marble), "docs/literate/models/NeoHookean.jl"))
 
 function elastic_rings(
         itp::Interpolation = KernelCorrection(CubicBSpline()),
-        alg::TransferAlgorithm = TPIC(),
-        ;output::Bool = true, #src
-        test::Bool = false,   #src
+        alg::TransferAlgorithm = TPIC();
         implicit::Bool = true,
+        output::Bool = true, #src
+        test::Bool = false,  #src
     )
 
     ## simulation parameters
     if implicit
-        CFL = 4.0   # Courant number
+        CFL = 4.0 # Courant number
     else
-        CFL = 1.0   # Courant number
+        CFL = 1.0 # Courant number
     end
-    # t_stop = 2.6e-5 # time for simulation
     t_stop = 10e-3 # time for simulation
     ## use low resolution for testing purpose #src
     if test                                   #src
-        Δx::Float64 = 1.0e-3                  #src
+        Δx::Float64 = 5.0e-3                  #src
     else                                      #src
     Δx = 0.625e-3 # grid spacing
     end                                       #src
-    v₀ = Vec(30, 0) # m/s
+    v⁰ = Vec(30, 0) # m/s
     w = 150e-3
     l = 200e-3
 
     ## material constants
-    ρ₀      = 1.01e3 # initial density
+    ρ⁰      = 1.01e3 # initial density
     r_in    = 30e-3
     r_out   = 40e-3
     elastic = NeoHookean(; E=73.08e6, ν=0.4)
@@ -55,7 +51,7 @@ function elastic_rings(
         x  :: Vec{2, Float64}
         m  :: Float64
         V  :: Float64
-        V₀ :: Float64
+        V⁰ :: Float64
         v  :: Vec{2, Float64}
         ∇v :: SecondOrderTensor{3, Float64, 9}
         σ  :: SymmetricSecondOrderTensor{3, Float64, 6}
@@ -73,18 +69,18 @@ function elastic_rings(
     grid = generate_grid(GridState, Δx, (-l/2,l/2), (-w/2,w/2))
 
     ## particles
-    if test                                                                                                                       #src
-        particles_lhs = generate_particles((x,y) -> r_in^2 < (x+l/4)^2+y^2 < r_out^2, ParticleState, grid.x; alg=StableRNG(1234)) #src
-        particles_rhs = generate_particles((x,y) -> r_in^2 < (x-l/4)^2+y^2 < r_out^2, ParticleState, grid.x; alg=StableRNG(1234)) #src
-    else                                                                                                                          #src
+    if test                                                                                                                                            #src
+        particles_lhs = generate_particles((x,y) -> r_in^2 < (x+l/4)^2+y^2 < r_out^2, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234))) #src
+        particles_rhs = generate_particles((x,y) -> r_in^2 < (x-l/4)^2+y^2 < r_out^2, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234))) #src
+    else                                                                                                                                               #src
     particles_lhs = generate_particles((x,y) -> r_in^2 < (x+l/4)^2+y^2 < r_out^2, ParticleState, grid.x)
     particles_rhs = generate_particles((x,y) -> r_in^2 < (x-l/4)^2+y^2 < r_out^2, ParticleState, grid.x)
-    end                                                                                                                        #src
-    @. particles_lhs.v =  v₀
-    @. particles_rhs.v = -v₀
+    end                                                                                                                                                #src
+    @. particles_lhs.v =  v⁰
+    @. particles_rhs.v = -v⁰
     particles = [particles_lhs; particles_rhs]
-    @. particles.V₀ = particles.V
-    @. particles.m  = ρ₀ * particles.V
+    @. particles.V⁰ = particles.V
+    @. particles.m  = ρ⁰ * particles.V
     @. particles.F  = one(particles.F)
     @. particles.Fⁿ = one(particles.Fⁿ)
     @show length(particles)
@@ -100,18 +96,18 @@ function elastic_rings(
     end
 
     ## outputs
-    if output                                                #src
+    if output                                        #src
     outdir = joinpath("output.tmp", "elastic_rings")
-    rm(outdir; recursive=true, force=true)                   #src
+    rm(outdir; recursive=true, force=true)           #src
     pvdfile = joinpath(mkpath(outdir), "paraview")
     closepvd(openpvd(pvdfile))
-    end                                                      #src
+    end                                              #src
 
     t = 0.0
     step = 0
     fps = 20e3
     savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
-    Marble.@showprogress while t < t_stop
+    while t < t_stop
 
         ## calculate timestep based on the Courant-Friedrichs-Lewy (CFL) condition
         Δt = CFL * spacing(grid) / maximum(eachparticle(particles)) do pt
@@ -144,7 +140,7 @@ function elastic_rings(
                 F = (I + Δt*pt.∇v) ⋅ pt.Fⁿ
                 dσdF, σ = gradient(F->compute_cauchy_stress(elastic, F), F, :all)
                 pt.F = F
-                pt.V = det(F) * pt.V₀
+                pt.V = det(F) * pt.V⁰
                 pt.σ = σ
                 pt.ℂ = Δt * (σ ⊗ inv(F)' + dσdF) ⋅ pt.Fⁿ'
             end
@@ -169,8 +165,13 @@ function elastic_rings(
     ifelse(test, particles, nothing) #src
 end
 
-## check the result                                                                                                                                                       #src
-using Test                                                                                                                                                                #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                                     #src
-# @test mean(elastic_rings(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [-0.004382367540378365, 2.443396567204942, -0.13044416953356866] rtol=1e-5 #src
-end                                                                                                                                                                       #src
+## check the result                                                                                                                                                #src
+using Test                                                                                                                                                         #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                              #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=false, test=true).x) ≈ [-0.0035966206398941277, -0.00019309942291381154] rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=false, test=true).x) ≈ [-0.0038299836923257747, -0.0001930994229137899]  rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=false, test=true).x) ≈ [-0.0037910149463340173, -0.0001930994229138152]  rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=true,  test=true).x) ≈ [-0.006950367683096536, -0.0001930994229138227]   rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=true,  test=true).x) ≈ [-0.006870318807007002, -0.00019309942291383605]  rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=true,  test=true).x) ≈ [-0.006868871983884539, -0.00019309942291382848]  rtol=1e-5 #src
+end                                                                                                                                                                #src
