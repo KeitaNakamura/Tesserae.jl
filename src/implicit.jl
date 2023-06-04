@@ -90,6 +90,4 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
             ok || @warn "not converged in Newton's method"
         end
     end
-
-    particles.Fⁿ .= particles.F
 end

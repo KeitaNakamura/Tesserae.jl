@@ -145,6 +145,7 @@ function elastic_rings(
                 pt.ℂ = Δt * (σ ⊗ inv(F)' + dσdF) ⋅ pt.Fⁿ'
             end
         end
+        @. particles.Fⁿ = particles.F
 
         t += Δt
         step += 1
