@@ -14,7 +14,7 @@ end
 NewtonMethod(; kwargs...) = NewtonMethod{Float64}(; kwargs...)
 
 # for matrix-free linear solver
-function get_Jδv(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
+function get_jacobian(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
     LinearMap(length(freedofs)) do Jδv, δv
         @inbounds begin
             # grid-to-particle to compute δvₚ from δvᵢ, then compute Cauchy stress increment
@@ -60,7 +60,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
 
         resize!(solver.R, length(freedofs))
         resize!(solver.δv, length(freedofs))
-        Jδv = get_Jδv(particles, grid, space, Δt, freedofs; alg, system, parallel)
+        A = get_jacobian(particles, grid, space, Δt, freedofs; alg, system, parallel)
 
         vⁿ = view(flatarray(grid.vⁿ), freedofs)
         if !isconverged(maximum(abs, vⁿ), 1)
@@ -77,8 +77,8 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 solver.R .= view(flatarray(R), freedofs)
                 isconverged(norm(solver.R) / r⁰, 2) && (ok=true; break)
 
-                # solve linear equation
-                solver.linsolve(solver.δv, Jδv, rmul!(solver.R, -1))
+                # solve linear equation A⋅δv = -R
+                solver.linsolve(solver.δv, A, rmul!(solver.R, -1))
 
                 # update grid velocity
                 v = view(flatarray(grid.v), freedofs)
