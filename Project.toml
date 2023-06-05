@@ -17,6 +17,7 @@ Tensorial = "98f94333-fa9f-48a9-ad80-1c66397b2b38"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
+IterativeSolvers = "0.9"
 LinearMaps = "3"
 PoissonDiskSampling = "0.9"
 ProgressMeter = "1"
