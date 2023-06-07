@@ -21,7 +21,7 @@ function Base.resize!(solver::NewtonMethod, n::Integer)
 end
 
 # for matrix-free linear solver
-function get_jacobian(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
+function jacobian_matrix(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
     LinearMap(length(freedofs)) do Jδv, δv
         @inbounds begin
             # grid-to-particle to compute δvₚ from δvᵢ, then compute Cauchy stress increment
@@ -33,8 +33,7 @@ function get_jacobian(particles::Particles, grid::Grid, space::MPSpace, Δt::Rea
             end
 
             # particle-to-grid to compute δfᵢ (i.e., ∂fᵢ∂δvᵢ ⋅ δvᵢ)
-            δf = grid.δv # reuse grid.δv
-            fillzero!(δf)
+            δf = fillzero!(grid.δv) # reuse grid.δv
             particle_to_grid!(:f, @rename(grid, δv=>f, f=>_), @rename(particles, δσ=>σ, σ=>_), space; alg, system, parallel)
 
             # compute J⋅δvᵢ (matrix-vector product)
@@ -66,7 +65,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
         end
 
         resize!(solver, length(freedofs))
-        A = get_jacobian(particles, grid, space, Δt, freedofs; alg, system, parallel)
+        A = jacobian_matrix(particles, grid, space, Δt, freedofs; alg, system, parallel)
 
         vⁿ = view(flatarray(grid.vⁿ), freedofs)
         if !isconverged(maximum(abs, vⁿ), 1)
