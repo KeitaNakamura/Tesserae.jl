@@ -13,6 +13,13 @@ function NewtonMethod{T}(;maxiter::Int = 20,
 end
 NewtonMethod(; kwargs...) = NewtonMethod{Float64}(; kwargs...)
 
+function Base.resize!(solver::NewtonMethod, n::Integer)
+    resize!(solver.R, n)
+    resize!(solver.P, n)
+    resize!(solver.δv, n)
+    solver
+end
+
 # for matrix-free linear solver
 function get_jacobian(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
     LinearMap(length(freedofs)) do Jδv, δv
@@ -58,8 +65,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
             @inbounds isnonzero(grid, I′) && !iszero(grid.m[I′]) && !fixeddofs[I]
         end
 
-        resize!(solver.R, length(freedofs))
-        resize!(solver.δv, length(freedofs))
+        resize!(solver, length(freedofs))
         A = get_jacobian(particles, grid, space, Δt, freedofs; alg, system, parallel)
 
         vⁿ = view(flatarray(grid.vⁿ), freedofs)
