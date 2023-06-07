@@ -1,7 +1,7 @@
 using IterativeSolvers
 using LinearMaps: LinearMap
 
-struct NewtonMethod{T, F}
+struct NewtonSolver{T, F}
     maxiter::Int
     tol::T
     linsolve::F
@@ -9,14 +9,14 @@ struct NewtonMethod{T, F}
     P::Vector{T}
     δv::Vector{T}
 end
-function NewtonMethod{T}(;maxiter::Int = 40,
+function NewtonSolver{T}(;maxiter::Int = 40,
                           tol::Real = sqrt(eps(T)),
                           linsolve = (x, A, b; kwargs...) -> gmres!(fillzero!(x), A, b; maxiter=20, initially_zero=true, kwargs...)) where {T}
     NewtonSolver(maxiter, tol, linsolve, T[], T[], T[])
 end
-NewtonMethod(; kwargs...) = NewtonMethod{Float64}(; kwargs...)
+NewtonSolver(; kwargs...) = NewtonSolver{Float64}(; kwargs...)
 
-function Base.resize!(solver::NewtonMethod, n::Integer)
+function Base.resize!(solver::NewtonSolver, n::Integer)
     resize!(solver.R, n)
     resize!(solver.P, n)
     resize!(solver.δv, n)
@@ -24,7 +24,7 @@ function Base.resize!(solver::NewtonMethod, n::Integer)
 end
 
 isless_eps(x::Real, p::Int) = abs(x) < eps(typeof(x))^(1/p)
-isconverged(x::Real, solver::NewtonMethod) = abs(x) < solver.tol
+isconverged(x::Real, solver::NewtonSolver) = abs(x) < solver.tol
 
 # for matrix-free linear solver
 function jacobian_matrix(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
@@ -69,14 +69,14 @@ function diagonal_preconditioner!(P::AbstractVector, particles::Particles, grid:
 end
 
 # implicit version of grid_to_particle!
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonMethod, fixeddofs::AbstractArray{Bool}; parallel::Bool) where {names}
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, fixeddofs::AbstractArray{Bool}; parallel::Bool) where {names}
     @assert :∇v in names
     grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, fixeddofs; alg, system, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
     grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
 
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, solver::NewtonMethod{T}, fixeddofs::AbstractArray{Bool}; parallel::Bool) where {dim, T}
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, solver::NewtonSolver{T}, fixeddofs::AbstractArray{Bool}; parallel::Bool) where {dim, T}
     @assert size(fixeddofs) == (dim, size(grid)...)
 
     grid_to_particle!(update_stress!, :∇v, particles, grid, space; alg, system, parallel)

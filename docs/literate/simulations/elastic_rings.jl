@@ -90,9 +90,9 @@ function elastic_rings(
 
     ## implicit method
     if implicit
-        solver = NewtonMethod()
+        solver = NewtonSolver()
     else
-        solver = NewtonMethod(; maxiter=0)
+        solver = NewtonSolver(; maxiter=0)
     end
 
     ## outputs
