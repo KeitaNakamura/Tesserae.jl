@@ -5,11 +5,12 @@ struct NewtonMethod{T, F}
     maxiter::Int
     linsolve::F
     R::Vector{T}
+    P::Vector{T}
     δv::Vector{T}
 end
-function NewtonMethod{T}(;maxiter::Int = 20,
-                          linsolve = (x, A, b) -> gmres!(fillzero!(x), A, b; maxiter=20, initially_zero=true)) where {T}
-    NewtonMethod(maxiter, linsolve, T[], T[])
+function NewtonMethod{T}(;maxiter::Int = 40,
+                          linsolve = (x, A, b; kwargs...) -> gmres!(fillzero!(x), A, b; maxiter=20, initially_zero=true, kwargs...)) where {T}
+    NewtonMethod(maxiter, linsolve, T[], T[], T[])
 end
 NewtonMethod(; kwargs...) = NewtonMethod{Float64}(; kwargs...)
 
@@ -41,6 +42,25 @@ function jacobian_matrix(particles::Particles, grid::Grid, space::MPSpace, Δt::
             @. Jδv = δv - Δt * δa
         end
     end
+end
+
+function diagonal_preconditioner!(P::AbstractVector, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freedofs::Vector{<: CartesianIndex}; parallel::Bool=true) where {dim}
+    fill!(P, 1)
+    parallel_each_particle(space; parallel) do p
+        @_inline_meta
+        @inbounds begin
+            ℂₚ = Tensorial.resizedim(particles.ℂ[p], Val(dim))
+            mp = values(space, p)
+            gridindices = neighbornodes(mp, grid)
+            @simd for j in CartesianIndices(gridindices)
+                i = gridindices[j]
+                ∇N = mp.∇N[j]
+                grid.δv[i] += diag(∇N ⋅ ℂₚ ⋅ ∇N) # reuse δv
+            end
+        end
+    end
+    @. grid.δv *= -Δt / grid.m
+    Diagonal(broadcast!(-, P, P, view(flatarray(grid.δv), freedofs)))
 end
 
 # implicit version of grid_to_particle!
@@ -83,6 +103,8 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 isconverged(norm(solver.R) / r⁰, 2) && (ok=true; break)
 
                 # solve linear equation A⋅δv = -R
+                # P = diagonal_preconditioner!(solver.P, particles, grid, space, Δt, freedofs; parallel)
+                # solver.linsolve(solver.δv, A, rmul!(solver.R, -1); Pl=P)
                 solver.linsolve(solver.δv, A, rmul!(solver.R, -1))
 
                 # update grid velocity
