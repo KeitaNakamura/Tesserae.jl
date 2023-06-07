@@ -3,14 +3,16 @@ using LinearMaps: LinearMap
 
 struct NewtonMethod{T, F}
     maxiter::Int
+    tol::T
     linsolve::F
     R::Vector{T}
     P::Vector{T}
     δv::Vector{T}
 end
 function NewtonMethod{T}(;maxiter::Int = 40,
+                          tol::Real = sqrt(eps(T)),
                           linsolve = (x, A, b; kwargs...) -> gmres!(fillzero!(x), A, b; maxiter=20, initially_zero=true, kwargs...)) where {T}
-    NewtonMethod(maxiter, linsolve, T[], T[], T[])
+    NewtonSolver(maxiter, tol, linsolve, T[], T[], T[])
 end
 NewtonMethod(; kwargs...) = NewtonMethod{Float64}(; kwargs...)
 
@@ -20,6 +22,9 @@ function Base.resize!(solver::NewtonMethod, n::Integer)
     resize!(solver.δv, n)
     solver
 end
+
+isless_eps(x::Real, p::Int) = abs(x) < eps(typeof(x))^(1/p)
+isconverged(x::Real, solver::NewtonMethod) = abs(x) < solver.tol
 
 # for matrix-free linear solver
 function jacobian_matrix(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
@@ -77,8 +82,6 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
     grid_to_particle!(update_stress!, :∇v, particles, grid, space; alg, system, parallel)
 
     if solver.maxiter != 0
-        isconverged(x::Real, p::Int) = x < eps(typeof(x))^(1/p)
-
         freedofs = filter(CartesianIndices(fixeddofs)) do I
             I′ = CartesianIndex(Base.tail(Tuple(I)))
             @inbounds isnonzero(grid, I′) && !iszero(grid.m[I′]) && !fixeddofs[I]
@@ -87,8 +90,8 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
         resize!(solver, length(freedofs))
         A = jacobian_matrix(particles, grid, space, Δt, freedofs; alg, system, parallel)
 
-        vⁿ = view(flatarray(grid.vⁿ), freedofs)
-        if !isconverged(maximum(abs, vⁿ), 1)
+        vⁿ = @inbounds view(flatarray(grid.vⁿ), freedofs)
+        if !isless_eps(maximum(abs, vⁿ), 1)
             ok = false
             r⁰ = norm(vⁿ)
             @inbounds for k in 1:solver.maxiter
@@ -100,7 +103,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 R = grid.δv # reuse grid.δv
                 @. R = grid.v - grid.vⁿ - Δt * (grid.f/grid.m)
                 solver.R .= view(flatarray(R), freedofs)
-                isconverged(norm(solver.R) / r⁰, 2) && (ok=true; break)
+                isconverged(norm(solver.R)/r⁰, solver) && (ok=true; break)
 
                 # solve linear equation A⋅δv = -R
                 # P = diagonal_preconditioner!(solver.P, particles, grid, space, Δt, freedofs; parallel)
@@ -114,7 +117,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 # recompute particle stress from grid velocity
                 grid_to_particle!(update_stress!, :∇v, particles, grid, space; alg, system, parallel)
             end
-            ok || @warn "not converged in Newton's method"
+            ok || @warn "Newton's method not converged"
         end
     end
 end
