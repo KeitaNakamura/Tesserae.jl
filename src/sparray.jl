@@ -204,32 +204,31 @@ resize_nonzeros!(A, n) = A
 ###############################
 
 struct NonzeroIndex{I}
-    parent::I
-    i::Int
+    index::I
+    nzindex::Int
 end
-Base.parent(nz::NonzeroIndex) = nz.parent
 @inline function Base.getindex(A::SpArray, nz::NonzeroIndex)
-    @boundscheck checkbounds(nonzeros(A), nz.i)
-    @inbounds nonzeros(A)[nz.i]
+    @boundscheck checkbounds(nonzeros(A), nz.nzindex)
+    @inbounds nonzeros(A)[nz.nzindex]
 end
 @inline function Base.setindex!(A::SpArray, v, nz::NonzeroIndex)
-    @boundscheck checkbounds(nonzeros(A), nz.i)
-    @inbounds nonzeros(A)[nz.i] = v
+    @boundscheck checkbounds(nonzeros(A), nz.nzindex)
+    @inbounds nonzeros(A)[nz.nzindex] = v
     A
 end
 @inline function Base.getindex(A::AbstractArray, nz::NonzeroIndex)
-    @boundscheck checkbounds(A, parent(nz))
-    @inbounds A[parent(nz)]
+    @boundscheck checkbounds(A, nz.index)
+    @inbounds A[nz.index]
 end
 @inline function Base.setindex!(A::AbstractArray, v, nz::NonzeroIndex)
-    @boundscheck checkbounds(A, parent(nz))
-    @inbounds A[parent(nz)] = v
+    @boundscheck checkbounds(A, nz.index)
+    @inbounds A[nz.index] = v
     A
 end
 
-@inline function nonzeroindex(inds::SpIndices, I)
-    @boundscheck checkbounds(inds, I)
-    @inbounds NonzeroIndex(I, inds[I])
+@inline function nonzeroindex(inds::SpIndices, index)
+    @boundscheck checkbounds(inds, index)
+    @inbounds NonzeroIndex(index, inds[index])
 end
 
 struct NonzeroIndices{I, dim, Tparent <: AbstractArray{I, dim}, Tspinds <: SpIndices{dim}} <: AbstractArray{NonzeroIndex{I}, dim}
