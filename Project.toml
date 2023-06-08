@@ -4,6 +4,7 @@ authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
 version = "1.2.1"
 
 [deps]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"

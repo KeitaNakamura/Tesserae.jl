@@ -8,6 +8,7 @@ using Reexport
 using LinearAlgebra
 @reexport using Tensorial
 using StructArrays
+using ForwardDiff: Dual
 
 # SIMD
 import SIMD

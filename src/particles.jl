@@ -5,6 +5,7 @@ const poisson_disk_sampling = PDS.generate
 const Particles = StructVector
 
 eachparticle(particles::Particles) = LazyRows(particles)
+@inline Base.setproperty!(pt::LazyRow, name::Symbol, v::Union{Dual, Tensor{<: Any, <: Dual}}) = setproperty!(pt, name, Tensorial.extract_value(v))
 
 #####################
 # SamplingAlgorithm #
