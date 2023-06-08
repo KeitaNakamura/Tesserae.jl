@@ -207,6 +207,7 @@ struct NonzeroIndex{I}
     index::I
     nzindex::Int
 end
+Base.convert(::Type{I}, nz::NonzeroIndex{I}) where {I} = nz.index
 @inline function Base.getindex(A::SpArray, nz::NonzeroIndex)
     @boundscheck checkbounds(nonzeros(A), nz.nzindex)
     @inbounds nonzeros(A)[nz.nzindex]
