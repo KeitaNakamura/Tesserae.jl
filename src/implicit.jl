@@ -69,22 +69,22 @@ function diagonal_preconditioner!(P::AbstractVector, particles::Particles, grid:
 end
 
 # implicit version of grid_to_particle!
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, fixeddofs::AbstractArray{Bool}; parallel::Bool) where {names}
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool) where {names}
     @assert :∇v in names
-    grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, fixeddofs; alg, system, parallel)
+    grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, isfixed; alg, system, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
     grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
 
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, solver::NewtonSolver{T}, fixeddofs::AbstractArray{Bool}; parallel::Bool) where {dim, T}
-    @assert size(fixeddofs) == (dim, size(grid)...)
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, solver::NewtonSolver{T}, isfixed::AbstractArray{Bool}; parallel::Bool) where {dim, T}
+    @assert size(isfixed) == (dim, size(grid)...)
 
     grid_to_particle!(update_stress!, :∇v, particles, grid, space; alg, system, parallel)
 
     if solver.maxiter != 0
-        freedofs = filter(CartesianIndices(fixeddofs)) do I
+        freedofs = filter(CartesianIndices(isfixed)) do I
             I′ = CartesianIndex(Base.tail(Tuple(I)))
-            @inbounds isnonzero(grid, I′) && !iszero(grid.m[I′]) && !fixeddofs[I]
+            @inbounds isnonzero(grid, I′) && !iszero(grid.m[I′]) && !isfixed[I]
         end
 
         resize!(solver, length(freedofs))

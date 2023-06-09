@@ -128,14 +128,14 @@ function elastic_rings(
         @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m) * !iszero(grid.m)
 
         ## boundary conditions
-        fixeddofs = falses(2, size(grid)...)
+        isfixed = falses(2, size(grid)...)
         @inbounds for i in @view eachindex(grid)[[begin,end],:]
             grid.v[i] = grid.v[i] .* (false,true)
-            fixeddofs[1,i] = true
+            isfixed[1,i] = true
         end
 
         ## implicit G2P transfer
-        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver, fixeddofs; alg) do pt
+        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver, isfixed; alg) do pt
             @inbounds begin
                 F = (I + Δt*pt.∇v) ⋅ pt.Fⁿ
                 V = det(F) * pt.V⁰
