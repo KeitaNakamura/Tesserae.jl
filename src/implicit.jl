@@ -34,8 +34,10 @@ function jacobian_matrix(particles::Particles, grid::Grid, space::MPSpace, Δt::
             flatarray(fillzero!(grid.δv))[freedofs] .= δv
             grid_to_particle!(:∇v, particles, @rename(grid, δv=>v, v=>_), space; alg, system, parallel) do pt
                 @_inline_meta
-                δvₚ = pt.∇v
-                pt.δσ = (pt.ℂ ⊡ δvₚ) / pt.V
+                @inbounds begin
+                    δvₚ = pt.∇v
+                    pt.δσ = (pt.ℂ ⊡ δvₚ) / pt.V
+                end
             end
 
             # particle-to-grid to compute δfᵢ (i.e., ∂fᵢ∂δvᵢ ⋅ δvᵢ)
