@@ -136,14 +136,14 @@ function elastic_rings(
 
         ## implicit G2P transfer
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver, isfixed; alg) do pt
-            @inbounds begin
-                F = (I + Δt*pt.∇v) ⋅ pt.Fⁿ
+            pt.ℂ = gradient(pt.∇v) do ∇v
+                F = (I + Δt*∇v) ⋅ pt.Fⁿ
                 V = det(F) * pt.V⁰
-                dσdF, σ = gradient(F->compute_cauchy_stress(elastic, F), F, :all)
+                σ = compute_cauchy_stress(elastic, F)
                 pt.F = F
                 pt.V = V
                 pt.σ = σ
-                pt.ℂ = Δt * V * (σ ⊗ inv(F)' + dσdF) ⋅ pt.Fⁿ'
+                V * σ
             end
         end
         @. particles.Fⁿ = particles.F
