@@ -113,6 +113,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 # P = diagonal_preconditioner!(solver.P, particles, grid, space, Δt, freedofs; parallel)
                 # solver.linsolve(solver.δv, A, rmul!(solver.R, -1); Pl=P)
                 solver.linsolve(solver.δv, A, rmul!(solver.R, -1))
+                isconverged(norm(solver.δv), solver) && (ok=true; break)
 
                 # update grid velocity
                 v = view(flatarray(grid.v), freedofs)
