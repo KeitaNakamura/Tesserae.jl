@@ -10,17 +10,15 @@ struct NewtonSolver{T, F}
     tol::T
     linsolve::F
     R::Vector{T}
-    P::Vector{T}
     δv::Vector{T}
 end
 function NewtonSolver{T}(; maxiter::Int=50, tol::Real=sqrt(eps(T)), linsolve=default_linsolve) where {T}
-    NewtonSolver(maxiter, tol, linsolve, T[], T[], T[])
+    NewtonSolver(maxiter, tol, linsolve, T[], T[])
 end
 NewtonSolver(; kwargs...) = NewtonSolver{Float64}(; kwargs...)
 
 function Base.resize!(solver::NewtonSolver, n::Integer)
     resize!(solver.R, n)
-    resize!(solver.P, n)
     resize!(solver.δv, n)
     solver
 end
