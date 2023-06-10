@@ -41,19 +41,20 @@ function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles,
 end
 
 # for matrix-free linear solver
-function jacobian_matrix(particles::Particles, grid::Grid, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
-    LinearMap(length(freedofs)) do Jδv, δv
-        flatarray(fillzero!(grid.δv))[freedofs] .= δv
-        recompute_grid_force!(@rename(grid, δv=>v, δf=>f, v=>_v, f=>_f), @rename(particles, δσ=>σ, σ=>_σ), space, alg, system, parallel) do pt
-            @_inline_meta
-            @inbounds begin
-                δvₚ = pt.∇v
-                pt.σ = (pt.ℂ ⊡ δvₚ) / pt.V
-            end
+function jacobian_matrix(grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+    @inline function update_stress!(pt)
+        @inbounds begin
+            δvₚ = pt.∇v
+            pt.σ = (pt.ℂ ⊡ δvₚ) / pt.V
         end
-        # compute J⋅δvᵢ (matrix-vector product)
-        δa = view(flatarray(grid.δf ./= grid.m), freedofs)
-        @. Jδv = δv - Δt * δa
+    end
+    LinearMap(length(freedofs)) do Jδv, δv
+        @inbounds begin
+            flatarray(fillzero!(grid.δv))[freedofs] .= δv
+            recompute_grid_force!(update_stress!, @rename(grid, δv=>v, δf=>f), @rename(particles, δσ=>σ), space, alg, system, parallel)
+            δa = view(flatarray(grid.δf ./= grid.m), freedofs)
+            @. Jδv = δv - Δt * δa
+        end
     end
 end
 
@@ -97,7 +98,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
         end
 
         resize!(solver, length(freedofs))
-        A = jacobian_matrix(particles, grid, space, Δt, freedofs, alg, system, parallel)
+        A = jacobian_matrix(grid, particles, space, Δt, freedofs, alg, system, parallel)
 
         vⁿ = @inbounds view(flatarray(grid.vⁿ), freedofs)
         if !isless_eps(maximum(abs, vⁿ), 1)
