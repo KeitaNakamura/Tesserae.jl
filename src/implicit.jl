@@ -1,6 +1,10 @@
 using IterativeSolvers
 using LinearMaps: LinearMap
 
+function default_linsolve(x, A, b; kwargs...)
+    gmres!(fillzero!(x), A, b; maxiter=15, initially_zero=true, abstol=sqrt(eps(eltype(b))), kwargs...)
+end
+
 struct NewtonSolver{T, F}
     maxiter::Int
     tol::T
@@ -9,9 +13,7 @@ struct NewtonSolver{T, F}
     P::Vector{T}
     δv::Vector{T}
 end
-function NewtonSolver{T}(;maxiter::Int = 40,
-                          tol::Real = sqrt(eps(T)),
-                          linsolve = (x, A, b; kwargs...) -> gmres!(fillzero!(x), A, b; maxiter=20, initially_zero=true, kwargs...)) where {T}
+function NewtonSolver{T}(; maxiter::Int=50, tol::Real=sqrt(eps(T)), linsolve=default_linsolve) where {T}
     NewtonSolver(maxiter, tol, linsolve, T[], T[], T[])
 end
 NewtonSolver(; kwargs...) = NewtonSolver{Float64}(; kwargs...)
