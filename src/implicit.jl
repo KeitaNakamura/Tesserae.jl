@@ -2,7 +2,7 @@ using IterativeSolvers
 using LinearMaps: LinearMap
 
 function default_linsolve(x, A, b; kwargs...)
-    gmres!(fillzero!(x), A, b; maxiter=15, initially_zero=true, abstol=sqrt(eps(eltype(b))), kwargs...)
+    gmres!(fillzero!(x), A, b; maxiter=20, initially_zero=true, abstol=sqrt(eps(eltype(b))), kwargs...)
 end
 
 struct NewtonSolver{T, F}
