@@ -46,6 +46,7 @@ function elastic_rings(
         vⁿ :: Vec{2, Float64}
         ## for implicit method
         δv :: Vec{2, Float64}
+        δf :: Vec{2, Float64}
     end
     ParticleState = @NamedTuple begin
         x  :: Vec{2, Float64}
