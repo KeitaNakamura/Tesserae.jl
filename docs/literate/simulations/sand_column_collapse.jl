@@ -143,19 +143,26 @@ function sand_column_collapse(
         ## G2P transfer
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg) do pt
             @inbounds begin
+                ## trial state
                 f = I + Δt*pt.∇v                     # relative deformation gradient
                 bᵉᵗʳ = symmetric(f ⋅ pt.bᵉ ⋅ f', :U) # trial elastic left Cauchy-Green deformation tensor
-                λᵉᵗʳₐ², mₐ = to_principal(bᵉᵗʳ)
-                ϵᵉᵗʳ = log.(λᵉᵗʳₐ²) / 2              # Hencky strain
+
+                ## computation in principal axes
+                λᵉᵗʳₐ², vecs = eigen(bᵉᵗʳ)
+                n₁, n₂, n₃ = vecs[:,1], vecs[:,2], vecs[:,3]
+                ϵᵉᵗʳ = log.(λᵉᵗʳₐ²) / 2                      # Hencky strain
                 τₐ = compute_stress(model, ϵᵉᵗʳ)
-                τ = from_principal(τₐ, mₐ)           # Kirchhoff stress
-                bᵉ = from_principal(exp.(2*compute_strain(elastic, τₐ)), mₐ)
+                λᵉₐ² = exp.(2*compute_strain(elastic, τₐ))
+
+                ## update
                 F = f ⋅ pt.F
                 J = det(F)
-                pt.σ = τ / J
-                pt.bᵉ = bᵉ
+                τ = symmetric(τₐ[1]*(n₁ ⊗ n₁) + τₐ[2]*(n₂ ⊗ n₂) + τₐ[3]*(n₃ ⊗ n₃), :U)        # Kirchhoff stress
+                bᵉ = symmetric(λᵉₐ²[1]*(n₁ ⊗ n₁) + λᵉₐ²[2]*(n₂ ⊗ n₂) + λᵉₐ²[3]*(n₃ ⊗ n₃), :U) # elastic left Cauchy-Green deformation tensor
                 pt.F = F
                 pt.V = J * pt.V₀
+                pt.σ = τ / J
+                pt.bᵉ = bᵉ
             end
         end
 
