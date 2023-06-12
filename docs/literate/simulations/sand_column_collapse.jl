@@ -120,9 +120,7 @@ function sand_column_collapse(
         @. grid.vⁿ = grid.mv / grid.m
         @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m)
 
-        ## boundary conditions
-
-        ## consider friction on the floor
+        ## boundary conditions: consider friction on the floor
         @inbounds for i in @view eachindex(grid)[:,begin]
             μ = 0.4 # friction coefficient
             n = Vec(0,-1)
@@ -157,8 +155,8 @@ function sand_column_collapse(
                 ## update
                 F = f ⋅ pt.F
                 J = det(F)
-                τ = symmetric(τₐ[1]*(n₁ ⊗ n₁) + τₐ[2]*(n₂ ⊗ n₂) + τₐ[3]*(n₃ ⊗ n₃), :U)        # Kirchhoff stress
-                bᵉ = symmetric(λᵉₐ²[1]*(n₁ ⊗ n₁) + λᵉₐ²[2]*(n₂ ⊗ n₂) + λᵉₐ²[3]*(n₃ ⊗ n₃), :U) # elastic left Cauchy-Green deformation tensor
+                τ = symmetric(τₐ[1]*(n₁ ⊗ n₁) + τₐ[2]*(n₂ ⊗ n₂) + τₐ[3]*(n₃ ⊗ n₃), :U)
+                bᵉ = symmetric(λᵉₐ²[1]*(n₁ ⊗ n₁) + λᵉₐ²[2]*(n₂ ⊗ n₂) + λᵉₐ²[3]*(n₃ ⊗ n₃), :U)
                 pt.F = F
                 pt.V = J * pt.V₀
                 pt.σ = τ / J
