@@ -7,6 +7,7 @@ using Base.Cartesian: @ntuple, @nall, @nexprs
 using Reexport
 using LinearAlgebra
 @reexport using Tensorial
+using Tensorial: AbstractSquareTensor
 using StructArrays
 using ForwardDiff: Dual
 

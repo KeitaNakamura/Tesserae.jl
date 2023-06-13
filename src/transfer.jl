@@ -382,14 +382,14 @@ end
 end
 
 # 1D
-@inline calc_fint(::DefaultSystem, ∇N::Vec{1}, Vₚσₚ::SymmetricSecondOrderTensor{1}) = Vₚσₚ ⋅ ∇N
+@inline calc_fint(::DefaultSystem, ∇N::Vec{1}, Vₚσₚ::AbstractSquareTensor{1}) = Vₚσₚ ⋅ ∇N
 # plane-strain
-@inline calc_fint(::Union{DefaultSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{3}) = @Tensor(Vₚσₚ[1:2,1:2]) ⋅ ∇N
-@inline calc_fint(::Union{DefaultSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{2}) = Vₚσₚ ⋅ ∇N
+@inline calc_fint(::Union{DefaultSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::AbstractSquareTensor{3}) = @Tensor(Vₚσₚ[1:2,1:2]) ⋅ ∇N
+@inline calc_fint(::Union{DefaultSystem, PlaneStrain}, ∇N::Vec{2}, Vₚσₚ::AbstractSquareTensor{2}) = Vₚσₚ ⋅ ∇N
 # axisymmetric
-@inline calc_fint(::Axisymmetric, N::Real, ∇N::Vec{2}, Vₚσₚ::SymmetricSecondOrderTensor{3}, rₚ::Real) = @Tensor(Vₚσₚ[1:2,1:2])⋅∇N + Vec(1,0)*Vₚσₚ[3,3]*N/rₚ
+@inline calc_fint(::Axisymmetric, N::Real, ∇N::Vec{2}, Vₚσₚ::AbstractSquareTensor{3}, rₚ::Real) = @Tensor(Vₚσₚ[1:2,1:2])⋅∇N + Vec(1,0)*Vₚσₚ[3,3]*N/rₚ
 # 3D
-@inline calc_fint(::DefaultSystem, ∇N::Vec{3}, Vₚσₚ::SymmetricSecondOrderTensor{3}) = Vₚσₚ ⋅ ∇N
+@inline calc_fint(::DefaultSystem, ∇N::Vec{3}, Vₚσₚ::AbstractSquareTensor{3}) = Vₚσₚ ⋅ ∇N
 
 ################
 # G2P transfer #
