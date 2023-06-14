@@ -52,10 +52,10 @@ function jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles,
     end
     LinearMap(length(freedofs)) do Jδv, δv
         @inbounds begin
-            @. $(flatarray(fillzero!(grid.δv)))[freedofs] = solver.θ * δv
+            flatarray(fillzero!(grid.δv))[freedofs] .= δv
             recompute_grid_force!(update_stress!, @rename(grid, δv=>v, δf=>f), @rename(particles, δσ=>σ), space, alg, system, parallel)
             δa = view(flatarray(grid.δf ./= grid.m), freedofs)
-            @. Jδv = δv - Δt * δa
+            @. Jδv = δv - solver.θ * Δt * δa
         end
     end
 end
