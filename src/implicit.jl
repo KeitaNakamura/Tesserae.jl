@@ -9,12 +9,13 @@ end
 struct NewtonSolver{T, F}
     maxiter::Int
     tol::T
+    θ::T
     linsolve::F
     R::Vector{T}
     δv::Vector{T}
 end
-function NewtonSolver{T}(; maxiter::Int=50, tol::Real=sqrt(eps(T)), linsolve=default_linsolve) where {T}
-    NewtonSolver(maxiter, tol, linsolve, T[], T[])
+function NewtonSolver{T}(; maxiter::Int=50, tol::Real=sqrt(eps(T)), implicit_parameter::Real=1, linsolve=default_linsolve) where {T}
+    NewtonSolver(maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[])
 end
 NewtonSolver(; kwargs...) = NewtonSolver{Float64}(; kwargs...)
 
@@ -42,7 +43,7 @@ function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles,
 end
 
 # for matrix-free linear solver
-function jacobian_matrix(grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
         @inbounds begin
             δvₚ = pt.∇v
@@ -51,7 +52,7 @@ function jacobian_matrix(grid::Grid, particles::Particles, space::MPSpace, Δt::
     end
     LinearMap(length(freedofs)) do Jδv, δv
         @inbounds begin
-            flatarray(fillzero!(grid.δv))[freedofs] .= δv
+            @. $(flatarray(fillzero!(grid.δv)))[freedofs] = solver.θ * δv
             recompute_grid_force!(update_stress!, @rename(grid, δv=>v, δf=>f), @rename(particles, δσ=>σ), space, alg, system, parallel)
             δa = view(flatarray(grid.δf ./= grid.m), freedofs)
             @. Jδv = δv - Δt * δa
@@ -88,9 +89,11 @@ end
 
 function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, solver::NewtonSolver{T}, isfixed::AbstractArray{Bool}; parallel::Bool) where {dim, T}
     @assert size(isfixed) == (dim, size(grid)...)
+    θ = solver.θ
 
     # recompute particle stress and grid force
-    recompute_grid_force!(update_stress!, grid, particles, space, alg, system, parallel)
+    @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v
+    recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space, alg, system, parallel)
 
     if solver.maxiter != 0
         freedofs = filter(CartesianIndices(isfixed)) do I
@@ -99,7 +102,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
         end
 
         resize!(solver, length(freedofs))
-        A = jacobian_matrix(grid, particles, space, Δt, freedofs, alg, system, parallel)
+        A = jacobian_matrix(solver, grid, particles, space, Δt, freedofs, alg, system, parallel)
 
         vⁿ = @inbounds view(flatarray(grid.vⁿ), freedofs)
         if !isless_eps(maximum(abs, vⁿ), 1)
@@ -122,7 +125,8 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 @. v += solver.δv
 
                 # recompute particle stress and grid force
-                recompute_grid_force!(update_stress!, grid, particles, space, alg, system, parallel)
+                @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v
+                recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space, alg, system, parallel)
             end
             @warn "Newton's method not converged"
         end
