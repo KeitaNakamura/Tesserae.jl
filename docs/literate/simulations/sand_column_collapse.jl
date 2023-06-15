@@ -29,7 +29,7 @@ function sand_column_collapse(
     end                                       #src
 
     ## material constants for soil (Drucker-Prager model with linear elastic model)
-    ρ₀      = 1.5e3 # initial density
+    ρ⁰      = 1.5e3 # initial density
     elastic = LinearElastic(; E=1e6, ν=0.3)
     model   = DruckerPrager(:plane_strain, elastic; c=0.0, ϕ=deg2rad(35), ψ=deg2rad(0))
 
@@ -46,7 +46,7 @@ function sand_column_collapse(
         x  :: Vec{2, Float64}
         m  :: Float64
         V  :: Float64
-        V₀ :: Float64
+        V⁰ :: Float64
         v  :: Vec{2, Float64}
         ∇v :: SecondOrderTensor{3, Float64, 9}
         F  :: SecondOrderTensor{3, Float64, 9}
@@ -72,14 +72,14 @@ function sand_column_collapse(
     for pt in eachparticle(particles)
         ν = elastic.ν
         y = pt.x[2]
-        σ_y = -ρ₀ * g * (h-y)
+        σ_y = -ρ⁰ * g * (h-y)
         σ_x = σ_y * ν / (1-ν)
         pt.σ = symmetric(@Mat [σ_x 0   0
                                0   σ_y 0
                                0   0   σ_x])
     end
-    @. particles.m = ρ₀ * particles.V
-    @. particles.V₀ = particles.V
+    @. particles.m = ρ⁰ * particles.V
+    @. particles.V⁰ = particles.V
     @. particles.F = one(particles.F)
     @. particles.bᵉ = one(particles.bᵉ)
     @. particles.b = Vec(0, -g)
@@ -158,7 +158,7 @@ function sand_column_collapse(
                 τ = symmetric(τₐ[1]*(n₁ ⊗ n₁) + τₐ[2]*(n₂ ⊗ n₂) + τₐ[3]*(n₃ ⊗ n₃), :U)
                 bᵉ = symmetric(λᵉₐ²[1]*(n₁ ⊗ n₁) + λᵉₐ²[2]*(n₂ ⊗ n₂) + λᵉₐ²[3]*(n₃ ⊗ n₃), :U)
                 pt.F = F
-                pt.V = J * pt.V₀
+                pt.V = J * pt.V⁰
                 pt.σ = τ / J
                 pt.bᵉ = bᵉ
             end

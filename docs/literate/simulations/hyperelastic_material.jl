@@ -29,7 +29,7 @@ function hyperelastic_material(
     end                                       #src
 
     ## material constants
-    ρ₀      = 1.0e3 # initial density
+    ρ⁰      = 1.0e3 # initial density
     elastic = NeoHookean(; E=1e6, ν=0.3)
 
     ## states for grid and particles
@@ -45,7 +45,7 @@ function hyperelastic_material(
         x  :: Vec{3, Float64}
         m  :: Float64
         V  :: Float64
-        V₀ :: Float64
+        V⁰ :: Float64
         v  :: Vec{3, Float64}
         ∇v :: SecondOrderTensor{3, Float64, 9}
         σ  :: SymmetricSecondOrderTensor{3, Float64, 6}
@@ -82,8 +82,8 @@ function hyperelastic_material(
         end
     end
     end                                                                                                                        #src
-    @. particles.V₀ = particles.V
-    @. particles.m  = ρ₀ * particles.V
+    @. particles.V⁰ = particles.V
+    @. particles.m  = ρ⁰ * particles.V
     @. particles.F  = one(particles.F)
     @. particles.b  = Vec(0,-g,0)
     @show length(particles)
@@ -140,7 +140,7 @@ function hyperelastic_material(
                 F = (I + Δt*pt.∇v) ⋅ pt.F
                 pt.σ = compute_cauchy_stress(elastic, F)
                 pt.F = F
-                pt.V = det(F) * pt.V₀
+                pt.V = det(F) * pt.V⁰
             end
         end
 

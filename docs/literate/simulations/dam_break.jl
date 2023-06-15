@@ -27,7 +27,7 @@ function dam_break(
     end                                       #src
 
     ## material constants for water
-    ρ₀ = 1.0e3   # initial density
+    ρ⁰ = 1.0e3   # initial density
     μ  = 1.01e-3 # dynamic viscosity (Pa⋅s)
     c  = 60.0    # speed of sound (m/s)
 
@@ -63,7 +63,7 @@ function dam_break(
     else                                                                                                                 #src
     particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid.x)
     end                                                                                                                  #src
-    @. particles.m = ρ₀ * particles.V
+    @. particles.m = ρ⁰ * particles.V
     @. particles.b = Vec(0, -g)
     @show length(particles)
 
@@ -115,7 +115,7 @@ function dam_break(
                 d = symmetric(pt.∇v)
                 V = pt.V * exp(tr(d)*Δt)
                 ρ = pt.m / V
-                p = c^2 * (ρ - ρ₀)
+                p = c^2 * (ρ - ρ⁰)
                 pt.σ = -p*I + 2μ*dev(d)
                 pt.V = V
             end

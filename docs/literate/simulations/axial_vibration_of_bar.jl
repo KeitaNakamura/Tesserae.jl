@@ -114,7 +114,7 @@ function axial_vibration_of_bar(
 
     ## simulation parameters
     n = nmodes
-    v₀ = 0.1
+    v⁰ = 0.1
 
     ## material constants
     E = 100
@@ -125,7 +125,7 @@ function axial_vibration_of_bar(
     ## exact solution
     βₙ = (2n-1)/2 * π/L
     ωₙ = βₙ * √(E/ρ)
-    v(x,t) = v₀ * cos(ωₙ*t) * sin.(βₙ*x)
+    v(x,t) = v⁰ * cos(ωₙ*t) * sin.(βₙ*x)
 
     ## states for grid and particles
     GridState = @NamedTuple begin
@@ -176,7 +176,7 @@ function axial_vibration_of_bar(
         t += Δt
 
         ## store results
-        v_exa = v₀/(βₙ*L) * cos(ωₙ*t)
+        v_exa = v⁰/(βₙ*L) * cos(ωₙ*t)
         v_num = only(sum(@. particles.v * particles.m) / sum(particles.m))
         Ek = 1/2 * sum(@. particles.v ⋅ particles.v * particles.m)
         Es = 1/2 * sum(@. particles.σ ⊡ particles.ϵ * particles.V)
