@@ -62,6 +62,7 @@ end
 
 function diagonal_preconditioner!(P::AbstractVector, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freedofs::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
     fill!(P, 1)
+    fillzero!(grid.δv)
     parallel_each_particle(space; parallel) do p
         @_inline_meta
         @inbounds begin
@@ -75,8 +76,8 @@ function diagonal_preconditioner!(P::AbstractVector, particles::Particles, grid:
             end
         end
     end
-    @. grid.δv *= -Δt / grid.m
-    Diagonal(broadcast!(-, P, P, view(flatarray(grid.δv), freedofs)))
+    @. grid.δv *= Δt / grid.m
+    Diagonal(broadcast!(+, P, P, view(flatarray(grid.δv), freedofs)))
 end
 
 # implicit version of grid_to_particle!
