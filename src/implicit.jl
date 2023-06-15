@@ -46,8 +46,8 @@ end
 function jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
         @inbounds begin
-            δvₚ = pt.∇v
-            pt.σ = (pt.ℂ ⊡ δvₚ) / pt.V
+            ∇δvₚ = pt.∇v
+            pt.σ = (pt.ℂ ⊡ ∇δvₚ) / pt.V
         end
     end
     LinearMap(length(freedofs)) do Jδv, δv
