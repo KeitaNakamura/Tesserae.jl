@@ -89,7 +89,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
     @assert :∇v in names
     grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, isfixed; alg, system, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
-    grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
+    !isempty(rest) && grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
 
 function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, solver::NewtonSolver{T}, isfixed::AbstractArray{Bool}; parallel::Bool) where {dim, T}
