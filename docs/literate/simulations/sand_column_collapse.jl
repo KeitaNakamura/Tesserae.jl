@@ -117,8 +117,8 @@ function sand_column_collapse(
         particle_to_grid!((:m,:mv,:f), fillzero!(grid), particles, space; alg)
 
         ## solve momentum equation
-        @. grid.vⁿ = grid.mv / grid.m
-        @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m)
+        @. grid.vⁿ = grid.mv / grid.m * !iszero(grid.m)
+        @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m) * !iszero(grid.m)
 
         ## boundary conditions: consider friction on the floor
         @inbounds for i in @view eachindex(grid)[:,begin]
