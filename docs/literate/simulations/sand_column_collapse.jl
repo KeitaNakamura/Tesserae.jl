@@ -139,30 +139,7 @@ function sand_column_collapse(
         end
 
         ## G2P transfer
-        grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg) do pt
-            @inbounds begin
-                ## trial state
-                f = I + Δt*pt.∇v                     # relative deformation gradient
-                bᵉᵗʳ = symmetric(f ⋅ pt.bᵉ ⋅ f', :U) # trial elastic left Cauchy-Green deformation tensor
-
-                ## computation in principal axes
-                λᵉᵗʳₐ², vecs = eigen(bᵉᵗʳ)
-                n₁, n₂, n₃ = vecs[:,1], vecs[:,2], vecs[:,3]
-                ϵᵉᵗʳ = log.(λᵉᵗʳₐ²) / 2                      # Hencky strain
-                τₐ = compute_stress(model, ϵᵉᵗʳ)
-                λᵉₐ² = exp.(2*compute_strain(elastic, τₐ))
-
-                ## update
-                F = f ⋅ pt.F
-                J = det(F)
-                τ = symmetric(τₐ[1]*(n₁ ⊗ n₁) + τₐ[2]*(n₂ ⊗ n₂) + τₐ[3]*(n₃ ⊗ n₃), :U)
-                bᵉ = symmetric(λᵉₐ²[1]*(n₁ ⊗ n₁) + λᵉₐ²[2]*(n₂ ⊗ n₂) + λᵉₐ²[3]*(n₃ ⊗ n₃), :U)
-                pt.F = F
-                pt.V = J * pt.V⁰
-                pt.σ = τ / J
-                pt.bᵉ = bᵉ
-            end
-        end
+        grid_to_particle!(pt->update_stress!(pt,model,Δt), (:v,:∇v,:x), particles, grid, space, Δt; alg)
 
         t += Δt
         step += 1
@@ -180,6 +157,39 @@ function sand_column_collapse(
         end #src
     end
     ifelse(test, particles, nothing) #src
+end
+
+@inline function update_stress!(pt, model, Δt)
+    @inbounds begin
+        ## trial elastic left Cauchy-Green deformation tensor
+        f = I + Δt*pt.∇v
+        bᵉᵗʳ = symmetric(f ⋅ pt.bᵉ ⋅ f', :U)
+
+        ## computation in principal axes
+        λᵉᵗʳₐ², vecs = eigen(bᵉᵗʳ)
+        nₐ = (vecs[:,1], vecs[:,2], vecs[:,3])
+        ϵᵉᵗʳ = log.(λᵉᵗʳₐ²) / 2 # Hencky strain
+        τₐ = compute_stress(model, ϵᵉᵗʳ)
+        λᵉₐ² = exp.(2*compute_strain(model.elastic, τₐ))
+
+        ## update
+        F = f ⋅ pt.F
+        J = det(F)
+        τ = from_principal(τₐ, nₐ)
+        bᵉ = from_principal(λᵉₐ², nₐ)
+        pt.F = F
+        pt.V = J * pt.V⁰
+        pt.σ = τ / J
+        pt.bᵉ = bᵉ
+    end
+end
+
+@inline function from_principal(v::Vec{3, T}, n::NTuple{3, Vec{dim, T}}) where {dim, T}
+    V = zero(SymmetricSecondOrderTensor{dim, T})
+    @inbounds @simd for A in 1:3
+        V += symmetric(v[A] * (n[A] ⊗ n[A]), :U)
+    end
+    V
 end
 
 ## check the result                                                                                                                                          #src
