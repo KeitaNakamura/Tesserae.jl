@@ -28,7 +28,7 @@ end
 isless_eps(x::Real, p::Int) = abs(x) < eps(typeof(x))^(1/p)
 isconverged(x::Real, solver::NewtonSolver) = abs(x) < solver.tol
 
-function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
     fillzero!(grid.f)
     parallel_each_particle(space; parallel) do p
         @inbounds begin
@@ -40,6 +40,10 @@ function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles,
             particle_to_grid!(alg, system, Val((:f,)), grid, pt, itp, mp)
         end
     end
+end
+function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, solver::NewtonSolver; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
+    @. grid.δv = (1-solver.θ)*grid.vⁿ + solver.θ*grid.v
+    recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
 end
 
 # for matrix-free linear solver
@@ -53,7 +57,7 @@ function jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles,
     LinearMap(length(freedofs)) do Jδv, δv
         @inbounds begin
             flatarray(fillzero!(grid.δv))[freedofs] .= δv
-            recompute_grid_force!(update_stress!, @rename(grid, δv=>v, δf=>f), @rename(particles, δσ=>σ), space, alg, system, parallel)
+            recompute_grid_force!(update_stress!, @rename(grid, δv=>v, δf=>f), @rename(particles, δσ=>σ), space; alg, system, parallel)
             δa = view(flatarray(grid.δf ./= grid.m), freedofs)
             @. Jδv = δv - solver.θ * Δt * δa
         end
@@ -90,11 +94,9 @@ end
 
 function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, solver::NewtonSolver{T}, isfixed::AbstractArray{Bool}; parallel::Bool) where {dim, T}
     @assert size(isfixed) == (dim, size(grid)...)
-    θ = solver.θ
 
     # recompute particle stress and grid force
-    @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v
-    recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space, alg, system, parallel)
+    recompute_grid_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
 
     if solver.maxiter != 0
         freedofs = filter(CartesianIndices(isfixed)) do I
@@ -126,8 +128,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 @. v += solver.δv
 
                 # recompute particle stress and grid force
-                @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v
-                recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space, alg, system, parallel)
+                recompute_grid_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
             end
             @warn "Newton's method not converged"
         end
