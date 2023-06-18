@@ -46,8 +46,7 @@ function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles,
     recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
 end
 
-# for matrix-free linear solver
-function jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function matrix_free_jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
         @inbounds begin
             ∇δvₚ = pt.∇v
@@ -105,7 +104,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
         end
 
         resize!(solver, length(freedofs))
-        A = jacobian_matrix(solver, grid, particles, space, Δt, freedofs, alg, system, parallel)
+        A = matrix_free_jacobian_matrix(solver, grid, particles, space, Δt, freedofs, alg, system, parallel)
 
         vⁿ = @inbounds view(flatarray(grid.vⁿ), freedofs)
         if !isless_eps(maximum(abs, vⁿ), 1)
