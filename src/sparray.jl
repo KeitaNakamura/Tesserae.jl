@@ -152,7 +152,7 @@ end
 Base.IndexStyle(::Type{<: SpArray}) = IndexCartesian()
 Base.size(A::SpArray) = size(A.spinds)
 
-nonzeros(A::SpArray) = A.data
+SparseArrays.nonzeros(A::SpArray) = A.data
 get_spinds(A::SpArray) = A.spinds
 
 # return zero if the index is not active

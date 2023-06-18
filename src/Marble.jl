@@ -6,6 +6,7 @@ using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using Reexport
 using LinearAlgebra
+using SparseArrays
 @reexport using Tensorial
 using Tensorial: AbstractSquareTensor
 using StructArrays
@@ -86,7 +87,8 @@ export
     TPIC,
     WLSTransfer,
 # implicit
-    NewtonSolver,
+    JacobianFreeNewtonSolver,
+    JacobianBasedNewtonSolver,
 # VTK
     openvtk,
     openvtm,
