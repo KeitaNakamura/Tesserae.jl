@@ -63,8 +63,8 @@ function matrix_free_jacobian_matrix(solver::NewtonSolver, grid::Grid, particles
     end
 end
 
-function diagonal_preconditioner!(P::AbstractVector, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freedofs::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
-    fill!(P, 1)
+function diagonal_preconditioner!(solver::NewtonSolver, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freedofs::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
+    fill!(solver.P, 1)
     fillzero!(grid.δv)
     parallel_each_particle(space; parallel) do p
         @_inline_meta
@@ -79,8 +79,8 @@ function diagonal_preconditioner!(P::AbstractVector, particles::Particles, grid:
             end
         end
     end
-    @. grid.δv *= Δt / grid.m
-    Diagonal(broadcast!(+, P, P, view(flatarray(grid.δv), freedofs)))
+    @. grid.δv *= solver.θ * Δt / grid.m
+    Diagonal(broadcast!(+, solver.P, solver.P, view(flatarray(grid.δv), freedofs)))
 end
 
 # implicit version of grid_to_particle!
@@ -117,8 +117,8 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 isconverged(norm(solver.R)/r⁰, solver) && return
 
                 # solve linear equation A⋅δv = -R
-                # P = diagonal_preconditioner!(solver.P, particles, grid, space, Δt, freedofs, parallel)
-                # solver.linsolve(solver.δv, A, rmul!(solver.R, -1); Pl=P)
+                # P = diagonal_preconditioner!(solver, particles, grid, space, Δt, freedofs, parallel)
+                # solver.linsolve(solver.δv, A, rmul!(solver.R, -1); Pr=P)
                 solver.linsolve(solver.δv, A, rmul!(solver.R, -1))
                 isconverged(norm(solver.δv), solver) && return
 
