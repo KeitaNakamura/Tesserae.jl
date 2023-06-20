@@ -7,7 +7,7 @@ The unchanged GIMP kernel [^uGIMP].
 """
 struct uGIMP <: Kernel end
 
-gridsize(::uGIMP) = 3
+gridsize(::uGIMP, ::Val{dim}) where {dim} = nfill(3, Val(dim))
 
 @inline function neighbornodes(::uGIMP, lattice::Lattice, pt)
     dx⁻¹ = spacing_inv(lattice)
@@ -43,7 +43,7 @@ end
 end
 
 function MPValuesInfo{dim, T}(itp::uGIMP) where {dim, T}
-    dims = nfill(gridsize(itp), Val(dim))
+    dims = gridsize(itp, Val(dim))
     values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
     sizes = (dims, dims)
     MPValuesInfo{dim, T}(values, sizes)

@@ -36,9 +36,9 @@ The peaks of this funciton are centered on the grid nodes [^Steffen].
 """
 const CubicBSpline = BSpline{3}
 
-gridsize(::BSpline{1}) = 2
-gridsize(::BSpline{2}) = 3
-gridsize(::BSpline{3}) = 4
+gridsize(::BSpline{1}, ::Val{dim}) where {dim} = nfill(2, Val(dim))
+gridsize(::BSpline{2}, ::Val{dim}) where {dim} = nfill(3, Val(dim))
+gridsize(::BSpline{3}, ::Val{dim}) where {dim} = nfill(4, Val(dim))
 
 @inline neighbornodes(::BSpline{1}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.0)
 @inline neighbornodes(::BSpline{2}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.5)
@@ -220,7 +220,7 @@ end
 end
 
 function MPValuesInfo{dim, T}(itp::BSpline{order}) where {dim, T, order}
-    dims = nfill(gridsize(itp), Val(dim))
+    dims = gridsize(itp, Val(dim))
     values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
     sizes = (dims, dims)
     MPValuesInfo{dim, T}(values, sizes)
