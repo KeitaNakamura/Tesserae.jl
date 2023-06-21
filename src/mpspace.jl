@@ -94,8 +94,9 @@ function parallel_each_particle(f, space::MPSpace; parallel::Bool=true)
     parallel_each_particle(f, get_blockspace(space), num_particles(space); parallel)
 end
 
-function Base.show(io::IO, space::MPSpace)
+function Base.show(io::IO, space::MPSpace{dim, T}) where {dim, T}
     print(io, "MPSpace:\n")
+    print(io, "  T: ", T, "\n")
     print(io, "  Interpolation: ", get_interpolation(space), "\n")
     print(io, "  Grid size: ", gridsize(space), "\n")
     print(io, "  Particles: ", commas(num_particles(space)))
