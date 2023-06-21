@@ -88,7 +88,6 @@ export
     WLSTransfer,
 # implicit
     JacobianFreeNewtonSolver,
-    JacobianBasedNewtonSolver,
 # VTK
     openvtk,
     openvtm,
