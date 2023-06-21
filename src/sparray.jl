@@ -37,7 +37,7 @@ Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()
 end
 @inline function blocklocal(I::Vararg{Integer, dim}) where {dim}
     blk, lcl = _blocklocal(I...)
-    LI = LinearIndices(nfill(1 .<< BLOCKFACTOR, Val(dim)))
+    LI = LinearIndices(nfill(1 << BLOCKFACTOR, Val(dim)))
     @inbounds blk, LI[lcl...]
 end
 
