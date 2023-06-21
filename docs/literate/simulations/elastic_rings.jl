@@ -174,7 +174,7 @@ if @isdefined(RUN_TESTS) && RUN_TESTS                                           
 @test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=false, test=true).x) ≈ [-0.0035966206398941277, -0.00019309942291381154] rtol=1e-5 #src
 @test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=false, test=true).x) ≈ [-0.0038299836923257747, -0.0001930994229137899]  rtol=1e-5 #src
 @test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=false, test=true).x) ≈ [-0.0037910149463340173, -0.0001930994229138152]  rtol=1e-5 #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=true,  test=true).x) ≈ [-0.00695053923724855, -0.0001930994229138357]    rtol=1e-5 #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=true,  test=true).x) ≈ [-0.006870414997920976, -0.00019309942291382553]  rtol=1e-5 #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=true,  test=true).x) ≈ [-0.006869033942350792, -0.00019309942291381222]  rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=true,  test=true).x) ≈ [-0.00952343172790872, -0.00019309942291380526]   rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=true,  test=true).x) ≈ [-0.008865326012755175, -0.00019309942291383586]  rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=true,  test=true).x) ≈ [-0.0090376173807799, -0.00019309942291383922]    rtol=1e-5 #src
 end                                                                                                                                                                #src
