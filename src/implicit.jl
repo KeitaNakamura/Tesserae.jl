@@ -64,7 +64,7 @@ end
 
 function default_jacobian_free_linsolve(x, A, b; kwargs...)
     T = eltype(b)
-    gmres!(fillzero!(x), A, b; maxiter=15, initially_zero=true, abstol=T(0.1), reltol=T(0.1), kwargs...)
+    gmres!(fillzero!(x), A, b; maxiter=15, initially_zero=true, abstol=T(1e-5), reltol=T(1e-5), kwargs...)
 end
 
 struct JacobianFreeNewtonSolver{T, F, dim} <: NewtonSolver
