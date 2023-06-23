@@ -127,7 +127,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
         freedofs = compute_freedofs(grid, isfixed)
 
         resize!(solver, length(freedofs))
-        A = jacobian_matrix(solver, grid, particles, space, Δt, freedofs, alg, system, parallel)
+        A = jacobian_matrix(solver, grid, particles, space, Δt, freedofs, alg, system, length(particles)>50_000)
 
         vⁿ = @inbounds view(flatarray(grid.vⁿ), freedofs)
         if !isless_eps(maximum(abs, vⁿ), 1)
