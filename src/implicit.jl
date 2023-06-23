@@ -80,7 +80,7 @@ function JacobianFreeNewtonSolver{T}(grid::Grid{dim}; maxiter::Int=50, tol::Real
     griddofs = Array{Vec{dim, Int}}(undef, size(grid))
     JacobianFreeNewtonSolver(maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], griddofs)
 end
-JacobianFreeNewtonSolver(grid; kwargs...) = JacobianFreeNewtonSolver{Float64}(grid; kwargs...)
+JacobianFreeNewtonSolver(grid::Grid; kwargs...) = JacobianFreeNewtonSolver{Float64}(grid; kwargs...)
 
 function jacobian_matrix(solver::JacobianFreeNewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
@@ -213,7 +213,7 @@ function JacobianBasedNewtonSolver{T}(grid::Grid{dim}; maxiter::Int=50, tol::Rea
     spmat_mask = Array{Bool}(undef, size(grid)..., size(grid)...)
     JacobianBasedNewtonSolver(maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], griddofs, SparseMatrixCSCCache{Bool, Int, T}(), spmat_mask)
 end
-JacobianBasedNewtonSolver(grid; kwargs...) = JacobianBasedNewtonSolver{Float64}(grid; kwargs...)
+JacobianBasedNewtonSolver(grid::Grid; kwargs...) = JacobianBasedNewtonSolver{Float64}(grid; kwargs...)
 
 function sparsity_pattern!(solver::JacobianBasedNewtonSolver, space::MPSpace{dim, T}, freedofs::AbstractVector{<: CartesianIndex}) where {dim, T}
     griddofs = solver.griddofs
