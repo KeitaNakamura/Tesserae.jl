@@ -87,7 +87,7 @@ export
     TPIC,
     WLSTransfer,
 # implicit
-    JacobianFreeNewtonSolver,
+    NewtonSolver,
 # VTK
     openvtk,
     openvtm,

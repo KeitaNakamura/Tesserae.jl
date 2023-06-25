@@ -91,9 +91,9 @@ function elastic_rings(
 
     ## implicit method
     if implicit
-        solver = JacobianFreeNewtonSolver(size(grid); implicit_parameter=0.5)
+        solver = NewtonSolver(size(grid); implicit_parameter=0.5)
     else
-        solver = JacobianFreeNewtonSolver(size(grid); maxiter=0)
+        solver = NewtonSolver(size(grid); maxiter=0)
     end
 
     ## outputs

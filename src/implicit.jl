@@ -11,12 +11,12 @@ function compute_freedofs(grid::Grid{dim}, isfixed::AbstractArray{Bool}) where {
     end
 end
 
-abstract type NewtonSolver end
+abstract type AbstractNewtonSolver end
 
 isless_eps(x::Real, p::Int) = abs(x) < eps(typeof(x))^(1/p)
-isconverged(x::Real, solver::NewtonSolver) = abs(x) < solver.tol
+isconverged(x::Real, solver::AbstractNewtonSolver) = abs(x) < solver.tol
 
-@inline function compute_residual!(solver::NewtonSolver, grid::Grid, Δt::Real, flatfreeinds::AbstractVector{<: CartesianIndex})
+@inline function compute_residual!(solver::AbstractNewtonSolver, grid::Grid, Δt::Real, flatfreeinds::AbstractVector{<: CartesianIndex})
     @boundscheck checkbounds(flatarray(grid.v), flatfreeinds)
     @inbounds begin
         R = grid.δv # reuse grid.δv
@@ -25,7 +25,7 @@ isconverged(x::Real, solver::NewtonSolver) = abs(x) < solver.tol
     end
 end
 
-function Base.resize!(solver::NewtonSolver, n::Integer)
+function Base.resize!(solver::AbstractNewtonSolver, n::Integer)
     resize!(solver.R, n)
     resize!(solver.δv, n)
     solver
@@ -44,14 +44,14 @@ function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles,
         end
     end
 end
-function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, solver::NewtonSolver; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
+function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, solver::AbstractNewtonSolver; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
     @. grid.δv = (1-solver.θ)*grid.vⁿ + solver.θ*grid.v
     recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
 end
 
 
 # implicit version of grid_to_particle!
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool) where {names}
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::AbstractNewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool) where {names}
     @assert :∇v in names
     grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, isfixed; alg, system, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
@@ -67,7 +67,8 @@ function default_jacobian_free_linsolve(x, A, b; kwargs...)
     gmres!(fillzero!(x), A, b; maxiter=15, initially_zero=true, abstol=T(1e-5), reltol=T(1e-5), kwargs...)
 end
 
-struct JacobianFreeNewtonSolver{T, F, dim} <: NewtonSolver
+# Jacobian-free Newton solver
+struct NewtonSolver{T, F, dim} <: AbstractNewtonSolver
     maxiter::Int
     tol::T
     θ::T
@@ -76,13 +77,13 @@ struct JacobianFreeNewtonSolver{T, F, dim} <: NewtonSolver
     δv::Vector{T}
     griddofs::Array{Vec{dim, Int}, dim}
 end
-function JacobianFreeNewtonSolver{T}(gridsize::Dims{dim}; maxiter::Int=50, tol::Real=sqrt(eps(T)), implicit_parameter::Real=1, linsolve=default_jacobian_free_linsolve) where {T, dim}
+function NewtonSolver{T}(gridsize::Dims{dim}; maxiter::Int=50, tol::Real=sqrt(eps(T)), implicit_parameter::Real=1, linsolve=default_jacobian_free_linsolve) where {T, dim}
     griddofs = Array{Vec{dim, Int}}(undef, gridsize)
-    JacobianFreeNewtonSolver(maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], griddofs)
+    NewtonSolver(maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], griddofs)
 end
-JacobianFreeNewtonSolver(gridsize::Dims; kwargs...) = JacobianFreeNewtonSolver{Float64}(gridsize; kwargs...)
+NewtonSolver(gridsize::Dims; kwargs...) = NewtonSolver{Float64}(gridsize; kwargs...)
 
-function jacobian_matrix(solver::JacobianFreeNewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
         @inbounds begin
             ∇δvₚ = pt.∇v
@@ -99,7 +100,7 @@ function jacobian_matrix(solver::JacobianFreeNewtonSolver, grid::Grid, particles
     end
 end
 
-function diagonal_preconditioner!(solver::JacobianFreeNewtonSolver, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freedofs::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
+function diagonal_preconditioner!(solver::NewtonSolver, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freedofs::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
     fill!(solver.P, 1)
     fillzero!(grid.δv)
     parallel_each_particle(space; parallel) do p
@@ -119,7 +120,7 @@ function diagonal_preconditioner!(solver::JacobianFreeNewtonSolver, particles::P
     Diagonal(broadcast!(+, solver.P, solver.P, view(flatarray(grid.δv), freedofs)))
 end
 
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::JacobianFreeNewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool)
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool)
     # recompute particle stress and grid force
     recompute_grid_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
 
@@ -196,7 +197,7 @@ function default_jacobian_based_linsolve(x, A, b)
     x .= A \ b
 end
 
-struct JacobianBasedNewtonSolver{T, F, dim, N} <: NewtonSolver
+struct JacobianBasedNewtonSolver{T, F, dim, N} <: AbstractNewtonSolver
     maxiter::Int
     tol::T
     θ::T
