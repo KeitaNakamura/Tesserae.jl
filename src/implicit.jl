@@ -205,7 +205,7 @@ struct JacobianBasedNewtonSolver{T, F, dim, N} <: NewtonSolver
     R::Vector{T}
     δv::Vector{T}
     griddofs::Array{Vec{dim, Int}, dim}
-    cache::SparseMatrixCSCCache{Bool, Int}
+    cache::SparseMatrixCSCCache{Bool, Int, T}
     spmat_mask::Array{Bool, N}
 end
 function JacobianBasedNewtonSolver{T}(grid::Grid{dim}; maxiter::Int=50, tol::Real=sqrt(eps(T)), implicit_parameter::Real=1, linsolve=default_jacobian_based_linsolve) where {T, dim}
