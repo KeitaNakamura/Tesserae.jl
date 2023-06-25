@@ -226,16 +226,16 @@ function sparsity_pattern!(solver::JacobianBasedNewtonSolver, space::MPSpace{dim
     fillzero!(griddofs)
     flatarray(griddofs)[freedofs] .= 1:length(freedofs)
 
-    npts = num_particles(space)
+    nelts = prod(gridsize(space) .- 1)
     nₚ = dim * prod(gridsize(get_interpolation(space), Val(dim)))
-    maxlen = npts * nₚ^2
+    len = nelts * nₚ^2 # roughly compute enough length
 
-    resize!(I, maxlen)
-    resize!(J, maxlen)
+    resize!(I, len)
+    resize!(J, len)
     count = 1
     spmat_mask .= false
     gridindices_prev = CartesianIndices((1:0,1:0))
-    @inbounds for p in 1:npts
+    @inbounds for p in 1:num_particles(space)
         gridindices = neighbornodes(values(space, p))
         if gridindices !== gridindices_prev
             for grid_j in gridindices
