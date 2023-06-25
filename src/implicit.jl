@@ -76,11 +76,11 @@ struct JacobianFreeNewtonSolver{T, F, dim} <: NewtonSolver
     δv::Vector{T}
     griddofs::Array{Vec{dim, Int}, dim}
 end
-function JacobianFreeNewtonSolver{T}(grid::Grid{dim}; maxiter::Int=50, tol::Real=sqrt(eps(T)), implicit_parameter::Real=1, linsolve=default_jacobian_free_linsolve) where {T, dim}
-    griddofs = Array{Vec{dim, Int}}(undef, size(grid))
+function JacobianFreeNewtonSolver{T}(gridsize::Dims{dim}; maxiter::Int=50, tol::Real=sqrt(eps(T)), implicit_parameter::Real=1, linsolve=default_jacobian_free_linsolve) where {T, dim}
+    griddofs = Array{Vec{dim, Int}}(undef, gridsize)
     JacobianFreeNewtonSolver(maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], griddofs)
 end
-JacobianFreeNewtonSolver(grid::Grid; kwargs...) = JacobianFreeNewtonSolver{Float64}(grid; kwargs...)
+JacobianFreeNewtonSolver(gridsize::Dims; kwargs...) = JacobianFreeNewtonSolver{Float64}(gridsize; kwargs...)
 
 function jacobian_matrix(solver::JacobianFreeNewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
@@ -188,8 +188,7 @@ function sparsity_pattern!(cache::SparseMatrixCSCCache{Tv, Ti, T}, m::Integer, n
     S = SparseArrays.sparse!(I, J, V, m, n, |, klasttouch,
                              csrrowptr, csrcolval, csrnzval,
                              I, J, V)
-    resize!(cache.V′, length(S.nzval))
-    cache.V′ .= 1
+    fillzero!(resize!(cache.V′, length(S.nzval)))
     SparseMatrixCSC{T, Ti}(m, n, S.colptr, S.rowval, cache.V′)
 end
 
@@ -208,12 +207,12 @@ struct JacobianBasedNewtonSolver{T, F, dim, N} <: NewtonSolver
     cache::SparseMatrixCSCCache{Bool, Int, T}
     spmat_mask::Array{Bool, N}
 end
-function JacobianBasedNewtonSolver{T}(grid::Grid{dim}; maxiter::Int=50, tol::Real=sqrt(eps(T)), implicit_parameter::Real=1, linsolve=default_jacobian_based_linsolve) where {T, dim}
-    griddofs = Array{Vec{dim, Int}}(undef, size(grid))
-    spmat_mask = Array{Bool}(undef, size(grid)..., size(grid)...)
+function JacobianBasedNewtonSolver{T}(gridsize::Dims{dim}; maxiter::Int=50, tol::Real=sqrt(eps(T)), implicit_parameter::Real=1, linsolve=default_jacobian_based_linsolve) where {T, dim}
+    griddofs = Array{Vec{dim, Int}}(undef, gridsize)
+    spmat_mask = Array{Bool}(undef, gridsize..., gridsize...)
     JacobianBasedNewtonSolver(maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], griddofs, SparseMatrixCSCCache{Bool, Int, T}(), spmat_mask)
 end
-JacobianBasedNewtonSolver(grid::Grid; kwargs...) = JacobianBasedNewtonSolver{Float64}(grid; kwargs...)
+JacobianBasedNewtonSolver(gridsize::Dims; kwargs...) = JacobianBasedNewtonSolver{Float64}(gridsize; kwargs...)
 
 function sparsity_pattern!(solver::JacobianBasedNewtonSolver, space::MPSpace{dim, T}, freedofs::AbstractVector{<: CartesianIndex}) where {dim, T}
     griddofs = solver.griddofs
