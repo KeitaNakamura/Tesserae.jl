@@ -54,7 +54,12 @@ macro rename(src, list...)
     esc(:(Marble.rename($src, $before, $after)))
 end
 
-@inline flatarray(A::AbstractArray{<: Vec}) = reinterpret(reshape, eltype(eltype(A)), A)
+@inline flatarray(A::AbstractArray{Vec{dim, T}, dim}) where {dim, T} = reinterpret(reshape, T, A)
+@inline function flatarray(A::AbstractArray{<: Vec{dim}, dim}, flatfreeinds::AbstractVector{CartesianIndex{N}}) where {dim, N}
+    @assert dim+1 == N
+    @boundscheck checkbounds(flatarray(A), flatfreeinds)
+    @inbounds view(flatarray(A), flatfreeinds)
+end
 
 # commas
 commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")

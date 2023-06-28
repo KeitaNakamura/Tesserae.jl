@@ -3,7 +3,7 @@ using LinearMaps: LinearMap
 
 _tail(I::CartesianIndex) = CartesianIndex(Base.tail(Tuple(I)))
 
-function compute_freedofs(grid::Grid{dim}, isfixed::AbstractArray{Bool}) where {dim}
+function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) where {dim}
     @assert size(isfixed) == (dim, size(grid)...)
     filter(CartesianIndices(isfixed)) do I
         I′ = _tail(I)
@@ -16,13 +16,10 @@ abstract type AbstractNewtonSolver end
 isless_eps(x::Real, p::Int) = abs(x) < eps(typeof(x))^(1/p)
 isconverged(x::Real, solver::AbstractNewtonSolver) = abs(x) < solver.tol
 
-@inline function compute_residual!(solver::AbstractNewtonSolver, grid::Grid, Δt::Real, flatfreeinds::AbstractVector{<: CartesianIndex})
-    @boundscheck checkbounds(flatarray(grid.v), flatfreeinds)
-    @inbounds begin
-        R = grid.δv # reuse grid.δv
-        @. R = grid.v - grid.vⁿ - Δt * (grid.f/grid.m)
-        solver.R .= view(flatarray(R), flatfreeinds)
-    end
+function compute_residual!(solver::AbstractNewtonSolver, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
+    R = grid.δv # reuse grid.δv
+    @. R = grid.v - grid.vⁿ - Δt * (grid.f/grid.m)
+    solver.R .= flatarray(R, freeinds)
 end
 
 function Base.resize!(solver::AbstractNewtonSolver, n::Integer)
@@ -83,24 +80,24 @@ function NewtonSolver{T}(gridsize::Dims{dim}; maxiter::Int=50, tol::Real=sqrt(ep
 end
 NewtonSolver(gridsize::Dims; kwargs...) = NewtonSolver{Float64}(gridsize; kwargs...)
 
-function jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freedofs::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function jacobian_matrix(solver::NewtonSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freeinds::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
         @inbounds begin
             ∇δvₚ = pt.∇v
             pt.σ = (pt.ℂ ⊡ ∇δvₚ) / pt.V
         end
     end
-    LinearMap(length(freedofs)) do Jδv, δv
+    LinearMap(length(freeinds)) do Jδv, δv
         @inbounds begin
-            flatarray(fillzero!(grid.δv))[freedofs] .= δv
+            flatarray(fillzero!(grid.δv), freeinds) .= δv
             recompute_grid_force!(update_stress!, @rename(grid, δv=>v, δf=>f), @rename(particles, δσ=>σ), space; alg, system, parallel)
-            δa = view(flatarray(grid.δf ./= grid.m), freedofs)
+            δa = flatarray(grid.δf ./= grid.m, freeinds)
             @. Jδv = δv - solver.θ * Δt * δa
         end
     end
 end
 
-function diagonal_preconditioner!(solver::NewtonSolver, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freedofs::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
+function diagonal_preconditioner!(solver::NewtonSolver, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freeinds::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
     fill!(solver.P, 1)
     fillzero!(grid.δv)
     parallel_each_particle(space; parallel) do p
@@ -117,7 +114,7 @@ function diagonal_preconditioner!(solver::NewtonSolver, particles::Particles, gr
         end
     end
     @. grid.δv *= solver.θ * Δt / grid.m
-    Diagonal(broadcast!(+, solver.P, solver.P, view(flatarray(grid.δv), freedofs)))
+    Diagonal(broadcast!(+, solver.P, solver.P, flatarray(grid.δv, freeinds)))
 end
 
 function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool)
@@ -125,29 +122,29 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
     recompute_grid_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
 
     if solver.maxiter != 0
-        freedofs = compute_freedofs(grid, isfixed)
+        freeinds = compute_flatfreeindices(grid, isfixed)
 
-        resize!(solver, length(freedofs))
-        A = jacobian_matrix(solver, grid, particles, space, Δt, freedofs, alg, system, length(particles)>50_000)
+        resize!(solver, length(freeinds))
+        A = jacobian_matrix(solver, grid, particles, space, Δt, freeinds, alg, system, length(particles)>50_000)
 
-        vⁿ = @inbounds view(flatarray(grid.vⁿ), freedofs)
+        v = flatarray(grid.v, freeinds)
+        vⁿ = flatarray(grid.vⁿ, freeinds)
         if !isless_eps(maximum(abs, vⁿ), 1)
             δv = solver.δv
             r⁰ = norm(vⁿ)
             @inbounds for k in 1:solver.maxiter
                 # compute residual for Newton's method
-                R = compute_residual!(solver, grid, Δt, freedofs)
+                R = compute_residual!(solver, grid, Δt, freeinds)
                 isconverged(norm(R)/r⁰, solver) && return
 
                 ## solve linear equation A⋅δv = -R
                 solver.linsolve(δv, A, rmul!(R, -1))
-                # P = diagonal_preconditioner!(solver, particles, grid, space, Δt, freedofs, parallel)
+                # P = diagonal_preconditioner!(solver, particles, grid, space, Δt, freeinds, parallel)
                 # solver.linsolve(δv, A, rmul!(R, -1); Pr=P)
 
                 isconverged(norm(δv), solver) && return
 
                 # update grid velocity
-                v = view(flatarray(grid.v), freedofs)
                 @. v += δv
 
                 # recompute particle stress and grid force
@@ -215,7 +212,7 @@ function JacobianBasedNewtonSolver{T}(gridsize::Dims{dim}; maxiter::Int=50, tol:
 end
 JacobianBasedNewtonSolver(gridsize::Dims; kwargs...) = JacobianBasedNewtonSolver{Float64}(gridsize; kwargs...)
 
-function sparsity_pattern!(solver::JacobianBasedNewtonSolver, space::MPSpace{dim, T}, freedofs::AbstractVector{<: CartesianIndex}) where {dim, T}
+function sparsity_pattern!(solver::JacobianBasedNewtonSolver, space::MPSpace{dim, T}, freeinds::AbstractVector{<: CartesianIndex}) where {dim, T}
     griddofs = solver.griddofs
     spmat_mask = solver.spmat_mask
     cache = solver.cache
@@ -224,7 +221,7 @@ function sparsity_pattern!(solver::JacobianBasedNewtonSolver, space::MPSpace{dim
 
     # reinit griddofs
     fillzero!(griddofs)
-    flatarray(griddofs)[freedofs] .= 1:length(freedofs)
+    flatarray(griddofs)[freeinds] .= 1:length(freeinds)
 
     nelts = prod(gridsize(space) .- 1)
     nₚ = dim * prod(gridsize(get_interpolation(space), Val(dim)))
@@ -263,7 +260,7 @@ function sparsity_pattern!(solver::JacobianBasedNewtonSolver, space::MPSpace{dim
     resize!(V, count-1)
     V .= true
 
-    m = n = length(freedofs)
+    m = n = length(freeinds)
     sparsity_pattern!(cache, m, n)
 end
 
@@ -293,7 +290,7 @@ function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}
     A
 end
 
-function jacobian_matrix!(K::SparseMatrixCSC, solver::JacobianBasedNewtonSolver, grid::Grid{dim}, particles::Particles, space::MPSpace{dim, T}, Δt::Real, freedofs::Vector{<: CartesianIndex}, parallel::Bool) where {dim, T}
+function jacobian_matrix!(K::SparseMatrixCSC, solver::JacobianBasedNewtonSolver, grid::Grid{dim}, particles::Particles, space::MPSpace{dim, T}, Δt::Real, freeinds::Vector{<: CartesianIndex}, parallel::Bool) where {dim, T}
     @assert size(solver.griddofs) == size(grid) == gridsize(space)
     fillzero!(K)
     griddofs = reinterpret(reshape, Int, solver.griddofs) # flatten dofs assinged on grid
@@ -346,7 +343,7 @@ function jacobian_matrix!(K::SparseMatrixCSC, solver::JacobianBasedNewtonSolver,
     @inbounds for j in 1:size(K, 2)
         for i in nzrange(K, j)
             row = rows[i]
-            I = freedofs[row]
+            I = freeinds[row]
             mᵢ = grid.m[_tail(I)]
             vals[i] /= mᵢ
             if row == j
@@ -363,28 +360,28 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
     recompute_grid_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
 
     if solver.maxiter != 0
-        freedofs = compute_freedofs(grid, isfixed)
-        resize!(solver, length(freedofs))
+        freeinds = compute_flatfreeindices(grid, isfixed)
+        resize!(solver, length(freeinds))
 
-        A = sparsity_pattern!(solver, space, freedofs)
+        A = sparsity_pattern!(solver, space, freeinds)
 
-        vⁿ = @inbounds view(flatarray(grid.vⁿ), freedofs)
+        v = flatarray(grid.v, freeinds)
+        vⁿ = flatarray(grid.vⁿ, freeinds)
         if !isless_eps(maximum(abs, vⁿ), 1)
             δv = solver.δv
             r⁰ = norm(vⁿ)
             @inbounds for k in 1:solver.maxiter
                 # compute residual for Newton's method
-                R = compute_residual!(solver, grid, Δt, freedofs)
+                R = compute_residual!(solver, grid, Δt, freeinds)
                 isconverged(norm(R)/r⁰, solver) && return
 
                 ## compute jacobian matrix `A` directly
-                jacobian_matrix!(A, solver, grid, particles, space, Δt, freedofs, parallel)
+                jacobian_matrix!(A, solver, grid, particles, space, Δt, freeinds, parallel)
                 solver.linsolve(δv, A, rmul!(R, -1))
 
                 isconverged(norm(δv), solver) && return
 
                 # update grid velocity
-                v = view(flatarray(grid.v), freedofs)
                 @. v += δv
 
                 # recompute particle stress and grid force
