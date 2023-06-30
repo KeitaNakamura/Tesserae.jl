@@ -25,7 +25,7 @@ function fillzero!(x::AbstractArray)
 end
 
 # rename property names
-@generated function rename(A::NamedTuple{srcnames}, ::Val{before}, ::Val{after}) where {srcnames, before, after}
+@generated function rename(::Val{srcnames}, ::Val{before}, ::Val{after}) where {srcnames, before, after}
     @assert length(before) == length(after)
     before_new = collect(before)
     after_new = collect(after)
@@ -36,13 +36,14 @@ end
         end
     end
     nt = (; zip(before_new, after_new)...)
-    newnames = map(name -> get(nt, name, name), srcnames)
-    quote
-        NamedTuple{$newnames}(values(A))
-    end
+    map(name -> get(nt, name, name), srcnames)
 end
-function rename(A::StructArray, b::Val, a::Val)
-    StructArray(rename(StructArrays.components(A), b, a))
+function rename(A::NamedTuple, before::Val, after::Val)
+    newnames = rename(Val(keys(A)), before, after)
+    NamedTuple{newnames}(values(A))
+end
+function rename(A::StructArray, before::Val, after::Val)
+    StructArray(rename(StructArrays.components(A), before, after))
 end
 
 macro rename(src, list...)
