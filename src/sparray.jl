@@ -56,6 +56,7 @@ end
     blkinds = blockindices(sp)
     @inbounds !isnullindex(blkinds[blocksize(I)...])
 end
+@inline isnonzero(sp::SpIndices, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(sp, Tuple(I)...))
 
 function numbering!(sp::SpIndices{dim}) where {dim}
     inds = blockindices(sp)
@@ -181,8 +182,7 @@ end
     A
 end
 
-@inline isnonzero(A::SpArray, I::Integer...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
-@inline isnonzero(A::SpArray, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(A, Tuple(I)...))
+@inline isnonzero(A::SpArray, I...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 

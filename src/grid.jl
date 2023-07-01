@@ -110,8 +110,7 @@ end
 
 blocksparsity(A::SpGrid) = blocksparsity(get_spinds(A))
 
-@inline isnonzero(A::SpGrid, I::Integer...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
-@inline isnonzero(A::SpGrid, I::CartesianIndex) = (@_propagate_inbounds_meta; isnonzero(A, Tuple(I)...))
+@inline isnonzero(A::SpGrid, I...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 
 # unsafe becuase the returned index can be 0 if the SpIndices is not correctly updated
 @inline function unsafe_nonzeroindex(A::SpGrid, i)
