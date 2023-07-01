@@ -284,7 +284,7 @@ function particle_to_grid!(name::Symbol, grid::Grid, particles::Particles, space
 end
 
 function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace; parallel::Bool) where {names}
-    check_statenames(names, (:m, :mv, :f, :∇m))
+    check_statenames(names, (:m, :mv, :f, :fint, :fext, :∇m))
     check_grid(grid, space)
     check_particles(particles, space)
     parallel_each_particle(space; parallel) do p
@@ -303,13 +303,16 @@ end
         mₚ = pt.m
     end
 
-    if :f in names
+    if :f in names || :fint in names
         Vₚσₚ = pt.V * pt.σ
-        if hasproperty(pt, :b)
-            mₚbₚ = pt.m * pt.b
-        end
         if system isa Axisymmetric
             rₚ = pt.x[1]
+        end
+    end
+
+    if :f in names || :fext in names
+        if hasproperty(pt, :b)
+            mₚbₚ = pt.m * pt.b
         end
     end
 
@@ -353,16 +356,22 @@ end
             grid.∇m[i] += ∇N*mₚ
         end
 
-        if :f in names
+        if :f in names || :fint in names
             if system isa Axisymmetric
-                f = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
+                fint = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
             else
-                f = -calc_fint(system, ∇N, Vₚσₚ)
+                fint = -calc_fint(system, ∇N, Vₚσₚ)
             end
+            :f    in names && (grid.f[i] += fint)
+            :fint in names && (grid.fint[i] += fint)
+        end
+
+        if :f in names || :fext in names
             if hasproperty(pt, :b)
-                f += N*mₚbₚ
+                fext = N*mₚbₚ
+                :f    in names && (grid.f[i] += fext)
+                :fext in names && (grid.fext[i] += fext)
             end
-            grid.f[i] += f
         end
 
         # grid momentum depends on transfer algorithms
