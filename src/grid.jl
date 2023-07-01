@@ -112,6 +112,10 @@ blocksparsity(A::SpGrid) = blocksparsity(get_spinds(A))
 
 @inline isnonzero(A::SpGrid, I...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 
+@inline function isactive(grid::Grid, I...)
+    @boundscheck checkbounds(grid, I...)
+    @inbounds isnonzero(grid, I...) && !iszero(grid.m[I...])
+end
 
 @inline function nonzeroindex(A::SpGrid, i)
     @_propagate_inbounds_meta

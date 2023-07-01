@@ -112,7 +112,7 @@ function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) 
     @assert size(isfixed) == (dim, size(grid)...)
     filter(CartesianIndices(isfixed)) do I
         I′ = _tail(I)
-        @inbounds isnonzero(grid, I′) && !iszero(grid.m[I′]) && !isfixed[I]
+        @inbounds isactive(grid, I′) && !isfixed[I]
     end
 end
 
