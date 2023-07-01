@@ -55,6 +55,24 @@ macro rename(src, list...)
     esc(:(Marble.rename($src, $before, $after)))
 end
 
+# combine properties
+@generated function combine_names(::Val{dest}, ::Val{src}) where {dest, src}
+    src_tmp = map(x->Symbol(:____, x, :____), src)
+    combined = (dest..., src_tmp...)
+    rename(Val(combined), Val(src_tmp), Val(src))
+end
+
+function combine(dest::NamedTuple, src::NamedTuple)
+    newnames = combine_names(Val(keys(dest)), Val(keys(src)))
+    NamedTuple{newnames}((values(dest)..., values(src)...))
+end
+function combine(A::StructArray, src::NamedTuple)
+    StructArray(combine(StructArrays.components(A), src))
+end
+function combine(A::StructArray, B::StructArray)
+    combine(A, StructArrays.components(B))
+end
+
 @inline flatarray(A::AbstractArray{Vec{dim, T}, dim}) where {dim, T} = reinterpret(reshape, T, A)
 @inline function flatarray(A::AbstractArray{<: Vec{dim}, dim}, flatfreeinds::AbstractVector{CartesianIndex{N}}) where {dim, N}
     @assert dim+1 == N

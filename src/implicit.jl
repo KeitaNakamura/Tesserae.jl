@@ -16,7 +16,7 @@ end
 function SparseMatrixCSCCache{Tv, Ti, T}() where {Tv, Ti, T}
     SparseMatrixCSCCache(Ti[], Ti[], Tv[], T[], Ti[], Ti[], Tv[], Ti[])
 end
-function sparsity_pattern!(cache::SparseMatrixCSCCache{Tv, Ti, T}, m::Integer, n::Integer) where {Tv, Ti, T}
+function construct_sparse_matrix!(cache::SparseMatrixCSCCache{Tv, Ti, T}, m::Integer, n::Integer) where {Tv, Ti, T}
     I, J, V = cache.I, cache.J, cache.V
     csrrowptr = cache.csrrowptr
     csrcolval = cache.csrcolval
@@ -47,7 +47,7 @@ function JacobianCache(::Type{T}, gridsize::Dims{dim}) where {T, dim}
     JacobianCache(griddofs, spmat_cache, spmat_grid_mask)
 end
 
-struct NewtonSolver{T, JacCache <: Union{Nothing, JacobianCache}}
+struct NewtonSolver{T, GridCache <: StructArray, PtsCache <: StructVector, JacCache <: Union{Nothing, JacobianCache}}
     jacobian_free::Bool
     maxiter::Int
     tol::T
@@ -55,33 +55,52 @@ struct NewtonSolver{T, JacCache <: Union{Nothing, JacobianCache}}
     linsolve::Function
     R::Vector{T}
     δv::Vector{T}
+    grid_cache::GridCache
+    pts_cache::PtsCache
     jac_cache::JacCache
 end
 
 function NewtonSolver(
         ::Type{T},
-        gridsize::Dims{dim};
+        grid::SpGrid{dim},
+        particles::Particles;
         jacobian_free::Bool = true,
         maxiter::Int = 50,
         tol::Real = sqrt(eps(T)),
         implicit_parameter::Real = 1,
-        linsolve = jacobian_free ? default_jacfree_linsolve : default_jacbased_linsolve) where {T, dim}
-    jac_cache = jacobian_free ? nothing : JacobianCache(T, gridsize)
-    NewtonSolver(jacobian_free, maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], jac_cache)
+        linsolve = jacobian_free ? jacfree_linsolve : jacbased_linsolve) where {T, dim}
+    # grid cache
+    Tv = eltype(grid.v)
+    spinds = get_spinds(grid)
+    grid_cache = StructArray(δv=SpArray{Tv}(spinds), δf=SpArray{Tv}(spinds))
+
+    # particles cache
+    npts = length(particles)
+    Tσ = eltype(particles.σ)
+    Tℂ = Tensor{Tuple{@Symmetry{3,3}, 3,3}, eltype(Tσ), 4, 54}
+    pts_cache = StructArray(δσ=Array{Tσ}(undef, npts), ℂ=Array{Tℂ}(undef, npts))
+
+    # Jacobian cache
+    jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
+
+    NewtonSolver(jacobian_free, maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], grid_cache, pts_cache, jac_cache)
 end
-NewtonSolver(gridsize::Dims; kwargs...) = NewtonSolver(Float64, gridsize; kwargs...)
+NewtonSolver(grid::Grid, particles::Particles; kwargs...) = NewtonSolver(Float64, grid, particles; kwargs...)
 # helpers
-function default_jacfree_linsolve(x, A, b; kwargs...)
+function jacfree_linsolve(x, A, b; kwargs...)
     T = eltype(b)
     gmres!(fillzero!(x), A, b; maxiter=15, initially_zero=true, abstol=T(1e-5), reltol=T(1e-5), kwargs...)
 end
-function default_jacbased_linsolve(x, A, b)
+function jacbased_linsolve(x, A, b)
     x .= A \ b
 end
 
-function Base.resize!(solver::NewtonSolver, n::Integer)
+function reinit!(solver::NewtonSolver, n::Integer)
     resize!(solver.R, n)
     resize!(solver.δv, n)
+    grid = solver.grid_cache
+    n = countnnz(get_spinds(grid.δv))
+    StructArrays.foreachfield(a->resize_nonzeros!(a,n), grid)
     solver
 end
 
@@ -98,11 +117,11 @@ function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) 
 end
 
 function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
-    @. grid.δv = grid.v - grid.vⁿ - Δt * (grid.f/grid.m)
+    @. grid.δv = grid.v - grid.vⁿ - Δt * (grid.f/grid.m) # reuse δv
     R .= flatarray(grid.δv, freeinds)
 end
 
-function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
+function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     fillzero!(grid.f)
     parallel_each_particle(space; parallel) do p
         @inbounds begin
@@ -115,8 +134,8 @@ function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles,
         end
     end
 end
-function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, solver::NewtonSolver; alg::TransferAlgorithm=FLIP(), system::CoordinateSystem=DefaultSystem(), parallel::Bool=true)
-    @. grid.δv = (1-solver.θ)*grid.vⁿ + solver.θ*grid.v
+function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, θ::Real; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+    @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v # reuse δv
     recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
 end
 
@@ -129,17 +148,35 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
 end
 
 function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool)
+    _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)),
+                       alg,
+                       system,
+                       Val((:∇v,)),
+                       combine(particles, solver.pts_cache),
+                       combine(grid, solver.grid_cache),
+                       space,
+                       Δt,
+                       solver,
+                       isfixed,
+                       parallel)
+end
+
+function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}, parallel::Bool)
+    @assert :δv in propertynames(grid) && :δf in propertynames(grid)
+    @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
+
+    freeinds = compute_flatfreeindices(grid, isfixed)
+    reinit!(solver, length(freeinds))
+
     # recompute particle stress and grid force
-    recompute_grid_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
+    recompute_grid_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
 
     if solver.maxiter != 0
-        freeinds = compute_flatfreeindices(grid, isfixed)
-        resize!(solver, length(freeinds))
-
         if solver.jacobian_free
-            A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, alg, system, length(particles)>50_000) # 50_000 is empirical value
+            should_be_parallel = length(particles) > 50_000 # 50_000 is empirical value
+            A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, alg, system, should_be_parallel)
         else
-            A = sparsity_pattern!(solver.jac_cache, space, freeinds)
+            A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
         end
 
         v = flatarray(grid.v, freeinds)
@@ -168,7 +205,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                 @. v += δv
 
                 # recompute particle stress and grid force
-                recompute_grid_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
+                recompute_grid_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
             end
             @warn "Newton's method not converged"
         end
@@ -199,7 +236,7 @@ end
 function diagonal_preconditioner!(P::AbstractVector, θ::Real, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freeinds::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
     @assert legnth(P) == length(freeinds)
     fill!(P, 1)
-    fillzero!(grid.δv)
+    fillzero!(grid.δv) # reuse δv
     parallel_each_particle(space; parallel) do p
         @_inline_meta
         @inbounds begin
@@ -221,7 +258,7 @@ end
 # Jacobian-based #
 ##################
 
-function sparsity_pattern!(jac_cache::JacobianCache, space::MPSpace{dim, T}, freeinds::AbstractVector{<: CartesianIndex}) where {dim, T}
+function construct_sparse_matrix!(jac_cache::JacobianCache, space::MPSpace{dim, T}, freeinds::AbstractVector{<: CartesianIndex}) where {dim, T}
     griddofs = jac_cache.griddofs
     spmat_grid_mask = jac_cache.spmat_grid_mask
     spmat_cache = jac_cache.spmat_cache
@@ -270,14 +307,13 @@ function sparsity_pattern!(jac_cache::JacobianCache, space::MPSpace{dim, T}, fre
     V .= true
 
     m = n = length(freeinds)
-    sparsity_pattern!(spmat_cache, m, n)
+    construct_sparse_matrix!(spmat_cache, m, n)
 end
 
 function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
     # `I` must be sorted
     @boundscheck checkbounds(A, I, J)
-    @assert length(I) ≤ size(K, 1) && length(J) ≤ size(K, 2)
-    # @assert size(K) == map(length, (I, J))
+    @assert size(K) == map(length, (I, J))
     rows = rowvals(A)
     vals = nonzeros(A)
     perm = sortperm(I)

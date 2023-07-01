@@ -44,9 +44,6 @@ function elastic_rings(
         f  :: Vec{2, Float64}
         v  :: Vec{2, Float64}
         vⁿ :: Vec{2, Float64}
-        ## for implicit method
-        δv :: Vec{2, Float64}
-        δf :: Vec{2, Float64}
     end
     ParticleState = @NamedTuple begin
         x  :: Vec{2, Float64}
@@ -57,13 +54,10 @@ function elastic_rings(
         ∇v :: SecondOrderTensor{3, Float64, 9}
         σ  :: SymmetricSecondOrderTensor{3, Float64, 6}
         F  :: SecondOrderTensor{3, Float64, 9}
+        Fⁿ :: SecondOrderTensor{3, Float64, 9}
         l  :: Float64                          # for uGIMP
         B  :: SecondOrderTensor{2, Float64, 4} # for APIC
         C  :: Mat{2, 3, Float64, 6}            # for WLS
-        ## for implicit method
-        δσ :: SymmetricSecondOrderTensor{3, Float64, 6}
-        Fⁿ :: SecondOrderTensor{3, Float64, 9}
-        ℂ  :: Tensor{Tuple{@Symmetry{3,3}, 3,3}, Float64, 4, 54}
     end
 
     ## grid
@@ -91,9 +85,9 @@ function elastic_rings(
 
     ## implicit method
     if implicit
-        solver = NewtonSolver(size(grid); implicit_parameter=0.5)
+        solver = NewtonSolver(grid, particles; implicit_parameter=0.5)
     else
-        solver = NewtonSolver(size(grid); maxiter=0)
+        solver = NewtonSolver(grid, particles; maxiter=0)
     end
 
     ## outputs
@@ -137,7 +131,7 @@ function elastic_rings(
 
         ## implicit G2P transfer
         grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver, isfixed; alg) do pt
-            pt.ℂ = gradient(pt.∇v) do ∇v
+            gradient(pt.∇v) do ∇v
                 F = (I + Δt*∇v) ⋅ pt.Fⁿ
                 V = det(F) * pt.V⁰
                 σ = compute_cauchy_stress(elastic, F)

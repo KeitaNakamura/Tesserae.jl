@@ -66,6 +66,10 @@ function numbering!(sp::SpIndices{dim}) where {dim}
     count << (BLOCKFACTOR*dim)
 end
 
+function countnnz(sp::SpIndices{dim}) where {dim}
+    count(!isnullindex, sp.blkinds) << (BLOCKFACTOR*dim)
+end
+
 function update_sparsity!(sp::SpIndices, spy_blk::AbstractArray{Bool})
     blocksparsity(sp) .= spy_blk
     numbering!(sp)
