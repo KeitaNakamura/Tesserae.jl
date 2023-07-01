@@ -233,7 +233,9 @@ end
 
 @inline function nonzeroindex(inds::SpIndices, index)
     @boundscheck checkbounds(inds, index)
-    @inbounds NonzeroIndex(index, inds[index])
+    @inbounds nzindex = inds[index]
+    @boundscheck @assert !isnullindex(nzindex)
+    @inbounds NonzeroIndex(index, nzindex)
 end
 
 struct NonzeroIndices{I, dim, Tparent <: AbstractArray{I, dim}, Tspinds <: SpIndices{dim}} <: AbstractArray{NonzeroIndex{I}, dim}

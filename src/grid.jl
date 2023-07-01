@@ -112,10 +112,10 @@ blocksparsity(A::SpGrid) = blocksparsity(get_spinds(A))
 
 @inline isnonzero(A::SpGrid, I...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
 
-# unsafe becuase the returned index can be 0 if the SpIndices is not correctly updated
-@inline function unsafe_nonzeroindex(A::SpGrid, i)
-    @boundscheck checkbounds(A, i)
-    @inbounds NonzeroIndex(get_spinds(A)[i])
+
+@inline function nonzeroindex(A::SpGrid, i)
+    @_propagate_inbounds_meta
+    nonzeroindex(get_spinds(A), i)
 end
 
 Base.show(io::IO, mime::MIME"text/plain", x::SpGrid) = show(io, mime, ShowSpArray(x))
