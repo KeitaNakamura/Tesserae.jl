@@ -362,14 +362,14 @@ end
             else
                 fint = -calc_fint(system, ∇N, Vₚσₚ)
             end
-            :f    in names && (grid.f[i] += fint)
+            :f    in names && (grid.f[i]    += fint)
             :fint in names && (grid.fint[i] += fint)
         end
 
         if :f in names || :fext in names
             if hasproperty(pt, :b)
                 fext = N*mₚbₚ
-                :f    in names && (grid.f[i] += fext)
+                :f    in names && (grid.f[i]    += fext)
                 :fext in names && (grid.fext[i] += fext)
             end
         end

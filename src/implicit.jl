@@ -62,17 +62,19 @@ end
 
 function NewtonSolver(
         ::Type{T},
-        grid::SpGrid{dim},
+        grid::SpGrid,
         particles::Particles;
         jacobian_free::Bool = true,
         maxiter::Int = 50,
         tol::Real = sqrt(eps(T)),
         implicit_parameter::Real = 1,
-        linsolve = jacobian_free ? jacfree_linsolve : jacbased_linsolve) where {T, dim}
+        linsolve = jacobian_free ? jacfree_linsolve : jacbased_linsolve) where {T}
     # grid cache
     Tv = eltype(grid.v)
     spinds = get_spinds(grid)
-    grid_cache = StructArray(δv=SpArray{Tv}(spinds), δf=SpArray{Tv}(spinds))
+    grid_cache = StructArray(δv   = SpArray{Tv}(spinds),
+                             fint = SpArray{Tv}(spinds),
+                             fext = SpArray{Tv}(spinds))
 
     # particles cache
     npts = length(particles)
@@ -117,12 +119,12 @@ function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) 
 end
 
 function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
-    @. grid.δv = grid.v - grid.vⁿ - Δt * (grid.f/grid.m) # reuse δv
+    @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
     R .= flatarray(grid.δv, freeinds)
 end
 
-function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
-    fillzero!(grid.f)
+function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+    fillzero!(grid.fint)
     parallel_each_particle(space; parallel) do p
         @inbounds begin
             pt = LazyRow(particles, p)
@@ -130,13 +132,13 @@ function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles,
             mp = values(space, p)
             grid_to_particle!(alg, system, Val((:∇v,)), pt, grid, itp, mp)
             update_stress!(pt)
-            particle_to_grid!(alg, system, Val((:f,)), grid, pt, itp, mp)
+            particle_to_grid!(alg, system, Val((:fint,)), grid, pt, itp, mp)
         end
     end
 end
-function recompute_grid_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, θ::Real; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, θ::Real; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v # reuse δv
-    recompute_grid_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
+    recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
 end
 
 # implicit version of grid_to_particle!
@@ -162,14 +164,18 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
 end
 
 function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}, parallel::Bool)
-    @assert :δv in propertynames(grid) && :δf in propertynames(grid)
+    @assert :δv in propertynames(grid) && :fint in propertynames(grid) && :fext in propertynames(grid)
     @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
 
     freeinds = compute_flatfreeindices(grid, isfixed)
     reinit!(solver, length(freeinds))
 
-    # recompute particle stress and grid force
-    recompute_grid_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
+    # calculate fext once
+    fillzero!(grid.fext)
+    particle_to_grid!(:fext, grid, particles, space; alg, system, parallel)
+
+    # recompute particle stress and grid internal force
+    recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
 
     if solver.maxiter != 0
         if solver.jacobian_free
@@ -186,7 +192,7 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
             r⁰ = norm(vⁿ)
             @inbounds for k in 1:solver.maxiter
                 # compute residual for Newton's method
-                R = compute_residual!(solver.R, grid, Δt, freeinds) # reuse δv
+                R = compute_residual!(solver.R, grid, Δt, freeinds)
                 isconverged(norm(R)/r⁰, solver) && return
 
                 ## solve linear equation A⋅δv = -R
@@ -204,8 +210,8 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
                 # update grid velocity
                 @. v += δv
 
-                # recompute particle stress and grid force
-                recompute_grid_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
+                # recompute particle stress and grid internal force
+                recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
             end
             @warn "Newton's method not converged"
         end
@@ -226,8 +232,8 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
     LinearMap(length(freeinds)) do Jδv, δv
         @inbounds begin
             flatarray(fillzero!(grid.δv), freeinds) .= δv
-            recompute_grid_force!(update_stress!, @rename(grid, δv=>v, δf=>f), @rename(particles, δσ=>σ), space; alg, system, parallel)
-            δa = flatarray(grid.δf ./= grid.m, freeinds)
+            recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
+            δa = flatarray(grid.fint ./= grid.m, freeinds)
             @. Jδv = δv - θ * Δt * δa
         end
     end
