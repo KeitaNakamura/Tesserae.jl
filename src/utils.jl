@@ -29,10 +29,10 @@ end
     @assert length(before) == length(after)
     before_new = collect(before)
     after_new = collect(after)
-    for name in after
-        if name in srcnames && !(name in before)
-            push!(before_new, name)
-            push!(after_new, Symbol(:__, name, :__))
+    for (bf, af) in zip(before, after)
+        if bf in srcnames && af in srcnames && !(af in before)
+            push!(before_new, af)
+            push!(after_new, Symbol(:__, af, :__))
         end
     end
     nt = (; zip(before_new, after_new)...)
