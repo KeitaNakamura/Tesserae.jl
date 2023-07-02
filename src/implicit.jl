@@ -106,8 +106,6 @@ function reinit!(solver::NewtonSolver, n::Integer)
     solver
 end
 
-# convergence
-isless_eps(x::Real, p::Int) = abs(x) < eps(typeof(x))^(1/p)
 isconverged(x::Real, solver::NewtonSolver) = abs(x) < solver.tol
 
 function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) where {dim}
@@ -118,6 +116,11 @@ function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) 
     end
 end
 
+function compute_reference_residual_norm!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
+    @. grid.δv = - grid.vⁿ - Δt * (grid.fext / grid.m) # reuse δv
+    R .= flatarray(grid.δv, freeinds)
+    norm(R)
+end
 function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
     @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
     R .= flatarray(grid.δv, freeinds)
@@ -177,45 +180,42 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
     # recompute particle stress and grid internal force
     recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
 
-    if solver.maxiter != 0
-        if solver.jacobian_free
-            should_be_parallel = length(particles) > 50_000 # 50_000 is empirical value
-            A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, alg, system, should_be_parallel)
-        else
-            A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
-        end
-
-        v = flatarray(grid.v, freeinds)
-        vⁿ = flatarray(grid.vⁿ, freeinds)
-        if !isless_eps(maximum(abs, vⁿ), 1)
-            δv = solver.δv
-            r⁰ = norm(vⁿ)
-            @inbounds for k in 1:solver.maxiter
-                # compute residual for Newton's method
-                R = compute_residual!(solver.R, grid, Δt, freeinds)
-                isconverged(norm(R)/r⁰, solver) && return
-
-                ## solve linear equation A⋅δv = -R
-                if solver.jacobian_free
-                    solver.linsolve(δv, A, rmul!(R, -1))
-                    # P = diagonal_preconditioner!(solver.P, solver.θ, particles, space, Δt, freeinds, parallel)
-                    # solver.linsolve(δv, A, rmul!(R, -1); Pr=P)
-                else
-                    jacobian_based_matrix!(A, solver.jac_cache, solver.θ, grid, particles, space, Δt, freeinds, parallel)
-                    solver.linsolve(δv, A, rmul!(R, -1))
-                end
-
-                isconverged(norm(δv), solver) && return
-
-                # update grid velocity
-                @. v += δv
-
-                # recompute particle stress and grid internal force
-                recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
-            end
-            @warn "Newton's method not converged"
-        end
+    if solver.jacobian_free
+        should_be_parallel = length(particles) > 50_000 # 50_000 is empirical value
+        A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, alg, system, should_be_parallel)
+    else
+        A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
+
+    v = flatarray(grid.v, freeinds)
+    δv = solver.δv
+
+    R = solver.R
+    r⁰ = compute_reference_residual_norm!(R, grid, Δt, freeinds)
+    @inbounds for k in 1:solver.maxiter
+        # compute residual for Newton's method
+        compute_residual!(R, grid, Δt, freeinds)
+        isconverged(norm(R)/r⁰, solver) && return
+
+        ## solve linear equation A⋅δv = -R
+        if solver.jacobian_free
+            solver.linsolve(δv, A, rmul!(R, -1))
+            # P = diagonal_preconditioner!(solver.P, solver.θ, particles, space, Δt, freeinds, parallel)
+            # solver.linsolve(δv, A, rmul!(R, -1); Pr=P)
+        else
+            jacobian_based_matrix!(A, solver.jac_cache, solver.θ, grid, particles, space, Δt, freeinds, parallel)
+            solver.linsolve(δv, A, rmul!(R, -1))
+        end
+
+        isconverged(norm(δv), solver) && return
+
+        # update grid velocity
+        @. v += δv
+
+        # recompute particle stress and grid internal force
+        recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
+    end
+    @warn "Newton's method not converged"
 end
 
 #################
