@@ -89,9 +89,8 @@ function NewtonSolver(
 end
 NewtonSolver(grid::Grid, particles::Particles; kwargs...) = NewtonSolver(Float64, grid, particles; kwargs...)
 # helpers
-function jacfree_linsolve(x, A, b; kwargs...)
-    T = eltype(b)
-    gmres!(fillzero!(x), A, b; maxiter=15, initially_zero=true, abstol=T(1e-5), reltol=T(1e-5), kwargs...)
+function jacfree_linsolve(x, A, b::AbstractVector{T}; maxiter=15, initially_zero=true, abstol=T(1e-5), reltol=T(1e-5), kwargs...) where {T}
+    gmres!(fillzero!(x), A, b; maxiter, initially_zero, abstol, reltol, kwargs...)
 end
 function jacbased_linsolve(x, A, b)
     x .= A \ b
