@@ -120,9 +120,10 @@ function compute_reference_residual_norm!(R::AbstractVector, grid::Grid, Δt::Re
     R .= flatarray(grid.δv, freeinds)
     norm(R)
 end
-function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
+function compute_residual_norm!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
     @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
     R .= flatarray(grid.δv, freeinds)
+    norm(R)
 end
 
 function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
@@ -193,8 +194,8 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
     r⁰ = compute_reference_residual_norm!(R, grid, Δt, freeinds)
     @inbounds for k in 1:solver.maxiter
         # compute residual for Newton's method
-        compute_residual!(R, grid, Δt, freeinds)
-        isconverged(norm(R)/r⁰, solver) && return
+        r = compute_residual_norm!(R, grid, Δt, freeinds)
+        isconverged(r/r⁰, solver) && return
 
         ## solve linear equation A⋅δv = -R
         if solver.jacobian_free
