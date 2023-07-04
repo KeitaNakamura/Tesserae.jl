@@ -50,7 +50,8 @@ end
 struct NewtonSolver{T, GridCache <: StructArray, PtsCache <: StructVector, JacCache <: Union{Nothing, JacobianCache}}
     jacobian_free::Bool
     maxiter::Int
-    tol::T
+    atol::T
+    rtol::T
     θ::T
     linsolve::Function
     R::Vector{T}
@@ -66,7 +67,8 @@ function NewtonSolver(
         particles::Particles;
         jacobian_free::Bool = true,
         maxiter::Int = 50,
-        tol::Real = sqrt(eps(T)),
+        atol::Real = sqrt(eps(T)),
+        rtol::Real = sqrt(eps(T)),
         implicit_parameter::Real = 1,
         linsolve = jacobian_free ? jacfree_linsolve : jacbased_linsolve) where {T}
     # grid cache
@@ -85,7 +87,7 @@ function NewtonSolver(
     # Jacobian cache
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
 
-    NewtonSolver(jacobian_free, maxiter, T(tol), T(implicit_parameter), linsolve, T[], T[], grid_cache, pts_cache, jac_cache)
+    NewtonSolver(jacobian_free, maxiter, T(atol), T(rtol), T(implicit_parameter), linsolve, T[], T[], grid_cache, pts_cache, jac_cache)
 end
 NewtonSolver(grid::Grid, particles::Particles; kwargs...) = NewtonSolver(Float64, grid, particles; kwargs...)
 # helpers
@@ -105,7 +107,7 @@ function reinit!(solver::NewtonSolver, n::Integer)
     solver
 end
 
-isconverged(x::Real, solver::NewtonSolver) = abs(x) < solver.tol
+isconverged(abs::Real, rel::Real, solver::NewtonSolver) = Base.abs(abs) < solver.atol || Base.abs(rel) < solver.rtol
 
 function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) where {dim}
     @assert size(isfixed) == (dim, size(grid)...)
@@ -195,7 +197,7 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
     @inbounds for k in 1:solver.maxiter
         # compute residual for Newton's method
         r = compute_residual_norm!(R, grid, Δt, freeinds)
-        isconverged(r/r⁰, solver) && return
+        isconverged(r, r/r⁰, solver) && return
 
         ## solve linear equation A⋅δv = -R
         if solver.jacobian_free
