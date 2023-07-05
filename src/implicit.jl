@@ -59,7 +59,7 @@ end
 
 function ImplicitSolver(
         ::Type{T},
-        grid::SpGrid,
+        grid::SpGrid{dim},
         particles::Particles;
         jacobian_free::Bool = true,
         implicit_parameter::Real = 1,
@@ -67,13 +67,20 @@ function ImplicitSolver(
         reltol::Real = 1e-6,
         maxiter::Int = 10,
         nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
-        linsolver = jacobian_free ? GMRESSolver(T; maxiter=15, reltol=1e-6, adaptive=true) : LUSolver()) where {T}
+        linsolver = jacobian_free ? GMRESSolver(T; maxiter=15, reltol=1e-6, adaptive=true) : LUSolver(),
+        friction::Bool = false,
+    ) where {T, dim}
     # grid cache
     Tv = eltype(grid.v)
     spinds = get_spinds(grid)
     grid_cache = StructArray(δv   = SpArray{Tv}(spinds),
                              fint = SpArray{Tv}(spinds),
                              fext = SpArray{Tv}(spinds))
+    if friction
+        Tm = Mat{dim,dim,eltype(grid.v),dim*dim}
+        grid_cache = combine(grid_cache, StructArray(dfᶜdv = SpArray{Tm}(spinds),
+                                                     dfᶜdf = SpArray{Tm}(spinds)))
+    end
 
     # particles cache
     npts = length(particles)
@@ -101,10 +108,45 @@ function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) 
         @inbounds isactive(grid, I′) && !isfixed[I]
     end
 end
+function compute_flatfreeindices(grid::Grid{dim}, coefs::AbstractArray{<: AbstractFloat}) where {dim}
+    @assert size(coefs) == (dim, size(grid)...)
+    filter(CartesianIndices(coefs)) do I
+        I′ = _tail(I)
+        @inbounds isactive(grid, I′) && coefs[I] ≥ 0 # negative friction coefficient means fixed
+    end
+end
 
 function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
     @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
     R .= flatarray(grid.δv, freeinds)
+end
+
+function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex}, coefs::AbstractArray{<: AbstractFloat})
+    # compute frictional forces
+    fillzero!(grid.dfᶜdv)
+    fillzero!(grid.dfᶜdf)
+    @inbounds for I in CartesianIndices(coefs)
+        μ = coefs[I]
+        if μ > 0 && isactive(grid, I)
+            i = nonzeroindex(grid, I)
+            (dfᶜdv, dfᶜdf), fᶜ = gradient((v,f) -> compute_friction_force(v, f, grid.m[i], grid.∇m[i], Δt, μ), grid.v[i], grid.fint[i], :all)
+            grid.fext[i] += fᶜ
+            grid.dfᶜdv[i] = dfᶜdv
+            grid.dfᶜdf[i] = dfᶜdf
+        end
+    end
+    compute_residual!(R, grid, Δt, freeinds)
+end
+function compute_friction_force(v::Vec, fint::Vec, m::Real, n::Vec, Δt::Real, μ::Real)
+    f_nor_norm = fint ⋅ n # traction
+    if f_nor_norm < 0 # traction is compressive
+        f_nor = f_nor_norm * n
+        f_stick = -m * v / Δt
+        f_stick_norm = norm(f_stick)
+        return -f_nor + f_stick * min(μ*f_nor_norm/f_stick_norm, 1)
+    else
+        return zero(fint)
+    end
 end
 
 function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
@@ -126,14 +168,14 @@ function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::P
 end
 
 # implicit version of grid_to_particle!
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, isfixed::AbstractArray{Bool}; parallel::Bool) where {names}
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}; parallel::Bool) where {names}
     @assert :∇v in names
-    grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, isfixed; alg, system, parallel)
+    grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, cond; alg, system, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
     !isempty(rest) && grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
 
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, isfixed::AbstractArray{Bool}; parallel::Bool)
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}; parallel::Bool)
     _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)),
                        alg,
                        system,
@@ -143,30 +185,37 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                        space,
                        Δt,
                        solver,
-                       isfixed,
+                       cond,
                        parallel)
 end
 
-function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, isfixed::AbstractArray{Bool}, parallel::Bool)
+function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}, parallel::Bool)
     @assert :δv in propertynames(grid) && :fint in propertynames(grid) && :fext in propertynames(grid)
     @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
 
-    freeinds = compute_flatfreeindices(grid, isfixed)
+    freeinds = compute_flatfreeindices(grid, cond)
 
     # calculate fext once
     fillzero!(grid.fext)
     particle_to_grid!(:fext, grid, particles, space; alg, system, parallel)
 
+    # friction on boundaries
+    consider_friction = eltype(cond) <: AbstractFloat
+
     if solver.jacobian_free
         should_be_parallel = length(particles) > 50_000 # 50_000 is empirical value
-        A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, alg, system, should_be_parallel)
+        A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, consider_friction, alg, system, should_be_parallel)
     else
         A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
 
     function residual_jacobian!(R, J, x)
         recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
-        compute_residual!(R, grid, Δt, freeinds)
+        if consider_friction
+            compute_residual!(R, grid, Δt, freeinds, cond)
+        else
+            compute_residual!(R, grid, Δt, freeinds)
+        end
         if !solver.jacobian_free
             jacobian_based_matrix!(J, solver.jac_cache, solver.θ, grid, particles, space, Δt, freeinds, parallel)
         end
@@ -181,7 +230,7 @@ end
 # Jacobian-free #
 #################
 
-function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freeinds::Vector{<: CartesianIndex}, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freeinds::Vector{<: CartesianIndex}, consider_friction::Bool, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
         @inbounds begin
             ∇δvₚ = pt.∇v
@@ -192,6 +241,9 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
         @inbounds begin
             flatarray(fillzero!(grid.δv), freeinds) .= δv
             recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
+            if consider_friction
+                @. grid.fint += grid.dfᶜdv ⋅ grid.δv + grid.dfᶜdf ⋅ grid.fint
+            end
             δa = flatarray(grid.fint ./= grid.m, freeinds)
             @. Jδv = δv - θ * Δt * δa
         end
