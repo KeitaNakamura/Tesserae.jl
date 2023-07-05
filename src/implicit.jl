@@ -47,48 +47,27 @@ function JacobianCache(::Type{T}, gridsize::Dims{dim}) where {T, dim}
     JacobianCache(griddofs, spmat_cache, spmat_grid_mask)
 end
 
-struct HistoryVector{T} <: AbstractVector{T}
-    maxlen::Int
-    data::AbstractVector{T}
-end
-HistoryVector{T}(maxlen::Int) where {T} = HistoryVector(maxlen, T[])
-Base.size(x::HistoryVector) = (length(x.data),)
-Base.getindex(x::HistoryVector, i::Integer) = (@_propagate_inbounds_meta; x.data[i])
-function Base.push!(x::HistoryVector, v)
-    push!(x.data, v)
-    if length(x.data) > x.maxlen
-        popfirst!(x.data)
-        @assert length(x) == x.maxlen
-    end
-    x
-end
-
-struct NewtonSolver{T, GridCache <: StructArray, PtsCache <: StructVector, JacCache <: Union{Nothing, JacobianCache}}
+struct ImplicitSolver{T, GridCache <: StructArray, PtsCache <: StructVector, JacCache <: Union{Nothing, JacobianCache}}
     jacobian_free::Bool
-    maxiter::Int
-    atol::T
-    rtol::T
     θ::T
-    linsolve::Function
-    R::Vector{T}
-    δv::Vector{T}
+    nlsolver::Any
+    linsolver::Any
     grid_cache::GridCache
     pts_cache::PtsCache
     jac_cache::JacCache
-    ntrials::HistoryVector{Int}
-    lin_params::HistoryVector{T}
 end
 
-function NewtonSolver(
+function ImplicitSolver(
         ::Type{T},
         grid::SpGrid,
         particles::Particles;
         jacobian_free::Bool = true,
-        maxiter::Int = 10,
-        atol::Real = sqrt(eps(T)),
-        rtol::Real = sqrt(eps(T)),
         implicit_parameter::Real = 1,
-        linsolve = jacobian_free ? jacfree_linsolve : jacbased_linsolve) where {T}
+        abstol::Real = 1e-6,
+        reltol::Real = 1e-6,
+        maxiter::Int = 10,
+        nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
+        linsolver = jacobian_free ? GMRESSolver(T; maxiter=15, reltol=1e-6, adaptive=true) : (x,A,b)->(x.=A\b)) where {T}
     # grid cache
     Tv = eltype(grid.v)
     spinds = get_spinds(grid)
@@ -105,27 +84,16 @@ function NewtonSolver(
     # Jacobian cache
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
 
-    NewtonSolver(jacobian_free, maxiter, T(atol), T(rtol), T(implicit_parameter), linsolve, T[], T[], grid_cache, pts_cache, jac_cache, HistoryVector{Int}(100), HistoryVector{T}(100))
+    ImplicitSolver(jacobian_free, T(implicit_parameter), nlsolver, linsolver, grid_cache, pts_cache, jac_cache)
 end
-NewtonSolver(grid::Grid, particles::Particles; kwargs...) = NewtonSolver(Float64, grid, particles; kwargs...)
-# helpers
-function jacfree_linsolve(x, A, b::AbstractVector{T}; maxiter=15, initially_zero=true, abstol=T(1e-5), reltol=T(1e-5), kwargs...) where {T}
-    gmres!(fillzero!(x), A, b; maxiter, initially_zero, abstol, reltol, kwargs...)
-end
-function jacbased_linsolve(x, A, b)
-    x .= A \ b
-end
+ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Float64, grid, particles; kwargs...)
 
-function reinit!(solver::NewtonSolver, n::Integer)
-    resize!(solver.R, n)
-    resize!(solver.δv, n)
+function reinit!(solver::ImplicitSolver, n::Integer)
     grid = solver.grid_cache
     n = countnnz(get_spinds(grid.δv))
     StructArrays.foreachfield(a->resize_nonzeros!(a,n), grid)
     solver
 end
-
-isconverged(abs::Real, rel::Real, solver::NewtonSolver) = Base.abs(abs) < solver.atol || Base.abs(rel) < solver.rtol
 
 function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) where {dim}
     @assert size(isfixed) == (dim, size(grid)...)
@@ -135,15 +103,9 @@ function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) 
     end
 end
 
-function compute_reference_residual_norm!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
-    @. grid.δv = - grid.vⁿ - Δt * (grid.fext / grid.m) # reuse δv
-    R .= flatarray(grid.δv, freeinds)
-    norm(R)
-end
-function compute_residual_norm!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
+function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex})
     @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
     R .= flatarray(grid.δv, freeinds)
-    norm(R)
 end
 
 function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
@@ -165,14 +127,14 @@ function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::P
 end
 
 # implicit version of grid_to_particle!
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool) where {names}
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, isfixed::AbstractArray{Bool}; parallel::Bool) where {names}
     @assert :∇v in names
     grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, isfixed; alg, system, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
     !isempty(rest) && grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
 
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver, isfixed::AbstractArray{Bool}; parallel::Bool)
+function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, isfixed::AbstractArray{Bool}; parallel::Bool)
     _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)),
                        alg,
                        system,
@@ -186,7 +148,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                        parallel)
 end
 
-function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::NewtonSolver{Tsolver}, isfixed::AbstractArray{Bool}, parallel::Bool) where {Tsolver}
+function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, isfixed::AbstractArray{Bool}, parallel::Bool)
     @assert :δv in propertynames(grid) && :fint in propertynames(grid) && :fext in propertynames(grid)
     @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
 
@@ -197,9 +159,6 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
     fillzero!(grid.fext)
     particle_to_grid!(:fext, grid, particles, space; alg, system, parallel)
 
-    # recompute particle stress and grid internal force
-    recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
-
     if solver.jacobian_free
         should_be_parallel = length(particles) > 50_000 # 50_000 is empirical value
         A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, alg, system, should_be_parallel)
@@ -207,56 +166,17 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
         A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
 
-    v = flatarray(grid.v, freeinds)
-    δv = solver.δv
-
-    R = solver.R
-    r⁰ = compute_reference_residual_norm!(R, grid, Δt, freeinds)
-
-    k = 1
-    if isempty(solver.lin_params)
-        α = Tsolver(1e-6)
-    else
-        α = solver.lin_params[end]
-        all(isone, solver.ntrials) && (α *= 2)
-    end
-
-    ok = false
-    while !ok || α > Tsolver(1e-8)
-        @inbounds for _ in 1:solver.maxiter
-            # compute residual for Newton's method
-            r = compute_residual_norm!(R, grid, Δt, freeinds)
-            if isconverged(r, r/r⁰, solver)
-                ok = true
-                push!(solver.ntrials, k)
-                push!(solver.lin_params, α)
-                break
-            end
-
-            ## solve linear equation A⋅δv = -R
-            if solver.jacobian_free
-                solver.linsolve(δv, A, rmul!(R, -1); abstol=α, reltol=α)
-                # P = diagonal_preconditioner!(solver.P, solver.θ, particles, space, Δt, freeinds, parallel)
-                # solver.linsolve(δv, A, rmul!(R, -1); Pr=P)
-            else
-                jacobian_based_matrix!(A, solver.jac_cache, solver.θ, grid, particles, space, Δt, freeinds, parallel)
-                solver.linsolve(δv, A, rmul!(R, -1))
-            end
-
-            # isconverged(norm(δv), solver) && return
-
-            # update grid velocity
-            @. v += δv
-
-            # recompute particle stress and grid internal force
-            recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
+    function residual_jacobian!(R, J, x)
+        recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
+        compute_residual!(R, grid, Δt, freeinds)
+        if !solver.jacobian_free
+            jacobian_based_matrix!(J, solver.jac_cache, solver.θ, grid, particles, space, Δt, freeinds, parallel)
         end
-        ok && break
-        k += 1
-        α /= 2
     end
-    # @show α k
-    ok || @warn "Newton's method not converged"
+
+    v = flatarray(grid.v, freeinds)
+    converged = solve!(v, residual_jacobian!, similar(v), A, solver.nlsolver, solver.linsolver)
+    converged || @warn "Implicit method not converged"
 end
 
 #################

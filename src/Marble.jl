@@ -87,7 +87,7 @@ export
     TPIC,
     WLSTransfer,
 # implicit
-    NewtonSolver,
+    ImplicitSolver,
 # VTK
     openvtk,
     openvtm,
@@ -112,6 +112,8 @@ include("Interpolations/kernelcorrection.jl")
 include("blockspace.jl")
 include("mpspace.jl")
 include("transfer.jl")
+
+include("solvers.jl")
 include("implicit.jl")
 
 include("vtk.jl")
