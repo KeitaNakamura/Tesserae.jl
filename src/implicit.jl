@@ -47,14 +47,14 @@ function JacobianCache(::Type{T}, gridsize::Dims{dim}) where {T, dim}
     JacobianCache(griddofs, spmat_cache, spmat_grid_mask)
 end
 
-struct ImplicitSolver{T, GridCache <: StructArray, PtsCache <: StructVector, JacCache <: Union{Nothing, JacobianCache}}
+struct ImplicitSolver{T}
     jacobian_free::Bool
     θ::T
-    nlsolver::Any
-    linsolver::Any
-    grid_cache::GridCache
-    pts_cache::PtsCache
-    jac_cache::JacCache
+    nlsolver::NonlinearSolver
+    linsolver::LinearSolver
+    grid_cache::StructArray
+    pts_cache::StructVector
+    jac_cache::Union{Nothing, JacobianCache{T}}
 end
 
 function ImplicitSolver(
@@ -67,7 +67,7 @@ function ImplicitSolver(
         reltol::Real = 1e-6,
         maxiter::Int = 10,
         nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
-        linsolver = jacobian_free ? GMRESSolver(T; maxiter=15, reltol=1e-6, adaptive=true) : (x,A,b)->(x.=A\b)) where {T}
+        linsolver = jacobian_free ? GMRESSolver(T; maxiter=15, reltol=1e-6, adaptive=true) : LUSolver()) where {T}
     # grid cache
     Tv = eltype(grid.v)
     spinds = get_spinds(grid)
@@ -88,11 +88,10 @@ function ImplicitSolver(
 end
 ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Float64, grid, particles; kwargs...)
 
-function reinit!(solver::ImplicitSolver, n::Integer)
-    grid = solver.grid_cache
-    n = countnnz(get_spinds(grid.δv))
-    StructArrays.foreachfield(a->resize_nonzeros!(a,n), grid)
-    solver
+function reinit_grid_cache!(spgrid::StructArray)
+    n = countnnz(get_spinds(spgrid.δv))
+    StructArrays.foreachfield(a->resize_nonzeros!(a,n), spgrid)
+    spgrid
 end
 
 function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) where {dim}
@@ -140,7 +139,7 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                        system,
                        Val((:∇v,)),
                        combine(particles, solver.pts_cache),
-                       combine(grid, solver.grid_cache),
+                       combine(grid, reinit_grid_cache!(solver.grid_cache)),
                        space,
                        Δt,
                        solver,
@@ -153,7 +152,6 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
     @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
 
     freeinds = compute_flatfreeindices(grid, isfixed)
-    reinit!(solver, length(freeinds))
 
     # calculate fext once
     fillzero!(grid.fext)

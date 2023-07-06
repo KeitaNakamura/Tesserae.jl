@@ -1,6 +1,9 @@
 abstract type LinearSolver end
 abstract type NonlinearSolver end
 
+struct LUSolver end
+solve!(x, A, b, ::LUSolver) = (x .= A \ b)
+
 mutable struct GMRESSolver{T} <: LinearSolver
     maxiter::Int
     abstol::T
