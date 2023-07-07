@@ -83,6 +83,23 @@ end
 # commas
 commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")
 
+#####################
+# NormalVectorArray #
+#####################
+
+struct NormalVectorArray{dim} <: AbstractArray{Vec{dim, Int}, dim}
+    size::Dims{dim}
+end
+Base.size(A::NormalVectorArray) = A.size
+@inline function Base.getindex(A::NormalVectorArray{dim}, I::Vararg{Integer, dim}) where {dim}
+    @boundscheck checkbounds(A, I...)
+    Vec{dim, Int}() do i
+        firstindex(A, i) == I[i] && return -1
+        lastindex(A, i) == I[i] && return 1
+        0
+    end
+end
+
 ############
 # MapArray #
 ############

@@ -1,3 +1,5 @@
+using IterativeSolvers
+
 abstract type LinearSolver end
 abstract type NonlinearSolver end
 
