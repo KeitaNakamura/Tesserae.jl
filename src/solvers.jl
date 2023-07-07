@@ -13,7 +13,7 @@ mutable struct GMRESSolver{T} <: LinearSolver
     # for adaptive linear parameter
     adaptive::Bool
     counter::Int
-    reltol′::T
+    tol′::T
 end
 
 function GMRESSolver(::Type{T}=Float64; maxiter::Int=20, abstol::Real=sqrt(eps(T)), reltol::Real=sqrt(eps(T)), adaptive::Bool=false) where {T}
@@ -22,7 +22,7 @@ end
 
 function solve!(x, A, b, solver::GMRESSolver)
     if solver.adaptive
-        gmres!(fillzero!(x), A, b; solver.maxiter, initially_zero=true, solver.abstol, reltol=solver.reltol′)
+        gmres!(fillzero!(x), A, b; solver.maxiter, initially_zero=true, abstol=solver.tol′, reltol=solver.tol′)
     else
         gmres!(fillzero!(x), A, b; solver.maxiter, initially_zero=true, solver.abstol, solver.reltol)
     end
@@ -39,14 +39,14 @@ end
 function solve_adaptive!(v::AbstractVector, residual_jacobian!, R::AbstractVector, J, solver::NonlinearSolver, gmres::GMRESSolver{T}) where {T}
     v⁰ = copy(v)
 
-    if gmres.counter ≥ 100 && gmres.reltol′ < 1e-4
-        gmres.reltol′ *= 10
+    if gmres.counter ≥ 100 && gmres.tol′ ≤ 1e-4
+        gmres.tol′ *= 10
         gmres.counter = 0
     end
 
     k = 1
     converged = false
-    while !converged && gmres.reltol′ > eps(T)
+    while !converged && gmres.tol′ > eps(T)
         converged = solve!(v, residual_jacobian!, R, J, solver, (x,A,b)->solve!(x,A,b,gmres))
         if converged
             # if converged at the first iteration, +1 counter
@@ -59,7 +59,7 @@ function solve_adaptive!(v::AbstractVector, residual_jacobian!, R::AbstractVecto
 
         # also make tolerance smaller
         gmres.counter = 0
-        gmres.reltol′ /= 10
+        gmres.tol′ /= 10
 
         k += 1
     end
