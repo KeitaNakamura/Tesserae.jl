@@ -150,7 +150,7 @@ end
 function update!(mpvalues::MPValues, itp::Interpolation, lattice::Lattice, spy::AbstractArray{Bool}, particles::Particles; parallel::Bool)
     @assert num_particles(mpvalues) == length(particles)
     @assert size(lattice) == size(spy)
-    @threads_inbounds parallel for p in 1:num_particles(mpvalues)
+    @threads_static_inbounds parallel for p in 1:num_particles(mpvalues)
         update!(values(mpvalues, p), itp, lattice, spy, LazyRow(particles, p))
     end
 end

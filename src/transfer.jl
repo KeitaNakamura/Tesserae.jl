@@ -435,7 +435,7 @@ function grid_to_particle!(do_particle!, alg::TransferAlgorithm, system::Coordin
     check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
     check_particles(particles, space)
-    @threads_inbounds parallel for p in 1:num_particles(space)
+    @threads_static_inbounds parallel for p in 1:num_particles(space)
         pt = LazyRow(particles, p)
         grid_to_particle!(alg, system, Val(names), pt, grid, get_interpolation(space), values(space, p), only_dt...)
         do_particle!(pt)
@@ -638,7 +638,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
 
     @. grid.poly_coef = safe_inv(grid.poly_mat) ⋅ grid.poly_coef
 
-    @threads_inbounds parallel for p in 1:num_particles(space)
+    @threads_static_inbounds parallel for p in 1:num_particles(space)
         val = zero(eltype(vals))
         mp = values(space, p)
         gridindices = neighbornodes(mp, grid)

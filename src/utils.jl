@@ -134,29 +134,23 @@ Base.IndexStyle(::Type{<: Trues}) = IndexLinear()
     true
 end
 
-#####################
-# @threads_inbounds #
-#####################
+############################
+# @threads_static_inbounds #
+############################
 
-macro threads_inbounds(parallel, schedule::QuoteNode, ex)
+macro threads_static_inbounds(parallel, ex)
     @assert Meta.isexpr(ex, :for)
     ex.args[2] = :(@inbounds begin $(ex.args[2]) end)
     quote
         if !$parallel || Threads.nthreads() == 1
             $ex
         else
-            Threads.@threads $schedule $ex
+            Threads.@threads :static $ex
         end
     end |> esc
 end
-macro threads_inbounds(parallel, ex)
-    esc(:(Marble.@threads_inbounds $parallel :dynamic $ex))
-end
-macro threads_inbounds(schedule::QuoteNode, ex)
-    esc(:(Marble.@threads_inbounds true $schedule $ex))
-end
-macro threads_inbounds(ex)
-    esc(:(Marble.@threads_inbounds true :dynamic $ex))
+macro threads_static_inbounds(ex)
+    esc(:(Marble.@threads_static_inbounds true $ex))
 end
 
 ########
