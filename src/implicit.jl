@@ -62,8 +62,9 @@ function ImplicitSolver(
         particles::Particles;
         jacobian_free::Bool = true,
         implicit_parameter::Real = 1,
-        abstol::Real = 1e-6,
-        reltol::Real = 1e-6,
+        tol::Real = 1e-6,
+        abstol::Real = tol,
+        reltol::Real = tol,
         maxiter::Int = 10,
         nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
         linsolver = jacobian_free ? GMRESSolver(T; maxiter=15, reltol=1e-6, adaptive=true) : LUSolver(),
