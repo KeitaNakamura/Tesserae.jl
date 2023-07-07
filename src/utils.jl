@@ -153,6 +153,22 @@ macro threads_static_inbounds(ex)
     esc(:(Marble.@threads_static_inbounds true $ex))
 end
 
+###################
+# foreach_threads #
+###################
+
+function foreach_threads(f, iter, parallel=true; tasks_per_thread::Integer=1)
+    if !parallel || Threads.nthreads() == 1
+        foreach(f, iter)
+    else
+        chunks = Iterators.partition(iter, max(1, length(iter) ÷ (tasks_per_thread * Threads.nthreads())))
+        tasks = map(chunks) do chunk
+            Threads.@spawn foreach(f, chunk)
+        end
+        fetch.(tasks)
+    end
+end
+
 ########
 # SIMD #
 ########

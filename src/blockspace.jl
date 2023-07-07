@@ -33,6 +33,18 @@ function parallel_each_particle(f, blkarray::ParticlesInBlocksArray, nparticles:
     if Threads.nthreads()>1 && parallel
         for blocks in threadsafe_blocks(size(blkarray))
             blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
+            foreach_threads(blocks′, parallel) do blk
+                @inbounds foreach(f, blkarray[blk])
+            end
+        end
+    else
+        foreach(f, 1:nparticles)
+    end
+end
+function parallel_each_particle_static(f, blkarray::ParticlesInBlocksArray, nparticles::Int; parallel::Bool)
+    if Threads.nthreads()>1 && parallel
+        for blocks in threadsafe_blocks(size(blkarray))
+            blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
             @threads_static_inbounds for blk in blocks′
                 foreach(f, blkarray[blk])
             end

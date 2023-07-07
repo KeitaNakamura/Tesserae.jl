@@ -311,7 +311,7 @@ function jacobian_based_matrix!(K::SparseMatrixCSC, jac_cache::JacobianCache, θ
     Kₚ_threads = [Array{T}(undef, nₚ, nₚ) for _ in 1:Threads.nthreads()]
     dofs_threads = [Int[] for _ in 1:Threads.nthreads()]
 
-    parallel_each_particle(space; parallel) do p
+    parallel_each_particle_static(space; parallel) do p
         @_inline_meta
         @inbounds begin
             ℂₚ = Tensorial.resizedim(particles.ℂ[p], Val(dim))

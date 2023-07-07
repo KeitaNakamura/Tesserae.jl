@@ -435,10 +435,12 @@ function grid_to_particle!(do_particle!, alg::TransferAlgorithm, system::Coordin
     check_statenames(names, (:v, :∇v, :x))
     check_grid(grid, space)
     check_particles(particles, space)
-    @threads_static_inbounds parallel for p in 1:num_particles(space)
-        pt = LazyRow(particles, p)
-        grid_to_particle!(alg, system, Val(names), pt, grid, get_interpolation(space), values(space, p), only_dt...)
-        do_particle!(pt)
+    foreach_threads(1:num_particles(space), parallel) do p
+        @inbounds begin
+            pt = LazyRow(particles, p)
+            grid_to_particle!(alg, system, Val(names), pt, grid, get_interpolation(space), values(space, p), only_dt...)
+            do_particle!(pt)
+        end
     end
     particles
 end
@@ -638,17 +640,19 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
 
     @. grid.poly_coef = safe_inv(grid.poly_mat) ⋅ grid.poly_coef
 
-    @threads_static_inbounds parallel for p in 1:num_particles(space)
-        val = zero(eltype(vals))
-        mp = values(space, p)
-        gridindices = neighbornodes(mp, grid)
-        @simd for j in CartesianIndices(gridindices)
-            i = gridindices[j]
-            N = mp.N[j]
-            P = value(basis, xₚ[p] - grid.x[i])
-            val += N * (P ⋅ grid.poly_coef[i])
+    foreach_threads(1:num_particles(space), parallel) do p
+        @inbounds begin
+            val = zero(eltype(vals))
+            mp = values(space, p)
+            gridindices = neighbornodes(mp, grid)
+            @simd for j in CartesianIndices(gridindices)
+                i = gridindices[j]
+                N = mp.N[j]
+                P = value(basis, xₚ[p] - grid.x[i])
+                val += N * (P ⋅ grid.poly_coef[i])
+            end
+            vals[p] = val
         end
-        vals[p] = val
     end
 
     vals
