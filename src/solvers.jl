@@ -39,7 +39,7 @@ end
 function solve_adaptive!(v::AbstractVector, residual_jacobian!, R::AbstractVector, J, solver::NonlinearSolver, gmres::GMRESSolver{T}) where {T}
     v⁰ = copy(v)
 
-    if gmres.counter ≥ 100 && gmres.tol′ ≤ 1e-4
+    if gmres.counter ≥ 100 && gmres.tol′ < 1e-3
         gmres.tol′ *= 10
         gmres.counter = 0
     end
