@@ -143,8 +143,13 @@ function compute_grid_friction_force!(grid::Grid, Δt::Real, coefs::AbstractArra
         I′ = _tail(I)
         if μ > 0 && isactive(grid, I′)
             i = nonzeroindex(grid, I′)
-            if grid.fint[i] ⋅ normals[i] > 0
-                (dfᶜdv, dfᶜdf), fᶜ = gradient((v,f) -> compute_friction_force(v, f, grid.m[i], normals[i], Δt, μ), grid.v[i], grid.fint[i], :all)
+            σₙ = grid.fint[i] ⋅ normals[i]
+            if σₙ > 0
+                (dfᶜdv, dfᶜdf), fᶜ = gradient(grid.v[i], grid.fint[i], :all) do v, f
+                    n = normals[i]
+                    σₙ = f ⋅ n
+                    compute_contact_force(grid.m[i], v, σₙ, n, μ, Δt)
+                end
                 grid.fᶜ[i] += fᶜ
                 grid.dfᶜdv[i] += dfᶜdv
                 grid.dfᶜdf[i] += dfᶜdf
@@ -153,16 +158,13 @@ function compute_grid_friction_force!(grid::Grid, Δt::Real, coefs::AbstractArra
     end
 end
 
-function compute_friction_force(v::Vec, fint::Vec, m::Real, n::Vec, Δt::Real, μ::Real)
-    # f_stick
-    v_nor = (v ⋅ n) * n
-    v_tan = v - v_nor
-    f_stick = -m * v_tan / Δt
-    # f_friction
-    f_stick_norm = norm(f_stick)
-    f_nor_norm = fint ⋅ n
-    f_nor = f_nor_norm * n
-    -f_nor + f_stick * min(μ*f_nor_norm/f_stick_norm, 1)
+function compute_contact_force(m::Real, v::Vec, σₙ::Real, n::Vec, μ::Real, Δt::Real)
+    vₙ = (v ⋅ n) * n
+    vₜ = v - vₙ
+    fₜ = -m * vₜ / Δt # sticky force
+    σₜ = norm(fₜ)
+    fₙ = -σₙ * n
+    fₙ + fₜ * min(μ*σₙ/σₜ, 1)
 end
 
 ## internal force ##
