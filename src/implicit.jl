@@ -133,7 +133,7 @@ end
 
 ## grid friction force ##
 
-function compute_grid_friction_force!(grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
+function compute_grid_contact_force!(grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
     fillzero!(grid.fᶜ)
     fillzero!(grid.dfᶜdv)
     fillzero!(grid.dfᶜdf)
@@ -237,7 +237,7 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
         # residual
         recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
         if consider_friction
-            compute_grid_friction_force!(grid, Δt, cond)
+            compute_grid_contact_force!(grid, Δt, cond)
             @. grid.fint += grid.fᶜ
         end
         compute_residual!(R, grid, Δt, freeinds)
