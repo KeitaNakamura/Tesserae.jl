@@ -276,14 +276,14 @@ transfer algorithms. See each algorithm in [`TransferAlgorithm`](@ref) for more 
     If you set `system = Axisymmetric()` in two dimensional case, `particles.x[p][1]`
     is used for the radius position of the particle `p`.
 """
-function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
-    particle_to_grid!(alg, system, Val(names), grid, particles, space; parallel)
+function particle_to_grid!(names::Tuple{Vararg{Symbol}}, grid::Grid, particles::Particles, space::MPSpace, args...; kwargs...)
+    particle_to_grid!(Val(names), grid, particles, space, args...; kwargs...)
 end
-function particle_to_grid!(name::Symbol, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true)
-    particle_to_grid!(alg, system, Val((name,)), grid, particles, space; parallel)
+function particle_to_grid!(name::Symbol, grid::Grid, particles::Particles, space::MPSpace, args...; kwargs...)
+    particle_to_grid!(Val((name,)), grid, particles, space, args...; kwargs...)
 end
 
-function particle_to_grid!(alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, grid::Grid, particles::Particles, space::MPSpace; parallel::Bool) where {names}
+function particle_to_grid!(::Val{names}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm = FLIP(), system::CoordinateSystem = DefaultSystem(), parallel::Bool=true) where {names}
     check_statenames(names, (:m, :mv, :f, :fint, :fext, :∇m))
     check_grid(grid, space)
     check_particles(particles, space)
