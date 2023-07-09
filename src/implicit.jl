@@ -227,8 +227,8 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
 
     # jacobian
     if solver.jacobian_free
-        should_be_parallel = length(particles) > 50_000 # 50_000 is empirical value
-        A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, consider_friction, alg, system, should_be_parallel)
+        should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
+        A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, consider_friction, alg, system, parallel)
     else
         A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
