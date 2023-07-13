@@ -116,6 +116,7 @@ end
 
 reorder_particles!(particles::Particles, blkspace::BlockSpace) = _reorder_particles!(particles, particlesinblocks(blkspace))
 parallel_each_particle(f, blkspace::BlockSpace, nparticles::Int; parallel::Bool) = parallel_each_particle(f, particlesinblocks(blkspace), nparticles; parallel)
+parallel_each_particle_static(f, blkspace::BlockSpace, nparticles::Int; parallel::Bool) = parallel_each_particle_static(f, particlesinblocks(blkspace), nparticles; parallel)
 
 ####################
 # block operations #

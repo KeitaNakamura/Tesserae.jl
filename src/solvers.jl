@@ -3,7 +3,11 @@ using IterativeSolvers
 abstract type LinearSolver end
 abstract type NonlinearSolver end
 
-struct LUSolver end
+function solve!(v::AbstractVector, residual_jacobian!, R::AbstractVector, J, nlsolver::NonlinearSolver, linsolver::LinearSolver)
+    solve!(v, residual_jacobian!, R, J, nlsolver, (x,A,b)->solve!(x,A,b,linsolver))
+end
+
+struct LUSolver <: LinearSolver end
 solve!(x, A, b, ::LUSolver) = (x .= A \ b)
 
 mutable struct GMRESSolver{T} <: LinearSolver
