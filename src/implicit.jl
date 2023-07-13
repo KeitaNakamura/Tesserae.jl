@@ -89,7 +89,7 @@ function ImplicitSolver(
     # Jacobian cache
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
 
-    ImplicitSolver(jacobian_free, T(implicit_parameter), nlsolver, linsolver, grid_cache, pts_cache, jac_cache)
+    ImplicitSolver{T}(jacobian_free, implicit_parameter, nlsolver, linsolver, grid_cache, pts_cache, jac_cache)
 end
 ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Float64, grid, particles; kwargs...)
 
@@ -183,11 +183,6 @@ function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::P
     end
 end
 
-function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, θ::Real; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
-    @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v # reuse δv
-    recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
-end
-
 ## implicit version of grid_to_particle! ##
 
 function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}; parallel::Bool) where {names}
@@ -216,6 +211,7 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
     @assert :δv in propertynames(grid) && :fint in propertynames(grid) && :fext in propertynames(grid)
     @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
 
+    θ = solver.θ
     freeinds = compute_flatfreeindices(grid, cond)
 
     # calculate fext once
@@ -228,14 +224,15 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
     # jacobian
     if solver.jacobian_free
         should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
-        A = jacobian_free_matrix(solver.θ, grid, particles, space, Δt, freeinds, consider_friction, alg, system, parallel)
+        A = jacobian_free_matrix(θ, grid, particles, space, Δt, freeinds, consider_friction, alg, system, parallel)
     else
         A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
 
     function residual_jacobian!(R, J, x)
         # residual
-        recompute_grid_internal_force!(update_stress!, grid, particles, space, solver.θ; alg, system, parallel)
+        @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v # reuse δv
+        recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
         if consider_friction
             compute_grid_contact_force!(grid, Δt, cond)
             @. grid.fint += grid.fᶜ
@@ -243,7 +240,7 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
         compute_residual!(R, grid, Δt, freeinds)
         # jacobian
         if !solver.jacobian_free
-            jacobian_based_matrix!(J, solver.jac_cache, solver.θ, grid, particles, space, Δt, freeinds, parallel)
+            jacobian_based_matrix!(J, solver.jac_cache, θ, grid, particles, space, Δt, freeinds, parallel)
         end
     end
 
