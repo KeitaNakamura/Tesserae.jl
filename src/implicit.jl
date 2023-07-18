@@ -81,7 +81,6 @@ function ImplicitSolver(
                              fint = SpArray{Tv}(spinds),
                              fext = SpArray{Tv}(spinds),
                              fᶜ = SpArray{Tv}(spinds),
-                             dfᶜdv = SpArray{Tm}(spinds),
                              dfᶜdf = SpArray{Tm}(spinds))
 
     # particles cache
@@ -104,7 +103,6 @@ function reinit_grid_cache!(spgrid::StructArray, friction::Bool)
     resize_nonzeros!(spgrid.fext, n)
     if friction
         resize_nonzeros!(spgrid.fᶜ, n)
-        resize_nonzeros!(spgrid.dfᶜdv, n)
         resize_nonzeros!(spgrid.dfᶜdf, n)
     end
     spgrid
@@ -141,11 +139,10 @@ function compute_flatfreeindices(grid::Grid{dim}, coefs::AbstractArray{<: Abstra
     end
 end
 
-## grid friction force ##
+## grid contact force ##
 
-function compute_grid_contact_force!(grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
+function compute_grid_contact_force!(friction_force_function, grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
     fillzero!(grid.fᶜ)
-    fillzero!(grid.dfᶜdv)
     fillzero!(grid.dfᶜdf)
     normals = NormalVectorArray(size(grid))
     @inbounds for I in CartesianIndices(coefs)
@@ -153,28 +150,33 @@ function compute_grid_contact_force!(grid::Grid, Δt::Real, coefs::AbstractArray
         I′ = _tail(I)
         if μ > 0 && isactive(grid, I′)
             i = nonzeroindex(grid, I′)
-            σₙ = grid.fint[i] ⋅ normals[i]
-            if σₙ > 0
-                (dfᶜdv, dfᶜdf), fᶜ = gradient(grid.v[i], grid.fint[i], :all) do v, f
+            fₙ = grid.fint[i] ⋅ normals[i]
+            if fₙ > 0
+                dfᶜdf, fᶜ = gradient(grid.fint[i], :all) do f
                     n = normals[i]
-                    σₙ = f ⋅ n
-                    compute_contact_force(grid.m[i], v, σₙ, n, μ, Δt)
+                    v★ = grid.vⁿ[i] + Δt * (grid.fext[i] + f) / grid.m[i]
+                    vₜ★ = v★ - (v★⋅n) * n
+                    vₜ★_norm = norm(vₜ★)
+                    if isapproxzero(vₜ★_norm)
+                        zero(vₜ★)
+                    else
+                        τ = friction_force_function(vₜ★_norm, f⋅n, μ)
+                        -τ * (vₜ★/vₜ★_norm)
+                    end
                 end
                 grid.fᶜ[i] += fᶜ
-                grid.dfᶜdv[i] += dfᶜdv
                 grid.dfᶜdf[i] += dfᶜdf
             end
         end
     end
 end
 
-function compute_contact_force(m::Real, v::Vec, σₙ::Real, n::Vec, μ::Real, Δt::Real)
-    vₙ = (v ⋅ n) * n
-    vₜ = v - vₙ
-    fₜ = -m * vₜ / Δt # sticky force
-    σₜ = norm(fₜ)
-    fₙ = -σₙ * n
-    fₙ + fₜ * min(μ*σₙ/σₜ, 1)
+function default_friction_force_function(; ϵᵥ::Real = sqrt(eps(Float64)))
+    function(vₜ::Real, fₙ::Real, μ::Real)
+        ξ = vₜ / ϵᵥ
+        θ = ξ < 1 ? -ξ^2 + 2ξ : one(ξ)
+        θ*μ*fₙ
+    end
 end
 
 ## internal force ##
@@ -205,14 +207,39 @@ end
 
 ## implicit version of grid_to_particle! ##
 
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}; parallel::Bool) where {names}
+function grid_to_particle!(
+        update_stress!,
+        alg       :: TransferAlgorithm,
+        system    :: CoordinateSystem,
+                  :: Val{names},
+        particles :: Particles,
+        grid      :: Grid,
+        space     :: MPSpace,
+        Δt        :: Real,
+        solver    :: ImplicitSolver,
+        cond      :: AbstractArray{<: Real},
+        friction_force_function = default_friction_force_function();
+        parallel  :: Bool) where {names}
     @assert :∇v in names
-    grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, cond; alg, system, parallel)
+    grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, cond, friction_force_function; alg, system, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
     !isempty(rest) && grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
 
-function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}; parallel::Bool)
+function grid_to_particle!(
+        update_stress!,
+        alg       :: TransferAlgorithm,
+        system    :: CoordinateSystem,
+                  :: Val{(:∇v,)},
+        particles :: Particles,
+        grid      :: Grid,
+        space     :: MPSpace,
+        Δt        :: Real,
+        solver    :: ImplicitSolver,
+        cond      :: AbstractArray{<: Real},
+        friction_force_function;
+        parallel  :: Bool
+    )
     consider_friction = eltype(cond) <: AbstractFloat
     _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)),
                        alg,
@@ -224,10 +251,11 @@ function grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coord
                        Δt,
                        solver,
                        cond,
+                       friction_force_function,
                        parallel)
 end
 
-function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}, parallel::Bool)
+function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}, friction_force_function, parallel::Bool)
     @assert :δv in propertynames(grid) && :fint in propertynames(grid) && :fext in propertynames(grid)
     @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
 
@@ -258,7 +286,7 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
 
         # contact force
         if consider_friction
-            compute_grid_contact_force!(grid, Δt, cond)
+            compute_grid_contact_force!(friction_force_function, grid, Δt, cond)
             @. grid.fint += grid.fᶜ
         end
 
@@ -291,7 +319,7 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
             recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
             @. grid.fint *= θ
             if consider_friction
-                @. grid.fint += grid.dfᶜdv ⋅ grid.δv + grid.dfᶜdf ⋅ grid.fint
+                @. grid.fint += grid.dfᶜdf ⋅ grid.fint
             end
             δa = flatarray(grid.fint ./= grid.m, freeinds)
             @. Jδv = δv - Δt * δa
