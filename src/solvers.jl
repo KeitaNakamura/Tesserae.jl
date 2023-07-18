@@ -51,15 +51,15 @@ function solve_adaptive!(v::AbstractVector, residual_jacobian!, R::AbstractVecto
     k = 1
     converged = false
     while !converged && gmres.tol′ > eps(T)
+        # reset the state
+        v .= v⁰
+
         converged = solve!(v, residual_jacobian!, R, J, solver, (x,A,b)->solve!(x,A,b,gmres))
         if converged
             # if converged at the first iteration, +1 counter
             gmres.counter = ifelse(k==1, gmres.counter+1, 0)
             break
         end
-
-        # if not converged, reset the state
-        v .= v⁰
 
         # also make tolerance smaller
         gmres.counter = 0
@@ -68,6 +68,9 @@ function solve_adaptive!(v::AbstractVector, residual_jacobian!, R::AbstractVecto
         k += 1
     end
 
+    if !converged
+        gmres.tol′ *= 10
+    end
     converged
 end
 
