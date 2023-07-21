@@ -118,6 +118,14 @@ function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) 
     end
 end
 
+function compute_flatfreeindices(grid::Grid{dim}, coefs::AbstractArray{<: AbstractFloat}) where {dim}
+    @assert size(coefs) == (dim, size(grid)...)
+    filter(CartesianIndices(coefs)) do I
+        I′ = _tail(I)
+        @inbounds isactive(grid, I′) && coefs[I] ≥ 0 # negative friction coefficient means fixed
+    end
+end
+
 ## residual ##
 
 function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex}, solver::ImplicitSolver)
@@ -128,14 +136,6 @@ function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::A
         θ = solver.θ
         @. grid.δv = grid.v - grid.vⁿ - Δt * ((θ*grid.fint + grid.fext) / grid.m) # reuse δv
         R .= flatarray(grid.δv, freeinds)
-    end
-end
-
-function compute_flatfreeindices(grid::Grid{dim}, coefs::AbstractArray{<: AbstractFloat}) where {dim}
-    @assert size(coefs) == (dim, size(grid)...)
-    filter(CartesianIndices(coefs)) do I
-        I′ = _tail(I)
-        @inbounds isactive(grid, I′) && coefs[I] ≥ 0 # negative friction coefficient means fixed
     end
 end
 
