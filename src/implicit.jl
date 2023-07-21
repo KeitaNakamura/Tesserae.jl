@@ -139,9 +139,9 @@ function compute_flatfreeindices(grid::Grid{dim}, coefs::AbstractArray{<: Abstra
     end
 end
 
-## grid contact force ##
+## grid friction force ##
 
-function compute_grid_contact_force!(friction_force_function, grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
+function compute_grid_friction_force!(friction_force_function, grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
     fillzero!(grid.fᶜ)
     fillzero!(grid.dfᶜdf)
     normals = NormalVectorArray(size(grid))
@@ -284,9 +284,9 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
         # internal force
         recompute_grid_internal_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
 
-        # contact force
+        # friction force
         if consider_friction
-            compute_grid_contact_force!(friction_force_function, grid, Δt, cond)
+            compute_grid_friction_force!(friction_force_function, grid, Δt, cond)
             @. grid.fint += grid.fᶜ
         end
 
