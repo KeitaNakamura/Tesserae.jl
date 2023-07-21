@@ -29,28 +29,12 @@ Base.size(x::ParticlesInBlocksArray) = size(x.stops)
 end
 
 # block-wise parallel computation
-function parallel_each_particle(f, blkarray::ParticlesInBlocksArray, nparticles::Int; parallel::Bool)
-    if Threads.nthreads()>1 && parallel
-        for blocks in threadsafe_blocks(size(blkarray))
-            blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
-            foreach_threads(blocks′, parallel) do blk
-                @inbounds foreach(f, blkarray[blk])
-            end
+function blockwise_parallel_each_particle(f, blkarray::ParticlesInBlocksArray, nparticles::Int, schedule::Symbol; ntasks::Integer)
+    for blocks in threadsafe_blocks(size(blkarray))
+        blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
+        parallel_foreach(blocks′, schedule; ntasks) do blk
+            foreach(f, blkarray[blk])
         end
-    else
-        foreach(f, 1:nparticles)
-    end
-end
-function parallel_each_particle_static(f, blkarray::ParticlesInBlocksArray, nparticles::Int; parallel::Bool)
-    if Threads.nthreads()>1 && parallel
-        for blocks in threadsafe_blocks(size(blkarray))
-            blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
-            @threads_static_inbounds for blk in blocks′
-                foreach(f, blkarray[blk])
-            end
-        end
-    else
-        foreach(f, 1:nparticles)
     end
 end
 
@@ -73,12 +57,15 @@ num_particles(bs::BlockSpace, index...) = (@_propagate_inbounds_meta; last(bs.np
 particlesinblocks(bs::BlockSpace) = bs.blkarray
 
 function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector; parallel::Bool)
+    ntasks = ifelse(parallel, Threads.nthreads(), 1)
     fillzero!.(bs.nparticles)
-    @threads_static_inbounds parallel for p in eachindex(xₚ)
-        id = Threads.threadid()
-        blk = sub2ind(blocksize(bs), whichblock(lattice, xₚ[p]))
-        bs.blockindices[p] = blk
-        bs.localindices[p] = iszero(blk) ? 0 : (bs.nparticles[id][blk] += 1)
+    parallel_foreach(eachindex(xₚ), :static; ntasks) do p
+        @inbounds begin
+            id = Threads.threadid()
+            blk = sub2ind(blocksize(bs), whichblock(lattice, xₚ[p]))
+            bs.blockindices[p] = blk
+            bs.localindices[p] = iszero(blk) ? 0 : (bs.nparticles[id][blk] += 1)
+        end
     end
     for i in 1:Threads.nthreads()-1
         @inbounds broadcast!(+, bs.nparticles[i+1], bs.nparticles[i+1], bs.nparticles[i])
@@ -88,7 +75,7 @@ function update!(bs::BlockSpace, lattice::Lattice, xₚ::AbstractVector; paralle
     # update `particlesinblocks`
     blkarray = particlesinblocks(bs)
     cumsum!(vec(blkarray.stops), vec(nptsinblks))
-    @threads_static_inbounds parallel for p in eachindex(xₚ)
+    parallel_foreach(eachindex(xₚ), :static; ntasks) do p
         blk = bs.blockindices[p]
         if !iszero(blk)
             id = Threads.threadid()
@@ -115,8 +102,8 @@ function update_sparsity!(spy::AbstractArray, bs::BlockSpace)
 end
 
 reorder_particles!(particles::Particles, blkspace::BlockSpace) = _reorder_particles!(particles, particlesinblocks(blkspace))
-parallel_each_particle(f, blkspace::BlockSpace, nparticles::Int; parallel::Bool) = parallel_each_particle(f, particlesinblocks(blkspace), nparticles; parallel)
-parallel_each_particle_static(f, blkspace::BlockSpace, nparticles::Int; parallel::Bool) = parallel_each_particle_static(f, particlesinblocks(blkspace), nparticles; parallel)
+blockwise_parallel_each_particle(f, blkspace::BlockSpace, nparticles::Int, schedule::Symbol; ntasks::Integer) =
+    blockwise_parallel_each_particle(f, particlesinblocks(blkspace), nparticles, schedule; ntasks)
 
 ####################
 # block operations #

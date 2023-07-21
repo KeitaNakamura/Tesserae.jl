@@ -151,39 +151,29 @@ Base.IndexStyle(::Type{<: Trues}) = IndexLinear()
     true
 end
 
-############################
-# @threads_static_inbounds #
-############################
+####################
+# parallel_foreach #
+####################
 
-macro threads_static_inbounds(parallel, ex)
-    @assert Meta.isexpr(ex, :for)
-    ex.args[2] = :(@inbounds begin $(ex.args[2]) end)
-    quote
-        if !$parallel || Threads.nthreads() == 1
-            $ex
-        else
-            Threads.@threads :static $ex
-        end
-    end |> esc
-end
-macro threads_static_inbounds(ex)
-    esc(:(Marble.@threads_static_inbounds true $ex))
-end
-
-###################
-# foreach_threads #
-###################
-
-function foreach_threads(f, iter, parallel=true; tasks_per_thread::Integer=1)
-    if !parallel || Threads.nthreads() == 1
+function parallel_foreach(f, iter, schedule::Symbol; ntasks::Integer)
+    if ntasks == 1
         foreach(f, iter)
     else
-        chunks = Iterators.partition(iter, max(1, length(iter) ÷ (tasks_per_thread * Threads.nthreads())))
-        tasks = map(chunks) do chunk
-            Threads.@spawn foreach(f, chunk)
+        if schedule == :static
+            Threads.@threads :static for x in iter
+                f(x)
+            end
+        elseif schedule == :dynamic
+            chunks = Iterators.partition(iter, max(1, length(iter) ÷ ntasks))
+            tasks = map(chunks) do chunk
+                Threads.@spawn foreach(f, chunk)
+            end
+            fetch.(tasks)
+        else
+            throw(ArgumentError("unsupported schedule argument in Marble.parallel_foreach"))
         end
-        fetch.(tasks)
     end
+    nothing
 end
 
 ########

@@ -78,7 +78,7 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
         # handle excluded domain
         spy = space.cache_spy
         spy .= filter
-        parallel_each_particle(space; parallel) do p
+        blockwise_parallel_each_particle(space, :dynamic; parallel) do p
             @inbounds begin
                 inds = neighbornodes(lattice, particles.x[p], 1)
                 spy[inds] .= true
@@ -90,11 +90,14 @@ function update_mpvalues!(space::MPSpace, lattice::Lattice, particles::Particles
     space
 end
 
-function parallel_each_particle(f, space::MPSpace; parallel::Bool=true)
-    parallel_each_particle(f, get_blockspace(space), num_particles(space); parallel)
-end
-function parallel_each_particle_static(f, space::MPSpace; parallel::Bool=true)
-    parallel_each_particle_static(f, get_blockspace(space), num_particles(space); parallel)
+function blockwise_parallel_each_particle(f, space::MPSpace, schedule::Symbol; parallel::Bool=true)
+    blockwise_parallel_each_particle(
+        f,
+        get_blockspace(space),
+        num_particles(space),
+        schedule;
+        ntasks = ifelse(parallel, Threads.nthreads(), 1)
+    )
 end
 
 function Base.show(io::IO, space::MPSpace{dim, T}) where {dim, T}

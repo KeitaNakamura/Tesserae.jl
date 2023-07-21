@@ -183,7 +183,7 @@ end
 
 function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     fillzero!(grid.fint)
-    parallel_each_particle(space; parallel) do p
+    blockwise_parallel_each_particle(space, :dynamic; parallel) do p
         @inbounds begin
             pt = LazyRow(particles, p)
             itp = get_interpolation(space)
@@ -331,8 +331,7 @@ function diagonal_preconditioner!(P::AbstractVector, θ::Real, particles::Partic
     @assert legnth(P) == length(freeinds)
     fill!(P, 1)
     fillzero!(grid.δv) # reuse δv
-    parallel_each_particle(space; parallel) do p
-        @_inline_meta
+    blockwise_parallel_each_particle(space, :dynamic; parallel) do p
         @inbounds begin
             ℂₚ = Tensorial.resizedim(particles.ℂ[p], Val(dim))
             mp = values(space, p)
@@ -438,8 +437,7 @@ function jacobian_based_matrix!(K::SparseMatrixCSC, jac_cache::JacobianCache, θ
     Kₚ_threads = [Array{T}(undef, nₚ, nₚ) for _ in 1:Threads.nthreads()]
     dofs_threads = [Int[] for _ in 1:Threads.nthreads()]
 
-    parallel_each_particle_static(space; parallel) do p
-        @_inline_meta
+    blockwise_parallel_each_particle(space, :static; parallel) do p
         @inbounds begin
             ℂₚ = Tensorial.resizedim(particles.ℂ[p], Val(dim))
             mp = values(space, p)
