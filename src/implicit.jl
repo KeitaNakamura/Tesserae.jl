@@ -77,11 +77,11 @@ function ImplicitSolver(
     Tv = eltype(grid.v)
     Tm = Mat{dim,dim,eltype(Tv),dim*dim}
     spinds = get_spinds(grid)
-    grid_cache = StructArray(δv = SpArray{Tv}(spinds),
-                             fint = SpArray{Tv}(spinds),
-                             fext = SpArray{Tv}(spinds),
-                             fᶜ = SpArray{Tv}(spinds),
-                             dfᶜdf = SpArray{Tm}(spinds))
+    grid_cache = StructArray(δv    = SpArray{Tv}(spinds),
+                             fint  = SpArray{Tv}(spinds),
+                             fext  = SpArray{Tv}(spinds),
+                             fᵇ    = SpArray{Tv}(spinds),
+                             dfᵇdf = SpArray{Tm}(spinds))
 
     # particles cache
     npts = length(particles)
@@ -102,8 +102,8 @@ function reinit_grid_cache!(spgrid::StructArray, friction::Bool)
     resize_nonzeros!(spgrid.fint, n)
     resize_nonzeros!(spgrid.fext, n)
     if friction
-        resize_nonzeros!(spgrid.fᶜ, n)
-        resize_nonzeros!(spgrid.dfᶜdf, n)
+        resize_nonzeros!(spgrid.fᵇ, n)
+        resize_nonzeros!(spgrid.dfᵇdf, n)
     end
     spgrid
 end
@@ -141,18 +141,18 @@ end
 
 ## grid friction force ##
 
-function compute_grid_friction_force!(friction_force_function, grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
-    fillzero!(grid.fᶜ)
-    fillzero!(grid.dfᶜdf)
+function compute_boundary_friction!(friction_force_function, grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
+    fillzero!(grid.fᵇ)
+    fillzero!(grid.dfᵇdf)
     normals = NormalVectorArray(size(grid))
-    @inbounds for I in CartesianIndices(coefs)
+    for I in CartesianIndices(coefs)
         μ = coefs[I]
         I′ = _tail(I)
         if μ > 0 && isactive(grid, I′)
             i = nonzeroindex(grid, I′)
             fₙ = grid.fint[i] ⋅ normals[i]
             if fₙ > 0
-                dfᶜdf, fᶜ = gradient(grid.fint[i], :all) do f
+                dfᵇdf, fᵇ = gradient(grid.fint[i], :all) do f
                     n = normals[i]
                     v★ = grid.vⁿ[i] + Δt * (grid.fext[i] + f) / grid.m[i]
                     vₜ★ = v★ - (v★⋅n) * n
@@ -164,8 +164,8 @@ function compute_grid_friction_force!(friction_force_function, grid::Grid, Δt::
                         -τ * (vₜ★/vₜ★_norm)
                     end
                 end
-                grid.fᶜ[i] += fᶜ
-                grid.dfᶜdf[i] += dfᶜdf
+                grid.fᵇ[i] += fᵇ
+                grid.dfᵇdf[i] += dfᵇdf
             end
         end
     end
@@ -207,60 +207,80 @@ end
 
 ## implicit version of grid_to_particle! ##
 
+function default_boundary_condition(gridsize::Dims{dim}) where {dim}
+    # normals = NormalVectorArray(gridsize)
+    # broadcast(!iszero, reinterpret(reshape, eltype(eltype(normals)), normals))
+    falses(dim, gridsize...)
+end
+
 function grid_to_particle!(
         update_stress!,
-        alg       :: TransferAlgorithm,
-        system    :: CoordinateSystem,
-                  :: Val{names},
-        particles :: Particles,
-        grid      :: Grid,
-        space     :: MPSpace,
-        Δt        :: Real,
-        solver    :: ImplicitSolver,
-        cond      :: AbstractArray{<: Real},
-        friction_force_function = default_friction_force_function();
-        parallel  :: Bool) where {names}
+        alg             :: TransferAlgorithm,
+        system          :: CoordinateSystem,
+                        :: Val{names},
+        particles       :: Particles,
+        grid            :: Grid,
+        space           :: MPSpace,
+        Δt              :: Real,
+        solver          :: ImplicitSolver;
+        bc              :: AbstractArray{<: Real} = default_boundary_condition(size(grid)),
+        friction_force  :: Function               = default_friction_force_function(),
+        parallel        :: Bool,
+    ) where {names}
     @assert :∇v in names
-    grid_to_particle!(update_stress!, :∇v, particles, grid, space, Δt, solver, cond, friction_force_function; alg, system, parallel)
+    grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, solver; bc, friction_force, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
     !isempty(rest) && grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
 
 function grid_to_particle!(
         update_stress!,
-        alg       :: TransferAlgorithm,
-        system    :: CoordinateSystem,
-                  :: Val{(:∇v,)},
-        particles :: Particles,
-        grid      :: Grid,
-        space     :: MPSpace,
-        Δt        :: Real,
-        solver    :: ImplicitSolver,
-        cond      :: AbstractArray{<: Real},
-        friction_force_function;
-        parallel  :: Bool
+        alg             :: TransferAlgorithm,
+        system          :: CoordinateSystem,
+                        :: Val{(:∇v,)},
+        particles       :: Particles,
+        grid            :: Grid,
+        space           :: MPSpace,
+        Δt              :: Real,
+        solver          :: ImplicitSolver;
+        bc              :: AbstractArray{<: Real} = default_boundary_condition(size(grid)),
+        friction_force  :: Function               = default_friction_force_function(),
+        parallel        :: Bool,
     )
-    consider_friction = eltype(cond) <: AbstractFloat
+    consider_boundary_condition = eltype(bc) <: AbstractFloat
     _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)),
                        alg,
                        system,
                        Val((:∇v,)),
                        combine(particles, solver.pts_cache),
-                       combine(grid, reinit_grid_cache!(solver.grid_cache, consider_friction)),
+                       combine(grid, reinit_grid_cache!(solver.grid_cache, consider_boundary_condition)),
                        space,
                        Δt,
                        solver,
-                       cond,
-                       friction_force_function,
+                       bc,
+                       friction_force,
                        parallel)
 end
 
-function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{(:∇v,)}, particles::Particles, grid::Grid, space::MPSpace, Δt::Real, solver::ImplicitSolver, cond::AbstractArray{<: Real}, friction_force_function, parallel::Bool)
+function _grid_to_particle!(
+        update_stress!,
+        alg             :: TransferAlgorithm,
+        system          :: CoordinateSystem,
+                        :: Val{(:∇v,)},
+        particles       :: Particles,
+        grid            :: Grid,
+        space           :: MPSpace,
+        Δt              :: Real,
+        solver          :: ImplicitSolver,
+        bc              :: AbstractArray{<: Real},
+        friction_force  :: Function,
+        parallel        :: Bool,
+    )
     @assert :δv in propertynames(grid) && :fint in propertynames(grid) && :fext in propertynames(grid)
     @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
 
     θ = solver.θ
-    freeinds = compute_flatfreeindices(grid, cond)
+    freeinds = compute_flatfreeindices(grid, bc)
 
     # calculate fext once
     fillzero!(grid.fext)
@@ -270,12 +290,12 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
     end
 
     # friction on boundaries
-    consider_friction = eltype(cond) <: AbstractFloat
+    consider_boundary_condition = eltype(bc) <: AbstractFloat
 
     # jacobian
     if solver.jacobian_free
         should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
-        A = jacobian_free_matrix(θ, grid, particles, space, Δt, freeinds, consider_friction, alg, system, parallel)
+        A = jacobian_free_matrix(θ, grid, particles, space, Δt, freeinds, consider_boundary_condition, alg, system, parallel)
     else
         A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
@@ -285,9 +305,9 @@ function _grid_to_particle!(update_stress!, alg::TransferAlgorithm, system::Coor
         recompute_grid_internal_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
 
         # friction force
-        if consider_friction
-            compute_grid_friction_force!(friction_force_function, grid, Δt, cond)
-            @. grid.fint += grid.fᶜ
+        if consider_boundary_condition
+            compute_boundary_friction!(friction_force, grid, Δt, bc)
+            @. grid.fint += grid.fᵇ
         end
 
         # residual
@@ -306,7 +326,7 @@ end
 
 ## for Jacobian-free method ##
 
-function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freeinds::Vector{<: CartesianIndex}, consider_friction::Bool, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freeinds::Vector{<: CartesianIndex}, consider_boundary_condition::Bool, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
         @inbounds begin
             ∇δvₚ = pt.∇v
@@ -318,8 +338,8 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
             flatarray(fillzero!(grid.δv), freeinds) .= δv
             recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
             @. grid.fint *= θ
-            if consider_friction
-                @. grid.fint += grid.dfᶜdf ⋅ grid.fint
+            if consider_boundary_condition
+                @. grid.fint += grid.dfᵇdf ⋅ grid.fint
             end
             δa = flatarray(grid.fint ./= grid.m, freeinds)
             @. Jδv = δv - Δt * δa
