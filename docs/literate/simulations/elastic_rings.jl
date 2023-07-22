@@ -129,7 +129,7 @@ function elastic_rings(
 
         ## implicit G2P transfer
         if implicit
-            grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver, isfixed; alg) do pt
+            grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver; alg, bc=isfixed) do pt
                 gradient(pt.∇v) do ∇v
                     F = (I + Δt*∇v) ⋅ pt.Fⁿ
                     V = det(F) * pt.V⁰
