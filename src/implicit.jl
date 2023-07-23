@@ -78,6 +78,7 @@ function ImplicitSolver(
     Tm = Mat{dim,dim,eltype(Tv),dim*dim}
     spinds = get_spinds(grid)
     grid_cache = StructArray(δv    = SpArray{Tv}(spinds),
+                             f★    = SpArray{Tv}(spinds),
                              fint  = SpArray{Tv}(spinds),
                              fext  = SpArray{Tv}(spinds),
                              fᵇ    = SpArray{Tv}(spinds),
@@ -99,6 +100,7 @@ ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Flo
 function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bool)
     n = countnnz(get_spinds(spgrid.δv))
     resize_nonzeros!(spgrid.δv, n)
+    resize_nonzeros!(spgrid.f★, n)
     resize_nonzeros!(spgrid.fint, n)
     resize_nonzeros!(spgrid.fext, n)
     if consider_boundary_condition
@@ -337,10 +339,11 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
         @inbounds begin
             flatarray(fillzero!(grid.δv), freeinds) .= θ .* δv
             recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
+            @. grid.f★ = grid.fint
             if consider_boundary_condition
-                @. grid.fint += grid.dfᵇdf ⋅ grid.fint
+                @. grid.f★ += grid.dfᵇdf ⋅ grid.fint
             end
-            δa = flatarray(grid.fint ./= grid.m, freeinds)
+            δa = flatarray(grid.f★ ./= grid.m, freeinds)
             @. Jδv = δv - Δt * δa
         end
     end
