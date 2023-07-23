@@ -96,12 +96,12 @@ function ImplicitSolver(
 end
 ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Float64, grid, particles; kwargs...)
 
-function reinit_grid_cache!(spgrid::StructArray, friction::Bool)
+function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bool)
     n = countnnz(get_spinds(spgrid.δv))
     resize_nonzeros!(spgrid.δv, n)
     resize_nonzeros!(spgrid.fint, n)
     resize_nonzeros!(spgrid.fext, n)
-    if friction
+    if consider_boundary_condition
         resize_nonzeros!(spgrid.fᵇ, n)
         resize_nonzeros!(spgrid.dfᵇdf, n)
     end
@@ -139,7 +139,7 @@ function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::A
     end
 end
 
-## grid friction force ##
+## boundary friction force ##
 
 function compute_boundary_friction!(friction_force_function, grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
     fillzero!(grid.fᵇ)
@@ -171,9 +171,9 @@ function compute_boundary_friction!(friction_force_function, grid::Grid, Δt::Re
     end
 end
 
-function default_friction_force_function(; ϵᵥ::Real = sqrt(eps(Float64)))
+function default_friction_force_function(; ϵ::Real = sqrt(eps(Float64)))
     function(vₜ::Real, fₙ::Real, μ::Real)
-        ξ = vₜ / ϵᵥ
+        ξ = vₜ / ϵ
         θ = ξ < 1 ? -ξ^2 + 2ξ : one(ξ)
         θ*μ*fₙ
     end
@@ -304,7 +304,7 @@ function _grid_to_particle!(
         # internal force
         recompute_grid_internal_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
 
-        # friction force
+        # boundary condition
         if consider_boundary_condition
             compute_boundary_friction!(friction_force, grid, Δt, bc)
             @. grid.fint += grid.fᵇ
@@ -335,9 +335,8 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
     end
     LinearMap(length(freeinds)) do Jδv, δv
         @inbounds begin
-            flatarray(fillzero!(grid.δv), freeinds) .= δv
+            flatarray(fillzero!(grid.δv), freeinds) .= θ .* δv
             recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
-            @. grid.fint *= θ
             if consider_boundary_condition
                 @. grid.fint += grid.dfᵇdf ⋅ grid.fint
             end
