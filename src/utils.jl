@@ -74,7 +74,7 @@ function combine(A::StructArray, B::StructArray)
 end
 
 @inline flatarray(A::AbstractArray{Vec{dim, T}, dim}) where {dim, T} = reinterpret(reshape, T, A)
-@inline function flatarray(A::AbstractArray{<: Vec{dim}, dim}, flatfreeinds::AbstractVector{CartesianIndex{N}}) where {dim, N}
+@inline function flatview(A::AbstractArray{<: Vec{dim}, dim}, flatfreeinds::AbstractVector{CartesianIndex{N}}) where {dim, N}
     @assert dim+1 == N
     @boundscheck checkbounds(flatarray(A), flatfreeinds)
     @inbounds view(flatarray(A), flatfreeinds)

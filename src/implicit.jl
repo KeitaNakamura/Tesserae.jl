@@ -298,7 +298,7 @@ function _grid_to_particle!(
 
         # residual
         @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
-        R .= flatarray(grid.δv, freeinds)
+        R .= flatview(grid.δv, freeinds)
 
         # jacobian
         if !solver.jacobian_free
@@ -306,7 +306,7 @@ function _grid_to_particle!(
         end
     end
 
-    v = flatarray(grid.v, freeinds)
+    v = flatview(grid.v, freeinds)
     converged = solve!(v, residual_jacobian!, similar(v), A, solver.nlsolver, solver.linsolver)
     converged || @warn "Implicit method not converged"
 end
@@ -340,7 +340,7 @@ function jacobian_free_matrix(solver::ImplicitSolver, grid::Grid, particles::Par
             if consider_boundary_condition
                 @. grid.f★ += grid.dfᵇdf ⋅ grid.fint
             end
-            δa = flatarray(grid.f★ ./= grid.m, freeinds)
+            δa = flatview(grid.f★ ./= grid.m, freeinds)
             @. Jδv = δv - Δt * δa
         end
     end
@@ -363,7 +363,7 @@ function diagonal_preconditioner!(P::AbstractVector, θ::Real, particles::Partic
         end
     end
     @. grid.δv *= θ * Δt / grid.m
-    Diagonal(broadcast!(+, P, P, flatarray(grid.δv, freeinds)))
+    Diagonal(broadcast!(+, P, P, flatview(grid.δv, freeinds)))
 end
 
 ## for Jacobian-based method ##
@@ -377,7 +377,7 @@ function construct_sparse_matrix!(jac_cache::JacobianCache, space::MPSpace{dim, 
 
     # reinit griddofs
     fillzero!(griddofs)
-    flatarray(griddofs)[freeinds] .= 1:length(freeinds)
+    flatview(griddofs, freeinds) .= 1:length(freeinds)
 
     nelts = prod(gridsize(space) .- 1)
     nₚ = dim * prod(gridsize(get_interpolation(space), Val(dim)))
