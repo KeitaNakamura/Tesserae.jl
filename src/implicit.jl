@@ -128,19 +128,6 @@ function compute_flatfreeindices(grid::Grid{dim}, coefs::AbstractArray{<: Abstra
     end
 end
 
-## residual ##
-
-function compute_residual!(R::AbstractVector, grid::Grid, Δt::Real, freeinds::AbstractVector{<: CartesianIndex}, solver::ImplicitSolver)
-    if solver.lin_var == lin_velocity
-        @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
-        R .= flatarray(grid.δv, freeinds)
-    elseif solver.lin_var == lin_force
-        θ = solver.θ
-        @. grid.δv = grid.v - grid.vⁿ - Δt * ((θ*grid.fint + grid.fext) / grid.m) # reuse δv
-        R .= flatarray(grid.δv, freeinds)
-    end
-end
-
 ## boundary friction force ##
 
 function compute_boundary_friction!(friction_force_function, grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
@@ -194,16 +181,6 @@ function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::P
             update_stress!(pt)
             particle_to_grid!(alg, system, Val((:fint,)), grid, pt, itp, mp)
         end
-    end
-end
-
-function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, solver::ImplicitSolver; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
-    if solver.lin_var == lin_velocity
-        θ = solver.θ
-        @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v # reuse δv
-        recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
-    elseif solver.lin_var == lin_force
-        recompute_grid_internal_force!(update_stress!, grid, particles, space; alg, system, parallel)
     end
 end
 
@@ -297,14 +274,21 @@ function _grid_to_particle!(
     # jacobian
     if solver.jacobian_free
         should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
-        A = jacobian_free_matrix(θ, grid, particles, space, Δt, freeinds, consider_boundary_condition, alg, system, parallel)
+        A = jacobian_free_matrix(solver, grid, particles, space, Δt, freeinds, consider_boundary_condition, alg, system, parallel)
     else
         A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
 
     function residual_jacobian!(R, J, x)
+
         # internal force
-        recompute_grid_internal_force!(update_stress!, grid, particles, space, solver; alg, system, parallel)
+        if solver.lin_var == lin_velocity
+            @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v # reuse δv
+            recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
+        elseif solver.lin_var == lin_force
+            recompute_grid_internal_force!(update_stress!, grid, particles, space; alg, system, parallel)
+            @. grid.fint = θ * grid.fint
+        end
 
         # boundary condition
         if consider_boundary_condition
@@ -313,7 +297,8 @@ function _grid_to_particle!(
         end
 
         # residual
-        compute_residual!(R, grid, Δt, freeinds, solver)
+        @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
+        R .= flatarray(grid.δv, freeinds)
 
         # jacobian
         if !solver.jacobian_free
@@ -328,7 +313,7 @@ end
 
 ## for Jacobian-free method ##
 
-function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freeinds::Vector{<: CartesianIndex}, consider_boundary_condition::Bool, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function jacobian_free_matrix(solver::ImplicitSolver, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freeinds::Vector{<: CartesianIndex}, consider_boundary_condition::Bool, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
     @inline function update_stress!(pt)
         @inbounds begin
             ∇δvₚ = pt.∇v
@@ -337,8 +322,20 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
     end
     LinearMap(length(freeinds)) do Jδv, δv
         @inbounds begin
-            flatarray(fillzero!(grid.δv), freeinds) .= θ .* δv
+            # setup grid.δv
+            if solver.lin_var == lin_velocity
+                flatview(fillzero!(grid.δv), freeinds) .= solver.θ .* δv
+            else
+                flatview(fillzero!(grid.δv), freeinds) .= δv
+            end
+
+            # recompute grid internal force `grid.fint` from grid velocity `grid.v`
             recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
+            if solver.lin_var == lin_force
+                @. grid.fint *= solver.θ
+            end
+
+            # Jacobian-vector product
             @. grid.f★ = grid.fint
             if consider_boundary_condition
                 @. grid.f★ += grid.dfᵇdf ⋅ grid.fint
