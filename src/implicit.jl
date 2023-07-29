@@ -2,6 +2,9 @@ using LinearMaps: LinearMap
 
 _tail(I::CartesianIndex) = CartesianIndex(Base.tail(Tuple(I)))
 
+normal(v::Vec, n::Vec) = (v⋅n) * n
+tangential(v::Vec, n::Vec) = v - normal(v,n)
+
 struct SparseMatrixCSCCache{Tv, Ti, T}
     I::Vector{Ti}
     J::Vector{Ti}
@@ -135,19 +138,15 @@ function compute_boundary_friction!(friction_force_function, grid::Grid, Δt::Re
         I′ = _tail(I)
         if μ > 0 && isactive(grid, I′)
             i = nonzeroindex(grid, I′)
-            fₙ = grid.fint[i] ⋅ normals[i]
-            if fₙ > 0
-                dfᵇdf, fᵇ = gradient(grid.fint[i], :all) do f
-                    n = normals[i]
-                    v★ = grid.vⁿ[i] + Δt * (grid.fext[i] + f) / grid.m[i]
-                    vₜ★ = v★ - (v★⋅n) * n
-                    vₜ★_norm = norm(vₜ★)
-                    if isapproxzero(vₜ★_norm)
-                        zero(vₜ★)
-                    else
-                        τ = friction_force_function(vₜ★_norm, f⋅n, μ)
-                        -τ * (vₜ★/vₜ★_norm)
-                    end
+            n = normals[i]
+            fint = grid.fint[i]
+            if fint ⋅ n > 0
+                f̄ₜ = tangential(grid.m[i]*grid.vⁿ[i]/Δt + grid.fext[i], n)
+                dfᵇdf, fᵇ = gradient(fint, :all) do f
+                    fₙ = normal(f, n)
+                    fₜ = f - fₙ
+                    fₜ★ = fₜ + f̄ₜ
+                    -min(1, μ*norm(fₙ)/norm(fₜ★)) * fₜ★
                 end
                 grid.fᵇ[i] += fᵇ
                 grid.dfᵇdf[i] += dfᵇdf
