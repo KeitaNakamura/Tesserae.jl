@@ -129,7 +129,7 @@ end
 
 ## boundary friction force ##
 
-function compute_boundary_friction!(friction_force_function, grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
+function compute_boundary_friction!(grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
     fillzero!(grid.fᵇ)
     fillzero!(grid.dfᵇdf)
     normals = NormalVectorArray(size(grid))
@@ -152,14 +152,6 @@ function compute_boundary_friction!(friction_force_function, grid::Grid, Δt::Re
                 grid.dfᵇdf[i] += dfᵇdf
             end
         end
-    end
-end
-
-function default_friction_force_function(; ϵ::Real = sqrt(eps(Float64)))
-    function(vₜ::Real, fₙ::Real, μ::Real)
-        ξ = vₜ / ϵ
-        θ = ξ < 1 ? -ξ^2 + 2ξ : one(ξ)
-        θ*μ*fₙ
     end
 end
 
@@ -198,11 +190,10 @@ function grid_to_particle!(
         Δt              :: Real,
         solver          :: ImplicitSolver;
         bc              :: AbstractArray{<: Real} = default_boundary_condition(size(grid)),
-        friction_force  :: Function               = default_friction_force_function(),
         parallel        :: Bool,
     ) where {names}
     @assert :∇v in names
-    grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, solver; bc, friction_force, parallel)
+    grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, solver; bc, parallel)
     rest = tuple(delete!(Set(names), :∇v)...)
     !isempty(rest) && grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
@@ -218,7 +209,6 @@ function grid_to_particle!(
         Δt              :: Real,
         solver          :: ImplicitSolver;
         bc              :: AbstractArray{<: Real} = default_boundary_condition(size(grid)),
-        friction_force  :: Function               = default_friction_force_function(),
         parallel        :: Bool,
     )
     consider_boundary_condition = eltype(bc) <: AbstractFloat
@@ -232,7 +222,6 @@ function grid_to_particle!(
                        Δt,
                        solver,
                        bc,
-                       friction_force,
                        parallel)
 end
 
@@ -247,7 +236,6 @@ function _grid_to_particle!(
         Δt              :: Real,
         solver          :: ImplicitSolver,
         bc              :: AbstractArray{<: Real},
-        friction_force  :: Function,
         parallel        :: Bool,
     )
     @assert :δv in propertynames(grid) && :fint in propertynames(grid) && :fext in propertynames(grid)
@@ -280,7 +268,7 @@ function _grid_to_particle!(
 
         # boundary condition
         if consider_boundary_condition
-            compute_boundary_friction!(friction_force, grid, Δt, bc)
+            compute_boundary_friction!(grid, Δt, bc)
             @. grid.fint += grid.fᵇ
         end
 
