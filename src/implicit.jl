@@ -109,6 +109,20 @@ function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bo
     spgrid
 end
 
+## fixed boundary condition ##
+
+_isfixed_bc(x::Bool) = x
+_isfixed_bc(x::AbstractFloat) = x < 0
+function impose_fixed_boundary_condition!(grid::Grid{dim}, bc::AbstractArray{<: Real}) where {dim}
+    @assert size(bc) == (dim, size(grid)...)
+    for I in CartesianIndices(bc)
+        if _isfixed_bc(bc[I])
+            flatarray(grid.v)[I] = 0
+            flatarray(grid.vⁿ)[I] = 0
+        end
+    end
+end
+
 ## free indices ##
 
 function compute_flatfreeindices(grid::Grid{dim}, isfixed::AbstractArray{Bool}) where {dim}
@@ -243,6 +257,9 @@ function _grid_to_particle!(
 
     θ = solver.θ
     freeinds = compute_flatfreeindices(grid, bc)
+
+    # set velocity to zero for fixed boundary condition
+    impose_fixed_boundary_condition!(grid, bc)
 
     # calculate fext once
     fillzero!(grid.fext)
