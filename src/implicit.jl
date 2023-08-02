@@ -275,7 +275,7 @@ function _grid_to_particle!(
     # jacobian
     if solver.jacobian_free
         should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
-        A = jacobian_free_matrix(θ, grid, particles, space, Δt, freeinds, consider_boundary_condition, alg, system, parallel)
+        A = jacobian_free_matrix(θ, @rename(grid, v★=>δv), particles, space, Δt, freeinds, consider_boundary_condition, alg, system, parallel)
     else
         A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
@@ -325,10 +325,10 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
     LinearMap(length(freeinds)) do Jδv, δv
         @inbounds begin
             # setup grid.δv
-            flatview(fillzero!(grid.v★), freeinds) .= θ .* δv # reuse v★
+            flatview(fillzero!(grid.δv), freeinds) .= θ .* δv
 
             # recompute grid internal force `grid.fint` from grid velocity `grid.v`
-            recompute_grid_internal_force!(update_stress!, @rename(grid, v★=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
+            recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
 
             # Jacobian-vector product
             @. grid.f★ = grid.fint
