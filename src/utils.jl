@@ -128,6 +128,22 @@ Base.IndexStyle(::Type{<: MapArray{<: Any, <: Any, F, Args}}) where {F, Args} = 
     @inbounds A.f(getindex.(A.args, i...)...)
 end
 
+#############
+# FillArray #
+#############
+
+struct FillArray{T, N} <: AbstractArray{T, N}
+    value::T
+    dims::Dims{N}
+end
+FillArray(value::Any, dims::Int...) = FillArray(value, dims)
+Base.size(A::FillArray) = A.dims
+Base.IndexStyle(::Type{<: FillArray}) = IndexLinear()
+@inline function Base.getindex(A::FillArray, i::Integer)
+    @boundscheck checkbounds(A, i)
+    A.value
+end
+
 ####################
 # CoordinateSystem #
 ####################

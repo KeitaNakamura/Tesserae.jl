@@ -88,6 +88,7 @@ export
     WLSTransfer,
 # implicit
     ImplicitSolver,
+    PenaltyMethod,
 # VTK
     openvtk,
     openvtm,

@@ -81,7 +81,10 @@ function ImplicitSolver(
                              fint  = SpArray{Tv}(spinds),
                              fext  = SpArray{Tv}(spinds),
                              fᵇ    = SpArray{Tv}(spinds),
-                             dfᵇdf = SpArray{Tm}(spinds))
+                             dfᵇdf = SpArray{Tm}(spinds),
+                             fᵖ    = SpArray{Tv}(spinds),
+                             dfᵖdv = SpArray{Tm}(spinds),
+                             dfᵖdf = SpArray{Tm}(spinds))
 
     # particles cache
     npts = length(particles)
@@ -96,7 +99,7 @@ function ImplicitSolver(
 end
 ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Float64, grid, particles; kwargs...)
 
-function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bool)
+function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bool, consider_penalty::Bool)
     n = countnnz(get_spinds(spgrid.v★))
     resize_nonzeros!(spgrid.v★, n)
     resize_nonzeros!(spgrid.f★, n)
@@ -105,6 +108,11 @@ function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bo
     if consider_boundary_condition
         resize_nonzeros!(spgrid.fᵇ, n)
         resize_nonzeros!(spgrid.dfᵇdf, n)
+    end
+    if consider_penalty
+        resize_nonzeros!(spgrid.fᵖ, n)
+        resize_nonzeros!(spgrid.dfᵖdv, n)
+        resize_nonzeros!(spgrid.dfᵖdf, n)
     end
     spgrid
 end
@@ -169,6 +177,64 @@ function compute_boundary_friction!(grid::Grid, Δt::Real, coefs::AbstractArray{
     end
 end
 
+## penalty force ##
+
+struct PenaltyMethod{F <: Function, dim, Grid_g <: AbstractArray{<: Vec{dim}, dim}, Grid_μ <: AbstractArray{<: Real, dim}, Grid_v <: AbstractArray{<: Vec{dim}, dim}, S}
+    penalty_force::F
+    grid_g::Grid_g
+    grid_μ::Grid_μ
+    grid_v::Grid_v
+    storage::S
+end
+
+function PenaltyMethod(
+        penalty_force::Function,
+        grid_g::AbstractArray{<: Vec},
+        grid_μ::AbstractArray{<: Real},
+        grid_v::AbstractArray{<: Vec} = FillArray(zero(eltype(grid_g)), size(grid_g));
+        storage = nothing,
+    )
+    PenaltyMethod(penalty_force, grid_g, grid_μ, grid_v, storage)
+end
+
+function compute_penalty_force!(grid::Grid, Δt::Real, p::PenaltyMethod)
+    compute_penalty_force!(grid, Δt, p.penalty_force, p.grid_g, p.grid_μ, p.grid_v)
+end
+
+function compute_penalty_force!(grid::Grid, Δt::Real, penalty_force::Function, grid_g::AbstractArray{<: Vec}, grid_μ::AbstractArray{<: Real}, grid_v::AbstractArray{<: Vec})
+    @assert size(grid) == size(grid_g) == size(grid_μ) == size(grid_v)
+    fillzero!(grid.fᵖ)
+    fillzero!(grid.dfᵖdv)
+    fillzero!(grid.dfᵖdf)
+    for I in CartesianIndices(grid)
+        if isactive(grid, I)
+            i = nonzeroindex(grid, I)
+            g⁰ = grid_g[i]
+            if !iszero(norm(g⁰))
+                n = normalize(g⁰)
+                μ = grid_μ[i]
+                v_rigid = grid_v[i]
+                f̄ₜ = tangential(grid.m[i]*(grid.vⁿ[i]-v_rigid)/Δt + grid.fext[i], n)
+                (dfᵖdv,dfᵖdf), fᵖ = gradient(grid.v[i], grid.fint[i], :all) do v, f
+                    # normal
+                    g = g⁰ + normal(v-v_rigid, n) * Δt
+                    fₙ = penalty_force(g)
+
+                    # tangential
+                    iszero(μ) && return fₙ
+                    fₜ★ = tangential(f,n) + f̄ₜ
+                    fₜ = -min(1, μ*norm(fₙ)/norm(fₜ★)) * fₜ★
+
+                    fₙ + fₜ
+                end
+                grid.fᵖ[i] += fᵖ
+                grid.dfᵖdv[i] += dfᵖdv
+                grid.dfᵖdf[i] += dfᵖdf
+            end
+        end
+    end
+end
+
 ## internal force ##
 
 function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
@@ -194,22 +260,23 @@ function default_boundary_condition(gridsize::Dims{dim}) where {dim}
 end
 
 function grid_to_particle!(
-        update_stress!,
-        alg             :: TransferAlgorithm,
-        system          :: CoordinateSystem,
-                        :: Val{names},
-        particles       :: Particles,
-        grid            :: Grid,
-        space           :: MPSpace,
-        Δt              :: Real,
-        solver          :: ImplicitSolver;
-        bc              :: AbstractArray{<: Real} = default_boundary_condition(size(grid)),
-        parallel        :: Bool,
+        update_stress!   :: Any,
+        alg              :: TransferAlgorithm,
+        system           :: CoordinateSystem,
+                         :: Val{names},
+        particles        :: Particles,
+        grid             :: Grid,
+        space            :: MPSpace,
+        Δt               :: Real,
+        solver           :: ImplicitSolver,
+        penalty_method   :: Union{PenaltyMethod, Nothing} = nothing;
+        bc               :: AbstractArray{<: Real}        = default_boundary_condition(size(grid)),
+        parallel         :: Bool,
     ) where {names}
     # implicit method
     # up-to-date velocity `grid.v` and interpolated velocity `grid.v★` are calculated
     @assert :∇v in names
-    grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, solver; bc, parallel)
+    grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, solver, penalty_method; bc, parallel)
 
     # use interpolated velocity `grid.v★` to update particle position `x`
     :x in names && grid_to_particle!(:x, particles, @rename(grid, v★=>v), space, Δt; alg, system, parallel)
@@ -220,44 +287,48 @@ function grid_to_particle!(
 end
 
 function grid_to_particle!(
-        update_stress!,
-        alg             :: TransferAlgorithm,
-        system          :: CoordinateSystem,
-                        :: Val{(:∇v,)},
-        particles       :: Particles,
-        grid            :: Grid,
-        space           :: MPSpace,
-        Δt              :: Real,
-        solver          :: ImplicitSolver;
-        bc              :: AbstractArray{<: Real} = default_boundary_condition(size(grid)),
-        parallel        :: Bool,
+        update_stress! :: Any,
+        alg            :: TransferAlgorithm,
+        system         :: CoordinateSystem,
+                       :: Val{(:∇v,)},
+        particles      :: Particles,
+        grid           :: Grid,
+        space          :: MPSpace,
+        Δt             :: Real,
+        solver         :: ImplicitSolver,
+        penalty_method :: Union{PenaltyMethod, Nothing} = nothing;
+        bc             :: AbstractArray{<: Real}        = default_boundary_condition(size(grid)),
+        parallel       :: Bool,
     )
     consider_boundary_condition = eltype(bc) <: AbstractFloat
+    consider_penalty = penalty_method isa PenaltyMethod
     _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)),
                        alg,
                        system,
                        Val((:∇v,)),
                        combine(particles, solver.pts_cache),
-                       combine(grid, reinit_grid_cache!(solver.grid_cache, consider_boundary_condition)),
+                       combine(grid, reinit_grid_cache!(solver.grid_cache, consider_boundary_condition, consider_penalty)),
                        space,
                        Δt,
                        solver,
+                       penalty_method,
                        bc,
                        parallel)
 end
 
 function _grid_to_particle!(
-        update_stress!,
-        alg             :: TransferAlgorithm,
-        system          :: CoordinateSystem,
-                        :: Val{(:∇v,)},
-        particles       :: Particles,
-        grid            :: Grid,
-        space           :: MPSpace,
-        Δt              :: Real,
-        solver          :: ImplicitSolver,
-        bc              :: AbstractArray{<: Real},
-        parallel        :: Bool,
+        update_stress!   :: Any,
+        alg              :: TransferAlgorithm,
+        system           :: CoordinateSystem,
+                         :: Val{(:∇v,)},
+        particles        :: Particles,
+        grid             :: Grid,
+        space            :: MPSpace,
+        Δt               :: Real,
+        solver           :: ImplicitSolver,
+        penalty_method   :: Union{PenaltyMethod, Nothing},
+        bc               :: AbstractArray{<: Real},
+        parallel         :: Bool,
     )
     θ = solver.θ
     freeinds = compute_flatfreeindices(grid, bc)
@@ -272,10 +343,13 @@ function _grid_to_particle!(
     # friction on boundaries
     consider_boundary_condition = eltype(bc) <: AbstractFloat
 
+    # penalty method
+    consider_penalty = penalty_method isa PenaltyMethod
+
     # jacobian
     if solver.jacobian_free
         should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
-        A = jacobian_free_matrix(θ, @rename(grid, v★=>δv), particles, space, Δt, freeinds, consider_boundary_condition, alg, system, parallel)
+        A = jacobian_free_matrix(θ, @rename(grid, v★=>δv), particles, space, Δt, freeinds, consider_boundary_condition, consider_penalty, alg, system, parallel)
     else
         A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
     end
@@ -293,6 +367,12 @@ function _grid_to_particle!(
             @. grid.fint += grid.fᵇ
         end
 
+        # penalty force
+        if consider_penalty
+            compute_penalty_force!(@rename(grid, v★=>v), Δt, penalty_method)
+            @. grid.fint += grid.fᵖ
+        end
+
         # residual
         @. grid.v★ = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse v★
         R .= flatview(grid.v★, freeinds)
@@ -307,6 +387,10 @@ function _grid_to_particle!(
     converged = solve!(v, residual_jacobian!, similar(v), A, solver.nlsolver, solver.linsolver)
     converged || @warn "Implicit method not converged"
 
+    if consider_penalty && penalty_method.storage !== nothing
+        @. penalty_method.storage = grid.fᵖ
+    end
+
     # calculate interpolated grid velocity to update `xₚ` outside function
     @. grid.v★ = (1-θ)*grid.vⁿ + θ*grid.v
 
@@ -315,7 +399,19 @@ end
 
 ## for Jacobian-free method ##
 
-function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space::MPSpace, Δt::Real, freeinds::Vector{<: CartesianIndex}, consider_boundary_condition::Bool, alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+function jacobian_free_matrix(
+        θ                           :: Real,
+        grid                        :: Grid,
+        particles                   :: Particles,
+        space                       :: MPSpace,
+        Δt                          :: Real,
+        freeinds                    :: Vector{<: CartesianIndex},
+        consider_boundary_condition :: Bool,
+        consider_penalty            :: Bool,
+        alg                         :: TransferAlgorithm,
+        system                      :: CoordinateSystem,
+        parallel                    :: Bool,
+    )
     @inline function update_stress!(pt)
         @inbounds begin
             ∇δvₚ = pt.∇v
@@ -334,6 +430,9 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
             @. grid.f★ = grid.fint
             if consider_boundary_condition
                 @. grid.f★ += grid.dfᵇdf ⋅ grid.fint
+            end
+            if consider_penalty
+                @. grid.f★ += grid.dfᵖdv ⋅ grid.δv + grid.dfᵖdf ⋅ grid.fint
             end
             δa = flatview(grid.f★ ./= grid.m, freeinds)
             @. Jδv = δv - Δt * δa
