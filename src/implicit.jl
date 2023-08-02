@@ -76,7 +76,7 @@ function ImplicitSolver(
     Tv = eltype(grid.v)
     Tm = Mat{dim,dim,eltype(Tv),dim*dim}
     spinds = get_spinds(grid)
-    grid_cache = StructArray(δv    = SpArray{Tv}(spinds),
+    grid_cache = StructArray(v★    = SpArray{Tv}(spinds),
                              f★    = SpArray{Tv}(spinds),
                              fint  = SpArray{Tv}(spinds),
                              fext  = SpArray{Tv}(spinds),
@@ -97,8 +97,8 @@ end
 ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Float64, grid, particles; kwargs...)
 
 function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bool)
-    n = countnnz(get_spinds(spgrid.δv))
-    resize_nonzeros!(spgrid.δv, n)
+    n = countnnz(get_spinds(spgrid.v★))
+    resize_nonzeros!(spgrid.v★, n)
     resize_nonzeros!(spgrid.f★, n)
     resize_nonzeros!(spgrid.fint, n)
     resize_nonzeros!(spgrid.fext, n)
@@ -206,10 +206,17 @@ function grid_to_particle!(
         bc              :: AbstractArray{<: Real} = default_boundary_condition(size(grid)),
         parallel        :: Bool,
     ) where {names}
+    # implicit method
+    # up-to-date velocity `grid.v` and interpolated velocity `grid.v★` are calculated
     @assert :∇v in names
     grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, solver; bc, parallel)
-    rest = tuple(delete!(Set(names), :∇v)...)
-    !isempty(rest) && grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
+
+    # use interpolated velocity `grid.v★` to update particle position `x`
+    :x in names && grid_to_particle!(:x, particles, @rename(grid, v★=>v), space, Δt; alg, system, parallel)
+
+    # other `v` and `∇v` should be updated by using up-to-date velocity `grid.v`
+    rest = tuple(delete!(Set(names), :x)...)
+    grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
 end
 
 function grid_to_particle!(
@@ -252,9 +259,6 @@ function _grid_to_particle!(
         bc              :: AbstractArray{<: Real},
         parallel        :: Bool,
     )
-    @assert :δv in propertynames(grid) && :fint in propertynames(grid) && :fext in propertynames(grid)
-    @assert :δσ in propertynames(particles) && :ℂ in propertynames(particles)
-
     θ = solver.θ
     freeinds = compute_flatfreeindices(grid, bc)
 
@@ -278,10 +282,10 @@ function _grid_to_particle!(
 
     function residual_jacobian!(R, J, x)
         flatview(grid.v, freeinds) .= x
-        @. grid.δv = (1-θ)*grid.vⁿ + θ*grid.v # reuse δv
+        @. grid.v★ = (1-θ)*grid.vⁿ + θ*grid.v
 
         # internal force
-        recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), particles, space; alg, system, parallel)
+        recompute_grid_internal_force!(update_stress!, @rename(grid, v★=>v), particles, space; alg, system, parallel)
 
         # boundary condition
         if consider_boundary_condition
@@ -290,8 +294,8 @@ function _grid_to_particle!(
         end
 
         # residual
-        @. grid.δv = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse δv
-        R .= flatview(grid.δv, freeinds)
+        @. grid.v★ = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse v★
+        R .= flatview(grid.v★, freeinds)
 
         # jacobian
         if !solver.jacobian_free
@@ -302,6 +306,11 @@ function _grid_to_particle!(
     v = copy(flatview(grid.v, freeinds))
     converged = solve!(v, residual_jacobian!, similar(v), A, solver.nlsolver, solver.linsolver)
     converged || @warn "Implicit method not converged"
+
+    # calculate interpolated grid velocity to update `xₚ` outside function
+    @. grid.v★ = (1-θ)*grid.vⁿ + θ*grid.v
+
+    nothing
 end
 
 ## for Jacobian-free method ##
@@ -316,10 +325,10 @@ function jacobian_free_matrix(θ::Real, grid::Grid, particles::Particles, space:
     LinearMap(length(freeinds)) do Jδv, δv
         @inbounds begin
             # setup grid.δv
-            flatview(fillzero!(grid.δv), freeinds) .= θ .* δv
+            flatview(fillzero!(grid.v★), freeinds) .= θ .* δv # reuse v★
 
             # recompute grid internal force `grid.fint` from grid velocity `grid.v`
-            recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
+            recompute_grid_internal_force!(update_stress!, @rename(grid, v★=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
 
             # Jacobian-vector product
             @. grid.f★ = grid.fint
@@ -335,7 +344,7 @@ end
 function diagonal_preconditioner!(P::AbstractVector, θ::Real, particles::Particles, grid::Grid{dim}, space::MPSpace{dim}, Δt::Real, freeinds::Vector{<: CartesianIndex}, parallel::Bool) where {dim}
     @assert legnth(P) == length(freeinds)
     fill!(P, 1)
-    fillzero!(grid.δv) # reuse δv
+    fillzero!(grid.v★) # reuse v★
     blockwise_parallel_each_particle(space, :dynamic; parallel) do p
         @inbounds begin
             ℂₚ = Tensorial.resizedim(particles.ℂ[p], Val(dim))
@@ -344,12 +353,12 @@ function diagonal_preconditioner!(P::AbstractVector, θ::Real, particles::Partic
             @simd for j in CartesianIndices(gridindices)
                 i = gridindices[j]
                 ∇N = mp.∇N[j]
-                grid.δv[i] += diag(∇N ⋅ ℂₚ ⋅ ∇N)
+                grid.v★[i] += diag(∇N ⋅ ℂₚ ⋅ ∇N)
             end
         end
     end
-    @. grid.δv *= θ * Δt / grid.m
-    Diagonal(broadcast!(+, P, P, flatview(grid.δv, freeinds)))
+    @. grid.v★ *= θ * Δt / grid.m
+    Diagonal(broadcast!(+, P, P, flatview(grid.v★, freeinds)))
 end
 
 ## for Jacobian-based method ##
