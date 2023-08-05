@@ -70,7 +70,7 @@ function ImplicitSolver(
         reltol::Real = tol,
         maxiter::Int = 10,
         nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
-        linsolver = jacobian_free ? GMRESSolver(T; maxiter=15, adaptive=true) : LUSolver(),
+        linsolver = jacobian_free ? GMRESSolver(T; adaptive=true) : LUSolver(),
     ) where {T, dim}
     # grid cache
     Tv = eltype(grid.v)

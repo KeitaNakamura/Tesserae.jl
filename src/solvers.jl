@@ -11,7 +11,7 @@ struct LUSolver <: LinearSolver end
 solve!(x, A, b, ::LUSolver) = (x .= A \ b)
 
 mutable struct GMRESSolver{T} <: LinearSolver
-    maxiter::Int
+    maxiter::Union{Int, Nothing}
     abstol::T
     reltol::T
     # for adaptive linear parameter
@@ -20,15 +20,22 @@ mutable struct GMRESSolver{T} <: LinearSolver
     tol′::T
 end
 
-function GMRESSolver(::Type{T}=Float64; maxiter::Int=20, abstol::Real=sqrt(eps(T)), reltol::Real=sqrt(eps(T)), adaptive::Bool=false) where {T}
+function GMRESSolver(::Type{T}=Float64; maxiter::Union{Int, Nothing}=nothing, abstol::Real=sqrt(eps(T)), reltol::Real=sqrt(eps(T)), adaptive::Bool=false) where {T}
     GMRESSolver{T}(maxiter, abstol, reltol, adaptive, 0, reltol)
 end
 
 function solve!(x, A, b, solver::GMRESSolver)
     if solver.adaptive
-        gmres!(fillzero!(x), A, b; solver.maxiter, initially_zero=true, abstol=solver.tol′, reltol=solver.tol′)
+        abstol = solver.tol′
+        reltol = solver.tol′
     else
-        gmres!(fillzero!(x), A, b; solver.maxiter, initially_zero=true, solver.abstol, solver.reltol)
+        abstol = solver.abstol
+        reltol = solver.reltol
+    end
+    if solver.maxiter === nothing
+        gmres!(fillzero!(x), A, b; initially_zero=true, abstol, reltol)
+    else
+        gmres!(fillzero!(x), A, b; initially_zero=true, abstol, reltol, solver.maxiter)
     end
 end
 
