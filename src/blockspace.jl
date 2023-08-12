@@ -30,10 +30,14 @@ end
 
 # block-wise parallel computation
 function blockwise_parallel_each_particle(f, blkarray::ParticlesInBlocksArray, nparticles::Int, schedule::Symbol; ntasks::Integer)
-    for blocks in threadsafe_blocks(size(blkarray))
-        blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
-        parallel_foreach(blocks′, schedule; ntasks) do blk
-            foreach(f, blkarray[blk])
+    if ntasks == 1
+        foreach(f, 1:nparticles)
+    else
+        for blocks in threadsafe_blocks(size(blkarray))
+            blocks′ = filter(I -> !isempty(blkarray[I]), blocks)
+            parallel_foreach(blocks′, schedule; ntasks) do blk
+                foreach(f, blkarray[blk])
+            end
         end
     end
 end
