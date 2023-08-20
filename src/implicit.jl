@@ -53,7 +53,7 @@ struct ImplicitSolver{T}
     jacobian_free::Bool
     θ::T
     nlsolver::NonlinearSolver
-    linsolver::LinearSolver
+    linsolver::Function
     grid_cache::StructArray
     pts_cache::StructVector
     jac_cache::Union{Nothing, JacobianCache{T}}
@@ -70,7 +70,9 @@ function ImplicitSolver(
         reltol::Real = tol,
         maxiter::Int = 10,
         nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
-        linsolver = jacobian_free ? GMRESSolver(T; adaptive=true) : LUSolver(),
+        linsolver = jacobian_free ?
+                    (x,A,b)->gmres!(fillzero!(x), A, b; initially_zero=true, maxiter=20) :
+                    (x,A,b)->x.=A\b,
     ) where {T, dim}
     # grid cache
     Tv = eltype(grid.v)
