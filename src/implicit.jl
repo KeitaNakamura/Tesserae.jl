@@ -68,7 +68,7 @@ function ImplicitSolver(
         tol::Real = 1e-6,
         abstol::Real = tol,
         reltol::Real = tol,
-        maxiter::Int = 10,
+        maxiter::Int = 100,
         nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
         linsolver = jacobian_free ?
                     (x,A,b)->gmres!(fillzero!(x), A, b; initially_zero=true, maxiter=20) :
