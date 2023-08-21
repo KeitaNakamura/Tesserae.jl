@@ -390,6 +390,30 @@ end
     end
 end
 
+function particle_to_grid!(::Val{(:g,)}, grid::Grid, particles::Particles, space::MPSpace, gap_function)
+    check_grid(grid, space)
+    check_particles(particles, space)
+
+    mask = falses(size(grid))
+    @inbounds for p in 1:length(particles)
+        pt = LazyRow(particles, p)
+        mₚ = pt.m
+        gₚ = gap_function(pt)
+        gₚ === nothing && continue
+
+        mp = values(space, p)
+        gridindices = neighbornodes(mp, grid)
+        @simd for j in CartesianIndices(gridindices)
+            i = gridindices[j]
+            N = mp.N[j]
+            grid.g[i] += N*mₚ*gₚ
+            mask[i] = true
+        end
+    end
+
+    findall(mask)
+end
+
 # 1D
 @inline calc_fint(::DefaultSystem, ∇N::Vec{1}, Vₚσₚ::AbstractSquareTensor{1}) = Vₚσₚ ⋅ ∇N
 # plane-strain
