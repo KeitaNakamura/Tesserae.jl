@@ -20,6 +20,7 @@ function newton!(x::AbstractVector, RJ!, R::AbstractVector{T}, J, δx::AbstractV
                  maxiter::Int=20, abstol::T=sqrt(eps(T)), reltol::T=sqrt(eps(T)), linsolve=(x,A,b)->x.=A\b) where {T}
     RJ!(R, J, x)
     r0 = r = norm(R)
+    r < abstol && return true
     r_prev = r
     x_prev = copy(x)
     @inbounds for _ in 1:maxiter
