@@ -53,7 +53,7 @@ struct ImplicitSolver{T}
     jacobian_free::Bool
     θ::T
     nlsolver::NonlinearSolver
-    linsolver::Function
+    linsolve!::Function
     grid_cache::StructArray
     pts_cache::StructVector
     jac_cache::Union{Nothing, JacobianCache{T}}
@@ -65,12 +65,10 @@ function ImplicitSolver(
         particles::Particles;
         jacobian_free::Bool = true,
         implicit_parameter::Real = 1,
-        tol::Real = 1e-6,
-        abstol::Real = tol,
-        reltol::Real = tol,
+        abstol::Real = sqrt(eps(T)),
+        reltol::Real = sqrt(eps(T)),
         maxiter::Int = 100,
-        nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
-        linsolver = jacobian_free ? (x,A,b)->gmres!(x,A,b) : (x,A,b)->x.=A\b,
+        linsolve! = jacobian_free ? (x,A,b)->gmres!(x,A,b) : (x,A,b)->x.=A\b,
     ) where {T, dim}
     # grid cache
     Tv = eltype(grid.v)
@@ -95,7 +93,8 @@ function ImplicitSolver(
     # Jacobian cache
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
 
-    ImplicitSolver{T}(jacobian_free, implicit_parameter, nlsolver, linsolver, grid_cache, pts_cache, jac_cache)
+    nlsolver = NewtonSolver(T; abstol, reltol, maxiter)
+    ImplicitSolver{T}(jacobian_free, implicit_parameter, nlsolver, linsolve!, grid_cache, pts_cache, jac_cache)
 end
 ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Float64, grid, particles; kwargs...)
 
@@ -384,7 +383,7 @@ function _grid_to_particle!(
     end
 
     v = copy(flatview(grid.v, freeinds))
-    converged = solve!(v, residual_jacobian!, similar(v), A, solver.nlsolver, solver.linsolver)
+    converged = solve!(v, residual_jacobian!, similar(v), A, solver.nlsolver, solver.linsolve!)
     converged || @warn "Implicit method not converged"
 
     if consider_penalty && penalty_method.storage !== nothing
