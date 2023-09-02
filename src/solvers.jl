@@ -13,20 +13,24 @@ function NewtonSolver(::Type{T}=Float64; maxiter::Integer=20, abstol::Real=sqrt(
 end
 
 function solve!(x::AbstractVector, residual_jacobian!, R::AbstractVector, J, solver::NewtonSolver, linsolve!::Function=(x,A,b)->x.=A\b)
-    newton!(x, residual_jacobian!, R, J; solver.maxiter, solver.abstol, solver.reltol, linsolve = (x,A,b) -> linsolve!(x,A,b))
+    newton!(x, residual_jacobian!, R, J; solver.maxiter, solver.abstol, solver.reltol, linsolve!)
 end
 
-function newton!(x::AbstractVector, RJ!, R::AbstractVector{T}, J, δx::AbstractVector=fillzero!(similar(x));
-                 maxiter::Int=20, abstol::T=sqrt(eps(T)), reltol::T=sqrt(eps(T)), linsolve=(x,A,b)->x.=A\b) where {T}
+function newton!(
+        x::AbstractVector, RJ!, R::AbstractVector{T}, J, δx::AbstractVector = fillzero!(similar(x));
+        abstol::T = sqrt(eps(T)), reltol::T = zero(T),
+        maxiter::Int = 20, linsolve! = (x,A,b) -> x .= A\b,
+    ) where {T}
     RJ!(R, J, x)
-    r0 = r = norm(R)
-    r < abstol && return true
+    r = norm(R)
+    TOL = max(reltol*r, abstol)
+    r < TOL && return true
     r_prev = r
     x_prev = copy(x)
     @inbounds for _ in 1:maxiter
         α₀ = α₁ = one(T)
         r_α₀ = r_α₁ = r
-        linsolve(δx, J, rmul!(R, -1))
+        linsolve!(δx, J, rmul!(R, -1))
         for k in 1:100
             @. x = x_prev + α₁ * δx
             RJ!(R, J, x)
@@ -46,7 +50,7 @@ function newton!(x::AbstractVector, RJ!, R::AbstractVector{T}, J, δx::AbstractV
             r_α₀ = r_α₁
         end
         dr = abs(r-r_prev)
-        (r < abstol || r/r0 < reltol || dr < abstol || dr/r0 < reltol) && return true
+        (r < TOL || dr < TOL) && return true
 
         r_prev = r
         x_prev .= x

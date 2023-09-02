@@ -66,7 +66,7 @@ function ImplicitSolver(
         jacobian_free::Bool = true,
         implicit_parameter::Real = 1,
         abstol::Real = sqrt(eps(T)),
-        reltol::Real = sqrt(eps(T)),
+        reltol::Real = zero(T),
         maxiter::Int = 100,
         linsolve! = jacobian_free ? (x,A,b)->gmres!(x,A,b) : (x,A,b)->x.=A\b,
     ) where {T, dim}
