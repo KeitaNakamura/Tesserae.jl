@@ -70,9 +70,7 @@ function ImplicitSolver(
         reltol::Real = tol,
         maxiter::Int = 100,
         nlsolver = NewtonSolver(T; abstol, reltol, maxiter),
-        linsolver = jacobian_free ?
-                    (x,A,b)->gmres!(fillzero!(x), A, b; initially_zero=true, maxiter=20) :
-                    (x,A,b)->x.=A\b,
+        linsolver = jacobian_free ? (x,A,b)->gmres!(x,A,b) : (x,A,b)->x.=A\b,
     ) where {T, dim}
     # grid cache
     Tv = eltype(grid.v)

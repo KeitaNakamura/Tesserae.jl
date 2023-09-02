@@ -16,7 +16,7 @@ function solve!(x::AbstractVector, residual_jacobian!, R::AbstractVector, J, sol
     newton!(x, residual_jacobian!, R, J; solver.maxiter, solver.abstol, solver.reltol, linsolve = (x,A,b) -> linsolve!(x,A,b))
 end
 
-function newton!(x::AbstractVector, RJ!, R::AbstractVector{T}, J, δx::AbstractVector=similar(x);
+function newton!(x::AbstractVector, RJ!, R::AbstractVector{T}, J, δx::AbstractVector=fillzero!(similar(x));
                  maxiter::Int=20, abstol::T=sqrt(eps(T)), reltol::T=sqrt(eps(T)), linsolve=(x,A,b)->x.=A\b) where {T}
     RJ!(R, J, x)
     r0 = r = norm(R)
