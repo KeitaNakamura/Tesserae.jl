@@ -115,6 +115,7 @@ include("mpspace.jl")
 include("transfer.jl")
 
 include("solvers.jl")
+include("penalty_method.jl")
 include("implicit.jl")
 
 include("vtk.jl")
