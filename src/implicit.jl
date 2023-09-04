@@ -49,7 +49,7 @@ function JacobianCache(::Type{T}, gridsize::Dims{dim}) where {T, dim}
     JacobianCache(griddofs, spmat_cache, spmat_grid_mask)
 end
 
-struct ImplicitSolver{T}
+struct EulerIntegrator{T}
     jacobian_free::Bool
     θ::T
     nlsolver::NonlinearSolver
@@ -59,7 +59,7 @@ struct ImplicitSolver{T}
     jac_cache::Union{Nothing, JacobianCache{T}}
 end
 
-function ImplicitSolver(
+function EulerIntegrator(
         ::Type{T},
         grid::SpGrid{dim},
         particles::Particles;
@@ -94,9 +94,9 @@ function ImplicitSolver(
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
 
     nlsolver = NewtonSolver(T; abstol, reltol, maxiter)
-    ImplicitSolver{T}(jacobian_free, implicit_parameter, nlsolver, linsolve!, grid_cache, pts_cache, jac_cache)
+    EulerIntegrator{T}(jacobian_free, implicit_parameter, nlsolver, linsolve!, grid_cache, pts_cache, jac_cache)
 end
-ImplicitSolver(grid::Grid, particles::Particles; kwargs...) = ImplicitSolver(Float64, grid, particles; kwargs...)
+EulerIntegrator(grid::Grid, particles::Particles; kwargs...) = EulerIntegrator(Float64, grid, particles; kwargs...)
 
 function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bool, consider_penalty::Bool)
     n = countnnz(get_spinds(spgrid.v★))
@@ -267,7 +267,7 @@ function grid_to_particle!(
         grid             :: Grid,
         space            :: MPSpace,
         Δt               :: Real,
-        solver           :: ImplicitSolver,
+        integrator       :: EulerIntegrator,
         penalty_method   :: Union{PenaltyMethod, Nothing} = nothing;
         bc               :: AbstractArray{<: Real}        = default_boundary_condition(size(grid)),
         parallel         :: Bool,
@@ -275,7 +275,7 @@ function grid_to_particle!(
     # implicit method
     # up-to-date velocity `grid.v` and interpolated velocity `grid.v★` are calculated
     @assert :∇v in names
-    grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, solver, penalty_method; bc, parallel)
+    grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, integrator, penalty_method; bc, parallel)
 
     # use interpolated velocity `grid.v★` to update particle position `x`
     :x in names && grid_to_particle!(:x, particles, @rename(grid, v★=>v), space, Δt; alg, system, parallel)
@@ -294,7 +294,7 @@ function grid_to_particle!(
         grid           :: Grid,
         space          :: MPSpace,
         Δt             :: Real,
-        solver         :: ImplicitSolver,
+        integrator     :: EulerIntegrator,
         penalty_method :: Union{PenaltyMethod, Nothing} = nothing;
         bc             :: AbstractArray{<: Real}        = default_boundary_condition(size(grid)),
         parallel       :: Bool,
@@ -305,11 +305,11 @@ function grid_to_particle!(
                        alg,
                        system,
                        Val((:∇v,)),
-                       combine(particles, solver.pts_cache),
-                       combine(grid, reinit_grid_cache!(solver.grid_cache, consider_boundary_condition, consider_penalty)),
+                       combine(particles, integrator.pts_cache),
+                       combine(grid, reinit_grid_cache!(integrator.grid_cache, consider_boundary_condition, consider_penalty)),
                        space,
                        Δt,
-                       solver,
+                       integrator,
                        penalty_method,
                        bc,
                        parallel)
@@ -324,12 +324,12 @@ function _grid_to_particle!(
         grid             :: Grid,
         space            :: MPSpace,
         Δt               :: Real,
-        solver           :: ImplicitSolver,
+        integrator       :: EulerIntegrator,
         penalty_method   :: Union{PenaltyMethod, Nothing},
         bc               :: AbstractArray{<: Real},
         parallel         :: Bool,
     )
-    θ = solver.θ
+    θ = integrator.θ
     freeinds = compute_flatfreeindices(grid, bc)
 
     # set velocity to zero for fixed boundary condition
@@ -346,11 +346,11 @@ function _grid_to_particle!(
     consider_penalty = penalty_method isa PenaltyMethod
 
     # jacobian
-    if solver.jacobian_free
+    if integrator.jacobian_free
         should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
         A = jacobian_free_matrix(θ, @rename(grid, v★=>δv), particles, space, Δt, freeinds, consider_boundary_condition, consider_penalty, alg, system, parallel)
     else
-        A = construct_sparse_matrix!(solver.jac_cache, space, freeinds)
+        A = construct_sparse_matrix!(integrator.jac_cache, space, freeinds)
     end
 
     function residual_jacobian!(R, J, x)
@@ -377,13 +377,13 @@ function _grid_to_particle!(
         R .= flatview(grid.v★, freeinds)
 
         # jacobian
-        if !solver.jacobian_free
-            jacobian_based_matrix!(J, solver.jac_cache, θ, grid, particles, space, Δt, freeinds, parallel)
+        if !integrator.jacobian_free
+            jacobian_based_matrix!(J, integrator.jac_cache, θ, grid, particles, space, Δt, freeinds, parallel)
         end
     end
 
     v = copy(flatview(grid.v, freeinds))
-    converged = solve!(v, residual_jacobian!, similar(v), A, solver.nlsolver, solver.linsolve!)
+    converged = solve!(v, residual_jacobian!, similar(v), A, integrator.nlsolver, integrator.linsolve!)
     converged || @warn "Implicit method not converged"
 
     if consider_penalty && penalty_method.storage !== nothing

@@ -85,7 +85,7 @@ function elastic_rings(
 
     ## implicit method
     if implicit
-        solver = ImplicitSolver(grid, particles; implicit_parameter=0.5)
+        solver = EulerIntegrator(grid, particles; implicit_parameter=0.5)
     end
 
     ## outputs

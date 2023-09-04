@@ -87,7 +87,7 @@ export
     TPIC,
     WLSTransfer,
 # implicit
-    ImplicitSolver,
+    EulerIntegrator,
     PenaltyMethod,
 # VTK
     openvtk,
