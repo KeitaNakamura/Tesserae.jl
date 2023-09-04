@@ -5,70 +5,23 @@ _tail(I::CartesianIndex) = CartesianIndex(Base.tail(Tuple(I)))
 normal(v::Vec, n::Vec) = (v⋅n) * n
 tangential(v::Vec, n::Vec) = v - normal(v,n)
 
-struct SparseMatrixCSCCache{Tv, Ti, T}
-    I::Vector{Ti}
-    J::Vector{Ti}
-    V::Vector{Tv}
-    V′::Vector{T}
-    csrrowptr::Vector{Ti}
-    csrcolval::Vector{Ti}
-    csrnzval::Vector{Tv}
-    klasttouch::Vector{Ti}
-end
-function SparseMatrixCSCCache{Tv, Ti, T}() where {Tv, Ti, T}
-    SparseMatrixCSCCache(Ti[], Ti[], Tv[], T[], Ti[], Ti[], Tv[], Ti[])
-end
-function construct_sparse_matrix!(cache::SparseMatrixCSCCache{Tv, Ti, T}, m::Integer, n::Integer) where {Tv, Ti, T}
-    I, J, V = cache.I, cache.J, cache.V
-    csrrowptr = cache.csrrowptr
-    csrcolval = cache.csrcolval
-    csrnzval = cache.csrnzval
-    klasttouch = cache.klasttouch
-    coolen = length(I)
-    resize!(csrrowptr, m+1)
-    resize!(csrcolval, coolen)
-    resize!(csrnzval, coolen)
-    resize!(klasttouch, n)
-    S = SparseArrays.sparse!(I, J, V, m, n, |, klasttouch,
-                             csrrowptr, csrcolval, csrnzval,
-                             I, J, V)
-    fillzero!(resize!(cache.V′, length(S.nzval)))
-    SparseMatrixCSC{T, Ti}(m, n, S.colptr, S.rowval, cache.V′)
-end
-
-# for Jacobian-based method
-struct JacobianCache{T, dim, N}
-    griddofs::Array{Vec{dim, Int}, dim}
-    spmat_cache::SparseMatrixCSCCache{Bool, Int, T}
-    spmat_grid_mask::Array{Bool, N}
-end
-function JacobianCache(::Type{T}, gridsize::Dims{dim}) where {T, dim}
-    griddofs = Array{Vec{dim, Int}}(undef, gridsize)
-    spmat_cache = SparseMatrixCSCCache{Bool, Int, T}()
-    spmat_grid_mask = Array{Bool}(undef, gridsize..., gridsize...)
-    JacobianCache(griddofs, spmat_cache, spmat_grid_mask)
-end
-
 struct EulerIntegrator{T}
-    jacobian_free::Bool
     θ::T
     nlsolver::NonlinearSolver
     linsolve!::Function
     grid_cache::StructArray
     pts_cache::StructVector
-    jac_cache::Union{Nothing, JacobianCache{T}}
 end
 
 function EulerIntegrator(
         ::Type{T},
         grid::SpGrid{dim},
         particles::Particles;
-        jacobian_free::Bool = true,
         implicit_parameter::Real = 1,
         abstol::Real = sqrt(eps(T)),
         reltol::Real = zero(T),
         maxiter::Int = 100,
-        linsolve! = jacobian_free ? (x,A,b)->gmres!(x,A,b) : (x,A,b)->x.=A\b,
+        linsolve! = (x,A,b) -> gmres!(x,A,b),
     ) where {T, dim}
     # grid cache
     Tv = eltype(grid.v)
@@ -90,11 +43,8 @@ function EulerIntegrator(
     Tℂ = Tensor{Tuple{@Symmetry{3,3}, 3,3}, eltype(Tσ), 4, 54}
     pts_cache = StructArray(δσ=Array{Tσ}(undef, npts), ℂ=Array{Tℂ}(undef, npts))
 
-    # Jacobian cache
-    jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
-
     nlsolver = NewtonSolver(T; abstol, reltol, maxiter)
-    EulerIntegrator{T}(jacobian_free, implicit_parameter, nlsolver, linsolve!, grid_cache, pts_cache, jac_cache)
+    EulerIntegrator{T}(implicit_parameter, nlsolver, linsolve!, grid_cache, pts_cache)
 end
 EulerIntegrator(grid::Grid, particles::Particles; kwargs...) = EulerIntegrator(Float64, grid, particles; kwargs...)
 
@@ -346,12 +296,8 @@ function _grid_to_particle!(
     consider_penalty = penalty_method isa PenaltyMethod
 
     # jacobian
-    if integrator.jacobian_free
-        should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
-        A = jacobian_free_matrix(θ, @rename(grid, v★=>δv), particles, space, Δt, freeinds, consider_boundary_condition, consider_penalty, alg, system, parallel)
-    else
-        A = construct_sparse_matrix!(integrator.jac_cache, space, freeinds)
-    end
+    should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
+    A = jacobian_matrix(θ, @rename(grid, v★=>δv), particles, space, Δt, freeinds, consider_boundary_condition, consider_penalty, alg, system, parallel)
 
     function residual_jacobian!(R, J, x)
         flatview(grid.v, freeinds) .= x
@@ -375,11 +321,6 @@ function _grid_to_particle!(
         # residual
         @. grid.v★ = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse v★
         R .= flatview(grid.v★, freeinds)
-
-        # jacobian
-        if !integrator.jacobian_free
-            jacobian_based_matrix!(J, integrator.jac_cache, θ, grid, particles, space, Δt, freeinds, parallel)
-        end
     end
 
     v = copy(flatview(grid.v, freeinds))
@@ -396,9 +337,8 @@ function _grid_to_particle!(
     nothing
 end
 
-## for Jacobian-free method ##
-
-function jacobian_free_matrix(
+# jacobian-free method
+function jacobian_matrix(
         θ                           :: Real,
         grid                        :: Grid,
         particles                   :: Particles,
@@ -457,147 +397,4 @@ function diagonal_preconditioner!(P::AbstractVector, θ::Real, particles::Partic
     end
     @. grid.v★ *= θ * Δt / grid.m
     Diagonal(broadcast!(+, P, P, flatview(grid.v★, freeinds)))
-end
-
-## for Jacobian-based method ##
-
-function construct_sparse_matrix!(jac_cache::JacobianCache, space::MPSpace{dim, T}, freeinds::AbstractVector{<: CartesianIndex}) where {dim, T}
-    griddofs = jac_cache.griddofs
-    spmat_grid_mask = jac_cache.spmat_grid_mask
-    spmat_cache = jac_cache.spmat_cache
-    I, J, V = spmat_cache.I, spmat_cache.J, spmat_cache.V
-    @assert size(griddofs) == gridsize(space)
-
-    # reinit griddofs
-    fillzero!(griddofs)
-    flatview(griddofs, freeinds) .= 1:length(freeinds)
-
-    nelts = prod(gridsize(space) .- 1)
-    nₚ = dim * prod(gridsize(get_interpolation(space), Val(dim)))
-    len = nelts * nₚ^2 # roughly compute enough length
-
-    resize!(I, len)
-    resize!(J, len)
-    count = 1
-    spmat_grid_mask .= false
-    gridindices_prev = CartesianIndices((1:0,1:0))
-    @inbounds for p in 1:num_particles(space)
-        gridindices = neighbornodes(values(space, p))
-        if gridindices !== gridindices_prev
-            for grid_j in gridindices
-                dofs_j = griddofs[grid_j]
-                for grid_i in gridindices
-                    dofs_i = griddofs[grid_i]
-                    if !(spmat_grid_mask[grid_i, grid_j])
-                        for jᵈ in 1:dim, iᵈ in 1:dim
-                            i = dofs_i[iᵈ]
-                            j = dofs_j[jᵈ]
-                            I[count] = i
-                            J[count] = j
-                            count += !iszero(i*j)
-                        end
-                        spmat_grid_mask[grid_i, grid_j] = true
-                    end
-                end
-            end
-            gridindices_prev = gridindices
-        end
-    end
-
-    resize!(I, count-1)
-    resize!(J, count-1)
-    resize!(V, count-1)
-    V .= true
-
-    m = n = length(freeinds)
-    construct_sparse_matrix!(spmat_cache, m, n)
-end
-
-function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
-    # `I` must be sorted
-    @boundscheck checkbounds(A, I, J)
-    @assert size(K) == map(length, (I, J))
-    rows = rowvals(A)
-    vals = nonzeros(A)
-    perm = sortperm(I)
-    @inbounds for j in 1:length(J)
-        i = 1
-        for k in nzrange(A, J[j])
-            row = rows[k] # row candidate
-            i′ = perm[i]
-            if I[i′] == row
-                vals[k] += K[i′,j]
-                i += 1
-            end
-            i > length(I) && break
-        end
-        if i <= length(I)
-            error("wrong sparsity pattern")
-        end
-    end
-    A
-end
-
-function jacobian_based_matrix!(K::SparseMatrixCSC, jac_cache::JacobianCache, θ::Real, grid::Grid{dim}, particles::Particles, space::MPSpace{dim, T}, Δt::Real, freeinds::Vector{<: CartesianIndex}, parallel::Bool) where {dim, T}
-    @assert size(jac_cache.griddofs) == size(grid) == gridsize(space)
-    fillzero!(K)
-    griddofs = reinterpret(reshape, Int, jac_cache.griddofs) # flatten dofs assinged on grid
-    rng(i) = dim*(i-1)+1 : dim*i
-
-    # thread-local storages
-    nₚ = dim * prod(gridsize(get_interpolation(space), Val(dim)))
-    Kₚ_threads = [Array{T}(undef, nₚ, nₚ) for _ in 1:Threads.nthreads()]
-    dofs_threads = [Int[] for _ in 1:Threads.nthreads()]
-
-    blockwise_parallel_each_particle(space, :static; parallel) do p
-        @inbounds begin
-            ℂₚ = Tensorial.resizedim(particles.ℂ[p], Val(dim))
-            mp = values(space, p)
-            gridindices = neighbornodes(mp)
-            gridindices_local = CartesianIndices(gridindices)
-
-            # reinit Kₚ
-            Kₚ = Kₚ_threads[Threads.threadid()]
-            fillzero!(Kₚ)
-
-            # assemble Kₚ
-            for (j, l) in enumerate(gridindices_local)
-                ∇Nⱼ = mp.∇N[l]
-                for (i, k) in enumerate(gridindices_local)
-                    ∇Nᵢ = mp.∇N[k]
-                    Kₚ[rng(i), rng(j)] .= SArray(∇Nᵢ ⋅ ℂₚ ⋅ ∇Nⱼ)
-                end
-            end
-
-            # generate local dofs
-            dofs = dofs_threads[Threads.threadid()]
-            copy!(dofs, vec(view(griddofs, :, gridindices)))
-            linds = findall(!iszero, dofs) # dof could be zero when the boundary conditions are imposed
-
-            # add Kₚ to global matrix
-            if length(linds) == length(dofs)
-                add!(K, dofs, dofs, Kₚ)
-            else # for boundaries
-                add!(K, view(dofs, linds), view(dofs, linds), view(Kₚ, linds, linds))
-            end
-        end
-    end
-    rmul!(K, θ * Δt)
-
-    # compute `K = one(K) + inv(M) * K`
-    rows = rowvals(K)
-    vals = nonzeros(K)
-    @inbounds for j in 1:size(K, 2)
-        for i in nzrange(K, j)
-            row = rows[i]
-            I = freeinds[row]
-            mᵢ = grid.m[_tail(I)]
-            vals[i] /= mᵢ
-            if row == j
-                vals[i] += 1 # +1 for diagonal entries
-            end
-        end
-    end
-
-    K
 end
