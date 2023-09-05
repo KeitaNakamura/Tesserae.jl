@@ -284,7 +284,7 @@ function particle_to_grid!(name::Symbol, grid::Grid, particles::Particles, space
 end
 
 function particle_to_grid!(::Val{names}, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem=DefaultSystem(), parallel::Bool=true) where {names}
-    check_statenames(names, (:m, :mv, :f, :fint, :fext, :∇m))
+    check_statenames(names, (:m, :mv, :ma, :f, :fint, :fext, :∇m))
     check_grid(grid, space)
     check_particles(particles, space)
     blockwise_parallel_each_particle(space, :dynamic; parallel) do p
@@ -343,6 +343,16 @@ end
         end
     end
 
+    if :ma in names
+        mₚaₚ = pt.m * pt.a
+
+        # additional term for advanced approximation
+        if alg isa TaylorTransfer
+            xₚ = pt.x
+            mₚ∇aₚ = pt.m * pt.∇a
+        end
+    end
+
     @simd for j in CartesianIndices(gridindices)
         i = gridindices[j]
         N = mp.N[j]
@@ -385,6 +395,15 @@ end
                 grid.mv[i] += N*(mₚvₚ + mₚ∇vₚ⋅(xᵢ-xₚ))
             else
                 grid.mv[i] += N*mₚvₚ
+            end
+        end
+
+        if :ma in names
+            xᵢ = grid.x[i]
+            if alg isa TaylorTransfer
+                grid.ma[i] += N*(mₚaₚ + mₚ∇aₚ⋅(xᵢ-xₚ))
+            else
+                grid.ma[i] += N*mₚaₚ
             end
         end
     end
@@ -460,7 +479,7 @@ end
 
 function grid_to_particle!(do_particle!, alg::TransferAlgorithm, system::CoordinateSystem, ::Val{names}, particles::Particles, grid::Grid, space::MPSpace{dim}, only_dt...; parallel::Bool) where {names, dim}
     @assert length(only_dt) == 0 || length(only_dt) == 1
-    check_statenames(names, (:v, :∇v, :x))
+    check_statenames(names, (:v, :a, :∇v, :∇a, :x))
     check_grid(grid, space)
     check_particles(particles, space)
     parallel_foreach(1:num_particles(space), :dynamic; ntasks=ifelse(parallel, Threads.nthreads(), 1)) do p
@@ -481,6 +500,13 @@ end
         ∇vₚ = @Tensor zero(pt.∇v)[1:dim, 1:dim]
         if system isa Axisymmetric
             vₚ = zero(pt.v)
+        end
+    end
+
+    if :∇u in names
+        ∇uₚ = @Tensor zero(pt.∇u)[1:dim, 1:dim]
+        if system isa Axisymmetric
+            uₚ = zero(pt.v)
         end
     end
 
@@ -511,6 +537,13 @@ end
         end
     end
 
+    if :a in names
+        aₚ = zero(pt.a)
+    end
+    if :∇a in names
+        ∇aₚ = zero(pt.∇a)
+    end
+
     gridindices = neighbornodes(mp, grid)
     @simd for j in CartesianIndices(gridindices)
         i = gridindices[j]
@@ -522,6 +555,11 @@ end
 
         if :∇v in names
             ∇vₚ += vᵢ ⊗ ∇N
+        end
+
+        if :∇u in names
+            uᵢ = grid.u[i]
+            ∇uₚ += uᵢ ⊗ ∇N
         end
 
         if :x in names
@@ -537,6 +575,11 @@ end
             vₚ += vᵢ * N
         end
 
+        if @isdefined uₚ
+            uᵢ = grid.u[i]
+            uₚ += uᵢ * N
+        end
+
         # particle velocity depends on transfer algorithms
         if :v in names
             if alg isa FLIPGroup || alg isa FLIP_PIC_Blends
@@ -548,6 +591,15 @@ end
                 Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
             end
         end
+
+        if :a in names
+            aᵢ = grid.a[i]
+            aₚ += aᵢ * N
+        end
+        if :a in names
+            aᵢ = grid.a[i]
+            ∇aₚ += aᵢ ⊗ ∇N
+        end
     end
 
     if :∇v in names
@@ -555,6 +607,14 @@ end
             pt.∇v = calc_∇v(system, typeof(pt.∇v), ∇vₚ, vₚ[1], pt.x[1])
         else
             pt.∇v = calc_∇v(system, typeof(pt.∇v), ∇vₚ)
+        end
+    end
+
+    if :∇u in names
+        if system isa Axisymmetric
+            pt.∇u = calc_∇v(system, typeof(pt.∇u), ∇uₚ, uₚ[1], pt.x[1])
+        else
+            pt.∇u = calc_∇v(system, typeof(pt.∇u), ∇uₚ)
         end
     end
 
@@ -586,6 +646,13 @@ end
             # Bₚ is always calculated when `:v` is specified
             pt.B = Bₚ
         end
+    end
+
+    if :a in names
+        pt.a = aₚ
+    end
+    if :∇a in names
+        pt.∇a = ∇aₚ
     end
 end
 
