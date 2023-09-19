@@ -5,46 +5,6 @@ _tail(I::CartesianIndex) = CartesianIndex(Base.tail(Tuple(I)))
 normal(v::Vec, n::Vec) = (v⋅n) * n
 tangential(v::Vec, n::Vec) = v - normal(v,n)
 
-function create_grid_cache(grid::Grid{dim}) where {dim}
-    Tv = eltype(grid.v)
-    Tm = Mat{dim,dim,eltype(Tv),dim*dim}
-    spinds = get_spinds(grid)
-    StructArray(v★    = SpArray{Tv}(spinds),
-                f★    = SpArray{Tv}(spinds),
-                fint  = SpArray{Tv}(spinds),
-                fext  = SpArray{Tv}(spinds),
-                fᵇ    = SpArray{Tv}(spinds),
-                dfᵇdf = SpArray{Tm}(spinds),
-                fᵖ    = SpArray{Tv}(spinds),
-                dfᵖdv = SpArray{Tm}(spinds),
-                dfᵖdf = SpArray{Tm}(spinds))
-end
-
-function reinit_grid_cache!(spgrid::StructArray, consider_boundary_condition::Bool, consider_penalty::Bool)
-    n = countnnz(get_spinds(spgrid.v★))
-    resize_nonzeros!(spgrid.v★, n)
-    resize_nonzeros!(spgrid.f★, n)
-    resize_nonzeros!(spgrid.fint, n)
-    resize_nonzeros!(spgrid.fext, n)
-    if consider_boundary_condition
-        resize_nonzeros!(spgrid.fᵇ, n)
-        resize_nonzeros!(spgrid.dfᵇdf, n)
-    end
-    if consider_penalty
-        resize_nonzeros!(spgrid.fᵖ, n)
-        resize_nonzeros!(spgrid.dfᵖdv, n)
-        resize_nonzeros!(spgrid.dfᵖdf, n)
-    end
-    spgrid
-end
-
-function create_particles_cache(particles::Particles)
-    npts = length(particles)
-    Tσ = eltype(particles.σ)
-    Tℂ = Tensor{Tuple{@Symmetry{3,3}, 3,3}, eltype(Tσ), 4, 54}
-    StructArray(δσ=Array{Tσ}(undef, npts), ℂ=Array{Tℂ}(undef, npts))
-end
-
 _isfixed_bc(x::Bool) = x
 _isfixed_bc(x::AbstractFloat) = x < 0
 function impose_fixed_boundary_condition!(grid::Grid{dim}, bc::AbstractArray{<: Real}) where {dim}
@@ -72,21 +32,51 @@ function compute_flatfreeindices(grid::Grid{dim}, coefs::AbstractArray{<: Abstra
     end
 end
 
-function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
-    fillzero!(grid.fint)
-    blockwise_parallel_each_particle(space, :dynamic; parallel) do p
-        @inbounds begin
-            pt = LazyRow(particles, p)
-            itp = get_interpolation(space)
-            mp = values(space, p)
-            grid_to_particle!(alg, system, Val((:∇v,)), pt, grid, itp, mp)
-            update_stress!(pt)
-            particle_to_grid!(alg, system, Val((:fint,)), grid, pt, itp, mp)
-        end
-    end
+abstract type ImplicitIntegrator end
+
+struct EulerIntegrator{T} <: ImplicitIntegrator
+    θ::T
+    nlsolver::NonlinearSolver
+    linsolve!::Function
+    grid_cache::StructArray
+    particles_cache::StructVector
 end
 
-abstract type ImplicitIntegrator end
+function EulerIntegrator(
+                           :: Type{T},
+        grid               :: SpGrid{dim},
+        particles          :: Particles;
+        implicit_parameter :: Real = 1,
+        abstol             :: Real = sqrt(eps(T)),
+        reltol             :: Real = zero(T),
+        maxiter            :: Int  = 100,
+        linsolve!                  = (x,A,b) -> gmres!(x,A,b),
+    ) where {T, dim}
+
+    # cache for grid
+    Tv = eltype(grid.v)
+    Tm = Mat{dim,dim,eltype(Tv),dim*dim}
+    spinds = get_spinds(grid)
+    grid_cache = StructArray(v★    = SpArray{Tv}(spinds),
+                             f★    = SpArray{Tv}(spinds),
+                             fint  = SpArray{Tv}(spinds),
+                             fext  = SpArray{Tv}(spinds),
+                             fᵇ    = SpArray{Tv}(spinds),
+                             dfᵇdf = SpArray{Tm}(spinds),
+                             fᵖ    = SpArray{Tv}(spinds),
+                             dfᵖdv = SpArray{Tm}(spinds),
+                             dfᵖdf = SpArray{Tm}(spinds))
+
+    # cache for particles
+    npts = length(particles)
+    Tσ = eltype(particles.σ)
+    Tℂ = Tensor{Tuple{@Symmetry{3,3}, 3,3}, eltype(Tσ), 4, 54}
+    particles_cache = StructArray(δσ=Array{Tσ}(undef, npts), ℂ=Array{Tℂ}(undef, npts))
+
+    nlsolver = NewtonSolver(T; abstol, reltol, maxiter)
+    EulerIntegrator{T}(implicit_parameter, nlsolver, linsolve!, grid_cache, particles_cache)
+end
+EulerIntegrator(grid::Grid, particles::Particles; kwargs...) = EulerIntegrator(Float64, grid, particles; kwargs...)
 
 function grid_to_particle!(
         update_stress!   :: Any,
@@ -97,7 +87,7 @@ function grid_to_particle!(
         grid             :: Grid{dim},
         space            :: MPSpace{dim},
         Δt               :: Real,
-        integrator       :: ImplicitIntegrator,
+        integrator       :: EulerIntegrator,
         penalty_method   :: Union{PenaltyMethod, Nothing} = nothing;
         bc               :: AbstractArray{<: Real}        = falses(dim, size(grid)...),
         parallel         :: Bool,
@@ -124,65 +114,53 @@ function grid_to_particle!(
         grid           :: Grid{dim},
         space          :: MPSpace{dim},
         Δt             :: Real,
-        integrator     :: ImplicitIntegrator,
+        integrator     :: EulerIntegrator,
         penalty_method :: Union{PenaltyMethod, Nothing} = nothing;
         bc             :: AbstractArray{<: Real}        = falses(dim, size(grid)...),
         parallel       :: Bool,
     ) where {dim}
     consider_boundary_condition = eltype(bc) <: AbstractFloat
     consider_penalty = penalty_method isa PenaltyMethod
-    _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)),
-                       alg,
-                       system,
-                       Val((:∇v,)),
-                       combine(particles, integrator.particles_cache),
-                       combine(grid, reinit_grid_cache!(integrator.grid_cache, consider_boundary_condition, consider_penalty)),
-                       space,
-                       Δt,
-                       integrator,
-                       penalty_method,
-                       bc,
-                       parallel)
-end
 
-struct EulerIntegrator{T} <: ImplicitIntegrator
-    θ::T
-    nlsolver::NonlinearSolver
-    linsolve!::Function
-    grid_cache::StructArray
-    particles_cache::StructVector
-end
+    # combine `grid` and its cache
+    spgrid = integrator.grid_cache
+    n = countnnz(get_spinds(spgrid.v★))
+    resize_nonzeros!(spgrid.v★, n)
+    resize_nonzeros!(spgrid.f★, n)
+    resize_nonzeros!(spgrid.fint, n)
+    resize_nonzeros!(spgrid.fext, n)
+    if consider_boundary_condition
+        resize_nonzeros!(spgrid.fᵇ, n)
+        resize_nonzeros!(spgrid.dfᵇdf, n)
+    end
+    if consider_penalty
+        resize_nonzeros!(spgrid.fᵖ, n)
+        resize_nonzeros!(spgrid.dfᵖdv, n)
+        resize_nonzeros!(spgrid.dfᵖdf, n)
+    end
+    grid_new = combine(grid, spgrid)
 
-function EulerIntegrator(
-                           :: Type{T},
-        grid               :: SpGrid{dim},
-        particles          :: Particles;
-        implicit_parameter :: Real         = 1,
-        abstol             :: Real         = sqrt(eps(T)),
-        reltol             :: Real         = zero(T),
-        maxiter            :: Int          = 100,
-        linsolve!                          = (x,A,b) -> gmres!(x,A,b),
-    ) where {T, dim}
-    grid_cache = create_grid_cache(grid)
-    particles_cache = create_particles_cache(particles)
-    nlsolver = NewtonSolver(T; abstol, reltol, maxiter)
-    EulerIntegrator{T}(implicit_parameter, nlsolver, linsolve!, grid_cache, particles_cache)
+    # combine `particles` and its cache
+    particles_new = combine(particles, integrator.particles_cache)
+
+    _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)), alg, system,
+                       Val((:∇v,)), particles_new, grid_new, space, Δt,
+                       integrator, penalty_method, bc, parallel)
 end
-EulerIntegrator(grid::Grid, particles::Particles; kwargs...) = EulerIntegrator(Float64, grid, particles; kwargs...)
 
 function _grid_to_particle!(
-        update_stress!   :: Any,
-        alg              :: TransferAlgorithm,
-        system           :: CoordinateSystem,
-                         :: Val{(:∇v,)},
-        particles        :: Particles,
-        grid             :: Grid,
-        space            :: MPSpace,
-        Δt               :: Real,
-        integrator       :: EulerIntegrator,
-        penalty_method   :: Union{PenaltyMethod, Nothing},
-        bc               :: AbstractArray{<: Real},
-        parallel         :: Bool,
+        update_stress! :: Any,
+        alg            :: TransferAlgorithm,
+        system         :: CoordinateSystem,
+                       :: Val{(:∇v,)},
+        particles      :: Particles,
+        grid           :: Grid,
+        space          :: MPSpace,
+        Δt             :: Real,
+        integrator     :: EulerIntegrator,
+        penalty_method :: Union{PenaltyMethod, Nothing},
+        bc             :: AbstractArray{<: Real},
+        parallel       :: Bool,
     )
     θ = integrator.θ
     freeinds = compute_flatfreeindices(grid, bc)
@@ -209,11 +187,11 @@ function _grid_to_particle!(
         @. grid.v★ = (1-θ)*grid.vⁿ + θ*grid.v
 
         # internal force
-        recompute_grid_internal_force!(update_stress!, @rename(grid, v★=>v), particles, space; alg, system, parallel)
+        recompute_grid_internal_force!(update_stress!, @rename(grid, v★=>v), particles, space, integrator; alg, system, parallel)
 
         # boundary condition
         if consider_boundary_condition
-            compute_boundary_friction!(grid, Δt, bc)
+            compute_boundary_friction!(grid, Δt, integrator, bc)
             @. grid.fint += grid.fᵇ
         end
 
@@ -267,7 +245,7 @@ function jacobian_matrix(
             flatview(fillzero!(grid.δv), freeinds) .= integrator.θ .* δv
 
             # recompute grid internal force `grid.fint` from grid velocity `grid.v`
-            recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space; alg, system, parallel)
+            recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space, integrator; alg, system, parallel)
 
             # Jacobian-vector product
             @. grid.f★ = grid.fint
@@ -283,7 +261,21 @@ function jacobian_matrix(
     end
 end
 
-function compute_boundary_friction!(grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
+function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, ::EulerIntegrator; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+    fillzero!(grid.fint)
+    blockwise_parallel_each_particle(space, :dynamic; parallel) do p
+        @inbounds begin
+            pt = LazyRow(particles, p)
+            itp = get_interpolation(space)
+            mp = values(space, p)
+            grid_to_particle!(alg, system, Val((:∇v,)), pt, grid, itp, mp)
+            update_stress!(pt)
+            particle_to_grid!(alg, system, Val((:fint,)), grid, pt, itp, mp)
+        end
+    end
+end
+
+function compute_boundary_friction!(grid::Grid, Δt::Real, ::EulerIntegrator, coefs::AbstractArray{<: AbstractFloat})
     fillzero!(grid.fᵇ)
     fillzero!(grid.dfᵇdf)
     normals = NormalVectorArray(size(grid))
