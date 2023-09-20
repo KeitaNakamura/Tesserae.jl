@@ -141,12 +141,12 @@ function contacting_grains(
             grain = grains[i]
             space = grain_spaces[i]
             update!(space, grid, grain; parallel=false)
-            particle_to_grid!((:m,:mv,:f,:∇m), fillzero!(grid), grain, space; parallel=false)
+            particle_to_grid!((:m,:mv,:f,:∇m), fillzero!(grid), grain, space; alg=FLIP(), parallel=false)
         end
 
         ## bar
         update!(bar_space, bar_grid, bar; parallel=false)
-        particle_to_grid!((:m,:mv), fillzero!(bar_grid), bar, bar_space; parallel=false)
+        particle_to_grid!((:m,:mv), fillzero!(bar_grid), bar, bar_space; alg=FLIP(), parallel=false)
 
         ## center of mass
         update_sparsity!(cm_grid, mapreduce(blocksparsity, .+, (bar_grid, grain_grids...)) .> 1)
@@ -194,10 +194,10 @@ function contacting_grains(
             grid = grain_grids[i]
             grain = grains[i]
             space = grain_spaces[i]
-            grid_to_particle!((:v,:∇v,:x,), grain, grid, space, Δt; parallel=false)
+            grid_to_particle!((:v,:∇v,:x,), grain, grid, space, Δt; alg=FLIP(), parallel=false)
         end
         ## bar
-        grid_to_particle!((:x,), bar, bar_grid, bar_space, Δt; parallel=false)
+        grid_to_particle!((:x,), bar, bar_grid, bar_space, Δt; alg=FLIP(), parallel=false)
 
         ## update stress and volume for grains
         Threads.@threads for grain in grains

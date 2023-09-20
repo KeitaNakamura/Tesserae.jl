@@ -26,13 +26,13 @@ function USL(grid::Grid, particles::Particles, space::MPSpace, E::Real, Δt::Rea
     fillzero!(grid)
 
     ## calculate grid velocity and force, update grid velocity
-    particle_to_grid!((:m,:mv,:f), grid, particles, space)
+    particle_to_grid!((:m,:mv,:f), grid, particles, space; alg=FLIP())
     @. grid.vⁿ = grid.mv / grid.m
     @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m)
     impose_boundary_condition!(grid)
 
     ## update particle states
-    grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt)
+    grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg=FLIP())
     update_stress!.(eachparticle(particles), E, Δt)
 end
 
@@ -50,22 +50,22 @@ function USF(grid::Grid, particles::Particles, space::MPSpace, E::Real, Δt::Rea
     fillzero!(grid)
 
     ## calculate grid velocity
-    particle_to_grid!((:m,:mv,), grid, particles, space)
+    particle_to_grid!((:m,:mv,), grid, particles, space; alg=FLIP())
     @. grid.v = grid.mv / grid.m
     impose_boundary_condition!(grid)
 
     ## update particle volume and stress first
-    grid_to_particle!(:∇v, particles, grid, space)
+    grid_to_particle!(:∇v, particles, grid, space; alg=FLIP())
     update_stress!.(eachparticle(particles), E, Δt)
 
     ## update grid velocity from updated stress
-    particle_to_grid!(:f, grid, particles, space)
+    particle_to_grid!(:f, grid, particles, space; alg=FLIP())
     @. grid.vⁿ = grid.v
     @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m)
     impose_boundary_condition!(grid)
 
     ## update particle velocity and position
-    grid_to_particle!((:v,:x), particles, grid, space, Δt)
+    grid_to_particle!((:v,:x), particles, grid, space, Δt; alg=FLIP())
 end
 
 # ### Modified Update Stress Last (MUSL)
@@ -83,22 +83,22 @@ function MUSL(grid::Grid, particles::Particles, space::MPSpace, E::Real, Δt::Re
     fillzero!(grid)
 
     ## calculate grid velocity and force, update grid velocity
-    particle_to_grid!((:m,:mv,:f), grid, particles, space)
+    particle_to_grid!((:m,:mv,:f), grid, particles, space; alg=FLIP())
     @. grid.vⁿ = grid.mv / grid.m
     @. grid.v = grid.vⁿ + Δt*(grid.f/grid.m)
     impose_boundary_condition!(grid)
 
     ## update particle velocity and position
-    grid_to_particle!((:v,:x), particles, grid, space, Δt)
+    grid_to_particle!((:v,:x), particles, grid, space, Δt; alg=FLIP())
 
     ## recalculate grid velocity
     fillzero!(grid.mv)
-    particle_to_grid!(:mv, grid, particles, space)
+    particle_to_grid!(:mv, grid, particles, space; alg=FLIP())
     @. grid.v = grid.mv / grid.m
     impose_boundary_condition!(grid)
 
     ## update particle volume and stress
-    grid_to_particle!(:∇v, particles, grid, space)
+    grid_to_particle!(:∇v, particles, grid, space; alg=FLIP())
     update_stress!.(eachparticle(particles), E, Δt)
 end
 
