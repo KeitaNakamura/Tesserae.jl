@@ -89,6 +89,7 @@ export
 # implicit
     solve_momentum_equation!,
     EulerIntegrator,
+    NewmarkIntegrator,
     PenaltyMethod,
 # VTK
     openvtk,

@@ -7,12 +7,14 @@ tangential(v::Vec, n::Vec) = v - normal(v,n)
 
 _isfixed_bc(x::Bool) = x
 _isfixed_bc(x::AbstractFloat) = x < 0
-function impose_fixed_boundary_condition!(grid::Grid{dim}, bc::AbstractArray{<: Real}) where {dim}
-    @assert size(bc) == (dim, size(grid)...)
+function impose_fixed_boundary_condition!(gridstates::Tuple{Vararg{AbstractArray{<: Vec{dim}, dim}}}, bc::AbstractArray{<: Real}) where {dim}
+    @assert all(==(size(first(gridstates))), map(size, gridstates))
+    @assert size(bc) == (dim, size(first(gridstates))...)
     for I in CartesianIndices(bc)
         if _isfixed_bc(bc[I])
-            flatarray(grid.v)[I] = 0
-            flatarray(grid.vⁿ)[I] = 0
+            for gridstate in gridstates
+                flatarray(gridstate)[I] = 0
+            end
         end
     end
 end
@@ -136,7 +138,7 @@ function solve_momentum_equation!(
     freeinds = compute_flatfreeindices(grid, bc)
 
     # set velocity to zero for fixed boundary condition
-    impose_fixed_boundary_condition!(grid, bc)
+    impose_fixed_boundary_condition!((grid.v, grid.vⁿ), bc)
 
     # calculate fext once
     fillzero!(grid.fext)
@@ -264,6 +266,259 @@ function compute_boundary_friction!(grid::Grid, Δt::Real, ::EulerIntegrator, co
                 grid.fᵇ[i] += fᵇ
                 grid.dfᵇdf[i] += dfᵇdf
             end
+        end
+    end
+end
+
+struct NewmarkIntegrator{T} <: ImplicitIntegrator
+    γ::T
+    β::T
+    nlsolver::NonlinearSolver
+    linsolve!::Function
+    grid_cache::StructArray
+    particles_cache::StructVector
+end
+
+function NewmarkIntegrator(
+                  :: Type{T},
+        grid      :: SpGrid{dim},
+        particles :: Particles;
+        γ         :: Real = T(1/2),
+        β         :: Real = T(1/4),
+        abstol    :: Real = sqrt(eps(T)),
+        reltol    :: Real = zero(T),
+        maxiter   :: Int  = 100,
+        linsolve!         = (x,A,b) -> gmres!(x,A,b),
+    ) where {T, dim}
+
+    # cache for grid
+    Tv = eltype(grid.v)
+    Tm = Mat{dim,dim,eltype(Tv),dim*dim}
+    spinds = get_spinds(grid)
+    grid_cache = StructArray(δu    = SpArray{Tv}(spinds),
+                             δv    = SpArray{Tv}(spinds),
+                             R     = SpArray{Tv}(spinds),
+                             u     = SpArray{Tv}(spinds),
+                             a     = SpArray{Tv}(spinds),
+                             aⁿ    = SpArray{Tv}(spinds),
+                             ma    = SpArray{Tv}(spinds),
+                             f★    = SpArray{Tv}(spinds),
+                             fint  = SpArray{Tv}(spinds),
+                             fext  = SpArray{Tv}(spinds),
+                             fᵇ    = SpArray{Tv}(spinds),
+                             dfᵇdf = SpArray{Tm}(spinds),
+                             fᵖ    = SpArray{Tv}(spinds),
+                             dfᵖdv = SpArray{Tm}(spinds),
+                             dfᵖdf = SpArray{Tm}(spinds))
+
+    # cache for particles
+    npts = length(particles)
+    Tσ = eltype(particles.σ)
+    T∇u = eltype(particles.∇v)
+    Tℂ = Tensor{Tuple{@Symmetry{3,3}, 3,3}, eltype(Tσ), 4, 54}
+    particles_cache = StructArray(δσ = Array{Tσ}(undef, npts),
+                                  a  = Array{Tv}(undef, npts),
+                                  ∇a = Array{Tm}(undef, npts),
+                                  ∇u = Array{T∇u}(undef, npts),
+                                  ℂ  = Array{Tℂ}(undef, npts),
+                                  𝔻  = Array{Tℂ}(undef, npts))
+    fillzero!(particles_cache)
+
+    nlsolver = NewtonSolver(T; abstol, reltol, maxiter)
+    NewmarkIntegrator{T}(γ, β, nlsolver, linsolve!, grid_cache, particles_cache)
+end
+NewmarkIntegrator(grid::Grid, particles::Particles; kwargs...) = NewmarkIntegrator(Float64, grid, particles; kwargs...)
+
+function solve_momentum_equation!(
+        update_stress! :: Any,
+        grid           :: Grid{dim},
+        particles      :: Particles,
+        space          :: MPSpace{dim},
+        Δt             :: Real,
+        integrator     :: NewmarkIntegrator,
+        penalty_method :: Union{PenaltyMethod, Nothing} = nothing;
+        alg            :: TransferAlgorithm,
+        system         :: CoordinateSystem       = DefaultSystem(),
+        bc             :: AbstractArray{<: Real} = falses(dim, size(grid)...),
+        parallel       :: Bool                   = true,
+    ) where {dim}
+    consider_boundary_condition = eltype(bc) <: AbstractFloat
+    consider_penalty = penalty_method isa PenaltyMethod
+
+    # combine `grid` and its cache
+    spgrid = integrator.grid_cache
+    n = countnnz(get_spinds(spgrid.δu))
+    resize_nonzeros!(spgrid.δu, n)
+    resize_nonzeros!(spgrid.δv, n)
+    resize_nonzeros!(spgrid.R, n)
+    resize_nonzeros!(spgrid.u, n)
+    resize_nonzeros!(spgrid.a, n)
+    resize_nonzeros!(spgrid.aⁿ, n)
+    resize_nonzeros!(spgrid.ma, n)
+    resize_nonzeros!(spgrid.f★, n)
+    resize_nonzeros!(spgrid.fint, n)
+    resize_nonzeros!(spgrid.fext, n)
+    if consider_boundary_condition
+        resize_nonzeros!(spgrid.fᵇ, n)
+        resize_nonzeros!(spgrid.dfᵇdf, n)
+    end
+    if consider_penalty
+        resize_nonzeros!(spgrid.fᵖ, n)
+        resize_nonzeros!(spgrid.dfᵖdv, n)
+        resize_nonzeros!(spgrid.dfᵖdf, n)
+    end
+    grid_new = combine(grid, spgrid)
+
+    # combine `particles` and its cache
+    particles_new = combine(particles, integrator.particles_cache)
+
+    function up!(pt)
+        grad = update_stress!(pt)
+        if grad isa Tuple{Any, Any}
+            pt.ℂ, pt.𝔻 = grad
+        elseif grad isa AbstractTensor
+            pt.ℂ = grad
+        else
+            error("solve_momentum_equation!: given function must return tensor(s)")
+        end
+    end
+    solve_momentum_equation!(up!, grid_new, particles_new, space, Δt,
+                             integrator, penalty_method, alg, system, bc, parallel)
+end
+
+function solve_momentum_equation!(
+        update_stress! :: Any,
+        grid           :: Grid,
+        particles      :: Particles,
+        space          :: MPSpace,
+        Δt             :: Real,
+        integrator     :: NewmarkIntegrator,
+        penalty_method :: Union{PenaltyMethod, Nothing},
+        alg            :: TransferAlgorithm,
+        system         :: CoordinateSystem,
+        bc             :: AbstractArray{<: Real},
+        parallel       :: Bool,
+    )
+    γ, β = integrator.γ, integrator.β
+    freeinds = compute_flatfreeindices(grid, bc)
+
+    # set velocity and acceleration to zero for fixed boundary condition
+    impose_fixed_boundary_condition!((grid.v,grid.vⁿ,grid.a,grid.aⁿ), bc)
+
+    # calculate `fext` and `aⁿ`
+    fillzero!(grid.fext)
+    fillzero!(grid.ma)
+    particle_to_grid!((:fext,:ma), grid, particles, space; alg, system, parallel)
+    @. grid.aⁿ = grid.ma / grid.m * !iszero(grid.m)
+
+    # friction on boundaries
+    consider_boundary_condition = eltype(bc) <: AbstractFloat
+
+    # penalty method
+    consider_penalty = penalty_method isa PenaltyMethod
+
+    # jacobian
+    should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
+    A = jacobian_matrix(integrator, grid, particles, space, Δt, freeinds, consider_boundary_condition, consider_penalty, alg, system, parallel)
+
+    function residual_jacobian!(R, J, x)
+        flatview(grid.u, freeinds) .= x
+        @. grid.v = (γ/(β*Δt))*grid.u + (1-γ/β)*grid.vⁿ + (1-γ/2β)*Δt*grid.aⁿ
+        @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ + (1-1/2β)*grid.aⁿ
+
+        # internal force
+        recompute_grid_internal_force!(update_stress!, grid, particles, space, integrator; alg, system, parallel)
+
+        # boundary condition
+        if consider_boundary_condition
+            compute_boundary_friction!(grid, Δt, integrator, bc)
+            @. grid.fint += grid.fᵇ
+        end
+
+        # penalty force
+        if consider_penalty
+            compute_penalty_force!(grid, Δt, penalty_method)
+            @. grid.fint += grid.fᵖ
+        end
+
+        # residual
+        @. grid.R = β*Δt * (grid.a + (grid.fint - grid.fext) / grid.m)
+        R .= flatview(grid.R, freeinds)
+    end
+
+    u = copy(flatview(fillzero!(grid.u), freeinds))
+    converged = solve!(u, residual_jacobian!, similar(u), A, integrator.nlsolver, integrator.linsolve!)
+    converged || @warn "Implicit method not converged"
+
+    grid_to_particle!((:a,:∇a), particles, grid, space; alg, system, parallel)
+    @. grid.xⁿ⁺¹ = grid.x + grid.u
+
+    if consider_penalty && penalty_method.storage !== nothing
+        @. penalty_method.storage = grid.fᵖ
+    end
+
+    nothing
+end
+
+function jacobian_matrix(
+        integrator                  :: NewmarkIntegrator,
+        grid                        :: Grid,
+        particles                   :: Particles,
+        space                       :: MPSpace,
+        Δt                          :: Real,
+        freeinds                    :: Vector{<: CartesianIndex},
+        consider_boundary_condition :: Bool,
+        consider_penalty            :: Bool,
+        alg                         :: TransferAlgorithm,
+        system                      :: CoordinateSystem,
+        parallel                    :: Bool,
+    )
+    γ, β = integrator.γ, integrator.β
+    @inline function update_stress!(pt)
+        @inbounds begin
+            ∇δuₚ = pt.∇u
+            ∇δvₚ = pt.∇v
+            pt.σ = (pt.ℂ ⊡ ∇δuₚ + pt.𝔻 ⊡ ∇δvₚ) / pt.V
+        end
+    end
+    LinearMap(length(freeinds)) do Jδu, δu
+        @inbounds begin
+            flatview(fillzero!(grid.δu), freeinds) .= δu
+            flatview(fillzero!(grid.δv), freeinds) .= (γ/(β*Δt)) .* δu
+
+            recompute_grid_internal_force!(update_stress!,
+                                           @rename(grid, δu=>u, δv=>v),
+                                           @rename(particles, δσ=>σ),
+                                           space,
+                                           integrator;
+                                           alg,
+                                           system,
+                                           parallel)
+
+            # Jacobian-vector product
+            @. grid.f★ = -grid.fint
+            if consider_boundary_condition
+                @. grid.f★ += grid.dfᵇdf ⋅ grid.fint
+            end
+            if consider_penalty
+                @. grid.f★ += grid.dfᵖdu ⋅ grid.δu + grid.dfᵖdf ⋅ grid.fint
+            end
+            δa = flatview(grid.f★ ./= grid.m, freeinds)
+            @. Jδu = δu/Δt - β*Δt * δa
+        end
+    end
+end
+
+function recompute_grid_internal_force!(update_stress!, grid::Grid, particles::Particles, space::MPSpace, ::NewmarkIntegrator; alg::TransferAlgorithm, system::CoordinateSystem, parallel::Bool)
+    fillzero!(grid.fint)
+    blockwise_parallel_each_particle(space, :dynamic; parallel) do p
+        @inbounds begin
+            pt = LazyRow(particles, p)
+            itp = get_interpolation(space)
+            mp = values(space, p)
+            grid_to_particle!(alg, system, Val((:∇u, :∇v,)), pt, grid, itp, mp)
+            update_stress!(pt)
+            particle_to_grid!(alg, system, Val((:fint,)), grid, pt, itp, mp)
         end
     end
 end
