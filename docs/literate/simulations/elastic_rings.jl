@@ -85,7 +85,7 @@ function elastic_rings(
 
     ## implicit method
     if implicit
-        solver = EulerIntegrator(grid, particles)
+        integrator = EulerIntegrator(grid, particles)
     end
 
     ## outputs
@@ -129,28 +129,19 @@ function elastic_rings(
         end
 
         ## implicit G2P transfer
-        if implicit
-            grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt, solver; alg, bc=isfixed) do pt
-                gradient(pt.∇v) do ∇v
-                    F = (I + Δt*∇v) ⋅ pt.Fⁿ
-                    V = det(F) * pt.V⁰
-                    σ = compute_cauchy_stress(elastic, F)
-                    pt.F = F
-                    pt.V = V
-                    pt.σ = σ
-                    V * σ
-                end
-            end
-        else
-            grid_to_particle!((:v,:∇v,:x), particles, grid, space, Δt; alg) do pt
-                F = (I + Δt*pt.∇v) ⋅ pt.Fⁿ
-                V = det(F) * pt.V⁰
-                σ = compute_cauchy_stress(elastic, F)
-                pt.F = F
-                pt.V = V
-                pt.σ = σ
-            end
+        function update_stress!(pt, ∇v)
+            F = (I + Δt*∇v) ⋅ pt.Fⁿ
+            V = det(F) * pt.V⁰
+            σ = compute_cauchy_stress(elastic, F)
+            pt.F = F
+            pt.V = V
+            pt.σ = σ
+            V * σ
         end
+        if implicit
+            solve_momentum_equation!(pt -> gradient(∇v -> update_stress!(pt, ∇v), pt.∇v), grid, particles, space, Δt, integrator; alg, bc=isfixed)
+        end
+        grid_to_particle!(pt -> update_stress!(pt, pt.∇v), (:v,:∇v,:x), particles, grid, space, Δt; alg)
         @. particles.Fⁿ = particles.F
 
         t += Δt

@@ -78,41 +78,18 @@ function EulerIntegrator(
 end
 EulerIntegrator(grid::Grid, particles::Particles; kwargs...) = EulerIntegrator(Float64, grid, particles; kwargs...)
 
-function grid_to_particle!(
-        update_stress!   :: Any,
-        alg              :: TransferAlgorithm,
-        system           :: CoordinateSystem,
-                         :: Val{names},
-        particles        :: Particles,
-        grid             :: Grid{dim},
-        space            :: MPSpace{dim},
-        Δt               :: Real,
-        integrator       :: EulerIntegrator,
-        penalty_method   :: Union{PenaltyMethod, Nothing} = nothing;
-        bc               :: AbstractArray{<: Real}        = falses(dim, size(grid)...),
-        parallel         :: Bool,
-    ) where {names, dim}
-    # up-to-date velocity `grid.v` is calculated by implicit method
-    @assert :∇v in names
-    grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, integrator, penalty_method; bc, parallel)
-
-    # `x`, `v` and `∇v` should be updated by using up-to-date velocity `grid.v`
-    grid_to_particle!(names, particles, grid, space, Δt; alg, system, parallel)
-end
-
-function grid_to_particle!(
+function solve_momentum_equation!(
         update_stress! :: Any,
-        alg            :: TransferAlgorithm,
-        system         :: CoordinateSystem,
-                       :: Val{(:∇v,)},
-        particles      :: Particles,
         grid           :: Grid{dim},
+        particles      :: Particles,
         space          :: MPSpace{dim},
         Δt             :: Real,
         integrator     :: EulerIntegrator,
         penalty_method :: Union{PenaltyMethod, Nothing} = nothing;
-        bc             :: AbstractArray{<: Real}        = falses(dim, size(grid)...),
-        parallel       :: Bool,
+        alg            :: TransferAlgorithm,
+        system         :: CoordinateSystem       = DefaultSystem(),
+        bc             :: AbstractArray{<: Real} = falses(dim, size(grid)...),
+        parallel       :: Bool                   = true,
     ) where {dim}
     consider_boundary_condition = eltype(bc) <: AbstractFloat
     consider_penalty = penalty_method isa PenaltyMethod
@@ -138,22 +115,20 @@ function grid_to_particle!(
     # combine `particles` and its cache
     particles_new = combine(particles, integrator.particles_cache)
 
-    _grid_to_particle!(pt -> (pt.ℂ = update_stress!(pt)), alg, system,
-                       Val((:∇v,)), particles_new, grid_new, space, Δt,
-                       integrator, penalty_method, bc, parallel)
+    solve_momentum_equation!(pt -> (pt.ℂ = update_stress!(pt)), grid_new, particles_new, space, Δt,
+                             integrator, penalty_method, alg, system, bc, parallel)
 end
 
-function _grid_to_particle!(
+function solve_momentum_equation!(
         update_stress! :: Any,
-        alg            :: TransferAlgorithm,
-        system         :: CoordinateSystem,
-                       :: Val{(:∇v,)},
-        particles      :: Particles,
         grid           :: Grid,
+        particles      :: Particles,
         space          :: MPSpace,
         Δt             :: Real,
         integrator     :: EulerIntegrator,
         penalty_method :: Union{PenaltyMethod, Nothing},
+        alg            :: TransferAlgorithm,
+        system         :: CoordinateSystem,
         bc             :: AbstractArray{<: Real},
         parallel       :: Bool,
     )

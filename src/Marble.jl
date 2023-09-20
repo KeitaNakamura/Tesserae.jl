@@ -87,6 +87,7 @@ export
     TPIC,
     WLSTransfer,
 # implicit
+    solve_momentum_equation!,
     EulerIntegrator,
     PenaltyMethod,
 # VTK
