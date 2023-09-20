@@ -92,17 +92,12 @@ function grid_to_particle!(
         bc               :: AbstractArray{<: Real}        = falses(dim, size(grid)...),
         parallel         :: Bool,
     ) where {names, dim}
-    # implicit method
-    # up-to-date velocity `grid.v` and interpolated velocity `grid.v★` are calculated
+    # up-to-date velocity `grid.v` is calculated by implicit method
     @assert :∇v in names
     grid_to_particle!(update_stress!, alg, system, Val((:∇v,)), particles, grid, space, Δt, integrator, penalty_method; bc, parallel)
 
-    # use interpolated velocity `grid.v★` to update particle position `x`
-    :x in names && grid_to_particle!(:x, particles, @rename(grid, v★=>v), space, Δt; alg, system, parallel)
-
-    # other `v` and `∇v` should be updated by using up-to-date velocity `grid.v`
-    rest = tuple(delete!(Set(names), :x)...)
-    grid_to_particle!(rest, particles, grid, space, Δt; alg, system, parallel)
+    # `x`, `v` and `∇v` should be updated by using up-to-date velocity `grid.v`
+    grid_to_particle!(names, particles, grid, space, Δt; alg, system, parallel)
 end
 
 function grid_to_particle!(
@@ -213,9 +208,6 @@ function _grid_to_particle!(
     if consider_penalty && penalty_method.storage !== nothing
         @. penalty_method.storage = grid.fᵖ
     end
-
-    # calculate interpolated grid velocity to update `xₚ` outside function
-    @. grid.v★ = (1-θ)*grid.vⁿ + θ*grid.v
 
     nothing
 end

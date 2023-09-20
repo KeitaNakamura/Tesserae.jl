@@ -85,7 +85,7 @@ function elastic_rings(
 
     ## implicit method
     if implicit
-        solver = EulerIntegrator(grid, particles; implicit_parameter=0.5)
+        solver = EulerIntegrator(grid, particles)
     end
 
     ## outputs
@@ -172,13 +172,13 @@ function elastic_rings(
     ifelse(test, particles, nothing) #src
 end
 
-## check the result                                                                                                                                                #src
-using Test                                                                                                                                                         #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                              #src
+## check the result                                                                                                                                           #src
+using Test                                                                                                                                                    #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                         #src
 @test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=false, test=true).x) ≈ [-0.003070200867754963, -0.00019309942291382027] rtol=1e-5 #src
 @test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=false, test=true).x) ≈ [-0.0038299836923257747, -0.0001930994229137899] rtol=1e-5 #src
 @test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=false, test=true).x) ≈ [-0.0037910149463340173, -0.0001930994229138152] rtol=1e-5 #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=true,  test=true).x) ≈ [-0.003686468596327485, -0.00019309942291382648] rtol=1e-5 #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=true,  test=true).x) ≈ [0.001089956465684416, -0.00019309942291407463]  rtol=1e-5 #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=true,  test=true).x) ≈ [-0.004370080981579167, -0.0001930994229138669]  rtol=1e-5 #src
-end                                                                                                                                                                #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=true,  test=true).x) ≈ [-0.006999089832465376, -0.0001930994229138141]  rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=true,  test=true).x) ≈ [-0.006870318810593698, -0.00019309942291383616] rtol=1e-5 #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=true,  test=true).x) ≈ [-0.006868871985344444, -0.0001930994229138209]  rtol=1e-5 #src
+end                                                                                                                                                           #src
