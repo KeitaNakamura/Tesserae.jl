@@ -358,11 +358,11 @@ end
 
         if :f in names || :fint in names
             if system isa Axisymmetric
-                fint = -calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
+                fint = calc_fint(system, N, ∇N, Vₚσₚ, rₚ)
             else
-                fint = -calc_fint(system, ∇N, Vₚσₚ)
+                fint = calc_fint(system, ∇N, Vₚσₚ)
             end
-            :f    in names && (grid.f[i]    += fint)
+            :f    in names && (grid.f[i]    -= fint)
             :fint in names && (grid.fint[i] += fint)
         end
 

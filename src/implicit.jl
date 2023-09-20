@@ -192,17 +192,17 @@ function _grid_to_particle!(
         # boundary condition
         if consider_boundary_condition
             compute_boundary_friction!(grid, Δt, integrator, bc)
-            @. grid.fint += grid.fᵇ
+            @. grid.fint -= grid.fᵇ
         end
 
         # penalty force
         if consider_penalty
             compute_penalty_force!(@rename(grid, v★=>v), Δt, penalty_method)
-            @. grid.fint += grid.fᵖ
+            @. grid.fint -= grid.fᵖ
         end
 
         # residual
-        @. grid.v★ = grid.v - grid.vⁿ - Δt * ((grid.fint + grid.fext) / grid.m) # reuse v★
+        @. grid.v★ = grid.v - grid.vⁿ + Δt * ((grid.fint - grid.fext) / grid.m) # reuse v★
         R .= flatview(grid.v★, freeinds)
     end
 
@@ -248,7 +248,7 @@ function jacobian_matrix(
             recompute_grid_internal_force!(update_stress!, @rename(grid, δv=>v), @rename(particles, δσ=>σ), space, integrator; alg, system, parallel)
 
             # Jacobian-vector product
-            @. grid.f★ = grid.fint
+            @. grid.f★ = -grid.fint
             if consider_boundary_condition
                 @. grid.f★ += grid.dfᵇdf ⋅ grid.fint
             end
@@ -286,7 +286,7 @@ function compute_boundary_friction!(grid::Grid, Δt::Real, ::EulerIntegrator, co
             i = nonzeroindex(grid, I′)
             n = normals[i]
             fint = grid.fint[i]
-            if fint ⋅ n > 0
+            if fint ⋅ n < 0
                 f̄ₜ = tangential(grid.m[i]*grid.vⁿ[i]/Δt + grid.fext[i], n)
                 dfᵇdf, fᵇ = gradient(fint, :all) do f
                     fₙ = normal(f, n)
