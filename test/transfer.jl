@@ -18,22 +18,25 @@
         vⁿ::Vec{2, Float64}
     end
     @testset "P2G" begin
-        @testset "$interp" for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-            @testset "$system" for system in (PlaneStrain(), Axisymmetric())
-                Random.seed!(1234)
-                # initialization
-                grid = generate_grid(GridState, 2.0, (0,10), (0,20))
-                particles = generate_particles((x,y) -> true, ParticleState, grid.x; system)
-                space = MPSpace(interp, size(grid), length(particles))
-                v0 = rand(Vec{2})
-                ρ0 = 1.2e3
-                @. particles.m = ρ0 * particles.V
-                @. particles.v = v0
-                # transfer
-                update!(space, grid, particles)
-                particle_to_grid!((:m,:mv), fillzero!(grid), particles, space; alg=FLIP(), system)
-                @. grid.v = grid.mv / grid.m
-                @test all(≈(v0), grid.v)
+        # momentum
+        for alg in (FLIP(), TPIC(), APIC())
+            for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
+                for system in (PlaneStrain(), Axisymmetric())
+                    Random.seed!(1234)
+                    # initialization
+                    grid = generate_grid(GridState, 2.0, (0,10), (0,20))
+                    particles = generate_particles((x,y) -> true, ParticleState, grid.x; system)
+                    space = MPSpace(interp, size(grid), length(particles))
+                    v0 = rand(Vec{2})
+                    ρ0 = 1.2e3
+                    @. particles.m = ρ0 * particles.V
+                    @. particles.v = v0
+                    # transfer
+                    update!(space, grid, particles)
+                    particle_to_grid!((:m,:mv), fillzero!(grid), particles, space; alg, system)
+                    @. grid.v = grid.mv / grid.m
+                    @test all(≈(v0), grid.v)
+                end
             end
         end
     end
