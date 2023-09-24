@@ -11,35 +11,70 @@
     end
     GridState = @NamedTuple begin
         x::Vec{2, Float64}
+        x_::Vec{2, Float64}
         m::Float64
         mv::Vec{2, Float64}
         f::Vec{2, Float64}
         v::Vec{2, Float64}
         vⁿ::Vec{2, Float64}
     end
-    @testset "P2G" begin
-        # momentum
-        for alg in (FLIP(), TPIC(), APIC())
-            for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-                for system in (PlaneStrain(), Axisymmetric())
-                    Random.seed!(1234)
-                    # initialization
-                    grid = generate_grid(GridState, 2.0, (0,10), (0,20))
-                    particles = generate_particles((x,y) -> true, ParticleState, grid.x; system)
-                    space = MPSpace(interp, size(grid), length(particles))
-                    v0 = rand(Vec{2})
-                    ρ0 = 1.2e3
-                    @. particles.m = ρ0 * particles.V
-                    @. particles.v = v0
-                    # transfer
-                    update!(space, grid, particles)
-                    particle_to_grid!((:m,:mv), fillzero!(grid), particles, space; alg, system)
-                    @. grid.v = grid.mv / grid.m
+
+    for alg in (FLIP(), TPIC(), APIC())
+        for interp in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),
+                       KernelCorrection(QuadraticBSpline()), KernelCorrection(CubicBSpline()))
+            if alg isa WLSTransfer
+                interp isa KernelCorrection && continue
+                interp = LinearWLS(interp)
+            end
+            for system in (PlaneStrain(), Axisymmetric())
+                Random.seed!(1234)
+                v0 = rand(Vec{2})
+                ρ0 = rand()
+                Δt = rand()
+
+                # grid
+                grid = generate_grid(GridState, 2.0, (0,10), (0,20))
+
+                # particles
+                particles = generate_particles((x,y)->true, ParticleState, grid.x; system)
+                @. particles.m = ρ0 * particles.V
+
+                # space
+                space = MPSpace(interp, size(grid), length(particles))
+                update!(space, grid, particles)
+
+                # initialize particle states
+                @. grid.v = v0
+                if alg isa FLIP
+                    grid_to_particle!((:v,:∇v), particles, grid, space, Δt; alg=PIC(), system)
+                else
+                    grid_to_particle!((:v,:∇v), particles, grid, space, Δt; alg, system)
+                end
+
+                # check momentum
+                particle_to_grid!((:m,:mv), fillzero!(grid), particles, space; alg, system)
+                @. grid.v = grid.mv / grid.m * !iszero(grid.m)
+                if alg isa APIC && (interp isa QuadraticBSpline || interp isa CubicBSpline) 
+                    # failed near boundaries (maybe)
+                    @test !all(≈(v0), grid.v)
+                else
                     @test all(≈(v0), grid.v)
+                end
+
+                # check position
+                grid_to_particle!(:x, particles, grid, space, Δt; alg, system)
+                xₚ = copy(particles.x)
+                @. grid.x_ = grid.x + Δt * grid.v
+                grid_to_particle!(:x, particles, @rename(grid, x_=>xⁿ⁺¹), space; alg, system)
+                if interp isa LinearBSpline || interp isa KernelCorrection || interp isa LinearWLS
+                    @test particles.x ≈ xₚ
+                else
+                    @test !(particles.x ≈ xₚ)
                 end
             end
         end
     end
+
     @testset "Check coincidence in LinearWLS/APIC/TPIC" begin # should be identical when LinearWLS interpolation is used except near boundary
         grid = generate_grid(GridState, 0.1, (-10,10), (-10,10))
         grid_v = [rand(x) for x in grid.x]

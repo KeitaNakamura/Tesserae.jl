@@ -485,7 +485,11 @@ end
     end
 
     if :x in names
-        vₚ = zero(pt.v)
+        if hasproperty(grid, :xⁿ⁺¹)
+            xₚⁿ⁺¹ = zero(pt.x)
+        else
+            vₚ = zero(pt.v)
+        end
     end
 
     # particle velocity depends on transfer algorithms
@@ -520,6 +524,13 @@ end
             ∇vₚ += vᵢ ⊗ ∇N
         end
 
+        if :x in names
+            if hasproperty(grid, :xⁿ⁺¹)
+                xᵢⁿ⁺¹ = grid.xⁿ⁺¹[i]
+                xₚⁿ⁺¹ += xᵢⁿ⁺¹ * N
+            end
+        end
+
         # use `@isdefined` to avoid complicated check
         # for `:v` in `PIC` is also calculated here
         if @isdefined vₚ
@@ -548,8 +559,12 @@ end
     end
 
     if :x in names
-        dt = only(only_dt)
-        pt.x += vₚ * dt
+        if hasproperty(grid, :xⁿ⁺¹)
+            pt.x = xₚⁿ⁺¹
+        else
+            dt = only(only_dt)
+            pt.x += vₚ * dt
+        end
     end
 
     # particle velocity depends on transfer algorithms
@@ -575,7 +590,7 @@ end
 end
 
 # special transfer for `WLS` interpolation
-@inline function grid_to_particle!(::WLSTransfer, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::WLS, mp::SubMPValues{dim}, dt::Real) where {names, dim}
+@inline function grid_to_particle!(::WLSTransfer, system::CoordinateSystem, ::Val{names}, pt, grid::Grid, itp::WLS, mp::SubMPValues{dim}, only_dt...) where {names, dim}
     @_propagate_inbounds_meta
 
     basis = get_basis(itp)
@@ -586,6 +601,12 @@ end
     xₚ = pt.x
     Cₚ = zero(pt.C)
 
+    if :x in names
+        if hasproperty(grid, :xⁿ⁺¹)
+            xₚⁿ⁺¹ = zero(pt.x)
+        end
+    end
+
     gridindices = neighbornodes(mp, grid)
     @simd for j in CartesianIndices(gridindices)
         i = gridindices[j]
@@ -594,6 +615,14 @@ end
         vᵢ = grid.v[i]
         xᵢ = grid.x[i]
         Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xᵢ - xₚ))
+
+        if :x in names
+            if hasproperty(grid, :xⁿ⁺¹)
+                N = mp.N[j]
+                xᵢⁿ⁺¹ = grid.xⁿ⁺¹[i]
+                xₚⁿ⁺¹ += xᵢⁿ⁺¹ * N
+            end
+        end
     end
 
     vₚ = Cₚ ⋅ p0
@@ -608,7 +637,12 @@ end
     end
 
     if :x in names
-        pt.x += vₚ * dt
+        if hasproperty(grid, :xⁿ⁺¹)
+            pt.x = xₚⁿ⁺¹
+        else
+            dt = only(only_dt)
+            pt.x += vₚ * dt
+        end
     end
 
     if :v in names
