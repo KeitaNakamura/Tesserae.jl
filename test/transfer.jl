@@ -75,6 +75,42 @@
         end
     end
 
+    @testset "Check linear momentum conservation" begin
+        for alg in (FLIP(), TPIC(), APIC())
+            for interp in (KernelCorrection(QuadraticBSpline()), KernelCorrection(CubicBSpline()))
+                v0 = rand(Vec{2})
+                ρ0 = rand()
+
+                # grid
+                grid = generate_grid(GridState, 2.0, (0,10), (0,20))
+
+                # particles
+                particles = generate_particles((x,y)->true, ParticleState, grid.x)
+                for p in 1:length(particles)
+                    particles.v[p] = rand(Vec{2})
+                end
+                @. particles.m = ρ0 * particles.V
+
+                # space
+                space = MPSpace(interp, size(grid), length(particles))
+                update!(space, grid, particles)
+
+                ∑mₚvₚⁿ = sum(p->p.m*p.v, particles)
+
+                particle_to_grid!((:m,:mv), fillzero!(grid), particles, space; alg)
+                @. grid.v = grid.vⁿ = grid.mv / grid.m * !iszero(grid.m)
+
+                ∑mᵢvᵢ = sum(g->g.m*g.v, grid)
+
+                grid_to_particle!((:v,), particles, grid, space; alg)
+
+                ∑mₚvₚⁿ⁺¹ = sum(p->p.m*p.v, particles)
+
+                @test ∑mₚvₚⁿ ≈ ∑mᵢvᵢ ≈ ∑mₚvₚⁿ⁺¹
+            end
+        end
+    end
+
     @testset "Check coincidence in LinearWLS/APIC/TPIC" begin # should be identical when LinearWLS interpolation is used except near boundary
         grid = generate_grid(GridState, 0.1, (-10,10), (-10,10))
         grid_v = [rand(x) for x in grid.x]
