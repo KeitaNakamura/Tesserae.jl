@@ -308,7 +308,7 @@ function NewmarkIntegrator(
                              fᵇ    = SpArray{Tv}(spinds),
                              dfᵇdf = SpArray{Tm}(spinds),
                              fᵖ    = SpArray{Tv}(spinds),
-                             dfᵖdv = SpArray{Tm}(spinds),
+                             dfᵖdu = SpArray{Tm}(spinds),
                              dfᵖdf = SpArray{Tm}(spinds))
 
     # cache for particles
@@ -364,7 +364,7 @@ function solve_grid_velocity!(
     end
     if consider_penalty
         resize_nonzeros!(spgrid.fᵖ, n)
-        resize_nonzeros!(spgrid.dfᵖdv, n)
+        resize_nonzeros!(spgrid.dfᵖdu, n)
         resize_nonzeros!(spgrid.dfᵖdf, n)
     end
     grid_new = combine(grid, spgrid)
@@ -423,8 +423,8 @@ function solve_grid_velocity!(
 
     function residual_jacobian!(R, J, x)
         flatview(grid.u, freeinds) .= x
-        @. grid.v = (γ/(β*Δt))*grid.u + (1-γ/β)*grid.vⁿ + (1-γ/2β)*Δt*grid.aⁿ
-        @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ + (1-1/2β)*grid.aⁿ
+        @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
+        @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a)*Δt
 
         # internal force
         recompute_grid_internal_force!(update_stress!, grid, particles, space, integrator; alg, system, parallel)
@@ -432,13 +432,13 @@ function solve_grid_velocity!(
         # boundary condition
         if consider_boundary_condition
             compute_boundary_friction!(grid, Δt, integrator, bc)
-            @. grid.fint += grid.fᵇ
+            @. grid.fint -= grid.fᵇ
         end
 
         # penalty force
         if consider_penalty
             compute_penalty_force!(grid, integrator, penalty_method, Δt)
-            @. grid.fint += grid.fᵖ
+            @. grid.fint -= grid.fᵖ
         end
 
         # residual
@@ -446,7 +446,8 @@ function solve_grid_velocity!(
         R .= flatview(grid.R, freeinds)
     end
 
-    u = copy(flatview(fillzero!(grid.u), freeinds))
+    @. grid.u = ((β*Δt)/γ) * (grid.v - (1-γ/β)*grid.vⁿ - (1-γ/2β)*Δt*grid.aⁿ)
+    u = copy(flatview(grid.u, freeinds))
     converged = solve!(u, residual_jacobian!, similar(u), A, integrator.nlsolver, integrator.linsolve!)
     converged || @warn "Implicit method not converged"
 
@@ -498,10 +499,10 @@ function jacobian_matrix(
             # Jacobian-vector product
             @. grid.f★ = -grid.fint
             if consider_boundary_condition
-                @. grid.f★ -= grid.dfᵇdf ⋅ grid.fint
+                @. grid.f★ += grid.dfᵇdf ⋅ grid.fint
             end
             if consider_penalty
-                @. grid.f★ -= grid.dfᵖdu ⋅ grid.δu + grid.dfᵖdf ⋅ grid.fint
+                @. grid.f★ += grid.dfᵖdu ⋅ grid.δu + grid.dfᵖdf ⋅ grid.fint
             end
             δa = flatview(grid.f★ ./= grid.m, freeinds)
             @. Jδu = δu/Δt - β*Δt * δa
