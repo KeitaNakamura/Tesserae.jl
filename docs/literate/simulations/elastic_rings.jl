@@ -139,7 +139,7 @@ function elastic_rings(
             V * σ
         end
         if implicit
-            solve_momentum_equation!(pt -> gradient(∇v -> update_stress!(pt, ∇v), pt.∇v), grid, particles, space, Δt, integrator; alg, bc=isfixed)
+            solve_grid_velocity!(pt -> gradient(∇v -> update_stress!(pt, ∇v), pt.∇v), grid, particles, space, Δt, integrator; alg, bc=isfixed)
         end
         grid_to_particle!(pt -> update_stress!(pt, pt.∇v), (:v,:∇v,:x), particles, grid, space, Δt; alg)
         @. particles.Fⁿ = particles.F

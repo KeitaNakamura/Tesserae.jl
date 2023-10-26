@@ -80,14 +80,14 @@ function EulerIntegrator(
 end
 EulerIntegrator(grid::Grid, particles::Particles; kwargs...) = EulerIntegrator(Float64, grid, particles; kwargs...)
 
-function solve_momentum_equation!(
+function solve_grid_velocity!(
         update_stress! :: Any,
         grid           :: Grid{dim},
         particles      :: Particles,
         space          :: MPSpace{dim},
         Δt             :: Real,
         integrator     :: EulerIntegrator,
-        penalty_method :: Union{PenaltyMethod, Nothing} = nothing;
+        penalty_method :: Any = nothing;
         alg            :: TransferAlgorithm,
         system         :: CoordinateSystem       = DefaultSystem(),
         bc             :: AbstractArray{<: Real} = falses(dim, size(grid)...),
@@ -117,18 +117,18 @@ function solve_momentum_equation!(
     # combine `particles` and its cache
     particles_new = combine(particles, integrator.particles_cache)
 
-    solve_momentum_equation!(pt -> (pt.ℂ = update_stress!(pt)), grid_new, particles_new, space, Δt,
-                             integrator, penalty_method, alg, system, bc, parallel)
+    solve_grid_velocity!(pt -> (pt.ℂ = update_stress!(pt)), grid_new, particles_new, space, Δt,
+                         integrator, penalty_method, alg, system, bc, parallel)
 end
 
-function solve_momentum_equation!(
+function solve_grid_velocity!(
         update_stress! :: Any,
         grid           :: Grid,
         particles      :: Particles,
         space          :: MPSpace,
         Δt             :: Real,
         integrator     :: EulerIntegrator,
-        penalty_method :: Union{PenaltyMethod, Nothing},
+        penalty_method :: Any,
         alg            :: TransferAlgorithm,
         system         :: CoordinateSystem,
         bc             :: AbstractArray{<: Real},
@@ -169,7 +169,7 @@ function solve_momentum_equation!(
 
         # penalty force
         if consider_penalty
-            compute_penalty_force!(@rename(grid, v★=>v), Δt, penalty_method)
+            compute_penalty_force!(@rename(grid, v★=>v), integrator, penalty_method, Δt)
             @. grid.fint -= grid.fᵖ
         end
 
@@ -329,14 +329,14 @@ function NewmarkIntegrator(
 end
 NewmarkIntegrator(grid::Grid, particles::Particles; kwargs...) = NewmarkIntegrator(Float64, grid, particles; kwargs...)
 
-function solve_momentum_equation!(
+function solve_grid_velocity!(
         update_stress! :: Any,
         grid           :: Grid{dim},
         particles      :: Particles,
         space          :: MPSpace{dim},
         Δt             :: Real,
         integrator     :: NewmarkIntegrator,
-        penalty_method :: Union{PenaltyMethod, Nothing} = nothing;
+        penalty_method :: Any = nothing;
         alg            :: TransferAlgorithm,
         system         :: CoordinateSystem       = DefaultSystem(),
         bc             :: AbstractArray{<: Real} = falses(dim, size(grid)...),
@@ -379,21 +379,21 @@ function solve_momentum_equation!(
         elseif grad isa AbstractTensor
             pt.ℂ = grad
         else
-            error("solve_momentum_equation!: given function must return tensor(s)")
+            error("solve_grid_velocity!: given function must return tensor(s)")
         end
     end
-    solve_momentum_equation!(up!, grid_new, particles_new, space, Δt,
-                             integrator, penalty_method, alg, system, bc, parallel)
+    solve_grid_velocity!(up!, grid_new, particles_new, space, Δt,
+                         integrator, penalty_method, alg, system, bc, parallel)
 end
 
-function solve_momentum_equation!(
+function solve_grid_velocity!(
         update_stress! :: Any,
         grid           :: Grid,
         particles      :: Particles,
         space          :: MPSpace,
         Δt             :: Real,
         integrator     :: NewmarkIntegrator,
-        penalty_method :: Union{PenaltyMethod, Nothing},
+        penalty_method :: Any,
         alg            :: TransferAlgorithm,
         system         :: CoordinateSystem,
         bc             :: AbstractArray{<: Real},
@@ -437,7 +437,7 @@ function solve_momentum_equation!(
 
         # penalty force
         if consider_penalty
-            compute_penalty_force!(grid, Δt, penalty_method)
+            compute_penalty_force!(grid, integrator, penalty_method, Δt)
             @. grid.fint += grid.fᵖ
         end
 
@@ -498,10 +498,10 @@ function jacobian_matrix(
             # Jacobian-vector product
             @. grid.f★ = -grid.fint
             if consider_boundary_condition
-                @. grid.f★ += grid.dfᵇdf ⋅ grid.fint
+                @. grid.f★ -= grid.dfᵇdf ⋅ grid.fint
             end
             if consider_penalty
-                @. grid.f★ += grid.dfᵖdu ⋅ grid.δu + grid.dfᵖdf ⋅ grid.fint
+                @. grid.f★ -= grid.dfᵖdu ⋅ grid.δu + grid.dfᵖdf ⋅ grid.fint
             end
             δa = flatview(grid.f★ ./= grid.m, freeinds)
             @. Jδu = δu/Δt - β*Δt * δa

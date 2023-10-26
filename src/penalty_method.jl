@@ -16,28 +16,24 @@ function PenaltyMethod(
     PenaltyMethod(penalty_force, grid_g, grid_μ, grid_v, storage)
 end
 
-function compute_penalty_force!(grid::Grid, Δt::Real, p::PenaltyMethod)
-    compute_penalty_force!(grid, Δt, p.penalty_force, p.grid_g, p.grid_μ, p.grid_v)
-end
-
-function compute_penalty_force!(grid::Grid, Δt::Real, penalty_force::Function, grid_g::AbstractArray{<: Vec}, grid_μ::AbstractArray{<: Real}, grid_v::AbstractArray{<: Vec})
-    @assert size(grid) == size(grid_g) == size(grid_μ) == size(grid_v)
+function compute_penalty_force!(grid::Grid, integrator::EulerIntegrator, p::PenaltyMethod, Δt::Real)
+    @assert size(grid) == size(p.grid_g) == size(p.grid_μ) == size(p.grid_v)
     fillzero!(grid.fᵖ)
     fillzero!(grid.dfᵖdv)
     fillzero!(grid.dfᵖdf)
     for I in CartesianIndices(grid)
         if isactive(grid, I)
             i = nonzeroindex(grid, I)
-            g⁰ = grid_g[i]
+            g⁰ = p.grid_g[i]
             if !iszero(norm(g⁰))
                 n = normalize(g⁰)
-                μ = grid_μ[i]
-                v_rigid = grid_v[i]
+                μ = p.grid_μ[i]
+                v_rigid = p.grid_v[i]
                 f̄ₜ = tangential(grid.m[i]*(grid.vⁿ[i]-v_rigid)/Δt + grid.fext[i], n)
                 (dfᵖdv,dfᵖdf), fᵖ = gradient(grid.v[i], grid.fint[i], :all) do v, f
                     # normal
                     g = g⁰ + normal(v-v_rigid, n) * Δt
-                    fₙ = penalty_force(g)
+                    fₙ = p.penalty_force(g)
 
                     # tangential
                     iszero(μ) && return fₙ
