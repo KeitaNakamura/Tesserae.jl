@@ -3,9 +3,6 @@ uuid = "8a8a7a0b-5081-41d5-b488-cbbf872f9543"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
 version = "1.2.1"
 
-[weakdeps]
-GeometricObjects = "f167b195-1c3d-409a-8dd6-02cc02a656c6"
-
 [deps]
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
@@ -21,6 +18,9 @@ StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 Tensorial = "98f94333-fa9f-48a9-ad80-1c66397b2b38"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
+[weakdeps]
+GeometricObjects = "f167b195-1c3d-409a-8dd6-02cc02a656c6"
+
 [extensions]
 MarbleGeometricObjectsExt = "GeometricObjects"
 
@@ -34,6 +34,6 @@ ProgressMeter = "1"
 Reexport = "1"
 SIMD = "3"
 StructArrays = "0.6"
-Tensorial = "0.11, 0.12"
+Tensorial = "0.11, 0.12, 0.13"
 WriteVTK = "1.9"
 julia = "1.9"
