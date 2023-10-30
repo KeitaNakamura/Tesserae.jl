@@ -21,7 +21,7 @@ function newton!(
         abstol::T = sqrt(eps(T)), reltol::T = zero(T),
         maxiter::Int = 20, linsolve! = (x,A,b) -> x .= A\b,
     ) where {T}
-    RJ!(R, J, x)
+    RJ!(R, nothing, x)
     r = norm(R)
     TOL = max(reltol*r, abstol)
     r < TOL && return true
@@ -30,10 +30,11 @@ function newton!(
     @inbounds for _ in 1:maxiter
         α₀ = α₁ = one(T)
         r_α₀ = r_α₁ = r
+        RJ!(nothing, J, nothing)
         linsolve!(δx, J, rmul!(R, -1))
         for k in 1:100
             @. x = x_prev + α₁ * δx
-            RJ!(R, J, x)
+            RJ!(R, nothing, x)
             r_α₁ = norm(R)
             r_α₁ < r && (r=r_α₁; break)
 
