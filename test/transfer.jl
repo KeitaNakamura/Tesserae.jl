@@ -10,7 +10,7 @@
         C::Mat{2, 3, Float64, 6} # for LinearWLS
     end
     GridState = @NamedTuple begin
-        x::Vec{2, Float64}
+        X::Vec{2, Float64}
         x_::Vec{2, Float64}
         m::Float64
         mv::Vec{2, Float64}
@@ -36,7 +36,7 @@
                 grid = generate_grid(GridState, 2.0, (0,10), (0,20))
 
                 # particles
-                particles = generate_particles((x,y)->true, ParticleState, grid.x; system)
+                particles = generate_particles((x,y)->true, ParticleState, grid.X; system)
                 @. particles.m = ρ0 * particles.V
 
                 # space
@@ -64,8 +64,8 @@
                 # check position
                 grid_to_particle!(:x, particles, grid, space, Δt; alg, system)
                 xₚ = copy(particles.x)
-                @. grid.x_ = grid.x + Δt * grid.v
-                grid_to_particle!(:x, particles, @rename(grid, x_=>xⁿ⁺¹), space; alg, system)
+                @. grid.x_ = grid.X + Δt * grid.v
+                grid_to_particle!(:x, particles, @rename(grid, x_=>x), space; alg, system)
                 if interp isa LinearBSpline || interp isa KernelCorrection || interp isa LinearWLS
                     @test particles.x ≈ xₚ
                 else
@@ -85,7 +85,7 @@
                 grid = generate_grid(GridState, 2.0, (0,10), (0,20))
 
                 # particles
-                particles = generate_particles((x,y)->true, ParticleState, grid.x)
+                particles = generate_particles((x,y)->true, ParticleState, grid.X)
                 for p in 1:length(particles)
                     particles.v[p] = rand(Vec{2})
                 end
@@ -104,16 +104,16 @@
 
                 grid_to_particle!((:v,), particles, grid, space; alg)
 
-                ∑mₚvₚⁿ⁺¹ = sum(p->p.m*p.v, particles)
+                ∑mₚvₚ = sum(p->p.m*p.v, particles)
 
-                @test ∑mₚvₚⁿ ≈ ∑mᵢvᵢ ≈ ∑mₚvₚⁿ⁺¹
+                @test ∑mₚvₚⁿ ≈ ∑mᵢvᵢ ≈ ∑mₚvₚ
             end
         end
     end
 
     @testset "Check coincidence in LinearWLS/APIC/TPIC" begin # should be identical when LinearWLS interpolation is used except near boundary
         grid = generate_grid(GridState, 0.1, (-10,10), (-10,10))
-        grid_v = [rand(x) for x in grid.x]
+        grid_v = [rand(x) for x in grid.X]
 
         for include_near_boundary in (true, false)
             for kernel in (QuadraticBSpline(), CubicBSpline())
@@ -122,9 +122,9 @@
                     dt = 0.002
 
                     if include_near_boundary
-                        particles = generate_particles((x,y) -> true, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234)))
+                        particles = generate_particles((x,y) -> true, ParticleState, grid.X; alg=PoissonDiskSampling(StableRNG(1234)))
                     else
-                        particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234)))
+                        particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid.X; alg=PoissonDiskSampling(StableRNG(1234)))
                     end
                     @. particles.m = 1
                     x₀ = copy(particles.x)
@@ -163,7 +163,7 @@
     @testset "Check preservation of velocity gradient" begin
         grid = generate_grid(GridState, 1.0, (-10,10), (-10,10))
         ∇v = rand(Mat{2,2})
-        grid_v = [∇v⋅x for x in grid.x] # create linear distribution
+        grid_v = [∇v⋅x for x in grid.X] # create linear distribution
 
         for include_near_boundary in (true, false,)
             @testset "$kernel" for kernel in (QuadraticBSpline(), CubicBSpline())
@@ -174,9 +174,9 @@
                         dt = 1.0
 
                         if include_near_boundary
-                            particles = generate_particles((x,y) -> true, ParticleState, grid.x)
+                            particles = generate_particles((x,y) -> true, ParticleState, grid.X)
                         else
-                            particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid.x)
+                            particles = generate_particles((x,y) -> -5<x<5 && -5<y<5, ParticleState, grid.X)
                         end
                         @. particles.m = 1
 

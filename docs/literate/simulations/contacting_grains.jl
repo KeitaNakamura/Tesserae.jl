@@ -11,7 +11,7 @@ using StableRNGs #src
 include(joinpath(pkgdir(Marble), "docs/literate/models/LinearElastic.jl"))
 
 struct GridState
-    x  :: Vec{2, Float64}
+    X  :: Vec{2, Float64}
     m  :: Float64
     mv :: Vec{2, Float64}
     f  :: Vec{2, Float64}
@@ -91,7 +91,7 @@ function contacting_grains(
     ## bar
     bar_grid = generate_grid(GridState, lattice)
     ## center of mass
-    cm_grid = generate_grid(@NamedTuple{x::Vec{2, Float64}, m::Float64, mv::Vec{2, Float64}, v::Vec{2, Float64}}, lattice)
+    cm_grid = generate_grid(@NamedTuple{X::Vec{2, Float64}, m::Float64, mv::Vec{2, Float64}, v::Vec{2, Float64}}, lattice)
 
     #=========
      MPSpaces

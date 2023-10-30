@@ -35,7 +35,7 @@ function sand_column_collapse(
 
     ## states for grid and particles
     GridState = @NamedTuple begin
-        x  :: Vec{2, Float64}
+        X  :: Vec{2, Float64}
         m  :: Float64
         mv :: Vec{2, Float64}
         f  :: Vec{2, Float64}
@@ -65,9 +65,9 @@ function sand_column_collapse(
     h = 0.9 # height of sand column
     if test                                                                                                                 #src
         particles::Marble.infer_particles_type(ParticleState) =                                                             #src
-            generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234))) #src
+            generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid.X; alg=PoissonDiskSampling(StableRNG(1234))) #src
     else                                                                                                                    #src
-    particles = generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid.x)
+    particles = generate_particles((x,y) -> -0.3<x<0.3 && y<h, ParticleState, grid.X)
     end                                                                                                                     #src
     for pt in eachparticle(particles)
         ν = elastic.ν

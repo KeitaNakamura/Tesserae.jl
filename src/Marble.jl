@@ -89,6 +89,7 @@ export
 # implicit
     solve_grid_velocity!,
     ImplicitIntegrator,
+    TimeIntegrationAlgorithm,
     BackwardEuler,
     NewmarkBeta,
     PenaltyMethod,

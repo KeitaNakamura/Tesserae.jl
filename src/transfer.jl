@@ -332,7 +332,7 @@ end
                 @simd for j in CartesianIndices(gridindices)
                     i = gridindices[j]
                     N = mp.N[j]
-                    xᵢ = grid.x[i]
+                    xᵢ = grid.X[i]
                     Dₚ += N*(xᵢ-xₚ)⊗(xᵢ-xₚ)
                 end
                 mₚCₚ = pt.m * pt.B ⋅ inv(Dₚ)
@@ -386,7 +386,7 @@ end
 
         # grid momentum depends on transfer algorithms
         if :mv in names
-            xᵢ = grid.x[i]
+            xᵢ = grid.X[i]
             if alg isa WLSTransfer && itp isa WLS
                 grid.mv[i] += N*mₚCₚ⋅P(xᵢ-xₚ)
             elseif alg isa AffineTransfer
@@ -399,7 +399,7 @@ end
         end
 
         if :ma in names
-            xᵢ = grid.x[i]
+            xᵢ = grid.X[i]
             if alg isa TaylorTransfer
                 grid.ma[i] += N*(mₚaₚ + mₚ∇aₚ⋅(xᵢ-xₚ))
             else
@@ -511,8 +511,8 @@ end
     end
 
     if :x in names
-        if hasproperty(grid, :xⁿ⁺¹)
-            xₚⁿ⁺¹ = zero(pt.x)
+        if hasproperty(grid, :x) && isempty(only_dt)
+            xₚ = zero(pt.x)
         else
             vₚ = zero(pt.v)
         end
@@ -532,7 +532,7 @@ end
         end
         if alg isa AffineTransfer
             # Bₚ is always calculated when `:v` is specified
-            xₚ = pt.x
+            xⁿₚ = pt.x
             Bₚ = zero(pt.B)
         end
     end
@@ -563,9 +563,9 @@ end
         end
 
         if :x in names
-            if hasproperty(grid, :xⁿ⁺¹)
-                xᵢⁿ⁺¹ = grid.xⁿ⁺¹[i]
-                xₚⁿ⁺¹ += xᵢⁿ⁺¹ * N
+            if hasproperty(grid, :x) && isempty(only_dt)
+                xᵢ = grid.x[i]
+                xₚ += xᵢ * N
             end
         end
 
@@ -587,8 +587,8 @@ end
                 dvₚ += N * dvᵢ
             end
             if alg isa AffineTransfer
-                xᵢ = grid.x[i]
-                Bₚ += N * vᵢ ⊗ (xᵢ - xₚ)
+                xⁿᵢ = grid.X[i]
+                Bₚ += N * vᵢ ⊗ (xⁿᵢ - xⁿₚ)
             end
         end
 
@@ -619,8 +619,8 @@ end
     end
 
     if :x in names
-        if hasproperty(grid, :xⁿ⁺¹)
-            pt.x = xₚⁿ⁺¹
+        if hasproperty(grid, :x) && isempty(only_dt)
+            pt.x = xₚ
         else
             dt = only(only_dt)
             pt.x += vₚ * dt
@@ -665,12 +665,12 @@ end
     p0 = value(basis, zero(Vec{dim, Int}))
     ∇p0 = gradient(basis, zero(Vec{dim, Int}))
 
-    xₚ = pt.x
+    xⁿₚ = pt.x
     Cₚ = zero(pt.C)
 
     if :x in names
-        if hasproperty(grid, :xⁿ⁺¹)
-            xₚⁿ⁺¹ = zero(pt.x)
+        if hasproperty(grid, :x)
+            xₚ = zero(pt.x)
         end
     end
 
@@ -680,14 +680,14 @@ end
         w = mp.w[j]
         Minv = mp.Minv[]
         vᵢ = grid.v[i]
-        xᵢ = grid.x[i]
-        Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xᵢ - xₚ))
+        xⁿᵢ = grid.X[i]
+        Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xⁿᵢ - xⁿₚ))
 
         if :x in names
-            if hasproperty(grid, :xⁿ⁺¹)
+            if hasproperty(grid, :x)
                 N = mp.N[j]
-                xᵢⁿ⁺¹ = grid.xⁿ⁺¹[i]
-                xₚⁿ⁺¹ += xᵢⁿ⁺¹ * N
+                xᵢ = grid.x[i]
+                xₚ += xᵢ * N
             end
         end
     end
@@ -704,8 +704,8 @@ end
     end
 
     if :x in names
-        if hasproperty(grid, :xⁿ⁺¹)
-            pt.x = xₚⁿ⁺¹
+        if hasproperty(grid, :x)
+            pt.x = xₚ
         else
             dt = only(only_dt)
             pt.x += vₚ * dt
@@ -759,7 +759,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
             @simd for j in CartesianIndices(gridindices)
                 i = gridindices[j]
                 N = mp.N[j]
-                P = value(basis, xₚ[p] - grid.x[i])
+                P = value(basis, xₚ[p] - grid.X[i])
                 VP = (N * Vₚ[p]) * P
                 grid.poly_coef[i] += VP * vals[p]
                 grid.poly_mat[i]  += VP ⊗ P
@@ -777,7 +777,7 @@ function smooth_particle_state!(vals::AbstractVector, xₚ::AbstractVector, Vₚ
             @simd for j in CartesianIndices(gridindices)
                 i = gridindices[j]
                 N = mp.N[j]
-                P = value(basis, xₚ[p] - grid.x[i])
+                P = value(basis, xₚ[p] - grid.X[i])
                 val += N * (P ⋅ grid.poly_coef[i])
             end
             vals[p] = val

@@ -5,7 +5,7 @@
 const Grid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I} = StructArray{T, N, NT, I}
 
 eachnode(grid::Grid) = LazyRows(grid)
-get_lattice(grid::Grid) = grid.x
+get_lattice(grid::Grid) = grid.X
 spacing(grid::Grid) = spacing(get_lattice(grid))
 
 # fillzero!
@@ -23,9 +23,9 @@ generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Latti
 const SpGrid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
 
 Base.@pure function infer_lattice_realtype(::Type{GridState}, ::Val{dim}) where {GridState, dim}
-    fieldname(GridState, 1) == :x || error("generate_grid: first field name must be `:x`")
+    fieldname(GridState, 1) == :X || error("generate_grid: first field name must be `:X`")
     V = fieldtype(GridState, 1)
-    V <: Vec{dim} || error("generate_grid: `fieldtype` of `:x` must be `<: Vec{$dim}`")
+    V <: Vec{dim} || error("generate_grid: `fieldtype` of `:X` must be `<: Vec{$dim}`")
     eltype(V)
 end
 
@@ -65,7 +65,7 @@ julia> grid = generate_grid(GridState{2,Float64}, 0.5, (0,3), (0,2))
 julia> grid[1]
 GridState{2, Float64}([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
 
-julia> grid.x
+julia> grid.X
 7×5 Lattice{2, Float64, Marble.LinAxis{Float64}}:
  [0.0, 0.0]  [0.0, 0.5]  [0.0, 1.0]  [0.0, 1.5]  [0.0, 2.0]
  [0.5, 0.0]  [0.5, 0.5]  [0.5, 1.0]  [0.5, 1.5]  [0.5, 2.0]

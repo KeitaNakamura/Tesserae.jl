@@ -34,7 +34,7 @@ function hyperelastic_material(
 
     ## states for grid and particles
     GridState = @NamedTuple begin
-        x  :: Vec{3, Float64}
+        X  :: Vec{3, Float64}
         m  :: Float64
         mv :: Vec{3, Float64}
         f  :: Vec{3, Float64}
@@ -67,18 +67,18 @@ function hyperelastic_material(
         particles::Marble.infer_particles_type(ParticleState) =                                                                #src
             mapreduce(vcat, centroids) do x                                                                                    #src
                 if rand(RNG, Bool)                                                                                             #src
-                    generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid.x; alg=PoissonDiskSampling(RNG))        #src
+                    generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid.X; alg=PoissonDiskSampling(RNG))        #src
                 else                                                                                                           #src
-                    generate_particles(BoxDomain(tuple.((x.-r), (x.+r))), ParticleState, grid.x; alg=PoissonDiskSampling(RNG)) #src
+                    generate_particles(BoxDomain(tuple.((x.-r), (x.+r))), ParticleState, grid.X; alg=PoissonDiskSampling(RNG)) #src
                 end                                                                                                            #src
             end                                                                                                                #src
     else                                                                                                                       #src
     centroids = Marble.poisson_disk_sampling(3r, (-0.8,0.8), (6,28), (-0.8,0.8))
     particles = mapreduce(vcat, centroids) do x
         if rand(Bool)
-            generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid.x)
+            generate_particles(SphericalDomain(Vec(x), r), ParticleState, grid.X)
         else
-            generate_particles(BoxDomain(tuple.((x.-r), (x.+r))), ParticleState, grid.x)
+            generate_particles(BoxDomain(tuple.((x.-r), (x.+r))), ParticleState, grid.X)
         end
     end
     end                                                                                                                        #src

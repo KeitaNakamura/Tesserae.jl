@@ -13,7 +13,7 @@ r = 0.2                    # radius of disk
 
 # states for grid and particles
 GridState = @NamedTuple begin
-    x  :: Vec{2, Float64}
+    X  :: Vec{2, Float64}
     m  :: Float64
     mv :: Vec{2, Float64}
     f  :: Vec{2, Float64}
@@ -34,8 +34,8 @@ grid = generate_grid(GridState, 0.05, (0,1), (0,1))
 
 # particles
 s = 1-r
-lhs = generate_particles((x,y) -> (x-r)^2 + (y-r)^2 < r^2, ParticleState, grid.x; alg=GridSampling()) # left disk
-rhs = generate_particles((x,y) -> (x-s)^2 + (y-s)^2 < r^2, ParticleState, grid.x; alg=GridSampling()) # right disk
+lhs = generate_particles((x,y) -> (x-r)^2 + (y-r)^2 < r^2, ParticleState, grid.X; alg=GridSampling()) # left disk
+rhs = generate_particles((x,y) -> (x-s)^2 + (y-s)^2 < r^2, ParticleState, grid.X; alg=GridSampling()) # right disk
 @. lhs.m = ρ * lhs.V
 @. rhs.m = ρ * rhs.V
 @. lhs.v = Vec( 0.1, 0.1)

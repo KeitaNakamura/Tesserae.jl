@@ -33,7 +33,7 @@ function dam_break(
 
     ## states for grid and particles
     GridState = @NamedTuple begin
-        x  :: Vec{2, Float64}
+        X  :: Vec{2, Float64}
         m  :: Float64
         mv :: Vec{2, Float64}
         f  :: Vec{2, Float64}
@@ -59,9 +59,9 @@ function dam_break(
     ## particles
     if test                                                                                                              #src
         particles::Marble.infer_particles_type(ParticleState) =                                                          #src
-            generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid.x; alg=PoissonDiskSampling(StableRNG(1234))) #src
+            generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid.X; alg=PoissonDiskSampling(StableRNG(1234))) #src
     else                                                                                                                 #src
-    particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid.x)
+    particles = generate_particles((x,y) -> x<1.2 && y<0.6, ParticleState, grid.X)
     end                                                                                                                  #src
     @. particles.m = ρ⁰ * particles.V
     @. particles.b = Vec(0, -g)

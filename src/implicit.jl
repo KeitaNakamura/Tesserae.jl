@@ -253,7 +253,7 @@ function solve_grid_velocity!(
     converged = solve!(u, residual_jacobian!, similar(u), A, integrator.nlsolver, integrator.linsolve!)
     converged || @warn "Implicit method not converged"
 
-    # @. grid.xⁿ⁺¹ = grid.x + grid.u
+    @. grid.x = grid.X + grid.u
 
     if consider_penalty && penalty_method.storage !== nothing
         @. penalty_method.storage = grid.fᵖ
