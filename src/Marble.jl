@@ -88,8 +88,9 @@ export
     WLSTransfer,
 # implicit
     solve_grid_velocity!,
-    EulerIntegrator,
-    NewmarkIntegrator,
+    ImplicitIntegrator,
+    BackwardEuler,
+    NewmarkBeta,
     PenaltyMethod,
 # VTK
     openvtk,
