@@ -43,7 +43,6 @@ gridsize(::BSpline{3}, ::Val{dim}) where {dim} = nfill(4, Val(dim))
 @inline neighbornodes(::BSpline{1}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.0)
 @inline neighbornodes(::BSpline{2}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.5)
 @inline neighbornodes(::BSpline{3}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 2.0)
-@inline neighbornodes(::BSpline{4}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 2.5)
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)
@@ -59,12 +58,6 @@ function value(::BSpline{3}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
     ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
-end
-function value(::BSpline{4}, ξ::Real)
-    ξ = abs(ξ)
-    ξ < 0.5 ? (48ξ^4 - 120ξ^2 + 115) / 192 :
-    ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
-    ξ < 2.5 ? (5 - 2ξ)^4 / 384 : zero(ξ)
 end
 @generated function value(bspline::BSpline, ξ::Vec{dim}) where {dim}
     quote
