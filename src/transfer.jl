@@ -511,7 +511,7 @@ end
     end
 
     if :x in names
-        if hasproperty(grid, :x) && isempty(only_dt)
+        if isempty(only_dt)
             xₚ = zero(pt.x)
         else
             vₚ = zero(pt.v)
@@ -563,7 +563,7 @@ end
         end
 
         if :x in names
-            if hasproperty(grid, :x) && isempty(only_dt)
+            if isempty(only_dt)
                 xᵢ = grid.x[i]
                 xₚ += xᵢ * N
             end
@@ -619,7 +619,7 @@ end
     end
 
     if :x in names
-        if hasproperty(grid, :x) && isempty(only_dt)
+        if isempty(only_dt)
             pt.x = xₚ
         else
             dt = only(only_dt)
@@ -669,7 +669,7 @@ end
     Cₚ = zero(pt.C)
 
     if :x in names
-        if hasproperty(grid, :x)
+        if isempty(only_dt)
             xₚ = zero(pt.x)
         end
     end
@@ -684,7 +684,7 @@ end
         Cₚ += vᵢ ⊗ (w * Minv ⋅ P(xⁿᵢ - xⁿₚ))
 
         if :x in names
-            if hasproperty(grid, :x)
+            if isempty(only_dt)
                 N = mp.N[j]
                 xᵢ = grid.x[i]
                 xₚ += xᵢ * N
@@ -704,7 +704,7 @@ end
     end
 
     if :x in names
-        if hasproperty(grid, :x)
+        if isempty(only_dt)
             pt.x = xₚ
         else
             dt = only(only_dt)
