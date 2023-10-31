@@ -507,7 +507,7 @@ function jacobian_based_matrix!(
             linds = findall(!iszero, dofs) # dof could be zero when the boundary conditions are imposed
 
             # add Kₚ to global matrix
-            if length(linds) == length(dofs)
+            if length(dofs)==nₚ && length(dofs)==length(linds)
                 add!(K, dofs, dofs, Kₚ)
             else # for boundaries
                 add!(K, view(dofs, linds), view(dofs, linds), view(Kₚ, linds, linds))
@@ -516,10 +516,10 @@ function jacobian_based_matrix!(
     end
 
     if consider_boundary_condition || consider_penalty
+        dofs = first(dofs_threads)
         for I in CartesianIndices(grid)
             if isactive(grid, I)
                 i = nonzeroindex(grid, I)
-                dofs = vec(view(griddofs, :, I))
                 Kₚ = zero(eltype(grid.dfᵇdu))
                 if consider_boundary_condition
                     Kₚ -= grid.dfᵇdu[i]
@@ -527,7 +527,15 @@ function jacobian_based_matrix!(
                 if consider_penalty
                     Kₚ -= grid.dfᵖdu[i]
                 end
-                add!(K, dofs, dofs, Kₚ)
+
+                copy!(dofs, vec(view(griddofs, :, I)))
+                linds = findall(!iszero, dofs) # dof could be zero when the boundary conditions are imposed
+
+                if length(dofs) == length(linds)
+                    add!(K, dofs, dofs, Kₚ)
+                else
+                    add!(K, view(dofs, linds), view(dofs, linds), view(Kₚ, linds, linds))
+                end
             end
         end
     end
