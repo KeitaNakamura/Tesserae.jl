@@ -36,7 +36,7 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
                     fₙ = p.penalty_force(g⋅n) * n
 
                     # tangential
-                    uₜ = tangential(u,n)
+                    uₜ = tangential(u-v_rigid*Δt, n)
                     (iszero(μ) || iszero(uₜ)) && return fₙ
 
                     if p.velocity_thresh === nothing
