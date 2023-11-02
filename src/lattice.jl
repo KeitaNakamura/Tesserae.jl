@@ -115,9 +115,9 @@ CartesianIndices((1:5,))
 """
 @inline function neighbornodes(lattice::Lattice{dim, T}, x::Vec, h::Real) where {dim, T}
     isinside(x, lattice) || return CartesianIndices(nfill(1:0, Val(dim)))
-    _neighborindices(SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)), SVec{dim,T}(x), convert(T, h))
+    _neighbornodes(SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)), SVec{dim,T}(x), convert(T, h))
 end
-@inline function _neighborindices(dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}, h::T) where {dim, T}
+@inline function _neighbornodes(dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}, h::T) where {dim, T}
     ξ = (x - xmin) * dx⁻¹
     start = convert(SVec{dim, Int}, floor(ξ - h)) + 2
     stop  = convert(SVec{dim, Int}, floor(ξ + h)) + 1

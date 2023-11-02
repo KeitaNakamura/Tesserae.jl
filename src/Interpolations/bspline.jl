@@ -40,9 +40,28 @@ gridsize(::BSpline{1}, ::Val{dim}) where {dim} = nfill(2, Val(dim))
 gridsize(::BSpline{2}, ::Val{dim}) where {dim} = nfill(3, Val(dim))
 gridsize(::BSpline{3}, ::Val{dim}) where {dim} = nfill(4, Val(dim))
 
-@inline neighbornodes(::BSpline{1}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.0)
-@inline neighbornodes(::BSpline{2}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 1.5)
-@inline neighbornodes(::BSpline{3}, lattice::Lattice, pt) = neighbornodes(lattice, getx(pt), 2.0)
+@inline function neighbornodes(bs::BSpline, lattice::Lattice{dim, T}, pt) where {dim, T}
+    x = getx(pt)
+    isinside(x, lattice) || return CartesianIndices(nfill(1:0, Val(dim)))
+    _neighbornodes(bs, SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)), SVec{dim,T}(x))
+end
+@inline function _neighbornodes(::BSpline{1}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
+    _bspline_neighborindices(dims, dx⁻¹, xmin, x, T(0), 1)
+end
+@inline function _neighbornodes(::BSpline{2}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
+    _bspline_neighborindices(dims, dx⁻¹, xmin, x, T(0.5), 2)
+end
+@inline function _neighbornodes(::BSpline{3}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
+    _bspline_neighborindices(dims, dx⁻¹, xmin, x, T(1), 3)
+end
+@inline function _bspline_neighborindices(dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}, offset::T, h::Int) where {dim, T}
+    ξ = (x - xmin) * dx⁻¹
+    start = convert(SVec{dim, Int}, floor(ξ - offset)) + 1
+    stop = start + h
+    imin = Tuple(max(start, 1))
+    imax = Tuple(min(stop, dims))
+    CartesianIndices(UnitRange.(imin, imax))
+end
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)
