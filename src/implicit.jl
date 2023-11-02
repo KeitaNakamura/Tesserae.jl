@@ -115,7 +115,7 @@ end
 
 function compute_boundary_friction!(grid::Grid, Δt::Real, coefs::AbstractArray{<: AbstractFloat})
     fillzero!(grid.fᵇ)
-    fillzero!(grid.dfᵇdv)
+    fillzero!(grid.dfᵇdu)
     normals = NormalVectorArray(size(grid))
     for I in CartesianIndices(coefs)
         μ = coefs[I]
@@ -125,14 +125,14 @@ function compute_boundary_friction!(grid::Grid, Δt::Real, coefs::AbstractArray{
             n = normals[i]
             fint = grid.fint[i]
             if fint ⋅ n < 0
-                dfᵇdv, fᵇ = gradient(grid.v[i], :all) do v
-                    fₙ = normal(f,n)
-                    vₜ = tangential(v,n)
-                    f̄ₜ = grid.m[i] * vₜ / Δt
+                dfᵇdu, fᵇ = gradient(grid.u[i], :all) do u
+                    fₙ = normal(fint,n)
+                    uₜ = tangential(u,n)
+                    f̄ₜ = grid.m[i] * uₜ / Δt^2
                     -min(1, μ*norm(fₙ)/norm(f̄ₜ)) * f̄ₜ
                 end
                 grid.fᵇ[i] += fᵇ
-                grid.dfᵇdv[i] += dfᵇdv
+                grid.dfᵇdu[i] += dfᵇdu
             end
         end
     end
