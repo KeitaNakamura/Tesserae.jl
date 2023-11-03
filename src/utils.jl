@@ -221,10 +221,23 @@ macro showprogress(expr)
     t, t_stop = esc(cnd.args[2]), esc(cnd.args[3])
     map!(esc, cnd.args, cnd.args)
     map!(esc, blk.args, blk.args)
-    push!(blk.args, :(ProgressMeter.update!(prog, min(floor(Int, ($t/$t_stop)*$thresh), $thresh))))
+    inner = quote
+        count += 1
+        elapsed = time() - prog.tinit
+        speed = elapsed/count
+        ProgressMeter.update!(prog,
+                              min(floor(Int, ($t/$t_stop)*$thresh), $thresh);
+                              showvalues = [(:Elapsed, ProgressMeter.durationstring(elapsed)),
+                                            (:Iterations, commas(count)),
+                                            (:Speed, ProgressMeter.speedstring(speed)[2:end])]) # remove whit space
+    end
+    push!(blk.args, inner)
     quote
-        prog = ProgressMeter.Progress($thresh; showspeed=true)
+        prog = ProgressMeter.Progress($thresh)
+        count = 0
         $expr
         ProgressMeter.finish!(prog)
     end
 end
+
+commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")
