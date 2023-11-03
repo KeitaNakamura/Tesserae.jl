@@ -229,7 +229,7 @@ macro showprogress(expr)
                               min(floor(Int, ($t/$t_stop)*$thresh), $thresh);
                               showvalues = [(:Elapsed, ProgressMeter.durationstring(elapsed)),
                                             (:Iterations, commas(count)),
-                                            (:Speed, ProgressMeter.speedstring(speed)[2:end])]) # remove whit space
+                                            (:Speed, lstrip(ProgressMeter.speedstring(speed)))])
     end
     push!(blk.args, inner)
     quote
