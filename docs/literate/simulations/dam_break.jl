@@ -143,10 +143,10 @@ end
 ## check the result                                                                                                                           #src
 using Test                                                                                                                                    #src
 if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                         #src
-@test mean(dam_break(KernelCorrection(QuadraticBSpline()), TPIC();        test=true).x) ≈ [1.626196432341774, 0.11209068688080602]  rtol=1e-5 #src
-@test mean(dam_break(KernelCorrection(QuadraticBSpline()), APIC();        test=true).x) ≈ [1.6265820036691907, 0.11217602693564092] rtol=1e-5 #src
-@test mean(dam_break(KernelCorrection(QuadraticBSpline()), FLIP();        test=true).x) ≈ [1.5109943159336998, 0.12369021905817391] rtol=1e-5 #src
-@test mean(dam_break(KernelCorrection(QuadraticBSpline()), FLIP(0.95);    test=true).x) ≈ [1.7229957080150673, 0.11395714240142928] rtol=1e-5 #src
+@test mean(dam_break(KernelCorrection(QuadraticBSpline()), TPIC();        test=true).x) ≈ [1.6717312780427844, 0.11213317245436256] rtol=1e-5 #src
+@test mean(dam_break(KernelCorrection(QuadraticBSpline()), APIC();        test=true).x) ≈ [1.6723389853422104, 0.11209766238778393] rtol=1e-5 #src
+@test mean(dam_break(KernelCorrection(QuadraticBSpline()), FLIP();        test=true).x) ≈ [1.5361459306343086, 0.12796987697694848] rtol=1e-5 #src
+@test mean(dam_break(KernelCorrection(QuadraticBSpline()), FLIP(0.95);    test=true).x) ≈ [1.7354321292902168, 0.11257282649182428] rtol=1e-5 #src
 @test mean(dam_break(LinearWLS(QuadraticBSpline()),        TPIC();        test=true).x) ≈                                                     #src
       mean(dam_break(LinearWLS(QuadraticBSpline()),        WLSTransfer(); test=true).x)                                                       #src
 end                                                                                                                                           #src

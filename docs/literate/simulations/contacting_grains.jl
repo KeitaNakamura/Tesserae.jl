@@ -278,7 +278,7 @@ end
 ## check the result                                                                                                                            #src
 using Test                                                                                                                                     #src
 if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                          #src
-@test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [0.5063888397477122, 0.18945871380726995] rtol=1e-5 #src
-@test mean(contacting_grains(uGIMP(),                              FLIP(); test=true).x) ≈ [0.5035272742634859, 0.19357400248575796] rtol=1e-5 #src
-@test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.5018861021371626, 0.18862935297543554] rtol=1e-5 #src
+@test mean(contacting_grains(QuadraticBSpline(),                   FLIP(); test=true).x) ≈ [0.503918505343174, 0.18856712175506346]  rtol=1e-5 #src
+@test mean(contacting_grains(uGIMP(),                              FLIP(); test=true).x) ≈ [0.5004931844100602, 0.19285831266032102] rtol=1e-5 #src
+@test mean(contacting_grains(KernelCorrection(QuadraticBSpline()), TPIC(); test=true).x) ≈ [0.5038619714466835, 0.18843639210110322] rtol=1e-5 #src
 end                                                                                                                                            #src

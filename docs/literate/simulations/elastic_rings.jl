@@ -180,22 +180,22 @@ function elastic_rings(
     ifelse(test, particles, nothing) #src
 end
 
-## check the result                                                                                                                                                                #src
-using Test                                                                                                                                                                         #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                                              #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=nothing,         test=true).x) ≈ [-0.0029897053481383294, -0.0001930994229138081] rtol=1e-5            #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=nothing,         test=true).x) ≈ [-0.003747610051693535, -0.00019309942291389977] rtol=1e-5            #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=nothing,         test=true).x) ≈ [-0.003708464542420926, -0.00019309942291382]    rtol=1e-5            #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=BackwardEuler(), jacobian_free=true,  test=true).x) ≈                                                  #src
-      mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=BackwardEuler(), jacobian_free=false, test=true).x) ≈ [-0.006999089832465376, -0.0001930994229138141]  #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=NewmarkBeta(),   jacobian_free=true,  test=true).x) ≈                                                  #src
-      mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=NewmarkBeta(),   jacobian_free=false, test=true).x) ≈ [-0.010005398694854659, -0.00019309942291343866] #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=BackwardEuler(), jacobian_free=true,  test=true).x) ≈                                                  #src
-      mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=BackwardEuler(), jacobian_free=false, test=true).x) ≈ [-0.006870318810593698, -0.00019309942291383616] #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=NewmarkBeta(),   jacobian_free=true,  test=true).x) ≈                                                  #src
-      mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=NewmarkBeta(),   jacobian_free=false, test=true).x) ≈ [-0.0029948574816484243, -0.00019309942291342]   #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=BackwardEuler(), jacobian_free=true,  test=true).x) ≈                                                  #src
-      mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=BackwardEuler(), jacobian_free=false, test=true).x) ≈ [-0.006868871985344444, -0.0001930994229138209]  #src
-@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=NewmarkBeta(),   jacobian_free=true,  test=true).x) ≈                                                  #src
-      mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=NewmarkBeta(),   jacobian_free=false, test=true).x) ≈ [-0.002444840950719716, -0.00019309942291344807] #src
-end                                                                                                                                                                                #src
+## check the result                                                                                                                                                                 #src
+using Test                                                                                                                                                                          #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                                                                                                                                               #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=nothing,         test=true).x) ≈ [0.0031455281793368196, -0.0006305014145523124] rtol=1e-5              #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=nothing,         test=true).x) ≈ [0.0020689380576093294, -0.0006305014145524088] rtol=1e-5              #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=nothing,         test=true).x) ≈ [0.0020670223503932847, -0.0006305014145523711] rtol=1e-5              #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=BackwardEuler(), jacobian_free=true,  test=true).x) ≈                                                   #src
+      mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=BackwardEuler(), jacobian_free=false, test=true).x) ≈ [-0.00031104359896745555, -0.0006305014145518642] #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=NewmarkBeta(),   jacobian_free=true,  test=true).x) ≈                                                   #src
+      mean(elastic_rings(KernelCorrection(CubicBSpline()), FLIP(); implicit=NewmarkBeta(),   jacobian_free=false, test=true).x) ≈ [0.0025421678419994408, -0.0006305014145518648]   #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=BackwardEuler(), jacobian_free=true,  test=true).x) ≈                                                   #src
+      mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=BackwardEuler(), jacobian_free=false, test=true).x) ≈ [-0.0018482501316316432, -0.0006305014145518951]  #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=NewmarkBeta(),   jacobian_free=true,  test=true).x) ≈                                                   #src
+      mean(elastic_rings(KernelCorrection(CubicBSpline()), APIC(); implicit=NewmarkBeta(),   jacobian_free=false, test=true).x) ≈ [-0.0024940149477415702, -0.0006305014145519003]  #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=BackwardEuler(), jacobian_free=true,  test=true).x) ≈                                                   #src
+      mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=BackwardEuler(), jacobian_free=false, test=true).x) ≈ [-0.001821078484136164, -0.0006305014145518928]   #src
+@test mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=NewmarkBeta(),   jacobian_free=true,  test=true).x) ≈                                                   #src
+      mean(elastic_rings(KernelCorrection(CubicBSpline()), TPIC(); implicit=NewmarkBeta(),   jacobian_free=false, test=true).x) ≈ [0.00032519862149581744, -0.0006305014145519442]  #src
+end                                                                                                                                                                                 #src

@@ -43,7 +43,7 @@ end
 # Determine minimum distance between particles for Poisson disk sampling
 # so that the number of generated particles is almost the same as the grid sampling.
 # This empirical equation is slightly different from a previous work (https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
-poisson_disk_sampling_minimum_distance(l::Real, dim::Int) = l/(1.376)^(1/√dim)
+poisson_disk_sampling_minimum_distance(l::Real, dim::Int) = l/(1.37)^(1/√dim)
 function point_sampling(pds::PoissonDiskSampling, box::BoxDomain{dim, T}, l::T) where {dim, T}
     d = poisson_disk_sampling_minimum_distance(l, dim)
     points::Vector{NTuple{dim, T}} = poisson_disk_sampling(pds.rng, T, d, box.minmax...)
