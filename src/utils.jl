@@ -223,13 +223,15 @@ macro showprogress(expr)
     map!(esc, blk.args, blk.args)
     inner = quote
         count += 1
-        elapsed = time() - prog.tinit
-        speed = elapsed/count
+        t_current = time()
+        elapsed = t_current - prog.tinit
+        speed = lstrip(ProgressMeter.speedstring(t_current-prog.tlast))
+        speed_ave = lstrip(ProgressMeter.speedstring(elapsed/count))
         ProgressMeter.update!(prog,
                               min(floor(Int, ($t/$t_stop)*$thresh), $thresh);
                               showvalues = [(:Elapsed, ProgressMeter.durationstring(elapsed)),
                                             (:Iterations, commas(count)),
-                                            (:Speed, lstrip(ProgressMeter.speedstring(speed)))])
+                                            (:Speed, string(speed, " (Ave. ", speed_ave, ")"))])
     end
     push!(blk.args, inner)
     quote
