@@ -1,10 +1,10 @@
-struct PenaltyMethod{F <: Function, dim, Grid_g <: AbstractArray{<: Vec{dim}, dim}, Grid_μ <: AbstractArray{<: Real, dim}, Grid_v <: AbstractArray{<: Vec{dim}, dim}, S, T <: Union{Nothing, Real}}
+struct PenaltyMethod{F <: Function, dim, Grid_g <: AbstractArray{<: Vec{dim}, dim}, Grid_μ <: AbstractArray{<: Real, dim}, Grid_v <: AbstractArray{<: Vec{dim}, dim}, S, T <: Real}
     penalty_force::F
     grid_g::Grid_g
     grid_μ::Grid_μ
     grid_v::Grid_v
     storage::S
-    velocity_thresh::T
+    microslip::T
 end
 
 function PenaltyMethod(
@@ -13,9 +13,9 @@ function PenaltyMethod(
         grid_μ::AbstractArray{<: Real},
         grid_v::AbstractArray{<: Vec} = FillArray(zero(eltype(grid_g)), size(grid_g));
         storage = nothing,
-        velocity_thresh = nothing,
+        microslip = 0,
     )
-    PenaltyMethod(penalty_force, grid_g, grid_μ, grid_v, storage, velocity_thresh)
+    PenaltyMethod(penalty_force, grid_g, grid_μ, grid_v, storage, microslip)
 end
 
 function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
@@ -39,14 +39,13 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
                     uₜ = tangential(u-v_rigid*Δt, n)
                     (iszero(μ) || iszero(uₜ)) && return fₙ
 
-                    if p.velocity_thresh === nothing
+                    if iszero(p.microslip)
                         fₜ★ = grid.m[i] * uₜ / Δt^2
                         fₜ = -min(1, μ*norm(fₙ)/norm(fₜ★)) * fₜ★
                     else
-                        vₜ = uₜ / Δt
-                        ξ = norm(vₜ) / p.velocity_thresh
+                        ξ = norm(uₜ) / p.microslip
                         α = ξ<1 ? -ξ^2+2ξ : one(ξ)
-                        fₜ = -α*μ*norm(fₙ)*normalize(vₜ)
+                        fₜ = -α*μ*norm(fₙ)*normalize(uₜ)
                     end
 
                     fₙ + fₜ
