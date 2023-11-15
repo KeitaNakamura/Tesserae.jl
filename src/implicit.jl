@@ -238,9 +238,9 @@ end
 
 function solve_grid_velocity!(
         update_stress! :: Any,
-        grid           :: Grid,
+        grid           :: Grid{dim},
         particles      :: Particles,
-        space          :: MPSpace,
+        space          :: MPSpace{dim},
         Δt             :: Real,
         integrator     :: ImplicitIntegrator,
         penalty_method :: Any,
@@ -248,7 +248,7 @@ function solve_grid_velocity!(
         system         :: CoordinateSystem,
         bc             :: AbstractArray{<: Real},
         parallel       :: Bool,
-    )
+    ) where {dim}
     α, β, γ = integrator.α, integrator.β, integrator.γ
     freeinds = compute_flatfreeindices(grid, bc)
 
@@ -267,7 +267,7 @@ function solve_grid_velocity!(
 
     # jacobian
     if integrator.jac_cache === nothing
-        should_be_parallel = length(particles) > 200_000 # 200_000 is empirical value
+        should_be_parallel = length(particles)*dim > 500_000 # 500_000 is empirical value
         A = jacobian_free_matrix(integrator, grid, particles, space, Δt, freeinds, consider_boundary_condition, consider_penalty, alg, system, parallel)
     else
         A = construct_sparse_matrix!(integrator.jac_cache, space, freeinds)
