@@ -12,14 +12,14 @@ function NewtonSolver(::Type{T}=Float64; maxiter::Integer=20, abstol::Real=sqrt(
     NewtonSolver{T}(maxiter, abstol, reltol)
 end
 
-function solve!(x::AbstractVector, residual_jacobian!, R::AbstractVector, J, solver::NewtonSolver, linsolve!::Function=(x,A,b)->x.=A\b)
-    newton!(x, residual_jacobian!, R, J; solver.maxiter, solver.abstol, solver.reltol, linsolve!)
+function solve!(x::AbstractVector, residual_jacobian!, R::AbstractVector, J, solver::NewtonSolver, linsolve::Function=(x,A,b)->x.=A\b)
+    newton!(x, residual_jacobian!, R, J; solver.maxiter, solver.abstol, solver.reltol, linsolve)
 end
 
 function newton!(
         x::AbstractVector, RJ!, R::AbstractVector{T}, J, δx::AbstractVector = fillzero!(similar(x));
         abstol::T = sqrt(eps(T)), reltol::T = zero(T),
-        maxiter::Int = 20, linsolve! = (x,A,b) -> x .= A\b,
+        maxiter::Int = 20, linsolve = (x,A,b) -> x .= A\b,
     ) where {T}
     RJ!(R, nothing, x)
     r = norm(R)
@@ -31,7 +31,7 @@ function newton!(
         α₀ = α₁ = one(T)
         r_α₀ = r_α₁ = r
         RJ!(nothing, J, nothing)
-        linsolve!(δx, J, rmul!(R, -1))
+        linsolve(δx, J, rmul!(R, -1))
         for k in 1:100
             @. x = x_prev + α₁ * δx
             RJ!(R, nothing, x)

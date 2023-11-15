@@ -188,7 +188,7 @@ struct ImplicitIntegrator{Alg <: TimeIntegrationAlgorithm, T}
     β::T
     γ::T
     nlsolver::NonlinearSolver
-    linsolve!::Function
+    linsolve::Function
     grid_cache::StructArray
     particles_cache::StructVector
     jac_cache::Union{Nothing, JacobianCache{T}}
@@ -203,14 +203,14 @@ function ImplicitIntegrator(
         abstol        :: Real = sqrt(eps(T)),
         reltol        :: Real = zero(T),
         maxiter       :: Int  = 100,
-        linsolve!     :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b) : (x,A,b)->x.=A\b,
+        linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b) : (x,A,b)->x.=A\b,
     ) where {T}
     α, β, γ = integration_parameters(alg)
     nlsolver = NewtonSolver(T; abstol, reltol, maxiter)
     grid_cache = create_grid_cache(grid, alg)
     particles_cache = fillzero!(create_particles_cache(particles, alg))
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
-    ImplicitIntegrator{typeof(alg), T}(alg, α, β, γ, nlsolver, linsolve!, grid_cache, particles_cache, jac_cache)
+    ImplicitIntegrator{typeof(alg), T}(alg, α, β, γ, nlsolver, linsolve, grid_cache, particles_cache, jac_cache)
 end
 ImplicitIntegrator(alg::TimeIntegrationAlgorithm, grid::Grid, particles::Particles; kwargs...) = ImplicitIntegrator(Float64, alg, grid, particles; kwargs...)
 
@@ -310,7 +310,7 @@ function solve_grid_velocity!(
     # `v` = `vⁿ` for initial guess
     @. grid.u = Δt*grid.vⁿ + α*Δt^2*(1-(2β/γ))*grid.aⁿ
     u = copy(flatview(grid.u, freeinds))
-    converged = solve!(u, residual_jacobian!, similar(u), A, integrator.nlsolver, integrator.linsolve!)
+    converged = solve!(u, residual_jacobian!, similar(u), A, integrator.nlsolver, integrator.linsolve)
     converged || @warn "Implicit method not converged"
 
     @. grid.x = grid.X + grid.u
