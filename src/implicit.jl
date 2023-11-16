@@ -1,3 +1,5 @@
+using NewtonSolvers
+using IterativeSolvers
 using LinearMaps: LinearMap
 
 abstract type TimeIntegrationAlgorithm end
@@ -182,13 +184,12 @@ function JacobianCache(::Type{T}, gridsize::Dims{dim}) where {T, dim}
     JacobianCache(griddofs, spmat_cache, spmat_grid_mask)
 end
 
-struct ImplicitIntegrator{Alg <: TimeIntegrationAlgorithm, T}
-    alg::Alg
+struct ImplicitIntegrator{T}
+    alg::TimeIntegrationAlgorithm
     α::T
     β::T
     γ::T
-    nlsolver::NonlinearSolver
-    linsolve::Function
+    nlsolve::Function
     grid_cache::StructArray
     particles_cache::StructVector
     jac_cache::Union{Nothing, JacobianCache{T}}
@@ -200,17 +201,19 @@ function ImplicitIntegrator(
         grid          :: Grid,
         particles     :: Particles;
         jacobian_free :: Bool = true,
-        abstol        :: Real = sqrt(eps(T)),
-        reltol        :: Real = zero(T),
+        f_tol         :: Real = convert(T, 1e-8),
+        x_tol         :: Real = zero(T),
         maxiter       :: Int  = 100,
         linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b) : (x,A,b)->x.=A\b,
+        backtracking  :: Bool = true,
+        showtrace     :: Bool = false,
     ) where {T}
     α, β, γ = integration_parameters(alg)
-    nlsolver = NewtonSolver(T; abstol, reltol, maxiter)
+    nlsolve(fj!, f, j, x) = NewtonSolvers.solve!(fj!, f, j, x; f_tol, x_tol, maxiter, linsolve, backtracking, showtrace)
     grid_cache = create_grid_cache(grid, alg)
     particles_cache = fillzero!(create_particles_cache(particles, alg))
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
-    ImplicitIntegrator{typeof(alg), T}(alg, α, β, γ, nlsolver, linsolve, grid_cache, particles_cache, jac_cache)
+    ImplicitIntegrator{T}(alg, α, β, γ, nlsolve, grid_cache, particles_cache, jac_cache)
 end
 ImplicitIntegrator(alg::TimeIntegrationAlgorithm, grid::Grid, particles::Particles; kwargs...) = ImplicitIntegrator(Float64, alg, grid, particles; kwargs...)
 
@@ -310,7 +313,7 @@ function solve_grid_velocity!(
     # `v` = `vⁿ` for initial guess
     @. grid.u = Δt*grid.vⁿ + α*Δt^2*(1-(2β/γ))*grid.aⁿ
     u = copy(flatview(grid.u, freeinds))
-    converged = solve!(u, residual_jacobian!, similar(u), A, integrator.nlsolver, integrator.linsolve)
+    converged = integrator.nlsolve(residual_jacobian!, similar(u), A, u)
     converged || @warn "Implicit method not converged"
 
     @. grid.x = grid.X + grid.u

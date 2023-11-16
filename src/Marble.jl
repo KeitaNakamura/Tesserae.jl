@@ -118,7 +118,6 @@ include("blockspace.jl")
 include("mpspace.jl")
 include("transfer.jl")
 
-include("solvers.jl")
 include("implicit.jl")
 include("penalty_method.jl")
 
