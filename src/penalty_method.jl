@@ -33,7 +33,7 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
                 dfᵖdu, fᵖ = gradient(grid.u[i], :all) do u
                     # normal
                     g = g⁰ + normal(u-v_rigid*Δt, n)
-                    fₙ = p.penalty_force(g⋅n) * n
+                    fₙ = -p.penalty_force(g⋅n) * n
 
                     # tangential
                     uₜ = tangential(u-v_rigid*Δt, n)
