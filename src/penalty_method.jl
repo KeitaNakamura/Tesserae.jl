@@ -37,7 +37,7 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
 
                     # tangential
                     uₜ = tangential(u-v_rigid*Δt, n)
-                    (iszero(μ) || iszero(uₜ)) && return fₙ
+                    (iszero(μ) || iszero(uₜ) || iszero(fₙ)) && return fₙ
 
                     if iszero(p.microslip)
                         fₜ★ = grid.m[i] * uₜ / Δt^2
