@@ -22,9 +22,6 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 [weakdeps]
 GeometricObjects = "f167b195-1c3d-409a-8dd6-02cc02a656c6"
 
-[extensions]
-MarbleGeometricObjectsExt = "GeometricObjects"
-
 [compat]
 ForwardDiff = "0.10"
 GeometricObjects = "0.8"

@@ -409,7 +409,11 @@ end
     end
 end
 
-function particle_to_grid!(::Val{(:g,)}, grid::Grid, particles::Particles, space::MPSpace, gap_function)
+function particle_to_grid!(f, name::Symbol, grid::Grid, particles::Particles, space::MPSpace)
+    particle_to_grid!(f, Val((name,)), grid, particles, space)
+end
+
+function particle_to_grid!(compute_gap, ::Val{(:g,)}, grid::Grid, particles::Particles, space::MPSpace)
     check_grid(grid, space)
     check_particles(particles, space)
 
@@ -417,7 +421,7 @@ function particle_to_grid!(::Val{(:g,)}, grid::Grid, particles::Particles, space
     @inbounds for p in 1:length(particles)
         pt = LazyRow(particles, p)
         mₚ = pt.m
-        gₚ = gap_function(pt)
+        gₚ = compute_gap(pt)
         gₚ === nothing && continue
 
         mp = values(space, p)
