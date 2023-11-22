@@ -31,12 +31,15 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
                 μ = p.grid_μ[i]
                 v_rigid = p.grid_v[i]
                 dfᵖdu, fᵖ = gradient(grid.u[i], :all) do u
+                    # relative displacement
+                    uᵣ = u - Δt * v_rigid
+
                     # normal
-                    g = g⁰ + normal(u-v_rigid*Δt, n)
+                    g = g⁰ + normal(uᵣ, n)
                     fₙ = -p.penalty_force(g⋅n) * n
 
                     # tangential
-                    uₜ = tangential(u-v_rigid*Δt, n)
+                    uₜ = tangential(uᵣ, n)
                     (iszero(μ) || iszero(uₜ) || iszero(fₙ)) && return fₙ
 
                     if iszero(p.microslip)
