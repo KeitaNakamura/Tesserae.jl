@@ -13,7 +13,7 @@ fillzero!(A::Grid) = (StructArrays.foreachfield(_fillzero!, A); A)
 _fillzero!(x::Lattice) = x
 _fillzero!(x::AbstractArray) = fillzero!(x)
 
-generate_grid(lattice::Lattice) = StructArray((; x = lattice))
+generate_grid(lattice::Lattice) = StructArray((; X = lattice))
 generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Lattice(Float64, dx, minmax...))
 
 ##########
