@@ -209,7 +209,7 @@ function ImplicitIntegrator(
         showtrace     :: Bool = false,
     ) where {T}
     α, β, γ = integration_parameters(alg)
-    nlsolve(fj!, f, j, x) = NewtonSolvers.solve!(fj!, f, j, x; f_tol, x_tol, maxiter, linsolve, backtracking, showtrace)
+    nlsolve(f!, j!, f, j, x) = NewtonSolvers.solve!(f!, j!, f, j, x; f_tol, x_tol, maxiter, linsolve, backtracking, showtrace)
     grid_cache = create_grid_cache(grid, alg)
     particles_cache = fillzero!(create_particles_cache(particles, alg))
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
@@ -276,44 +276,40 @@ function solve_grid_velocity!(
         A = construct_sparse_matrix!(integrator.jac_cache, space, freeinds)
     end
 
-    function residual_jacobian!(R, J, x)
-        if R !== nothing
-            flatview(grid.u, freeinds) .= x
-            @. grid.a = (1/(2α*β*Δt^2))*grid.u - (1/(2α*β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
-            @. grid.v = grid.vⁿ + Δt*((1-γ)*grid.aⁿ + γ*grid.a)
+    function residual!(R, x)
+        flatview(grid.u, freeinds) .= x
+        @. grid.a = (1/(2α*β*Δt^2))*grid.u - (1/(2α*β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
+        @. grid.v = grid.vⁿ + Δt*((1-γ)*grid.aⁿ + γ*grid.a)
 
-            # internal force
-            recompute_grid_internal_force!(update_stress!, grid, particles, space; alg, system, parallel)
+        # internal force
+        recompute_grid_internal_force!(update_stress!, grid, particles, space; alg, system, parallel)
 
-            # boundary condition
-            if consider_boundary_condition
-                compute_boundary_friction!(grid, Δt, bc)
-                @. grid.fint -= grid.fᵇ
-            end
-
-            # penalty force
-            if consider_penalty
-                compute_penalty_force!(grid, penalty_method, Δt)
-                @. grid.fint -= grid.fᵖ
-            end
-
-            # residual
-            @. grid.R = 2α*β*Δt * (grid.a + (grid.fint - grid.fext) / grid.m)
-            R .= flatview(grid.R, freeinds)
+        # boundary condition
+        if consider_boundary_condition
+            compute_boundary_friction!(grid, Δt, bc)
+            @. grid.fint -= grid.fᵇ
         end
 
-        if J !== nothing
-            # jacobian
-            if integrator.jac_cache !== nothing
-                jacobian_based_matrix!(J, integrator, grid, particles, space, Δt, freeinds, consider_boundary_condition, consider_penalty, parallel)
-            end
+        # penalty force
+        if consider_penalty
+            compute_penalty_force!(grid, penalty_method, Δt)
+            @. grid.fint -= grid.fᵖ
+        end
+
+        # residual
+        @. grid.R = 2α*β*Δt * (grid.a + (grid.fint - grid.fext) / grid.m)
+        R .= flatview(grid.R, freeinds)
+    end
+    function jacobian!(J, x)
+        if integrator.jac_cache !== nothing
+            jacobian_based_matrix!(J, integrator, grid, particles, space, Δt, freeinds, consider_boundary_condition, consider_penalty, parallel)
         end
     end
 
     # `v` = `vⁿ` for initial guess
     @. grid.u = Δt*grid.vⁿ + α*Δt^2*(1-(2β/γ))*grid.aⁿ
     u = copy(flatview(grid.u, freeinds))
-    converged = integrator.nlsolve(residual_jacobian!, similar(u), A, u)
+    converged = integrator.nlsolve(residual!, jacobian!, similar(u), A, u)
     converged || @warn "Implicit method not converged"
 
     @. grid.x = grid.X + grid.u
