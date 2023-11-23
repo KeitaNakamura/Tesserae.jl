@@ -13,7 +13,7 @@ function PenaltyMethod(
         grid_μ::AbstractArray{<: Real},
         grid_v::AbstractArray{<: Vec} = FillArray(zero(eltype(grid_g)), size(grid_g));
         storage = nothing,
-        microslip = 0,
+        microslip = NaN,
     )
     PenaltyMethod(penalty_force, grid_g, grid_μ, grid_v, storage, microslip)
 end
@@ -42,11 +42,15 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
                     uₜ = tangential(uᵣ, n)
                     (iszero(μ) || iszero(uₜ) || iszero(fₙ)) && return fₙ
 
-                    if iszero(p.microslip)
-                        fₜ★ = grid.m[i] * uₜ / Δt^2
-                        fₜ = -min(1, μ*norm(fₙ)/norm(fₜ★)) * fₜ★
+                    if isnan(p.microslip) # default value of microslip is given by current velocity
+                        ϵᵤ = oftype(p.microslip, norm(Δt*(grid.vⁿ[i]-v_rigid)))
                     else
-                        ξ = norm(uₜ) / p.microslip
+                        ϵᵤ = p.microslip
+                    end
+                    if isone(-ϵᵤ) # special treatment to force simple stick condition
+                        fₜ = -grid.m[i] * uₜ / Δt^2
+                    else
+                        ξ = norm(uₜ) / ϵᵤ
                         α = ξ<1 ? -ξ^2+2ξ : one(ξ)
                         fₜ = -α*μ*norm(fₙ)*normalize(uₜ)
                     end
