@@ -16,8 +16,10 @@ abstract type SamplingAlgorithm end
 struct GridSampling <: SamplingAlgorithm end
 struct PoissonDiskSampling{RNG} <: SamplingAlgorithm
     rng::RNG
+    parallel::Bool
 end
-PoissonDiskSampling() = PoissonDiskSampling(Random.GLOBAL_RNG)
+PoissonDiskSampling() = PoissonDiskSampling(Random.default_rng(), true)
+PoissonDiskSampling(rng; parallel=false) = PoissonDiskSampling(rng, parallel)
 
 ##################
 # SamplingDomain #
@@ -46,7 +48,7 @@ end
 poisson_disk_sampling_minimum_distance(l::Real, dim::Int) = l/(1.37)^(1/√dim)
 function point_sampling(pds::PoissonDiskSampling, box::BoxDomain{dim, T}, l::T) where {dim, T}
     d = poisson_disk_sampling_minimum_distance(l, dim)
-    points::Vector{NTuple{dim, T}} = poisson_disk_sampling(pds.rng, T, d, box.minmax...)
+    points::Vector{NTuple{dim, T}} = poisson_disk_sampling(pds.rng, T, d, box.minmax...; pds.parallel)
     reinterpret(Vec{dim, T}, points), entire_volume(box)/length(points)
 end
 
