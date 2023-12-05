@@ -43,7 +43,7 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
                     (iszero(μ) || iszero(uₜ) || iszero(fₙ)) && return fₙ
 
                     if isnan(p.microslip) # default value of microslip is given by current velocity
-                        ϵᵤ = oftype(p.microslip, norm(Δt*(grid.vⁿ[i]-v_rigid)))
+                        ϵᵤ = norm(uᵣ) + 0.01*norm(g)
                     else
                         ϵᵤ = p.microslip
                     end
