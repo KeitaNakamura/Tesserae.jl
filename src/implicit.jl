@@ -543,7 +543,7 @@ function jacobian_based_matrix!(
         end
     end
 
-    rmul!(K, 2α*β*Δt)
+    rmul!(K, 2α*β*Δt^2)
 
     # compute `K = one(K) + inv(M) * K`
     rows = rowvals(K)
@@ -555,7 +555,7 @@ function jacobian_based_matrix!(
             mᵢ = grid.m[_tail(I)]
             vals[i] /= mᵢ
             if row == j
-                vals[i] += inv(Δt) # for diagonal entries
+                vals[i] += one(eltype(K)) # for diagonal entries
             end
         end
     end
