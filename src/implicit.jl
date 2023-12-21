@@ -204,8 +204,8 @@ function ImplicitIntegrator(
         grid          :: Grid,
         particles     :: Particles;
         jacobian_free :: Bool = true,
-        f_tol         :: Real = zero(T),
-        x_tol         :: Real = convert(T, 1e-8),
+        f_tol         :: Real = zero(T, 1e-8),
+        x_tol         :: Real = zero(T),
         dx_tol        :: Real = zero(T),
         maxiter       :: Int  = 100,
         linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b) : (x,A,b)->x.=A\b,
@@ -301,7 +301,7 @@ function solve_grid_velocity!(
         end
 
         # residual
-        @. grid.R = 2α*β*Δt * (grid.a + (grid.fint - grid.fext) / grid.m)
+        @. grid.R = 2α*β*Δt^2 * (grid.a + (grid.fint - grid.fext) / grid.m)
         R .= flatview(grid.R, freeinds)
     end
     function jacobian!(J, x)
@@ -362,7 +362,7 @@ function jacobian_free_matrix(
                 @. grid_δf -= grid.dfᵖdu ⋅ grid.δu
             end
             δa = flatview(grid_δf ./= grid.m, freeinds)
-            @. Jδu = δu/Δt + 2α*β*Δt * δa
+            @. Jδu = δu + 2α*β*Δt^2 * δa
         end
     end
 end
