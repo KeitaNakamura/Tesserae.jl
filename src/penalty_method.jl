@@ -26,7 +26,7 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
         if isactive(grid, I)
             i = nonzeroindex(grid, I)
             g⁰ = p.grid_g[i]
-            if !iszero(g⁰)
+            if !isapproxzero(norm(g⁰))
                 n = normalize(g⁰)
                 μ = p.grid_μ[i]
                 v_rigid = p.grid_v[i]
@@ -40,9 +40,10 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
 
                     # tangential
                     uₜ = tangential(uᵣ, n)
-                    (iszero(μ) || iszero(uₜ) || iszero(fₙ)) && return fₙ
+                    uₜ_norm = norm(uₜ)
+                    (iszero(μ) || isapproxzero(uₜ_norm)) && return fₙ
 
-                    if isnan(p.microslip) # default value of microslip is given by current velocity
+                    if isnan(p.microslip) # default
                         ϵᵤ = norm(uᵣ) + 0.01*norm(g)
                     else
                         ϵᵤ = p.microslip
@@ -50,9 +51,9 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
                     if isone(-ϵᵤ) # special treatment to force simple stick condition
                         fₜ = -grid.m[i] * uₜ / Δt^2
                     else
-                        ξ = norm(uₜ) / ϵᵤ
+                        ξ = uₜ_norm / ϵᵤ
                         α = ξ<1 ? -ξ^2+2ξ : one(ξ)
-                        fₜ = -α*μ*norm(fₙ)*normalize(uₜ)
+                        fₜ = -α*μ*norm(fₙ)*(uₜ/uₜ_norm)
                     end
 
                     fₙ + fₜ

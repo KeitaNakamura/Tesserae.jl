@@ -130,8 +130,11 @@ function compute_boundary_friction!(grid::Grid, Δt::Real, coefs::AbstractArray{
                 dfᵇdu, fᵇ = gradient(grid.u[i], :all) do u
                     fₙ = normal(fint,n)
                     uₜ = tangential(u,n)
+                    fₙ_norm = norm(fₙ)
+                    uₜ_norm = norm(uₜ)
+                    (isapproxzero(fₙ_norm) || isapproxzero(uₜ_norm)) && return fₙ
                     f̄ₜ = grid.m[i] * uₜ / Δt^2
-                    -min(1, μ*norm(fₙ)/norm(f̄ₜ)) * f̄ₜ
+                    -min(1, μ*fₙ_norm/norm(f̄ₜ)) * f̄ₜ
                 end
                 grid.fᵇ[i] += fᵇ
                 grid.dfᵇdu[i] += dfᵇdu
