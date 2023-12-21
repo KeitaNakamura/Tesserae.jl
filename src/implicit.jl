@@ -204,15 +204,16 @@ function ImplicitIntegrator(
         grid          :: Grid,
         particles     :: Particles;
         jacobian_free :: Bool = true,
-        f_tol         :: Real = convert(T, 1e-8),
-        x_tol         :: Real = zero(T),
+        f_tol         :: Real = zero(T),
+        x_tol         :: Real = convert(T, 1e-8),
+        dx_tol        :: Real = zero(T),
         maxiter       :: Int  = 100,
         linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b) : (x,A,b)->x.=A\b,
         backtracking  :: Bool = true,
         showtrace     :: Bool = false,
     ) where {T}
     α, β, γ = integration_parameters(alg)
-    nlsolve(f!, j!, f, j, x) = NewtonSolvers.solve!(f!, j!, f, j, x; f_tol, x_tol, maxiter, linsolve, backtracking, showtrace)
+    nlsolve(f!, j!, f, j, x) = NewtonSolvers.solve!(f!, j!, f, j, x; f_tol, x_tol, dx_tol, maxiter, linsolve, backtracking, showtrace)
     grid_cache = create_grid_cache(grid, alg)
     particles_cache = fillzero!(create_particles_cache(particles, alg))
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
