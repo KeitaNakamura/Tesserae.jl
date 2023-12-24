@@ -205,7 +205,7 @@ function ImplicitIntegrator(
         particles     :: Particles;
         jacobian_free :: Bool = true,
         f_tol         :: Real = convert(T, 1e-8),
-        x_tol         :: Real = convert(T, 1e-8),
+        x_tol         :: Real = zero(T),
         dx_tol        :: Real = zero(T),
         maxiter       :: Int  = 100,
         linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b) : (x,A,b)->x.=A\b,
