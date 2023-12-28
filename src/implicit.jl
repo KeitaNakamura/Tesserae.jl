@@ -204,11 +204,11 @@ function ImplicitIntegrator(
         grid          :: Grid,
         particles     :: Particles;
         jacobian_free :: Bool = true,
-        f_tol         :: Real = convert(T, 1e-8),
-        x_tol         :: Real = zero(T),
-        dx_tol        :: Real = zero(T),
+        f_tol         :: Real = zero(T),
+        x_tol         :: Real = convert(T, 1e-8),
+        dx_tol        :: Real = eps(T),
         maxiter       :: Int  = 200,
-        linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b) : (x,A,b)->x.=A\b,
+        linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b;abstol=x_tol/10,reltol=zero(T)) : (x,A,b)->x.=A\b,
         backtracking  :: Bool = true,
         showtrace     :: Bool = false,
     ) where {T}
