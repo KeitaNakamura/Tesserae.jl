@@ -480,22 +480,19 @@ function jacobian_based_matrix!(
 
     # thread-local storages
     nₚ = dim * prod(gridsize(get_interpolation(space), Val(dim)))
-    Kₚ_threads = [Array{T}(undef, nₚ, nₚ) for _ in 1:Threads.nthreads()]
-    dofs_threads = [Int[] for _ in 1:Threads.nthreads()]
+    Kₚ = Array{T}(undef, nₚ, nₚ)
+    dofs = Int[]
 
     α, β, γ = integrator.α, integrator.β, integrator.γ
-    blockwise_parallel_each_particle(space, :static; parallel) do p
+    blockwise_parallel_each_particle(space, :static; parallel=false) do p
         @inbounds begin
             ℂₚ = Tensorial.resizedim(particles.ℂ[p], Val(dim))
             mp = values(space, p)
             gridindices = neighbornodes(mp)
             gridindices_local = CartesianIndices(gridindices)
 
-            # reinit Kₚ
-            Kₚ = Kₚ_threads[Threads.threadid()]
-            fillzero!(Kₚ)
-
             # assemble Kₚ
+            fillzero!(Kₚ)
             for (j, l) in enumerate(gridindices_local)
                 ∇Nⱼ = mp.∇N[l]
                 for (i, k) in enumerate(gridindices_local)
@@ -505,7 +502,6 @@ function jacobian_based_matrix!(
             end
 
             # generate local dofs
-            dofs = dofs_threads[Threads.threadid()]
             copy!(dofs, vec(view(griddofs, :, gridindices)))
             linds = findall(!iszero, dofs) # dof could be zero when the boundary conditions are imposed
 
@@ -519,7 +515,6 @@ function jacobian_based_matrix!(
     end
 
     if consider_boundary_condition || consider_penalty
-        dofs = first(dofs_threads)
         for I in CartesianIndices(grid)
             if isactive(grid, I)
                 i = nonzeroindex(grid, I)
