@@ -207,7 +207,7 @@ function ImplicitIntegrator(
         f_tol         :: Real = zero(T),
         x_tol         :: Real = convert(T, 1e-8),
         dx_tol        :: Real = eps(T),
-        iterations    :: Int  = 500,
+        iterations    :: Int  = 1000,
         linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b;abstol=x_tol/10,reltol=zero(T)) : (x,A,b)->x.=A\b,
         backtracking  :: Bool = true,
         showtrace     :: Bool = false,
