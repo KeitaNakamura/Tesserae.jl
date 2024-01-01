@@ -207,13 +207,14 @@ function ImplicitIntegrator(
         f_tol         :: Real = zero(T),
         x_tol         :: Real = convert(T, 1e-8),
         dx_tol        :: Real = eps(T),
-        maxiter       :: Int  = 200,
+        iterations    :: Int  = 500,
         linsolve      :: Any  = jacobian_free ? (x,A,b)->idrs!(x,A,b;abstol=x_tol/10,reltol=zero(T)) : (x,A,b)->x.=A\b,
         backtracking  :: Bool = true,
         showtrace     :: Bool = false,
+        logall        :: Bool = false,
     ) where {T}
     α, β, γ = integration_parameters(alg)
-    nlsolve(f!, j!, f, j, x) = NewtonSolvers.solve!(f!, j!, f, j, x; f_tol, x_tol, dx_tol, maxiter, linsolve, backtracking, showtrace)
+    nlsolve(f!, j!, f, j, x) = NewtonSolvers.solve!(f!, j!, f, j, x; f_tol, x_tol, dx_tol, iterations, linsolve, backtracking, showtrace, logall)
     grid_cache = create_grid_cache(grid, alg)
     particles_cache = fillzero!(create_particles_cache(particles, alg))
     jac_cache = jacobian_free ? nothing : JacobianCache(T, size(grid))
@@ -313,8 +314,8 @@ function solve_grid_velocity!(
     # `v` = `vⁿ` for initial guess
     @. grid.u = Δt*grid.vⁿ + α*Δt^2*(1-(2β/γ))*grid.aⁿ
     u = copy(flatview(grid.u, freeinds))
-    converged = integrator.nlsolve(residual!, jacobian!, similar(u), A, u)
-    converged || @warn "Implicit method not converged"
+    ch = integrator.nlsolve(residual!, jacobian!, similar(u), A, u)
+    ch.isconverged || @warn "Implicit method not converged"
 
     @. grid.x = grid.X + grid.u
 
@@ -322,7 +323,7 @@ function solve_grid_velocity!(
         @. penalty_method.storage = grid.fᵖ
     end
 
-    nothing
+    ch
 end
 
 function jacobian_free_matrix(

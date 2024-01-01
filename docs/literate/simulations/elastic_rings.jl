@@ -92,7 +92,7 @@ function elastic_rings(
 
     ## implicit method
     if implicit isa TimeIntegrationAlgorithm
-        integrator = ImplicitIntegrator(implicit, grid, particles; jacobian_free)
+        integrator = ImplicitIntegrator(implicit, grid, particles; x_tol=1e-10, dx_tol=0.0, jacobian_free)
     end
 
     ## outputs
