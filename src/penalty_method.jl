@@ -5,6 +5,7 @@ struct PenaltyMethod{F <: Function, dim, Grid_g <: AbstractArray{<: Vec{dim}, di
     grid_v::Grid_v
     storage::S
     microslip::T
+    microslip_auto_parameter::T
 end
 
 function PenaltyMethod(
@@ -14,8 +15,9 @@ function PenaltyMethod(
         grid_v::AbstractArray{<: Vec} = FillArray(zero(eltype(grid_g)), size(grid_g));
         storage = nothing,
         microslip = NaN,
+        microslip_auto_parameter = 0.1,
     )
-    PenaltyMethod(penalty_force, grid_g, grid_μ, grid_v, storage, microslip)
+    PenaltyMethod(penalty_force, grid_g, grid_μ, grid_v, storage, microslip, microslip_auto_parameter)
 end
 
 function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
@@ -36,14 +38,15 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
 
                     # normal
                     g = g⁰ + normal(uᵣ, n)
-                    fₙ = -p.penalty_force(g⋅n) * n
+                    c = p.penalty_force(g ⋅ n)
+                    fₙ = -c * n
 
                     # tangential
                     uₜ = tangential(uᵣ, n)
                     (iszero(fₙ) || iszero(μ) || iszero(uₜ)) && return fₙ
 
                     if isnan(p.microslip) # default
-                        ϵᵤ = norm(uᵣ) + 0.01*norm(g)
+                        ϵᵤ = norm(p.microslip_auto_parameter*g + uₜ)
                     else
                         ϵᵤ = p.microslip
                     end
@@ -53,7 +56,7 @@ function compute_penalty_force!(grid::Grid, p::PenaltyMethod, Δt::Real)
                         uₜ_norm = norm(uₜ)
                         ξ = uₜ_norm / ϵᵤ
                         α = ξ<1 ? -ξ^2+2ξ : one(ξ)
-                        fₜ = -α*μ*norm(fₙ)*(uₜ/uₜ_norm)
+                        fₜ = -α*μ*c*(uₜ/uₜ_norm)
                     end
 
                     fₙ + fₜ
