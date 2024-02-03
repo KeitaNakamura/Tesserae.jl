@@ -1,7 +1,2 @@
-*.tmp
 /Manifest.toml
 /test/Manifest.toml
-/docs/Manifest.toml
-/docs/build
-/docs/src/examples/simulations/*.md
-/docs/src/examples/models/*.md

@@ -1,126 +1,112 @@
-struct WLS{B <: AbstractBasis, K <: Kernel} <: Interpolation
-end
-
 """
-    LinearWLS(::Kernel)
+    WLS(::Kernel)
 
 WLS (weighted least squares) interpolation using the linear polynomial.
 
 This interpolation function is used in the moving least squares material point method (MLS-MPM) [^MLSMPM],
-but it is referred as the WLS in Marble.jl because the formulation is fundamentally WLS scheme.
-For the MLS-MPM formulation, use this `LinearWLS` with [`WLSTransfer`](@ref).
+but it is referred as the WLS in this library because the formulation is fundamentally WLS scheme.
 
 [^MLSMPM]: [Hu, Y., Fang, Y., Ge, Z., Qu, Z., Zhu, Y., Pradhana, A., & Jiang, C. (2018). A moving least squares material point method with displacement discontinuity and two-way rigid body coupling. *ACM Transactions on Graphics (TOG)*, 37(4), 1-14.](https://doi.org/10.1145/3197517.3201293)
 """
-const LinearWLS = WLS{PolynomialBasis{1}}
+struct WLS{K <: Kernel} <: Interpolation
+    kernel::K
+end
 
-const BilinearWLS = WLS{BilinearBasis}
-
-WLS{B}(w::Kernel) where {B} = WLS{B, typeof(w)}()
-
-get_basis(::WLS{B}) where {B} = B()
-get_kernel(::WLS{B, W}) where {B, W} = W()
-gridsize(wls::WLS, ::Val{dim}) where {dim} = gridsize(get_kernel(wls), Val(dim))
+get_kernel(wls::WLS) = wls.kernel
+gridspan(wls::WLS) = gridspan(get_kernel(wls))
 @inline neighbornodes(wls::WLS, lattice::Lattice, pt) = neighbornodes(get_kernel(wls), lattice, pt)
 
-function MPValuesInfo{dim, T}(itp::WLS) where {dim, T}
-    dims = gridsize(itp, Val(dim))
-    L = length(value(get_basis(itp), zero(Vec{dim, T})))
-    values = (; w=zero(T), N=zero(T), ∇N=zero(Vec{dim, T}), Minv=zero(Mat{L, L, T}))
-    sizes = (dims, dims, dims, (1,))
-    MPValuesInfo{dim, T}(values, sizes)
+function create_property(::Type{Vec{dim, T}}, it::WLS) where {dim, T}
+    dims = nfill(gridspan(it), Val(dim))
+    N = zeros(T, dims)
+    ∇N = zeros(Vec{dim, T}, dims)
+    (; N, ∇N)
 end
 
 # general version
-function update_mpvalues!(mp::SubMPValues, itp::WLS, lattice::Lattice, spy::AbstractArray{Bool}, pt)
+function update_property!(mp::MPValues{<: WLS}, lattice::Lattice{dim, T}, pt, filter::AbstractArray{Bool} = Trues(size(lattice))) where {dim, T}
     indices = neighbornodes(mp)
 
-    F = get_kernel(itp)
-    P = get_basis(itp)
-    M = zero(mp.Minv[])
+    it = interpolation(mp)
+    F = get_kernel(it)
+    M = zero(Mat{dim+1, dim+1, T})
     xₚ = getx(pt)
 
-    @inbounds @simd for j in CartesianIndices(indices)
-        i = indices[j]
+    @inbounds @simd for ip in eachindex(indices)
+        i = indices[ip]
         xᵢ = lattice[i]
-        w = value(F, lattice, i, pt) * spy[i]
-        p = value(P, xᵢ - xₚ)
+        w = value(F, lattice, i, pt) * filter[i]
+        p = [1; xᵢ-xₚ]
         M += w * p ⊗ p
-        mp.w[j] = w
+        mp.N[ip] = w
     end
 
     M⁻¹ = inv(M)
 
-    @inbounds @simd for j in CartesianIndices(indices)
-        i = indices[j]
+    @inbounds @simd for ip in eachindex(indices)
+        i = indices[ip]
         xᵢ = lattice[i]
-        q = M⁻¹ ⋅ value(P, xᵢ - xₚ)
-        wq = mp.w[j] * q
-        mp.N[j] = wq ⋅ value(P, xₚ - xₚ)
-        mp.∇N[j] = wq ⋅ gradient(P, xₚ - xₚ)
+        wq = mp.N[ip] * (M⁻¹ ⋅ [1;xᵢ-xₚ])
+        mp.N[ip] = wq[1]
+        mp.∇N[ip] = @Tensor wq[2:end]
     end
-    mp.Minv[] = M⁻¹
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_mpvalues!(mp::SubMPValues, itp::WLS{PolynomialBasis{1}, <: BSpline}, lattice::Lattice, spy::AbstractArray{Bool}, pt)
-    if isnearbounds(mp)
-        fast_update_mpvalues_nearbounds!(mp, itp, lattice, spy, pt)
+function update_property!(mp::MPValues{<: WLS{<: BSpline}}, lattice::Lattice, pt, filter::AbstractArray{Bool} = Trues(size(lattice)))
+    indices = neighbornodes(mp)
+    isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
+    if isnearbounds
+        fast_update_property_nearbounds!(mp, lattice, pt, filter)
     else
-        fast_update_mpvalues!(mp, itp, lattice, spy, pt)
+        fast_update_property!(mp, lattice, pt)
     end
 end
 
-function fast_update_mpvalues!(mp::SubMPValues{dim, T}, itp::WLS, lattice::Lattice, spy::AbstractArray{Bool}, pt) where {dim, T}
+function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, lattice::Lattice{dim, T}, pt) where {dim, T}
     indices = neighbornodes(mp)
-    F = get_kernel(itp)
+    F = get_kernel(interpolation(mp))
     xₚ = getx(pt)
-    D = zero(Vec{dim, T}) # diagonal entries
-    values_gradients!(mp.w, reinterpret(reshape, T, mp.∇N), F, lattice, xₚ)
+    D = zero(Vec{dim, T}) # diagonal entries of M
+    values_gradients!(mp.N, mp.∇N, F, lattice, xₚ)
 
-    @inbounds @simd for j in CartesianIndices(indices)
-        i = indices[j]
+    @inbounds @simd for ip in eachindex(indices)
+        i = indices[ip]
         xᵢ = lattice[i]
-        w = mp.w[j]
         D += w * (xᵢ - xₚ) .* (xᵢ - xₚ)
-        mp.N[j] = w
-        mp.∇N[j] = w * (xᵢ - xₚ)
+        mp.∇N[ip] = w * (xᵢ - xₚ)
     end
 
     D⁻¹ = inv.(D)
     broadcast!(.*, mp.∇N, mp.∇N, D⁻¹)
-    mp.Minv[] = diagm(vcat(1, D⁻¹))
 end
 
-function fast_update_mpvalues_nearbounds!(mp::SubMPValues, itp::WLS, lattice::Lattice, spy::AbstractArray{Bool}, pt)
+function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, lattice::Lattice{dim, T}, pt, filter::AbstractArray{Bool}) where {dim, T}
     indices = neighbornodes(mp)
-    F = get_kernel(itp)
-    P = get_basis(itp)
+    it = interpolation(mp)
+    F = get_kernel(it)
+    P = get_basis(it)
+    M = zero(Mat{dim+1, dim+1, T})
     xₚ = getx(pt)
-    M = zero(mp.Minv[])
 
-    @inbounds @simd for j in CartesianIndices(indices)
-        i = indices[j]
+    @inbounds @simd for ip in eachindex(indices)
+        i = indices[ip]
         xᵢ = lattice[i]
-        w = value(F, lattice, i, xₚ) * spy[i]
+        w = value(F, lattice, i, xₚ) * filter[i]
         p = value(P, xᵢ - xₚ)
         M += w * p ⊗ p
-        mp.w[j] = w
+        mp.N[ip] = w
     end
 
     M⁻¹ = inv(M)
 
-    @inbounds @simd for j in CartesianIndices(indices)
-        i = indices[j]
+    @inbounds @simd for ip in eachindex(indices)
+        i = indices[ip]
         xᵢ = lattice[i]
-        q = M⁻¹ ⋅ value(P, xᵢ - xₚ)
-        wq = mp.w[j] * q
-        mp.N[j] = wq[1]
-        mp.∇N[j] = @Tensor wq[2:end]
+        wq = mp.N[ip] * (M⁻¹ ⋅ [1;xᵢ-xₚ])
+        mp.N[ip] = wq[1]
+        mp.∇N[ip] = @Tensor wq[2:end]
     end
-    mp.Minv[] = M⁻¹
-
-    mp
 end
 
-Base.show(io::IO, wls::WLS{B}) where {B} = print(io, WLS{B}, "(", get_kernel(wls), ")")
+Base.show(io::IO, wls::WLS) = print(io, WLS, "(", get_kernel(wls), ")")

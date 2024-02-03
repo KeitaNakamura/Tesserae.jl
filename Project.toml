@@ -1,38 +1,14 @@
-name = "Marble"
-uuid = "8a8a7a0b-5081-41d5-b488-cbbf872f9543"
+name = "Sequoia"
+uuid = "30a04e26-4a89-4862-aa00-4d71e820c402"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
-version = "1.2.1"
+version = "0.1.0"
 
 [deps]
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
-NewtonSolvers = "08c6405b-2d9a-475f-9b5b-02ac0aab7e31"
 PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
-ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 SIMD = "fdea26ae-647d-5447-a871-4b548cad5224"
-SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 Tensorial = "98f94333-fa9f-48a9-ad80-1c66397b2b38"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
-
-[weakdeps]
-GeometricObjects = "f167b195-1c3d-409a-8dd6-02cc02a656c6"
-
-[compat]
-ForwardDiff = "0.10"
-GeometricObjects = "0.8"
-IterativeSolvers = "0.9"
-LinearMaps = "3"
-NewtonSolvers = "0.5"
-PoissonDiskSampling = "0.10"
-ProgressMeter = "1"
-Reexport = "1"
-SIMD = "3"
-StructArrays = "0.6"
-Tensorial = "0.11, 0.12, 0.13"
-WriteVTK = "1.9"
-julia = "1.9"

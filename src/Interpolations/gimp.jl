@@ -7,7 +7,7 @@ The unchanged GIMP kernel [^uGIMP].
 """
 struct uGIMP <: Kernel end
 
-gridsize(::uGIMP, ::Val{dim}) where {dim} = nfill(3, Val(dim))
+gridspan(::uGIMP) = 3
 
 @inline function neighbornodes(::uGIMP, lattice::Lattice, pt)
     dx⁻¹ = spacing_inv(lattice)
@@ -42,17 +42,17 @@ end
     N, ∇N
 end
 
-function MPValuesInfo{dim, T}(itp::uGIMP) where {dim, T}
-    dims = gridsize(itp, Val(dim))
-    values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
-    sizes = (dims, dims)
-    MPValuesInfo{dim, T}(values, sizes)
+function create_property(::Type{Vec{dim, T}}, it::uGIMP) where {dim, T}
+    dims = nfill(gridspan(it), Val(dim))
+    N = zeros(T, dims)
+    ∇N = zeros(Vec{dim, T}, dims)
+    (; N, ∇N)
 end
 
-@inline function update_mpvalues!(mp::SubMPValues, itp::uGIMP, lattice::Lattice, pt)
+@inline function update_property!(mp::MPValues{uGIMP}, lattice::Lattice, pt)
     indices = neighbornodes(mp)
-    @inbounds @simd for j in CartesianIndices(indices)
-        i = indices[j]
-        mp.N[j], mp.∇N[j] = value_gradient(itp, lattice, i, pt)
+    @inbounds @simd for ip in eachindex(indices)
+        i = indices[ip]
+        mp.N[ip], mp.∇N[ip] = value_gradient(interpolation(mp), lattice, i, pt)
     end
 end

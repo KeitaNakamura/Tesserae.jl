@@ -5,7 +5,7 @@
 const Grid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I} = StructArray{T, N, NT, I}
 
 eachnode(grid::Grid) = LazyRows(grid)
-get_lattice(grid::Grid) = grid.X
+get_lattice(grid::Grid) = getx(grid)
 spacing(grid::Grid) = spacing(get_lattice(grid))
 
 # fillzero!
@@ -13,7 +13,7 @@ fillzero!(A::Grid) = (StructArrays.foreachfield(_fillzero!, A); A)
 _fillzero!(x::Lattice) = x
 _fillzero!(x::AbstractArray) = fillzero!(x)
 
-generate_grid(lattice::Lattice) = StructArray((; X = lattice))
+generate_grid(lattice::Lattice) = StructArray((; x=lattice))
 generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Lattice(Float64, dx, minmax...))
 
 ##########
@@ -22,28 +22,26 @@ generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Latti
 
 const SpGrid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
 
-Base.@pure function infer_lattice_realtype(::Type{GridState}, ::Val{dim}) where {GridState, dim}
-    fieldname(GridState, 1) == :X || error("generate_grid: first field name must be `:X`")
-    V = fieldtype(GridState, 1)
-    V <: Vec{dim} || error("generate_grid: `fieldtype` of `:X` must be `<: Vec{$dim}`")
+Base.@pure function infer_lattice_realtype(::Type{GridProperty}, ::Val{dim}) where {GridProperty, dim}
+    V = fieldtype(GridProperty, 1)
+    V <: Vec{dim} || error("generate_grid: the first `fieldtype` must be `<: Vec{$dim}`")
     eltype(V)
 end
 
 """
     generate_grid(Δx::Real, (xmin, xmax)::Tuple{Real, Real}...)
-    generate_grid(GridState, Δx::Real, (xmin, xmax)::Tuple{Real, Real}...)
+    generate_grid(GridProperty, Δx::Real, (xmin, xmax)::Tuple{Real, Real}...)
 
-Generate background grid with type `GridState`.
+Generate background grid with type `GridProperty`.
 
 This returns `StructArray` (see [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl)).
-`GridState` must have `x::Vec` as its first field.
-It is also strongly recommended that `GridState` is bits type, i.e., `isbitstype(GridState)`
-returns `true`. It is possible to use `NamedTuple` for `GridState`.
-If `GridState` is not given, field `x` is only created as field.
+The first field of `GridProperty` must be of type `Vec`.
+It is also strongly recommended that `GridProperty` is bits type for performance, i.e., `isbitstype(GridProperty)`
+returns `true`.
 
 # Examples
 ```jldoctest
-julia> struct GridState{dim, T}
+julia> struct GridProperty{dim, T}
            x::Vec{dim, T}
            m::Float64
            mv::Vec{dim, T}
@@ -52,21 +50,13 @@ julia> struct GridState{dim, T}
            vⁿ::Vec{dim, T}
        end
 
-julia> grid = generate_grid(GridState{2,Float64}, 0.5, (0,3), (0,2))
-7×5 StructArray(::Lattice{2, Float64, Marble.LinAxis{Float64}}, ::Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}, ::Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}) with eltype GridState{2, Float64}:
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
+julia> grid = generate_grid(GridProperty{2,Float64}, 0.5, (0,3), (0,2));
 
 julia> grid[1]
-GridState{2, Float64}([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+GridProperty{2, Float64}([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
 
-julia> grid.X
-7×5 Lattice{2, Float64, Marble.LinAxis{Float64}}:
+julia> grid.x
+7×5 Lattice{2, Float64, Vector{Float64}}:
  [0.0, 0.0]  [0.0, 0.5]  [0.0, 1.0]  [0.0, 1.5]  [0.0, 2.0]
  [0.5, 0.0]  [0.5, 0.5]  [0.5, 1.0]  [0.5, 1.5]  [0.5, 2.0]
  [1.0, 0.0]  [1.0, 0.5]  [1.0, 1.0]  [1.0, 1.5]  [1.0, 2.0]
@@ -76,51 +66,50 @@ julia> grid.X
  [3.0, 0.0]  [3.0, 0.5]  [3.0, 1.0]  [3.0, 1.5]  [3.0, 2.0]
 
 julia> grid.v
-7×5 Marble.SpArray{Vec{2, Float64}, 2, Vector{Vec{2, Float64}}, Matrix{UInt32}}:
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
+7×5 Matrix{Vec{2, Float64}}:
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
 ```
 """
-function generate_grid(::Type{GridState}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridState, dim}
-    T = infer_lattice_realtype(GridState, Val(dim))
-    generate_grid(GridState, Lattice(T, dx, minmax...))
+function generate_grid(::Type{ArrayType}, ::Type{GridProperty}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {ArrayType, GridProperty, dim}
+    T = infer_lattice_realtype(GridProperty, Val(dim))
+    generate_grid(ArrayType, GridProperty, Lattice(T, dx, minmax...))
 end
+function generate_grid(::Type{GridProperty}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridProperty, dim}
+    generate_grid(Array, GridProperty, dx, minmax...)
+end
+
 # from lattice
-@generated function generate_grid(::Type{GridState}, lattice::Lattice{dim, T}) where {GridState, dim, T}
-    @assert infer_lattice_realtype(GridState, Val(dim)) == T
-    exps = [:(SpArray{$T}(spinds)) for T in fieldtypes(GridState)[2:end]]
+@generated function generate_grid(::Type{Array}, ::Type{GridProperty}, lattice::Lattice{dim, T}) where {GridProperty, dim, T}
+    @assert infer_lattice_realtype(GridProperty, Val(dim)) == T
+    exps = [:(Array{$T}(undef, size(lattice))) for T in fieldtypes(GridProperty)[2:end]]
+    quote
+        fillzero!(StructArray{GridProperty}(tuple(lattice, $(exps...))))
+    end
+end
+@generated function generate_grid(::Type{SpArray}, ::Type{GridProperty}, lattice::Lattice{dim, T}) where {GridProperty, dim, T}
+    @assert infer_lattice_realtype(GridProperty, Val(dim)) == T
+    exps = [:(SpArray{$T}(spinds)) for T in fieldtypes(GridProperty)[2:end]]
     quote
         spinds = SpIndices(size(lattice))
-        StructArray{GridState}(tuple(lattice, $(exps...)))
+        StructArray{GridProperty}(tuple(lattice, $(exps...)))
     end
 end
 
 get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
-function update_sparsity!(A::SpGrid, blkspace::AbstractArray{Bool})
-    n = update_sparsity!(get_spinds(A), blkspace)
-    StructArrays.foreachfield(a->resize_nonzeros!(a,n), A)
+function update_block_sparsity!(A::SpGrid, blkspy)
+    n = update_block_sparsity!(get_spinds(A), blkspy)
+    StructArrays.foreachfield(a->resize_data!(a,n), A)
     A
 end
 
-blocksparsity(A::SpGrid) = blocksparsity(get_spinds(A))
-
-@inline isnonzero(A::SpGrid, I...) = (@_propagate_inbounds_meta; isnonzero(get_spinds(A), I...))
-
-@inline function isactive(grid::Grid, I...)
-    @boundscheck checkbounds(grid, I...)
-    @inbounds isnonzero(grid, I...) && !iszero(grid.m[I...])
-end
-
-@inline function nonzeroindex(A::SpGrid, i)
-    @_propagate_inbounds_meta
-    nonzeroindex(get_spinds(A), i)
-end
+@inline isactive(A::SpGrid, I...) = (@_propagate_inbounds_meta; isactive(get_spinds(A), I...))
 
 Base.show(io::IO, mime::MIME"text/plain", x::SpGrid) = show(io, mime, ShowSpArray(x))
 Base.show(io::IO, x::SpGrid) = show(io, ShowSpArray(x))

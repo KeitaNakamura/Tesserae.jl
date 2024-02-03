@@ -10,65 +10,70 @@ and almost necessary for [`AffineTransfer`](@ref) and [`TaylorTransfer`](@ref).
 [^KC]: [Nakamura, K., Matsumura, S., & Mizutani, T. (2023). Taylor particle-in-cell transfer and kernel correction for material point method. *Computer Methods in Applied Mechanics and Engineering*, 403, 115720.](https://doi.org/10.1016/j.cma.2022.115720)
 """
 struct KernelCorrection{K <: Kernel} <: Interpolation
+    kernel::K
 end
-KernelCorrection(k::Kernel) = KernelCorrection{typeof(k)}()
 
-get_kernel(::KernelCorrection{K}) where {K} = K()
-gridsize(kc::KernelCorrection, ::Val{dim}) where {dim} = gridsize(get_kernel(kc), Val(dim))
+get_kernel(kc::KernelCorrection) = kc.kernel
+gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
 @inline neighbornodes(kc::KernelCorrection, lattice::Lattice, pt) = neighbornodes(get_kernel(kc), lattice, pt)
 
-function MPValuesInfo{dim, T}(itp::KernelCorrection) where {dim, T}
-    dims = gridsize(itp, Val(dim))
-    values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
-    sizes = (dims, dims)
-    MPValuesInfo{dim, T}(values, sizes)
+function create_property(::Type{Vec{dim, T}}, it::KernelCorrection) where {dim, T}
+    dims = nfill(gridspan(it), Val(dim))
+    N = zeros(T, dims)
+    ∇N = zeros(Vec{dim, T}, dims)
+    (; N, ∇N)
 end
 
 # general version
-@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection, lattice::Lattice, spy::AbstractArray{Bool}, pt)
-    if isnearbounds(mp)
-        update_mpvalues_nearbounds!(mp, itp, lattice, spy, pt)
+@inline function update_property!(mp::MPValues{<: KernelCorrection}, lattice::Lattice, pt, filter::AbstractArray{Bool} = Trues(size(lattice)))
+    indices = neighbornodes(mp)
+    isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
+    if isnearbounds
+        update_property_nearbounds!(mp, lattice, pt, filter)
     else
-        indices = neighbornodes(mp)
-        @inbounds @simd for j in CartesianIndices(indices)
-            i = indices[j]
-            mp.N[j], mp.∇N[j] = value_gradient(get_kernel(itp), lattice, i, pt)
+        @inbounds @simd for ip in eachindex(indices)
+            i = indices[ip]
+            mp.N[ip], mp.∇N[ip] = value_gradient(get_kernel(interpolation(mp)), lattice, i, pt)
         end
     end
 end
 
 # fast version for B-spline kernels
-@inline function update_mpvalues!(mp::SubMPValues, itp::KernelCorrection{<: BSpline}, lattice::Lattice, spy::AbstractArray{Bool}, pt)
-    if isnearbounds(mp)
-        update_mpvalues_nearbounds!(mp, itp, lattice, spy, pt)
+@inline function update_property!(mp::MPValues{<: KernelCorrection{<: BSpline}}, lattice::Lattice, pt, filter::AbstractArray{Bool} = Trues(size(lattice)))
+    indices = neighbornodes(mp)
+    isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
+    if isnearbounds
+        update_property_nearbounds!(mp, lattice, pt, filter)
     else
-        values_gradients!(mp.N, mp.∇N, get_kernel(itp), lattice, pt)
+        values_gradients!(mp.N, mp.∇N, get_kernel(interpolation(mp)), lattice, pt)
     end
 end
 
-@inline function update_mpvalues_nearbounds!(mp::SubMPValues{dim, T}, itp::KernelCorrection, lattice::Lattice, spy::AbstractArray{Bool}, pt) where {dim, T}
+@inline function update_property_nearbounds!(mp::MPValues{<: KernelCorrection}, lattice::Lattice, pt, filter::AbstractArray{Bool})
     indices = neighbornodes(mp)
-    F = get_kernel(itp)
+    F = get_kernel(interpolation(mp))
     xₚ = getx(pt)
+    VecType = promote_type(eltype(lattice), typeof(xₚ))
+    dim, T = length(VecType), eltype(VecType)
     M = zero(Mat{dim+1, dim+1, T})
-    @inbounds for j in CartesianIndices(indices)
-        i = indices[j]
+    @inbounds for ip in eachindex(indices)
+        i = indices[ip]
         xᵢ = lattice[i]
-        w = value(F, lattice, i, pt) * spy[i]
+        w = value(F, lattice, i, pt) * filter[i]
         P = [1; xᵢ - xₚ]
         M += w * P ⊗ P
-        mp.N[j] = w
+        mp.N[ip] = w
     end
     M⁻¹ = inv(M)
     C₁ = M⁻¹[1,1]
     C₂ = @Tensor M⁻¹[2:end,1]
     C₃ = @Tensor M⁻¹[2:end,2:end]
-    @inbounds for j in CartesianIndices(indices)
-        i = indices[j]
+    @inbounds for ip in eachindex(indices)
+        i = indices[ip]
         xᵢ = lattice[i]
-        w = mp.N[j]
-        mp.N[j] = (C₁ + C₂ ⋅ (xᵢ - xₚ)) * w
-        mp.∇N[j] = (C₂ + C₃ ⋅ (xᵢ - xₚ)) * w
+        w = mp.N[ip]
+        mp.N[ip] = (C₁ + C₂ ⋅ (xᵢ - xₚ)) * w
+        mp.∇N[ip] = (C₂ + C₃ ⋅ (xᵢ - xₚ)) * w
     end
 end
 

@@ -1,6 +1,20 @@
-nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
+const DEBUG = Preferences.@load_preference("debug_mode", false)
 
-isapproxzero(x::Number) = abs(x) < sqrt(eps(typeof(x)))
+@static if DEBUG
+    @eval macro debug(ex)
+        return :($(esc(ex)))
+    end
+else
+    @eval macro debug(ex)
+         return nothing
+    end
+end
+
+#############
+# Utilities #
+#############
+
+nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
 
 # zero_recursive
 @generated function zero_recursive(::Type{T}) where {T}
@@ -24,81 +38,8 @@ function fillzero!(x::AbstractArray)
     x
 end
 
-# rename property names
-@generated function rename(::Val{srcnames}, ::Val{before}, ::Val{after}) where {srcnames, before, after}
-    @assert length(before) == length(after)
-    before_new = collect(before)
-    after_new = collect(after)
-    for (bf, af) in zip(before, after)
-        if bf in srcnames && af in srcnames && !(af in before)
-            push!(before_new, af)
-            push!(after_new, Symbol(:__, af, :__))
-        end
-    end
-    nt = (; zip(before_new, after_new)...)
-    map(name -> get(nt, name, name), srcnames)
-end
-function rename(A::NamedTuple, before::Val, after::Val)
-    newnames = rename(Val(keys(A)), before, after)
-    NamedTuple{newnames}(values(A))
-end
-function rename(A::StructArray, before::Val, after::Val)
-    StructArray(rename(StructArrays.components(A), before, after))
-end
-
-macro rename(src, list...)
-    for ex in list
-        @assert Meta.isexpr(ex, :call) && ex.args[1] == :(=>)
-    end
-    before = Val(tuple(Symbol[ex.args[2] for ex in list]...))
-    after  = Val(tuple(Symbol[ex.args[3] for ex in list]...))
-    esc(:(Marble.rename($src, $before, $after)))
-end
-
-# combine properties
-@generated function combine_names(::Val{dest}, ::Val{src}) where {dest, src}
-    src_tmp = map(x->Symbol(:____, x, :____), src)
-    combined = (dest..., src_tmp...)
-    rename(Val(combined), Val(src_tmp), Val(src))
-end
-
-function combine(dest::NamedTuple, src::NamedTuple)
-    newnames = combine_names(Val(keys(dest)), Val(keys(src)))
-    NamedTuple{newnames}((values(dest)..., values(src)...))
-end
-function combine(A::StructArray, src::NamedTuple)
-    StructArray(combine(StructArrays.components(A), src))
-end
-function combine(A::StructArray, B::StructArray)
-    combine(A, StructArrays.components(B))
-end
-
-@inline flatarray(A::AbstractArray{Vec{dim, T}, dim}) where {dim, T} = reinterpret(reshape, T, A)
-@inline function flatview(A::AbstractArray{<: Vec{dim}, dim}, flatfreeinds::AbstractVector{CartesianIndex{N}}) where {dim, N}
-    @assert dim+1 == N
-    @boundscheck checkbounds(flatarray(A), flatfreeinds)
-    @inbounds view(flatarray(A), flatfreeinds)
-end
-
 # commas
 commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")
-
-#####################
-# NormalVectorArray #
-#####################
-
-struct NormalVectorArray{dim} <: AbstractArray{Vec{dim, Int}, dim}
-    size::Dims{dim}
-end
-Base.size(A::NormalVectorArray) = A.size
-@inline function Base.getindex(A::NormalVectorArray{dim}, I::Vararg{Integer, dim}) where {dim}
-    @boundscheck checkbounds(A, I...)
-    Vec{dim, Int}() do i
-        firstindex(A, i) == I[i] && return -1
-        lastindex(A, i) == I[i] && return 1
-        0
-    end
-end
 
 ############
 # MapArray #
@@ -128,31 +69,6 @@ Base.IndexStyle(::Type{<: MapArray{<: Any, <: Any, F, Args}}) where {F, Args} = 
     @inbounds A.f(getindex.(A.args, i...)...)
 end
 
-#############
-# FillArray #
-#############
-
-struct FillArray{T, N} <: AbstractArray{T, N}
-    value::T
-    dims::Dims{N}
-end
-FillArray(value::Any, dims::Int...) = FillArray(value, dims)
-Base.size(A::FillArray) = A.dims
-Base.IndexStyle(::Type{<: FillArray}) = IndexLinear()
-@inline function Base.getindex(A::FillArray, i::Integer)
-    @boundscheck checkbounds(A, i)
-    A.value
-end
-
-####################
-# CoordinateSystem #
-####################
-
-abstract type CoordinateSystem end
-struct DefaultSystem <: CoordinateSystem end
-struct PlaneStrain   <: CoordinateSystem end
-struct Axisymmetric  <: CoordinateSystem end
-
 #########
 # Trues #
 #########
@@ -167,29 +83,19 @@ Base.IndexStyle(::Type{<: Trues}) = IndexLinear()
     true
 end
 
-####################
-# parallel_foreach #
-####################
+##################
+# threaded macro #
+##################
 
-function parallel_foreach(f, iter, schedule::Symbol; ntasks::Integer)
-    if ntasks == 1
-        foreach(f, iter)
-    else
-        if schedule == :static
-            Threads.@threads :static for x in iter
-                f(x)
-            end
-        elseif schedule == :dynamic
-            chunks = Iterators.partition(iter, max(1, length(iter) ÷ ntasks))
-            tasks = map(chunks) do chunk
-                Threads.@spawn foreach(f, chunk)
-            end
-            fetch.(tasks)
+macro threaded(schedule::QuoteNode, expr)
+    @assert Meta.isexpr(expr, :for)
+    quote
+        if Threads.nthreads() == 1
+            $expr
         else
-            throw(ArgumentError("unsupported schedule argument in Marble.parallel_foreach"))
+            Threads.@threads $schedule $expr
         end
-    end
-    nothing
+    end |> esc
 end
 
 ########
@@ -201,42 +107,100 @@ end
 @inline SIMD.Vec{dim,T}(x::Vec{dim,U}) where {dim,T<:SIMDTypes,U<:SIMDTypes} = SVec(convert(Vec{dim,T}, x))
 
 #################
-# @showprogress #
+# Lazy getindex #
 #################
 
-"""
-```
-@showprogress while t < t_stop
-    # computation goes here
+@inline function lazy_getindex(x::StructArray, i...)
+    @boundscheck checkbounds(x, i...)
+    @inbounds LazyRow(x, i...)
 end
-```
 
-displays progress of `while` loop.
-"""
-macro showprogress(expr)
-    @assert Meta.isexpr(expr, :while)
-    cnd, blk = expr.args[1], expr.args[2]
-    @assert Meta.isexpr(cnd, :call) && cnd.args[1] == :<
-    thresh = 10000
-    t, t_stop = esc(cnd.args[2]), esc(cnd.args[3])
-    map!(esc, cnd.args, cnd.args)
-    map!(esc, blk.args, blk.args)
-    inner = quote
-        count += 1
-        t_current = time()
-        elapsed = t_current - prog.tinit
-        speed = t_current - prog.tlast
-        ProgressMeter.update!(prog,
-                              min(floor(Int, ($t/$t_stop)*$thresh), $thresh);
-                              showvalues = [(:Elapsed, ProgressMeter.durationstring(elapsed)),
-                                            (:Iterations, commas(count)),
-                                            (:Speed, lstrip(ProgressMeter.speedstring(speed)))])
-    end
-    push!(blk.args, inner)
+@inline function lazy_getindex(x::AbstractArray, i...)
+    @boundscheck checkbounds(x, i...)
+    @inbounds x[i...]
+end
+
+########
+# getx #
+########
+
+getx(x) = getproperty(x, first(propertynames(x)))
+getx(x::Vec) = x
+getx(x::Vector{<: Vec}) = x
+
+##########
+# elzero #
+##########
+
+elzero(x) = zero(eltype(x))
+
+#=
+
+###################
+# simdpairs macro #
+###################
+
+macro simdpairs(expr)
+    @assert Meta.isexpr(expr, :for)
+    head = expr.args[1]
+    body = expr.args[2]
+
+    tmpname = gensym("iter")
+
+    @assert Meta.isexpr(head.args[1], :tuple)
+    key, value = head.args[1].args
+    iter = head.args[2]
+
+    # wrap iterator by `eachindex`
+    head.args[2] = :(eachindex($tmpname))
+    # replace (key,value) to key
+    head.args[1] = key
+    # get `value` from iterator
+    pushfirst!(body.args, :($value = $tmpname[$key]))
+
     quote
-        prog = ProgressMeter.Progress($thresh)
-        count = 0
-        $expr
-        ProgressMeter.finish!(prog)
+        $tmpname = $iter
+        @simd $expr
+    end |> esc
+end
+
+##################
+# equation macro #
+##################
+
+macro equation(exprs...)
+    pairs = exprs[1:end-1]
+    body = exprs[end]
+    @assert all(ex->first(ex.args)==:(=>), pairs)
+    modify_equation!(body, [p.args[2]=>p.args[3] for p in pairs])
+    esc(body)
+end
+
+function modify_equation!(body::Expr, pairs::Vector{Pair{Symbol, Symbol}})
+    for arg in body.args
+        if Meta.isexpr(arg, :ref)
+            complete_ref_expr!(arg, pairs)
+        else
+            modify_equation!(arg, pairs)
+        end
     end
 end
+modify_equation!(body, pairs::Vector{Pair{Symbol, Symbol}}) = nothing
+
+function complete_ref_expr!(body::Expr, pairs::Vector{Pair{Symbol, Symbol}})
+    @assert Meta.isexpr(body, :ref)
+    if length(body.args) == 2
+        index = body.args[2]
+        for p in pairs
+            if p.second == index
+                body.args[1] = :($(p.first).$(body.args[1]))
+            end
+        end
+    end
+    # recursively check
+    for arg in body.args
+        Meta.isexpr(arg, :ref) && complete_ref_expr!(arg, pairs)
+    end
+end
+
+=#

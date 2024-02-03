@@ -1,98 +1,67 @@
-module Marble
+module Sequoia
 
 using Base: @_inline_meta, @_propagate_inbounds_meta
 using Base.Broadcast: Broadcasted, ArrayStyle, DefaultArrayStyle
 using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using Reexport
-using LinearAlgebra
-using SparseArrays
 @reexport using Tensorial
-using Tensorial: AbstractSquareTensor
+
 using StructArrays
-using ForwardDiff: Dual
+# export LazyRow, LazyRows
 
 # SIMD
 import SIMD
 const SVec = SIMD.Vec
 const SIMDTypes = Union{SIMD.ScalarTypes, Bool}
 
+# sampling
+import PoissonDiskSampling: generate as poisson_disk_sampling
+import Random
+
 # stream
 using WriteVTK
-import ProgressMeter
 
-# reexport from StructArrays
-export LazyRow, LazyRows
+# others
+import Preferences
 
 export
 # utils
     fillzero!,
-    @rename,
-    flatarray,
-# coordinate system
-    CoordinateSystem,
-    DefaultSystem,
-    PlaneStrain,
-    Axisymmetric,
-# SpArray
+# SpArray/SpSpace
     SpArray,
+    SpSpace,
     blocksize,
-    blocksparsity,
-    update_sparsity!,
+    update_block_sparsity!,
 # lattice
     Lattice,
 # Grid
     Grid,
     SpGrid,
-    eachnode,
     generate_grid,
     spacing,
-    isnonzero,
+    isactive,
 # Particles
-    Particles,
-    eachparticle,
     generate_particles,
     GridSampling,
     PoissonDiskSampling,
-    BoxDomain,
-    SphericalDomain,
-    FunctionDomain,
 # interpolations
+    interpolation,
     update!,
-    Kernel,
     BSpline,
     LinearBSpline,
     QuadraticBSpline,
     CubicBSpline,
     uGIMP,
     Interpolation,
-    LinearWLS,
+    WLS,
     KernelCorrection,
-    MPValues,
-# MPSpace
-    MPSpace,
-    num_particles,
+# MPValues
     neighbornodes,
-# Transfer
-    particle_to_grid!,
-    grid_to_particle!,
-    TransferAlgorithm,
-    FLIP,
-    PIC,
-    AffineTransfer,
-    AFLIP,
-    APIC,
-    TaylorTransfer,
-    TFLIP,
-    TPIC,
-    WLSTransfer,
-# implicit
-    solve_grid_velocity!,
-    ImplicitIntegrator,
-    TimeIntegrationAlgorithm,
-    BackwardEuler,
-    NewmarkBeta,
-    PenaltyMethod,
+    MPValues,
+# transfer
+    @P2G,
+    @G2P,
 # VTK
     openvtk,
     openvtm,
@@ -101,26 +70,22 @@ export
     closevtm,
     closepvd
 
-
 include("utils.jl")
-include("sparray.jl")
 include("lattice.jl")
+include("sparray.jl")
+include("spspace.jl")
 
 include("grid.jl")
 include("particles.jl")
+
 include("Interpolations/mpvalues.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
-include("Interpolations/polybasis.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
-include("blockspace.jl")
-include("mpspace.jl")
-include("transfer.jl")
 
-include("implicit.jl")
-include("penalty_method.jl")
+include("transfer.jl")
 
 include("vtk.jl")
 
-end # module
+end # module Sequoia

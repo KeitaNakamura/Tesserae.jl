@@ -6,9 +6,7 @@ end
     BSpline{1}()
     LinearBSpline()
 
-Lienar B-spline kernel.
-
-It is also called the "tent" function.
+Linear B-spline kernel, which is also referred as "tent" function.
 """
 const LinearBSpline = BSpline{1}
 
@@ -36,9 +34,9 @@ The peaks of this funciton are centered on the grid nodes [^Steffen].
 """
 const CubicBSpline = BSpline{3}
 
-gridsize(::BSpline{1}, ::Val{dim}) where {dim} = nfill(2, Val(dim))
-gridsize(::BSpline{2}, ::Val{dim}) where {dim} = nfill(3, Val(dim))
-gridsize(::BSpline{3}, ::Val{dim}) where {dim} = nfill(4, Val(dim))
+gridspan(::BSpline{1}) = 2
+gridspan(::BSpline{2}) = 3
+gridspan(::BSpline{3}) = 4
 
 @inline function neighbornodes(bs::BSpline, lattice::Lattice{dim, T}, pt) where {dim, T}
     x = getx(pt)
@@ -231,21 +229,23 @@ end
     end
 end
 
-function MPValuesInfo{dim, T}(itp::BSpline{order}) where {dim, T, order}
-    dims = gridsize(itp, Val(dim))
-    values = (; N=zero(T), ∇N=zero(Vec{dim, T}))
-    sizes = (dims, dims)
-    MPValuesInfo{dim, T}(values, sizes)
+function create_property(::Type{Vec{dim, T}}, it::BSpline) where {dim, T}
+    dims = nfill(gridspan(it), Val(dim))
+    N = zeros(T, dims)
+    ∇N = zeros(Vec{dim, T}, dims)
+    (; N, ∇N)
 end
 
-function update_mpvalues!(mp::SubMPValues, itp::BSpline, lattice::Lattice, pt)
-    if isnearbounds(mp)
+function update_property!(mp::MPValues{<: BSpline}, lattice::Lattice, pt)
+    indices = neighbornodes(mp)
+    isnearbounds = size(mp.N) != size(indices)
+    if isnearbounds
         indices = neighbornodes(mp)
-        @inbounds @simd for j in CartesianIndices(indices)
-            i = indices[j]
-            mp.∇N[j], mp.N[j] = gradient(x->value(itp,lattice,i,x,:steffen), getx(pt), :all)
+        @inbounds @simd for ip in eachindex(indices)
+            i = indices[ip]
+            mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),lattice,i,x,:steffen), getx(pt), :all)
         end
     else
-        values_gradients!(mp.N, mp.∇N, itp, lattice, pt)
+        values_gradients!(mp.N, mp.∇N, interpolation(mp), lattice, pt)
     end
 end
