@@ -17,13 +17,6 @@ get_kernel(kc::KernelCorrection) = kc.kernel
 gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
 @inline neighbornodes(kc::KernelCorrection, lattice::Lattice, pt) = neighbornodes(get_kernel(kc), lattice, pt)
 
-function create_property(::Type{Vec{dim, T}}, it::KernelCorrection) where {dim, T}
-    dims = nfill(gridspan(it), Val(dim))
-    N = zeros(T, dims)
-    ∇N = zeros(Vec{dim, T}, dims)
-    (; N, ∇N)
-end
-
 # general version
 @inline function update_property!(mp::MPValues{<: KernelCorrection}, lattice::Lattice, pt, filter::AbstractArray{Bool} = Trues(size(lattice)))
     indices = neighbornodes(mp)

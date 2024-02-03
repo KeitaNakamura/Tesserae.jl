@@ -1,6 +1,13 @@
 abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
+function create_property(::Type{Vec{dim, T}}, it::Interpolation) where {dim, T}
+    dims = nfill(gridspan(it), Val(dim))
+    N = zeros(T, dims)
+    ∇N = zeros(Vec{dim, T}, dims)
+    (; N, ∇N)
+end
+
 """
     MPValues(Vec{dim}, interpolation)
     MPValues(Vec{dim, T}, interpolation)

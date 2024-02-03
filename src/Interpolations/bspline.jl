@@ -229,13 +229,6 @@ end
     end
 end
 
-function create_property(::Type{Vec{dim, T}}, it::BSpline) where {dim, T}
-    dims = nfill(gridspan(it), Val(dim))
-    N = zeros(T, dims)
-    ∇N = zeros(Vec{dim, T}, dims)
-    (; N, ∇N)
-end
-
 function update_property!(mp::MPValues{<: BSpline}, lattice::Lattice, pt)
     indices = neighbornodes(mp)
     isnearbounds = size(mp.N) != size(indices)

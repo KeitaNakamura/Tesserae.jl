@@ -16,13 +16,6 @@ get_kernel(wls::WLS) = wls.kernel
 gridspan(wls::WLS) = gridspan(get_kernel(wls))
 @inline neighbornodes(wls::WLS, lattice::Lattice, pt) = neighbornodes(get_kernel(wls), lattice, pt)
 
-function create_property(::Type{Vec{dim, T}}, it::WLS) where {dim, T}
-    dims = nfill(gridspan(it), Val(dim))
-    N = zeros(T, dims)
-    ∇N = zeros(Vec{dim, T}, dims)
-    (; N, ∇N)
-end
-
 # general version
 function update_property!(mp::MPValues{<: WLS}, lattice::Lattice{dim, T}, pt, filter::AbstractArray{Bool} = Trues(size(lattice))) where {dim, T}
     indices = neighbornodes(mp)

@@ -42,13 +42,6 @@ end
     N, ∇N
 end
 
-function create_property(::Type{Vec{dim, T}}, it::uGIMP) where {dim, T}
-    dims = nfill(gridspan(it), Val(dim))
-    N = zeros(T, dims)
-    ∇N = zeros(Vec{dim, T}, dims)
-    (; N, ∇N)
-end
-
 @inline function update_property!(mp::MPValues{uGIMP}, lattice::Lattice, pt)
     indices = neighbornodes(mp)
     @inbounds @simd for ip in eachindex(indices)
