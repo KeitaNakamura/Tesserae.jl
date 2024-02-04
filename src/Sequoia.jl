@@ -59,6 +59,7 @@ export
 # MPValues
     neighbornodes,
     MPValues,
+    MPValuesVector,
 # transfer
     @P2G,
     @G2P,

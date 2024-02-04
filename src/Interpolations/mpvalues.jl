@@ -65,6 +65,58 @@ function Base.show(io::IO, mp::MPValues)
     print(io, "  Neighbor nodes: ", neighbornodes(mp))
 end
 
+struct MPValuesVector{It, Prop <: NamedTuple, Indices, ElType <: MPValues{It}} <: AbstractVector{ElType}
+    it::It
+    prop::Prop
+    indices::Indices
+end
+
+function MPValuesVector(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where {dim, T}
+    prop = map(create_property(Vec{dim, T}, it)) do prop
+        fill(zero(eltype(prop)), size(prop)..., n)
+    end
+    indices = fill(CartesianIndices(nfill(0:0, Val(dim))), n)
+    It = typeof(it)
+    Prop = typeof(prop)
+    Indices = typeof(indices)
+    ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
+    MPValuesVector{It, Prop, Indices, ElType}(it, prop, indices)
+end
+MPValuesVector(::Type{Vec{dim}}, it::Interpolation, n::Int) where {dim} = MPValuesVector(Vec{dim, Float64}, it, n)
+
+@inline interpolation(mp::MPValuesVector) = getfield(mp, :it)
+
+Base.size(x::MPValuesVector) = size(x.indices)
+
+@inline function Base.getindex(x::MPValuesVector, i::Integer)
+    @boundscheck checkbounds(x, i)
+    @inbounds _getindex(x.it, x.prop, x.indices, i)
+end
+@generated function _getindex(it::Interpolation, prop::NamedTuple{names}, indices, i::Integer) where {names}
+    exps = [:(viewcol(prop.$name, i)) for name in names]
+    quote
+        @_inline_meta
+        @_propagate_inbounds_meta
+        MPValues(it, NamedTuple{names}(tuple($(exps...))), view(indices, i))
+    end
+end
+
+@inline function viewcol(A::AbstractArray, i::Integer)
+    @boundscheck checkbounds(axes(A, ndims(A)), i)
+    colons = nfill(:, Val(ndims(A)-1))
+    @inbounds view(A, colons..., i)
+end
+
+function Base.show(io::IO, mime::MIME"text/plain", mpvalues::MPValuesVector)
+    print(io, length(mpvalues), "-element MPValuesVector: \n")
+    print(io, "  Interpolation: ", interpolation(mpvalues))
+end
+
+function Base.show(io::IO, mpvalues::MPValuesVector)
+    print(io, length(mpvalues), "-element MPValuesVector: \n")
+    print(io, "  Interpolation: ", interpolation(mpvalues))
+end
+
 ###########
 # update! #
 ###########
