@@ -195,11 +195,7 @@ function update_block_sparsity!(A::SpArray, blkspy)
 end
 
 function resize_data!(A::SpArray, n::Integer)
-    data = get_data(A)
-    len = length(data)
-    if 10n < len || len < n
-        resize!(data, 2n)
-    end
+    resize!(get_data(A), n)
     A
 end
 resize_data!(A, n) = A
