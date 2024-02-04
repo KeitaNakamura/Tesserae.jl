@@ -180,7 +180,10 @@ end
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
 function update_block_sparsity!(A::SpArray, blkspy)
-    A.shared_spinds && error("SpArray: `update_block_sparsity!` should be done in `update!` for `MPSpace`. Don't call this manually.")
+    A.shared_spinds && error("""
+    The sparsity pattern is shared among some `SpArray`s. \
+    Perhaps you should use `update_block_sparsity!(grid, blkspy)` instead of applying it to each `SpArray`.
+    """)
     n = update_block_sparsity!(get_spinds(A), blkspy)
     resize_data!(A, n)
     n
