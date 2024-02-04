@@ -133,13 +133,15 @@ end
     true
 end
 
-function update!(mp::MPValues, lattice, pt)
-    set_neighbornodes!(mp, neighbornodes(interpolation(mp), lattice, pt))
-    update_property!(mp, lattice, pt)
+function update!(mp::MPValues, pt, lattice)
+    set_neighbornodes!(mp, neighbornodes(interpolation(mp), pt, lattice))
+    update_property!(mp, pt, lattice)
+    mp
 end
 
-function update!(mp::MPValues, lattice, pt, filter)
+function update!(mp::MPValues, pt, lattice, filter)
     @debug @assert size(lattice) == size(filter)
-    set_neighbornodes!(mp, neighbornodes(interpolation(mp), lattice, pt))
-    update_property!(mp, lattice, pt, filter)
+    set_neighbornodes!(mp, neighbornodes(interpolation(mp), pt, lattice))
+    update_property!(mp, pt, lattice, filter)
+    mp
 end

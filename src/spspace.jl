@@ -35,7 +35,7 @@ function update!(s::SpSpace, xₚ::AbstractVector{<: Vec})
 
     @threaded :static for p in 1:n
         id = Threads.threadid()
-        blk = sub2ind(size(s), whichblock(s.lattice, xₚ[p]))
+        blk = sub2ind(size(s), whichblock(xₚ[p], s.lattice))
         s.blockindices[p] = blk
         s.localindices[p] = iszero(blk) ? 0 : (s.nparticles[id][blk] += 1)
     end
@@ -120,7 +120,7 @@ blocksize(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCKFACTOR+1
 blocksize(A::AbstractArray) = blocksize(size(A))
 
 """
-    Marble.whichblock(lattice, x::Vec)
+    Sequoia.whichblock(x::Vec, lattice::Lattice)
 
 Return block index where `x` locates.
 The unit block size is `2^$BLOCKFACTOR` cells.
@@ -128,7 +128,7 @@ The unit block size is `2^$BLOCKFACTOR` cells.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,10), (0,10))
-11×11 Lattice{2, Float64, Marble.LinAxis{Float64}}:
+11×11 Lattice{2, Float64, Vector{Float64}}:
  [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
  [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
  [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]
@@ -141,12 +141,12 @@ julia> lattice = Lattice(1, (0,10), (0,10))
  [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]      [9.0, 9.0]   [9.0, 10.0]
  [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
 
-julia> Marble.whichblock(lattice, Vec(8.5, 1.5))
+julia> Sequoia.whichblock(Vec(8.5, 1.5), lattice)
 CartesianIndex(2, 1)
 ```
 """
-@inline function whichblock(lattice::Lattice, x::Vec)
-    I = whichcell(lattice, x)
+@inline function whichblock(x::Vec, lattice::Lattice)
+    I = whichcell(x, lattice)
     I === nothing && return nothing
     CartesianIndex(@. (I.I-1) >> BLOCKFACTOR + 1)
 end

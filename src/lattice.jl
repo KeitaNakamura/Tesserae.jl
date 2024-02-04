@@ -70,7 +70,7 @@ end
 end
 
 """
-    neighbornodes(lattice, x::Vec, h)
+    neighbornodes(x::Vec, h::Real, lattice::Lattice)
 
 Return `CartesianIndices` storing neighboring node around `x`.
 `h` denotes the range for searching area. In 1D, for example, the range `a`
@@ -79,7 +79,7 @@ becomes ` x-h*Δx < a < x+h*Δx` where `Δx` is `spacing(lattice)`.
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,5))
-6-element Lattice{1, Float64, Marble.LinAxis{Float64}}:
+6-element Lattice{1, Float64, Vector{Float64}}:
  [0.0]
  [1.0]
  [2.0]
@@ -87,18 +87,18 @@ julia> lattice = Lattice(1, (0,5))
  [4.0]
  [5.0]
 
-julia> neighbornodes(lattice, Vec(1.5), 1)
+julia> neighbornodes(Vec(1.5), 1, lattice)
 CartesianIndices((2:3,))
 
-julia> neighbornodes(lattice, Vec(1.5), 3)
+julia> neighbornodes(Vec(1.5), 3, lattice)
 CartesianIndices((1:5,))
 ```
 """
-@inline function neighbornodes(lattice::Lattice{dim, T}, x::Vec, h::Real) where {dim, T}
+@inline function neighbornodes(x::Vec, h::Real, lattice::Lattice{dim, T}) where {dim, T}
     isinside(x, lattice) || return CartesianIndices(nfill(1:0, Val(dim)))
-    _neighbornodes(SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)), SVec{dim,T}(x), convert(T, h))
+    _neighbornodes(SVec{dim,T}(x), convert(T, h), SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)))
 end
-@inline function _neighbornodes(dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}, h::T) where {dim, T}
+@inline function _neighbornodes(x::SVec{dim, T}, h::T, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
     ξ = (x - xmin) * dx⁻¹
     start = convert(SVec{dim, Int}, floor(ξ - h)) + 2
     stop  = convert(SVec{dim, Int}, floor(ξ + h)) + 1
@@ -108,14 +108,14 @@ end
 end
 
 """
-    Marble.whichcell(lattice, x::Vec)
+    Sequoia.whichcell(x::Vec, lattice::Lattice)
 
 Return cell index where `x` locates.
 
 # Examples
 ```jldoctest
 julia> lattice = Lattice(1, (0,5), (0,5))
-6×6 Lattice{2, Float64, Marble.LinAxis{Float64}}:
+6×6 Lattice{2, Float64, Vector{Float64}}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -123,15 +123,15 @@ julia> lattice = Lattice(1, (0,5), (0,5))
  [4.0, 0.0]  [4.0, 1.0]  [4.0, 2.0]  [4.0, 3.0]  [4.0, 4.0]  [4.0, 5.0]
  [5.0, 0.0]  [5.0, 1.0]  [5.0, 2.0]  [5.0, 3.0]  [5.0, 4.0]  [5.0, 5.0]
 
-julia> Marble.whichcell(lattice, Vec(1.5, 1.5))
+julia> Sequoia.whichcell(Vec(1.5, 1.5), lattice)
 CartesianIndex(2, 2)
 ```
 """
-@inline function whichcell(lattice::Lattice{dim, T}, x::Vec) where {dim, T}
+@inline function whichcell(x::Vec, lattice::Lattice{dim, T}) where {dim, T}
     isinside(x, lattice) || return nothing
-    _whichcell(spacing_inv(lattice), SVec{dim, T}(first(lattice)), SVec{dim, T}(x))
+    _whichcell(SVec{dim, T}(x), spacing_inv(lattice), SVec{dim, T}(first(lattice)))
 end
-@inline function _whichcell(dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
+@inline function _whichcell(x::SVec{dim, T}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
     ξ = (x - xmin) * dx⁻¹
     CartesianIndex(Tuple(convert(SVec{dim, Int}, floor(ξ)) + 1))
 end

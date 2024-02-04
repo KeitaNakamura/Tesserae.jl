@@ -50,7 +50,7 @@ end
 function _reorder_particles!(particles::AbstractVector, lattice::Lattice)
     ptsinblks = map(_->Int[], CartesianIndices(blocksize(lattice)))
     for p in eachindex(particles)
-        I = whichblock(lattice, getx(particles)[p])
+        I = whichblock(getx(particles)[p], lattice)
         I === nothing || push!(ptsinblks[I], p)
     end
     reorder_particles!(particles, ptsinblks)

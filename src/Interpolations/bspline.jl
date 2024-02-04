@@ -38,21 +38,21 @@ gridspan(::BSpline{1}) = 2
 gridspan(::BSpline{2}) = 3
 gridspan(::BSpline{3}) = 4
 
-@inline function neighbornodes(bs::BSpline, lattice::Lattice{dim, T}, pt) where {dim, T}
+@inline function neighbornodes(bs::BSpline, pt, lattice::Lattice{dim, T}) where {dim, T}
     x = getx(pt)
     isinside(x, lattice) || return CartesianIndices(nfill(1:0, Val(dim)))
-    _neighbornodes(bs, SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)), SVec{dim,T}(x))
+    _neighbornodes(bs, SVec{dim,T}(x), SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)))
 end
-@inline function _neighbornodes(::BSpline{1}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
-    _bspline_neighborindices(dims, dx⁻¹, xmin, x, T(0), 1)
+@inline function _neighbornodes(::BSpline{1}, x::SVec{dim, T}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
+    _bspline_neighborindices(x, 1, T(0), dims, dx⁻¹, xmin)
 end
-@inline function _neighbornodes(::BSpline{2}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
-    _bspline_neighborindices(dims, dx⁻¹, xmin, x, T(0.5), 2)
+@inline function _neighbornodes(::BSpline{2}, x::SVec{dim, T}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
+    _bspline_neighborindices(x, 2, T(0.5), dims, dx⁻¹, xmin)
 end
-@inline function _neighbornodes(::BSpline{3}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
-    _bspline_neighborindices(dims, dx⁻¹, xmin, x, T(1), 3)
+@inline function _neighbornodes(::BSpline{3}, x::SVec{dim, T}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
+    _bspline_neighborindices(x, 3, T(1), dims, dx⁻¹, xmin)
 end
-@inline function _bspline_neighborindices(dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}, x::SVec{dim, T}, offset::T, h::Int) where {dim, T}
+@inline function _bspline_neighborindices(x::SVec{dim, T}, h::Int, offset::T, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
     ξ = (x - xmin) * dx⁻¹
     start = convert(SVec{dim, Int}, floor(ξ - offset)) + 1
     stop = start + h
@@ -82,16 +82,16 @@ end
         prod(@ntuple $dim i -> value(bspline, ξ[i]))
     end
 end
-@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xₚ::Vec)
+@inline function value(bspline::BSpline, xₚ::Vec, lattice::Lattice, I::CartesianIndex)
     @_propagate_inbounds_meta
     xᵢ = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
     ξ = (xₚ - xᵢ) * dx⁻¹
     value(bspline, ξ)
 end
-@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, pt)
+@inline function value(bspline::BSpline, pt, lattice::Lattice, I::CartesianIndex)
     @_propagate_inbounds_meta
-    value(bspline, lattice, I, getx(pt))
+    value(bspline, getx(pt), lattice, I)
 end
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
@@ -136,7 +136,7 @@ end
         prod(@ntuple $dim i -> value(bspline, ξ[i], pos[i]))
     end
 end
-@inline function value(bspline::BSpline, lattice::Lattice, I::CartesianIndex, xₚ::Vec, ::Symbol) # last argument is pseudo argument `:steffen`
+@inline function value(bspline::BSpline, xₚ::Vec, lattice::Lattice, I::CartesianIndex, ::Symbol) # last argument is pseudo argument `:steffen`
     @_propagate_inbounds_meta
     xᵢ = lattice[I]
     dx⁻¹ = spacing_inv(lattice)
@@ -182,9 +182,9 @@ end
     vals, grads
 end
 
-@inline values_gradients!(N, ∇N, bspline::BSpline, lattice::Lattice, pt) = values_gradients!(N, ∇N, bspline, lattice, getx(pt))
+@inline values_gradients!(N, ∇N, bspline::BSpline, pt, lattice::Lattice) = values_gradients!(N, ∇N, bspline, getx(pt), lattice)
 
-@generated function values_gradients!(N, ∇N, bspline::BSpline, lattice::Lattice{dim}, xₚ::Vec{dim}) where {dim}
+@generated function values_gradients!(N, ∇N, bspline::BSpline, xₚ::Vec{dim}, lattice::Lattice{dim}) where {dim}
     quote
         @_inline_meta
         dx⁻¹ = spacing_inv(lattice)
@@ -229,16 +229,16 @@ end
     end
 end
 
-function update_property!(mp::MPValues{<: BSpline}, lattice::Lattice, pt)
+function update_property!(mp::MPValues{<: BSpline}, pt, lattice::Lattice)
     indices = neighbornodes(mp)
     isnearbounds = size(mp.N) != size(indices)
     if isnearbounds
         indices = neighbornodes(mp)
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
-            mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),lattice,i,x,:steffen), getx(pt), :all)
+            mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),x,lattice,i,:steffen), getx(pt), :all)
         end
     else
-        values_gradients!(mp.N, mp.∇N, interpolation(mp), lattice, pt)
+        values_gradients!(mp.N, mp.∇N, interpolation(mp), pt, lattice)
     end
 end

@@ -14,10 +14,10 @@ end
 
 get_kernel(wls::WLS) = wls.kernel
 gridspan(wls::WLS) = gridspan(get_kernel(wls))
-@inline neighbornodes(wls::WLS, lattice::Lattice, pt) = neighbornodes(get_kernel(wls), lattice, pt)
+@inline neighbornodes(wls::WLS, pt, lattice::Lattice) = neighbornodes(get_kernel(wls), pt, lattice)
 
 # general version
-function update_property!(mp::MPValues{<: WLS}, lattice::Lattice{dim, T}, pt, filter::AbstractArray{Bool} = Trues(size(lattice))) where {dim, T}
+function update_property!(mp::MPValues{<: WLS}, pt, lattice::Lattice{dim, T}, filter::AbstractArray{Bool} = Trues(size(lattice))) where {dim, T}
     indices = neighbornodes(mp)
 
     it = interpolation(mp)
@@ -28,7 +28,7 @@ function update_property!(mp::MPValues{<: WLS}, lattice::Lattice{dim, T}, pt, fi
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = lattice[i]
-        w = value(F, lattice, i, pt) * filter[i]
+        w = value(F, pt, lattice, i) * filter[i]
         p = [1; xᵢ-xₚ]
         M += w * p ⊗ p
         mp.N[ip] = w
@@ -46,22 +46,22 @@ function update_property!(mp::MPValues{<: WLS}, lattice::Lattice{dim, T}, pt, fi
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_property!(mp::MPValues{<: WLS{<: BSpline}}, lattice::Lattice, pt, filter::AbstractArray{Bool} = Trues(size(lattice)))
+function update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, lattice::Lattice, filter::AbstractArray{Bool} = Trues(size(lattice)))
     indices = neighbornodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        fast_update_property_nearbounds!(mp, lattice, pt, filter)
+        fast_update_property_nearbounds!(mp, pt, lattice, filter)
     else
-        fast_update_property!(mp, lattice, pt)
+        fast_update_property!(mp, pt, lattice)
     end
 end
 
-function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, lattice::Lattice{dim, T}, pt) where {dim, T}
+function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, lattice::Lattice{dim, T}) where {dim, T}
     indices = neighbornodes(mp)
     F = get_kernel(interpolation(mp))
     xₚ = getx(pt)
     D = zero(Vec{dim, T}) # diagonal entries of M
-    values_gradients!(mp.N, mp.∇N, F, lattice, xₚ)
+    values_gradients!(mp.N, mp.∇N, F, xₚ, lattice)
 
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
@@ -74,7 +74,7 @@ function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, lattice::Lattic
     broadcast!(.*, mp.∇N, mp.∇N, D⁻¹)
 end
 
-function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, lattice::Lattice{dim, T}, pt, filter::AbstractArray{Bool}) where {dim, T}
+function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, lattice::Lattice{dim, T}, filter::AbstractArray{Bool}) where {dim, T}
     indices = neighbornodes(mp)
     it = interpolation(mp)
     F = get_kernel(it)
@@ -85,7 +85,7 @@ function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, latt
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = lattice[i]
-        w = value(F, lattice, i, xₚ) * filter[i]
+        w = value(F, xₚ, lattice, i) * filter[i]
         p = value(P, xᵢ - xₚ)
         M += w * p ⊗ p
         mp.N[ip] = w
