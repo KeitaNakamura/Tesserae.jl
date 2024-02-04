@@ -11,7 +11,7 @@ gridspan(::uGIMP) = 3
 
 @inline function neighbornodes(::uGIMP, lattice::Lattice, pt)
     dx⁻¹ = spacing_inv(lattice)
-    neighbornodes(lattice, pt.x, 1+(pt.l/2)*dx⁻¹)
+    neighbornodes(lattice, getx(pt), 1+(pt.l/2)*dx⁻¹)
 end
 
 # simple uGIMP calculation
@@ -34,11 +34,11 @@ end
     ξ = (xₚ - xᵢ) * dx⁻¹
     value(f, ξ, lₚ*dx⁻¹)
 end
-@inline value(f::uGIMP, lattice::Lattice, I::CartesianIndex, pt) = value(f, lattice, I, pt.x, pt.l)
+@inline value(f::uGIMP, lattice::Lattice, I::CartesianIndex, pt) = value(f, lattice, I, getx(pt), pt.l)
 
 @inline function value_gradient(f::uGIMP, lattice::Lattice, I::CartesianIndex, pt)
     @_propagate_inbounds_meta
-    ∇N, N = gradient(x -> (@_propagate_inbounds_meta; value(f, lattice, I, x, pt.l)), pt.x, :all)
+    ∇N, N = gradient(x -> (@_propagate_inbounds_meta; value(f, lattice, I, x, pt.l)), getx(pt), :all)
     N, ∇N
 end
 
