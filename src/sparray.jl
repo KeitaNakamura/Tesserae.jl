@@ -155,6 +155,7 @@ Base.size(A::SpArray) = size(A.spinds)
 get_data(A::SpArray) = A.data
 get_spinds(A::SpArray) = A.spinds
 
+# return zero if the index is not active
 @inline function Base.getindex(A::SpArray, i::SpIndex)
     @boundscheck checkbounds(A, i.index)
     isactive(i) || return zero_recursive(eltype(A))
@@ -162,6 +163,7 @@ get_spinds(A::SpArray) = A.spinds
     @inbounds get_data(A)[i.spindex]
 end
 
+# do nothing if the index is not active (do not throw error!!)
 @inline function Base.setindex!(A::SpArray, v, i::SpIndex)
     @boundscheck checkbounds(A, i.index)
     isactive(i) || return A
@@ -170,16 +172,14 @@ end
     A
 end
 
-# return zero if the index is not active
 @inline function Base.getindex(A::SpArray{<: Any, dim}, I::Vararg{Integer, dim}) where {dim}
-    @boundscheck checkbounds(A, I...)
-    @inbounds A[get_spinds(A)[I...]]
+    @_propagate_inbounds_meta
+    A[get_spinds(A)[I...]]
 end
 
-# do nothing if the index is not active (don't throw error!!)
 @inline function Base.setindex!(A::SpArray{<: Any, dim}, v, I::Vararg{Integer, dim}) where {dim}
-    @boundscheck checkbounds(A, I...)
-    @inbounds A[get_spinds(A)[I...]] = v
+    @_propagate_inbounds_meta
+    A[get_spinds(A)[I...]] = v
     A
 end
 
