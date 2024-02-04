@@ -81,8 +81,8 @@ In `SpArray`, it is not allowed to freely change the value like built-in `Array`
 For example, trying to `setindex!` doesn't change anything without any errors as
 
 ```jldoctest sparray
-julia> A = Marble.SpArray{Float64}(5,5)
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}:
+julia> A = SpArray{Float64}(undef, 5, 5)
+5×5 SpArray{Float64, 2}:
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
@@ -104,31 +104,23 @@ To activate the block, update sparsity pattern by `update_block_sparsity!(A, spy
 where `spy` must have `blocksize(A)`.
 
 ```jldoctest sparray
-julia> spy = falses(blocksize(A))
+julia> spy = trues(blocksize(A))
 1×1 BitMatrix:
- 0
+ 1
 
-julia> spy[1,1] = true
-true
-
-julia> update_block_sparsity!(A, spy)
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}:
- 2.23145e-314  2.61586e-314  2.61723e-314  2.61675e-314  2.94553e-314
- 2.37e-322     2.61623e-314  3.02298e-314  2.61586e-314  2.94543e-314
- 2.7826e-318   2.61586e-314  2.94156e-314  2.61586e-314  3.05631e-314
- 2.37e-322     2.61512e-314  2.94553e-314  2.61587e-314  2.61675e-314
- 2.96e-322     2.61615e-314  2.94543e-314  2.61512e-314  2.61586e-314
+julia> update_block_sparsity!(A, spy) # returned value indicates the number of allocated elements in `A`.
+64
 
 julia> A[1,1] = 2
 2
 
 julia> A
-5×5 Marble.SpArray{Float64, 2, Vector{Float64}, Matrix{UInt32}}:
- 2.0           2.61586e-314  2.61723e-314  2.61675e-314  2.94553e-314
- 2.37e-322     2.61623e-314  3.02298e-314  2.61586e-314  2.94543e-314
- 2.7826e-318   2.61586e-314  2.94156e-314  2.61586e-314  3.05631e-314
- 2.37e-322     2.61512e-314  2.94553e-314  2.61587e-314  2.61675e-314
- 2.96e-322     2.61615e-314  2.94543e-314  2.61512e-314  2.61586e-314
+5×5 SpArray{Float64, 2}:
+ 2.0  0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0  0.0
 ```
 """
 struct SpArray{T, dim} <: AbstractArray{T, dim}
