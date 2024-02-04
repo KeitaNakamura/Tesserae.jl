@@ -1,4 +1,12 @@
 macro P2G(grid_pair, particles_pair, mpvalues_pair, equations)
+    P2G_macro(grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+end
+
+macro P2G(grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+    P2G_macro(grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+end
+
+function P2G_macro(grid_pair, particles_pair, mpvalues_pair, spspace, equations)
     grid, i = unpair(grid_pair)
     particles, p = unpair(particles_pair)
     mpvalues, ip = unpair(mpvalues_pair)
@@ -26,11 +34,23 @@ macro P2G(grid_pair, particles_pair, mpvalues_pair, equations)
         body = :(@inbounds $body)
     end
 
-    quote
-        for $p in eachindex($particles, $mpvalues)
-            $body
-        end
-    end |> esc
+    if isnothing(spspace)
+        quote
+            for $p in eachindex($particles, $mpvalues)
+                $body
+            end
+        end |> esc
+    else
+        quote
+            for blocks in Sequoia.threadsafe_blocks($spspace)
+                Sequoia.@threaded :dynamic for blk in blocks
+                    for $p in $spspace[blk]
+                        $body
+                    end
+                end
+            end
+        end |> esc
+    end
 end
 
 macro G2P(grid_pair, particles_pair, mpvalues_pair, equations)
