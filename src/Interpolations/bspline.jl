@@ -6,7 +6,7 @@ end
     BSpline{1}()
     LinearBSpline()
 
-Linear B-spline kernel, which is also referred as "tent" function.
+Linear B-spline kernel (also known as 'tent' function).
 """
 const LinearBSpline = BSpline{1}
 
@@ -15,7 +15,6 @@ const LinearBSpline = BSpline{1}
     QuadraticBSpline()
 
 Quadratic B-spline kernel.
-
 The peaks of this funciton are centered on the grid nodes [^Steffen].
 
 [^Steffen]: [Steffen, M., Kirby, R. M., & Berzins, M. (2008). Analysis and reduction of quadrature errors in the material point method (MPM). *International journal for numerical methods in engineering*, 76(6), 922-948.](https://doi.org/10.1002/nme.2360)
@@ -27,7 +26,6 @@ const QuadraticBSpline = BSpline{2}
     CubicBSpline()
 
 Cubic B-spline kernel.
-
 The peaks of this funciton are centered on the grid nodes [^Steffen].
 
 [^Steffen]: [Steffen, M., Kirby, R. M., & Berzins, M. (2008). Analysis and reduction of quadrature errors in the material point method (MPM). *International journal for numerical methods in engineering*, 76(6), 922-948.](https://doi.org/10.1002/nme.2360)

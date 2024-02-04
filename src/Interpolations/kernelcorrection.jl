@@ -1,11 +1,8 @@
 """
     KernelCorrection(::Kernel)
 
-Kernel correction method [^KC].
-
-This modifies kernels to achive stable simulations near boundaries.
-Using kernel correction is preferred for [`QuadraticBSpline`](@ref) and [`CubicBSpline`](@ref),
-and almost necessary for [`AffineTransfer`](@ref) and [`TaylorTransfer`](@ref).
+Kernel correction method [^KC] modifies kernels to achieve stable simulations near boundaries.
+Available kernels include `BSpline`s and `uGIMP`.
 
 [^KC]: [Nakamura, K., Matsumura, S., & Mizutani, T. (2023). Taylor particle-in-cell transfer and kernel correction for material point method. *Computer Methods in Applied Mechanics and Engineering*, 403, 115720.](https://doi.org/10.1016/j.cma.2022.115720)
 """

@@ -11,6 +11,37 @@ end
 """
     MPValues(Vec{dim}, interpolation)
     MPValues(Vec{dim, T}, interpolation)
+
+`MPValues` stores properties for interpolation, such as the value of the kernel and its gradient.
+
+```jldoctest
+julia> lattice = Lattice(1.0, (0,5), (0,5)); # computational domain
+
+julia> x = Vec(2.2, 3.4); # particle coordinate
+
+julia> mp = MPValues(Vec{2}, QuadraticBSpline())
+MPValues:
+  Interpolation: QuadraticBSpline()
+  Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
+  Neighbor nodes: CartesianIndices((0:0, 0:0))
+
+julia> update!(mp, x, lattice) # update `mp` at position `x` in `lattice`
+MPValues:
+  Interpolation: QuadraticBSpline()
+  Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
+  Neighbor nodes: CartesianIndices((2:4, 3:5))
+
+julia> sum(mp.N)
+1.0000000000000004
+
+julia> sum(mp.∇N)
+2-element Vec{2, Float64}:
+ 0.0
+ 5.551115123125783e-17
+
+julia> neighbornodes(mp) # grid indices within the local domain of a particle
+CartesianIndices((2:4, 3:5))
+```
 """
 struct MPValues{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
     it::It
