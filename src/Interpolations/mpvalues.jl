@@ -12,16 +12,16 @@ end
     MPValues(Vec{dim}, interpolation)
     MPValues(Vec{dim, T}, interpolation)
 """
-struct MPValues{It, Prop, Indices}
+struct MPValues{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
     it::It
     prop::Prop
-    indices::Base.RefValue{Indices}
+    indices::Indices
 end
 
 function MPValues(::Type{Vec{dim, T}}, it::Interpolation) where {dim, T}
     prop = create_property(Vec{dim, T}, it)
     indices = CartesianIndices(nfill(0:0, Val(dim)))
-    MPValues(it, prop, Ref(indices))
+    MPValues(it, prop, fill(indices))
 end
 MPValues(::Type{Vec{dim}}, it::Interpolation) where {dim} = MPValues(Vec{dim, Float64}, it)
 
