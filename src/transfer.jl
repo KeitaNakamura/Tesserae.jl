@@ -137,7 +137,7 @@ end
 function complete_rhseqexpr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector)
     for i in eachindex(expr.args)
         ex = expr.args[i]
-        if Meta.isexpr(ex, :ref)
+        if Meta.isexpr(ex, :ref) && length(ex.args) == 2 # support only single index
             index = ex.args[2]
             for j in eachindex(pairs)
                 if pairs[j].second == index
@@ -146,9 +146,9 @@ function complete_rhseqexpr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}}, va
                     expr.args[i] = name
                 end
             end
-        else
-            complete_rhseqexpr!(ex, pairs, vars)
         end
+        # check for recursive indexing
+        complete_rhseqexpr!(ex, pairs, vars)
     end
 end
 complete_rhseqexpr!(expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector) = nothing
