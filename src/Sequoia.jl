@@ -6,6 +6,8 @@ using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using Reexport
 @reexport using Tensorial
+using Tensorial: resizedim
+export resizedim
 
 using StructArrays
 export LazyRow, LazyRows
