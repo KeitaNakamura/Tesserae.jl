@@ -8,7 +8,7 @@ using Reexport
 @reexport using Tensorial
 
 using StructArrays
-# export LazyRow, LazyRows
+export LazyRow, LazyRows
 
 # SIMD
 import SIMD
