@@ -30,6 +30,7 @@ import Preferences
 export
 # utils
     fillzero!,
+    @threaded,
 # SpArray/SpSpace
     SpArray,
     SpSpace,

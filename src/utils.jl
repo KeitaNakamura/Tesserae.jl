@@ -112,6 +112,11 @@ macro threaded(schedule::QuoteNode, expr)
         end
     end |> esc
 end
+macro threaded(expr)
+    quote
+        @threaded :dynamic $expr
+    end |> esc
+end
 
 ########
 # SIMD #
