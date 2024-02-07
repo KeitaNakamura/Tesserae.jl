@@ -27,7 +27,7 @@ end
 function generate_particles(::Type{ParticleProperty}, points::AbstractVector{<: Vec}) where {ParticleProperty}
     particles = StructVector{ParticleProperty}(undef, length(points))
     fillzero!(particles)
-    getproperty(particles, 1) .= points
+    getx(particles) .= points
     particles
 end
 
