@@ -4,7 +4,6 @@
 
 const Grid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray}}}, I} = StructArray{T, N, NT, I}
 
-eachnode(grid::Grid) = LazyRows(grid)
 get_lattice(grid::Grid) = getx(grid)
 spacing(grid::Grid) = spacing(get_lattice(grid))
 
