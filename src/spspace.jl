@@ -1,6 +1,6 @@
 const BLOCKFACTOR = unsigned(Preferences.@load_preference("block_factor", 3)) # 2^n
 
-struct SpSpace{dim, L <: Lattice{dim}} <: AbstractArray{Int, dim}
+struct SpSpace{dim, L <: Lattice{dim}, ElType} <: AbstractArray{ElType, dim}
     lattice::L
     particleindices::Vector{Int}
     stops::Array{Int, dim}
@@ -9,21 +9,26 @@ struct SpSpace{dim, L <: Lattice{dim}} <: AbstractArray{Int, dim}
     localindices::Vector{Int}
 end
 
-function SpSpace(lattice::Lattice)
+function SpSpace(lattice::Lattice{dim}) where {dim}
     dims = blocksize(lattice)
     nparticles = [zeros(Int, dims) for _ in 1:Threads.nthreads()]
-    SpSpace(lattice, Int[], zeros(Int, dims), nparticles, Int[], Int[])
+    particleindices = Int[]
+    stops = zeros(Int, dims)
+    ElType = Base._return_type(_getindex, Tuple{typeof(particleindices), typeof(stops), Int})
+    SpSpace{dim, typeof(lattice), ElType}(lattice, particleindices, stops, nparticles, Int[], Int[])
 end
 
 Base.IndexStyle(::Type{<: SpSpace}) = IndexLinear()
 Base.size(x::SpSpace) = size(x.stops)
 @inline function Base.getindex(x::SpSpace, i::Integer)
     @boundscheck checkbounds(x, i)
-    @inbounds begin
-        stop = x.stops[i]
-        start = i==1 ? 1 : x.stops[i-1]+1
-        view(x.particleindices, start:stop)
-    end
+    @inbounds _getindex(x.particleindices, x.stops, i)
+end
+@inline function _getindex(particleindices, stops, i)
+    @_propagate_inbounds_meta
+    stop = stops[i]
+    start = i==1 ? 1 : stops[i-1]+1
+    view(particleindices, start:stop)
 end
 
 function update!(s::SpSpace, xₚ::AbstractVector{<: Vec})
@@ -81,7 +86,7 @@ function threadsafe_blocks(s::SpSpace)
     [filter(I -> !isempty(s[I]), blocks) for blocks in threadsafe_blocks(size(s))]
 end
 
-function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{Vector{Int}})
+function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
     inds = Vector{Int}(undef, sum(length, ptsinblks))
 
     cnt = 1
