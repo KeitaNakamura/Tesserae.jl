@@ -105,7 +105,7 @@ function P2G_nosum_macro(grid_pair, nosum_equations::Vector)
     foreach(ex->findarrays_from_index!(vars, i, ex), nosum_equations)
 
     body = quote
-        Sequoia.loop_grid(Sequoia.GridIndexStyle($(vars...)), $grid) do $i
+        Sequoia.foreach_gridindex(Sequoia.GridIndexStyle($(vars...)), $grid) do $i
             Base.@_inline_meta
             Base.@_propagate_inbounds_meta
             $(nosum_equations...)
@@ -128,13 +128,13 @@ GridIndexStyle(::IndexLinear, ::IndexLinear) = IndexLinear()
 GridIndexStyle(::IndexSpArray, ::IndexSpArray) = IndexSpArray()
 GridIndexStyle(::IndexStyle, ::IndexStyle) = IndexCartesian()
 
-@inline function loop_grid(f, style::IndexStyle, grid::Grid)
+@inline function foreach_gridindex(f, style::IndexStyle, grid::Grid)
     @_propagate_inbounds_meta
     @simd for i in eachindex(style, grid)
         f(i)
     end
 end
-@inline function loop_grid(f, style::IndexCartesian, grid::SpGrid)
+@inline function foreach_gridindex(f, style::IndexCartesian, grid::SpGrid)
     @_propagate_inbounds_meta
     @simd for i in eachindex(style, grid)
         if isactive(grid, i)
@@ -142,7 +142,7 @@ end
         end
     end
 end
-@inline function loop_grid(f, style::IndexSpArray, grid::SpGrid)
+@inline function foreach_gridindex(f, style::IndexSpArray, grid::SpGrid)
     @_propagate_inbounds_meta
     @simd for i in 1:countnnz(get_spinds(grid))
         f(UnsafeSpIndex(i))
