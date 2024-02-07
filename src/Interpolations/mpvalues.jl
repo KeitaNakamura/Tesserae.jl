@@ -115,9 +115,10 @@ function MPValuesVector(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where {d
 end
 MPValuesVector(::Type{Vec{dim}}, it::Interpolation, n::Int) where {dim} = MPValuesVector(Vec{dim, Float64}, it, n)
 
-@inline interpolation(mp::MPValuesVector) = getfield(mp, :it)
-
+Base.IndexStyle(::Type{<: MPValuesVector}) = IndexLinear()
 Base.size(x::MPValuesVector) = size(x.indices)
+
+@inline interpolation(mp::MPValuesVector) = getfield(mp, :it)
 
 @inline function Base.getindex(x::MPValuesVector, i::Integer)
     @boundscheck checkbounds(x, i)
