@@ -22,10 +22,11 @@ generate_grid(dx::Real, minmax::Vararg{Tuple{Real, Real}}) = generate_grid(Latti
 
 const SpGrid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
 
-Base.@pure function infer_lattice_realtype(::Type{GridProperty}, ::Val{dim}) where {GridProperty, dim}
+function check_gridproperty(::Type{GridProperty}, ::Val{dim}) where {GridProperty, dim}
     V = fieldtype(GridProperty, 1)
-    V <: Vec{dim} || error("generate_grid: the first `fieldtype` must be `<: Vec{$dim}`")
-    eltype(V)
+    if !(V <: Vec{dim,T} where {T<:Real})
+        error("generate_grid: the first property of grid must be `<: Vec{$dim, T}` for `Lattice`, got $V")
+    end
 end
 
 """
@@ -77,23 +78,25 @@ julia> grid.v
 ```
 """
 function generate_grid(::Type{ArrayType}, ::Type{GridProperty}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {ArrayType, GridProperty, dim}
-    T = infer_lattice_realtype(GridProperty, Val(dim))
+    check_gridproperty(GridProperty, Val(dim))
+    T = eltype(fieldtype(GridProperty, 1))
     generate_grid(ArrayType, GridProperty, Lattice(T, dx, minmax...))
 end
 function generate_grid(::Type{GridProperty}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {GridProperty, dim}
+    check_gridproperty(GridProperty, Val(dim))
     generate_grid(Array, GridProperty, dx, minmax...)
 end
 
 # from lattice
 @generated function generate_grid(::Type{Array}, ::Type{GridProperty}, lattice::Lattice{dim, T}) where {GridProperty, dim, T}
-    @assert infer_lattice_realtype(GridProperty, Val(dim)) == T
+    @assert fieldtype(GridProperty, 1) == Vec{dim, T}
     exps = [:(Array{$T}(undef, size(lattice))) for T in fieldtypes(GridProperty)[2:end]]
     quote
         fillzero!(StructArray{GridProperty}(tuple(lattice, $(exps...))))
     end
 end
 @generated function generate_grid(::Type{SpArray}, ::Type{GridProperty}, lattice::Lattice{dim, T}) where {GridProperty, dim, T}
-    @assert infer_lattice_realtype(GridProperty, Val(dim)) == T
+    @assert fieldtype(GridProperty, 1) == Vec{dim, T}
     exps = [:(SpArray{$T}(spinds)) for T in fieldtypes(GridProperty)[2:end]]
     quote
         spinds = SpIndices(size(lattice))
