@@ -62,6 +62,12 @@ end
     @inbounds Lattice(get_axisarray(lattice)[ranges...], spacing(lattice), spacing_inv(lattice))
 end
 
+"""
+    Sequoia.isinside(x::Vec, lattice::Lattice)
+
+Check if `x` is inside the `lattice`.
+This returns `true` if `all(lattice[1] .≤ x .< lattice[end])`.
+"""
 @inline function isinside(x::Vec, lattice::Lattice{dim, T}) where {dim, T}
     axes = get_axes(lattice)
     @inbounds _isinside(SVec{dim, T}(map(first, axes)), SVec{dim, T}(map(last, axes)), SVec{dim, T}(x))
