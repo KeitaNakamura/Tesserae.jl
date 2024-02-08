@@ -151,7 +151,7 @@ get_spinds(A::SpArray) = A.spinds
 @inline function Base.getindex(A::SpArray, i::SpIndex)
     @boundscheck checkbounds(A, i.index)
     isactive(i) || return zero_recursive(eltype(A))
-    @boundscheck checkbounds(get_data(A), i.spindex)
+    @debug checkbounds(get_data(A), i.spindex)
     @inbounds get_data(A)[i.spindex]
 end
 
@@ -159,7 +159,7 @@ end
 @inline function Base.setindex!(A::SpArray, v, i::SpIndex)
     @boundscheck checkbounds(A, i.index)
     isactive(i) || return A
-    @boundscheck checkbounds(get_data(A), i.spindex)
+    @debug checkbounds(get_data(A), i.spindex)
     @inbounds get_data(A)[i.spindex] = v
     A
 end

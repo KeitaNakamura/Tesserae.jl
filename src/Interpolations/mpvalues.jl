@@ -77,7 +77,7 @@ end
     spinds = get_spinds(grid)
     @boundscheck checkbounds(spinds, inds)
     @inbounds neighbors = view(spinds, inds)
-    @boundscheck all(isactive, neighbors)
+    @debug @assert all(isactive, neighbors)
     neighbors
 end
 
