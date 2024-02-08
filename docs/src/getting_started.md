@@ -5,7 +5,7 @@ using Sequoia
 import Plots
 
 # material constants
-E = 1000                   # Young's modulus
+E = 500                    # Young's modulus
 ν = 0.3                    # Poisson's ratio
 λ = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
 μ = E / 2(1 + ν)           # shear modulus
