@@ -111,6 +111,8 @@ julia> spy = trues(blocksize(A))
 julia> update_block_sparsity!(A, spy) # returned value indicates the number of allocated elements in `A`.
 64
 
+julia> A .= 0;
+
 julia> A[1,1] = 2
 2
 

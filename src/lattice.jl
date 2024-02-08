@@ -24,7 +24,7 @@ Construct `Lattice` with the spacing `Δx`.
 # Examples
 ```jldoctest
 julia> Lattice(1.0, (0,3), (1,4))
-4×4 Lattice{2, Float64, Marble.LinAxis{Float64}}:
+4×4 Lattice{2, Float64, Vector{Float64}}:
  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
