@@ -26,6 +26,7 @@
     end
     @test_throws Exception generate_grid(@NamedTuple{x::Vec{3,Float64}, m::Float64, v::Vec{3,Float64}}, Δx, xlims, ylims)
     @test_throws Exception generate_grid(Array, @NamedTuple{x::Vec{3,Float64}, m::Float64, v::Vec{3,Float64}}, Δx, xlims, ylims)
+    @test_throws Exception generate_grid(Array, @NamedTuple{x::Vec{2,Float64}, v::Vector{Float64}}, Δx, xlims, ylims)
     ## with grid property (SpArray)
     grid = (@inferred generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, Δx, xlims, ylims))
     @test grid isa Grid
@@ -36,6 +37,7 @@
     @test !all(i->isactive(grid,i), eachindex(grid))
     @test all(x->Sequoia.get_spinds(x)===Sequoia.get_spinds(grid), (grid.m, grid.v))
     @test_throws Exception generate_grid(SpArray, @NamedTuple{x::Vec{3,Float64}, m::Float64, v::Vec{3,Float64}}, Δx, xlims, ylims)
+    @test_throws Exception generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, v::Vector{Float64}}, Δx, xlims, ylims)
 
     # first entry becomes lattice
     grid = generate_grid(@NamedTuple{v::Vec{3,Float32}, m::Float32, x::Vec{3,Float32}}, Δx, xlims, ylims, ylims)

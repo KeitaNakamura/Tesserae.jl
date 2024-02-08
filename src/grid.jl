@@ -27,31 +27,32 @@ function check_gridproperty(::Type{GridProperty}, ::Val{dim}) where {GridPropert
     if !(V <: Vec{dim,T} where {T<:Real})
         error("generate_grid: the first property of grid must be `<: Vec{$dim, T}` for `Lattice`, got $V")
     end
+    if !(isbitstype(GridProperty))
+        error("generate_grid: the property type of grid must be `isbitstype` type")
+    end
 end
 
 """
     generate_grid(Δx::Real, (xmin, xmax)::Tuple{Real, Real}...)
-    generate_grid(GridProperty, Δx::Real, (xmin, xmax)::Tuple{Real, Real}...)
+    generate_grid([ArrayType], GridProperty, Δx::Real, (xmin, xmax)::Tuple{Real, Real}...)
 
 Generate background grid with type `GridProperty`.
-
-This returns `StructArray` (see [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl)).
-The first field of `GridProperty` must be of type `Vec`.
-It is also strongly recommended that `GridProperty` is bits type for performance, i.e., `isbitstype(GridProperty)`
-returns `true`.
+This returns `StructArray` ([StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl)).
+The first field of `GridProperty` is used to create a `Lattice` which requires type `Vec{dim, T}`.
+`ArrayType` can be chosen from `Array` and `SpArray`.
 
 # Examples
 ```jldoctest
 julia> struct GridProperty{dim, T}
-           x::Vec{dim, T}
-           m::Float64
-           mv::Vec{dim, T}
-           f::Vec{dim, T}
-           v::Vec{dim, T}
-           vⁿ::Vec{dim, T}
+           x  :: Vec{dim, T}
+           m  :: Float64
+           mv :: Vec{dim, T}
+           f  :: Vec{dim, T}
+           v  :: Vec{dim, T}
+           vⁿ :: Vec{dim, T}
        end
 
-julia> grid = generate_grid(GridProperty{2,Float64}, 0.5, (0,3), (0,2));
+julia> grid = generate_grid(GridProperty{2, Float64}, 0.5, (0,3), (0,2));
 
 julia> grid[1]
 GridProperty{2, Float64}([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
