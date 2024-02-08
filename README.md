@@ -1,4 +1,4 @@
-# Sequoia
+# Sequoia.jl
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://KeitaNakamura.github.io/Sequoia.jl/stable)
 [![Develop](https://img.shields.io/badge/docs-dev-blue.svg)](https://KeitaNakamura.github.io/Sequoia.jl/dev)
