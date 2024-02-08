@@ -64,7 +64,7 @@ function P2G_sum_macro(grid_pair, particles_pair, mpvalues_pair, spspace, sum_eq
         $(vars[2]...)
         $mp = $mpvalues[$p]
         $gridindices = neighbornodes($mp, $grid)
-        @inbounds @simd for $ip in eachindex($gridindices)
+        @inbounds for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(union(vars[1], vars[3])...)
             $(sum_equations...)
@@ -200,7 +200,7 @@ macro G2P(grid_pair, particles_pair, mpvalues_pair, equations)
         $(particles_vars_declare...)
         $mp = $mpvalues[$p]
         $gridindices = neighbornodes($mp, $grid)
-        @inbounds @simd for $ip in eachindex($gridindices)
+        @inbounds for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(union(vars[1], vars[3])...)
             $(sum_equations...)
