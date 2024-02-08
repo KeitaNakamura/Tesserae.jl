@@ -64,14 +64,11 @@ function P2G_sum_macro(grid_pair, particles_pair, mpvalues_pair, spspace, sum_eq
         $(vars[2]...)
         $mp = $mpvalues[$p]
         $gridindices = neighbornodes($mp, $grid)
-        @simd for $ip in eachindex($gridindices)
+        @inbounds @simd for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(union(vars[1], vars[3])...)
             $(sum_equations...)
         end
-    end
-    if !DEBUG
-        body = :(@inbounds $body)
     end
 
     if isnothing(spspace)
@@ -111,9 +108,6 @@ function P2G_nosum_macro(grid_pair, nosum_equations::Vector)
             $(nosum_equations...)
         end
     end
-    if !DEBUG
-        body = :(@inbounds $body)
-    end
 
     body
 end
@@ -129,22 +123,19 @@ GridIndexStyle(::IndexSpArray, ::IndexSpArray) = IndexSpArray()
 GridIndexStyle(::IndexStyle, ::IndexStyle) = IndexCartesian()
 
 @inline function foreach_gridindex(f, style::IndexStyle, grid::Grid)
-    @_propagate_inbounds_meta
-    @simd for i in eachindex(style, grid)
+    @inbounds @simd for i in eachindex(style, grid)
         f(i)
     end
 end
 @inline function foreach_gridindex(f, style::IndexCartesian, grid::SpGrid)
-    @_propagate_inbounds_meta
-    @simd for i in eachindex(style, grid)
+    @inbounds @simd for i in eachindex(style, grid)
         if isactive(grid, i)
             f(i)
         end
     end
 end
 @inline function foreach_gridindex(f, style::IndexSpArray, grid::SpGrid)
-    @_propagate_inbounds_meta
-    @simd for i in 1:countnnz(get_spinds(grid))
+    @inbounds @simd for i in 1:countnnz(get_spinds(grid))
         f(UnsafeSpIndex(i))
     end
 end
@@ -209,16 +200,13 @@ macro G2P(grid_pair, particles_pair, mpvalues_pair, equations)
         $(particles_vars_declare...)
         $mp = $mpvalues[$p]
         $gridindices = neighbornodes($mp, $grid)
-        @simd for $ip in eachindex($gridindices)
+        @inbounds @simd for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(union(vars[1], vars[3])...)
             $(sum_equations...)
         end
         $(particles_vars_store...)
         $(nosum_equations...)
-    end
-    if !DEBUG
-        body = :(@inbounds $body)
     end
 
     quote
