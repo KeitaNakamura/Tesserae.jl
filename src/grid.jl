@@ -6,6 +6,7 @@ const Grid{N, T, NT <: NamedTuple{<: Any, <: Tuple{Lattice, Vararg{AbstractArray
 
 get_lattice(grid::Grid) = getx(grid)
 spacing(grid::Grid) = spacing(get_lattice(grid))
+spacing_inv(grid::Grid) = spacing_inv(get_lattice(grid))
 
 # fillzero!
 fillzero!(A::Grid) = (StructArrays.foreachfield(_fillzero!, A); A)
