@@ -43,6 +43,7 @@ export
     SpGrid,
     generate_grid,
     spacing,
+    spacing_inv,
     isactive,
 # Particles
     generate_particles,

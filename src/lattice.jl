@@ -39,6 +39,7 @@ end
 
 get_axisarray(x::Lattice) = x.axisarray
 Base.size(x::Lattice) = size(get_axisarray(x))
+Base.IndexStyle(::Type{<: Lattice}) = IndexCartesian()
 # helpers
 spacing(x::Lattice) = x.dx
 spacing_inv(x::Lattice) = x.dx_inv
@@ -66,7 +67,7 @@ end
     @inbounds _isinside(SVec{dim, T}(map(first, axes)), SVec{dim, T}(map(last, axes)), SVec{dim, T}(x))
 end
 @inline function _isinside(start::SVec{dim, T}, stop::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
-    all(start ≤ x) && all(x ≤ stop)
+    all(start ≤ x) && all(x < stop)
 end
 
 """
@@ -74,7 +75,7 @@ end
 
 Return `CartesianIndices` storing neighboring node around `x`.
 `h` denotes the range for searching area. In 1D, for example, the range `a`
-becomes ` x-h*Δx < a < x+h*Δx` where `Δx` is `spacing(lattice)`.
+becomes ` x-h*Δx ≤ a < x+h*Δx` where `Δx` is `spacing(lattice)`.
 
 # Examples
 ```jldoctest
@@ -95,13 +96,13 @@ CartesianIndices((1:5,))
 ```
 """
 @inline function neighbornodes(x::Vec, h::Real, lattice::Lattice{dim, T}) where {dim, T}
-    isinside(x, lattice) || return CartesianIndices(nfill(1:0, Val(dim)))
+    isinside(x, lattice) || return CartesianIndices(nfill(0:0, Val(dim)))
     _neighbornodes(SVec{dim,T}(x), convert(T, h), SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)))
 end
 @inline function _neighbornodes(x::SVec{dim, T}, h::T, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
     ξ = (x - xmin) * dx⁻¹
-    start = convert(SVec{dim, Int}, floor(ξ - h)) + 2
-    stop  = convert(SVec{dim, Int}, floor(ξ + h)) + 1
+    start = convert(SVec{dim, Int}, ceil(ξ - h)) + 1
+    stop  = convert(SVec{dim, Int}, ceil(ξ + h))
     imin = Tuple(max(start, 1))
     imax = Tuple(min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
