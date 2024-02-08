@@ -18,12 +18,8 @@ nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
 
 # zero_recursive
 @generated function zero_recursive(::Type{T}) where {T}
-    if Base._return_type(zero, Tuple{T}) == Union{}
-        exps = [:(zero_recursive($t)) for t in fieldtypes(T)]
-        :(@_inline_meta; T($(exps...)))
-    else
-        :(@_inline_meta; zero(T))
-    end
+    isbitstype(T) || return :(throw(ArgumentError("`zero_recursive` supports only `isbitstype`, got $T")))
+    :(@_inline_meta; zero(T))
 end
 @generated function zero_recursive(::Type{T}) where {T <: Union{Tuple, NamedTuple}}
     exps = [:(zero_recursive($t)) for t in fieldtypes(T)]
