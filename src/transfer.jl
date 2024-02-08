@@ -226,7 +226,14 @@ function issumexpr(expr::Expr, index::Symbol)
     _issumexpr(expr.args[2])
 end
 
-_issumexpr(expr::Expr) = expr.head==:macrocall && length(expr.args)==3 && isa(expr.args[2],LineNumberNode)
+function _issumexpr(expr::Expr)
+    if expr.head==:macrocall
+        @assert length(expr.args)==3 && (expr.args[1]==Symbol("@∑") || expr.args[1]==Symbol("@Σ")) && isa(expr.args[2],LineNumberNode)
+        true
+    else
+        false
+    end
+end
 _issumexpr(x) = false
 
 isrefexpr(expr::Expr, index::Symbol) = expr.head==:ref && expr.args[2]==index
