@@ -60,6 +60,17 @@ function P2G_sum_macro(grid_pair, particles_pair, mpvalues_pair, spspace, sum_eq
     vars = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
     foreach(ex->complete_sumeq_expr!(ex, pairs, vars), sum_equations)
 
+    init_gridprops = Any[]
+    for ex in sum_equations
+        if Meta.isexpr(ex, :(=))
+            lhs = ex.args[1]
+            @assert Meta.isexpr(lhs, :ref)
+            push!(init_gridprops, :(fillzero!($(lhs.args[1]))))
+        end
+    end
+
+    foreach(ex->ex.head=:(+=), sum_equations)
+
     body = quote
         $(vars[2]...)
         $mp = $mpvalues[$p]
@@ -89,7 +100,10 @@ function P2G_sum_macro(grid_pair, particles_pair, mpvalues_pair, spspace, sum_eq
         end
     end
 
-    body
+    quote
+        $(init_gridprops...)
+        $body
+    end
 end
 
 function P2G_nosum_macro(grid_pair, nosum_equations::Vector)
@@ -189,9 +203,11 @@ macro G2P(grid_pair, particles_pair, mpvalues_pair, equations)
         lhs = ex.args[1]
         name_p = Symbol(lhs.args[1], :_p)
         push!(particles_vars_declare, :($name_p = zero(eltype($(lhs.args[1])))))
-        push!(particles_vars_store, :($lhs = $name_p))
+        push!(particles_vars_store, Expr(ex.head, ex.args[1], name_p))
         ex.args[1] = name_p
     end
+
+    foreach(ex->ex.head=:(+=), sum_equations)
 
     foreach(ex->complete_parent_from_index!(ex, [particles=>p]), nosum_equations)
 
@@ -222,7 +238,7 @@ function unpair(expr::Expr)
 end
 
 function issumexpr(expr::Expr, index::Symbol)
-    @assert expr.head==:(=) && isrefexpr(expr.args[1], index)
+    @assert (expr.head==:(=) || expr.head==:(+=) || expr.head==:(-=)) && isrefexpr(expr.args[1], index)
     _issumexpr(expr.args[2])
 end
 
@@ -242,7 +258,6 @@ isrefexpr(x, index) = false
 function complete_sumeq_expr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector)
     # must check `iseqexpr` in advance
     expr.args[2] = remove_∑(expr.args[2])
-    expr.head = :(+=) # change `=` to `+=`
     complete_parent_from_index!(expr.args[1], pairs)
     complete_sumeq_rhs_expr!(Meta.quot(expr.args[2]), pairs, vars) # rhs
 end
