@@ -44,4 +44,21 @@
     @test grid.v isa Lattice{3,Float32}
     @test all(iszero, (grid.m)::Array{Float32,3})
     @test all(iszero, (grid.x)::Array{Vec{3,Float32},3})
+
+    # broadcast for SpArray
+    grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, Δx, xlims, ylims)
+    blkspy = rand(Bool, blocksize(grid))
+    update_block_sparsity!(grid, blkspy)
+    @test all(i->isactive(grid,i), filter(I->blkspy[Sequoia.blocklocal(Tuple(I)...)[1]...]===true, eachindex(grid)))
+    grid.m .= rand(size(grid))
+    grid.v .= grid.x .* rand(size(grid))
+    array_x = Array(grid.x)
+    array_m = Array(grid.m)
+    array_v = Array(grid.v)
+    # broadcast `SpArray`s having identical `SpIndices`
+    @. grid.v = grid.v - grid.v / grid.m
+    @test grid.v == (@. array_v = array_v - array_v / array_m * !iszero(array_m))
+    # broadcast `SpArray`s and `AbstractArray`
+    @. grid.v = grid.v - grid.x / grid.m
+    @test grid.v == (@. array_v = array_v - array_x / array_m * !iszero(array_m))
 end

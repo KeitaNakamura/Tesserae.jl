@@ -50,5 +50,4 @@ end
     @test all(i->(a=rand(); A[i]=a; A[i]==a), filter(i->isactive(A,i), eachindex(A)))
 
     # breadcast is tested on grid part
-
 end
