@@ -1,5 +1,3 @@
-const BLOCKFACTOR = unsigned(Preferences.@load_preference("block_factor", 3)) # 2^n
-
 struct SpSpace{dim, L <: Lattice{dim}, ElType} <: AbstractArray{ElType, dim}
     lattice::L
     particleindices::Vector{Int}

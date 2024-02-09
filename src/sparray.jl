@@ -1,3 +1,5 @@
+const BLOCKFACTOR = unsigned(Preferences.@load_preference("block_factor", 3)) # 2^n
+
 struct SpIndex{I}
     index::I
     spindex::Int
