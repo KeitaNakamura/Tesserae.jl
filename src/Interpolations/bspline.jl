@@ -6,7 +6,7 @@ end
     BSpline{1}()
     LinearBSpline()
 
-Linear B-spline kernel (also known as 'tent' function).
+Linear B-spline kernel.
 """
 const LinearBSpline = BSpline{1}
 
