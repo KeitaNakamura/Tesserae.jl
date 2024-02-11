@@ -63,7 +63,7 @@ end
 end
 
 """
-    Sequoia.isinside(x::Vec, lattice::Lattice)
+    isinside(x::Vec, lattice::Lattice)
 
 Check if `x` is inside the `lattice`.
 This returns `true` if `all(lattice[1] .≤ x .< lattice[end])`.

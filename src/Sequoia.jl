@@ -38,6 +38,7 @@ export
     update_block_sparsity!,
 # lattice
     Lattice,
+    isinside,
 # Grid
     Grid,
     SpGrid,
