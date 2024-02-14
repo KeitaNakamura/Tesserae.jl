@@ -21,15 +21,23 @@ Particle-to-grid transfer macro.
 end
 ```
 """
-macro P2G(grid_pair, particles_pair, mpvalues_pair, equations)
-    P2G_macro(grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+macro P2G(exprs...)
+    esc(:(@P2G(false, $(exprs...))))
 end
 
-macro P2G(grid_pair, particles_pair, mpvalues_pair, spspace, equations)
-    P2G_macro(grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+macro P2G(expr)
+    @assert Meta.isexpr(expr, :macrocall) && expr.args[1] == Symbol("@threaded")
+    esc(:(@P2G(true, $(expr.args[3:end]...))))
 end
 
-function P2G_macro(grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+macro P2G(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, equations)
+    P2G_macro(threaded, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+end
+macro P2G(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+    P2G_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+end
+
+function P2G_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
     _, i = unpair(grid_pair)
 
     @assert equations.head == :block
@@ -39,7 +47,7 @@ function P2G_macro(grid_pair, particles_pair, mpvalues_pair, spspace, equations)
     sum_equations = equations.args[sumornot]
     nosum_equations = equations.args[.!sumornot]
 
-    body1 = P2G_sum_macro(grid_pair, particles_pair, mpvalues_pair, spspace, sum_equations)
+    body1 = P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspace, sum_equations)
     body2 = P2G_nosum_macro(grid_pair, nosum_equations)
 
     quote
@@ -48,7 +56,7 @@ function P2G_macro(grid_pair, particles_pair, mpvalues_pair, spspace, equations)
     end |> esc
 end
 
-function P2G_sum_macro(grid_pair, particles_pair, mpvalues_pair, spspace, sum_equations::Vector)
+function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspace, sum_equations::Vector)
     isempty(sum_equations) && return Expr(:block)
 
     grid, i = unpair(grid_pair)
@@ -84,16 +92,31 @@ function P2G_sum_macro(grid_pair, particles_pair, mpvalues_pair, spspace, sum_eq
 
     if isnothing(spspace)
         body = quote
+            if $threaded
+                @warn "@P2G: `SpSpace` must be given for threaded computation" maxlog=1
+            end
             for $p in eachindex($particles, $mpvalues)
                 $body
             end
         end
     else
-        body = quote
-            for blocks in Sequoia.threadsafe_blocks($spspace)
-                Sequoia.@threaded :dynamic for blk in blocks
-                    for $p in $spspace[blk]
-                        $body
+        if threaded
+            body = quote
+                for blocks in Sequoia.threadsafe_blocks($spspace)
+                    @threaded :dynamic for blk in blocks
+                        for $p in $spspace[blk]
+                            $body
+                        end
+                    end
+                end
+            end
+        else
+            body = quote
+                for blocks in Sequoia.threadsafe_blocks($spspace)
+                    for blk in blocks
+                        for $p in $spspace[blk]
+                            $body
+                        end
                     end
                 end
             end
@@ -180,7 +203,16 @@ Grid-to-particle transfer macro.
 end
 ```
 """
-macro G2P(grid_pair, particles_pair, mpvalues_pair, equations)
+macro G2P(exprs...)
+    G2P_macro(false, exprs...)
+end
+
+macro G2P(expr)
+    @assert Meta.isexpr(expr, :macrocall) && expr.args[1] == Symbol("@threaded")
+    G2P_macro(true, expr.args[3:end]...)
+end
+
+function G2P_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, equations)
     grid, i = unpair(grid_pair)
     particles, p = unpair(particles_pair)
     mpvalues, ip = unpair(mpvalues_pair)
@@ -225,11 +257,21 @@ macro G2P(grid_pair, particles_pair, mpvalues_pair, equations)
         $(nosum_equations...)
     end
 
-    quote
-        Sequoia.@threaded :dynamic for $p in eachindex($particles, $mpvalues)
-            $body
+    if threaded
+        body = quote
+            @threaded :dynamic for $p in eachindex($particles, $mpvalues)
+                $body
+            end
         end
-    end |> esc
+    else
+        body = quote
+            for $p in eachindex($particles, $mpvalues)
+                $body
+            end
+        end
+    end
+
+    esc(body)
 end
 
 function unpair(expr::Expr)
