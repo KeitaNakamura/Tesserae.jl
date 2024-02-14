@@ -98,13 +98,15 @@ end
 # threaded macro #
 ##################
 
+const THREADED = Preferences.@load_preference("threaded_macro", true)
+
 macro threaded(schedule::QuoteNode, expr)
     @assert Meta.isexpr(expr, :for)
     quote
-        if Threads.nthreads() == 1
-            $expr
-        else
+        if Threads.nthreads() > 1 && $THREADED
             Threads.@threads $schedule $expr
+        else
+            $expr
         end
     end |> esc
 end
