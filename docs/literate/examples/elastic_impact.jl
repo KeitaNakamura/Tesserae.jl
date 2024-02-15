@@ -1,7 +1,11 @@
 # # Elastic impact between two rings
 #
+# ```@raw html
+# <video autoplay loop width="500" src="https://github.com/KeitaNakamura/Sequoia.jl/assets/16015926/adeb872b-036f-4ba8-8915-0b9c6cf331fc"/></video>
+# ```
+#
 # In this example, the following transfer schemes are demonstrated:
-# * PIC-FLIP mixed transfer[^1]
+# * PIC--FLIP mixed transfer[^1]
 # * Affine PIC (APIC) transfer[^2]
 # * Taylor PIC (TPIC) transfer[^3]
 #
@@ -96,9 +100,6 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
         MPValues(Vec{2, Float64}, QuadraticBSpline())
     end
 
-    ## setup SpSpace for threaded @P2G
-    spspace = SpSpace(grid.x)
-
     ## material model (neo-Hookean)
     function caucy_stress(F)
         J = det(F)
@@ -113,7 +114,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
 
     t = 0.0
     step = 0
-    fps = 30e3
+    fps = 12e3
     savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
     Sequoia.@showprogress while t < t_stop
@@ -125,27 +126,26 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
             vc + norm(pt.v)
         end
 
-        ## update MPValues and SpSpace
-        @threaded for p in eachindex(particles, mpvalues)
+        ## update MPValues
+        for p in eachindex(particles, mpvalues)
             update!(mpvalues[p], LazyRow(particles, p), grid.x)
         end
-        update!(spspace, particles.x)
 
         if transfer isa FLIP
-            @P2G @threaded grid=>i particles=>p mpvalues=>ip spspace begin
+            @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ N[ip] * m[p]
                 mv[i] = @∑ N[ip] * m[p] * v[p]
                 f[i]  = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
             end
         elseif transfer isa APIC
             local Dₚ⁻¹ = inv(1/4 * Δx^2 * I)
-            @P2G @threaded grid=>i particles=>p mpvalues=>ip spspace begin
+            @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ N[ip] * m[p]
                 mv[i] = @∑ N[ip] * m[p] * (v[p] + B[p] ⋅ Dₚ⁻¹ ⋅ (x[i] - x[p]))
                 f[i]  = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
             end
         elseif transfer isa TPIC
-            @P2G @threaded grid=>i particles=>p mpvalues=>ip spspace begin
+            @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ N[ip] * m[p]
                 mv[i] = @∑ N[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
                 f[i]  = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
@@ -158,21 +158,21 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
 
         if transfer isa FLIP
             local α = transfer.α
-            @G2P @threaded grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p]  = @∑ ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i]))) * N[ip]
                 ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
                 x[p] += @∑ Δt * v[i] * N[ip]
 
             end
         elseif transfer isa APIC
-            @G2P @threaded grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p]  = @∑ v[i] * N[ip]
                 ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
                 B[p]  = @∑ v[i] ⊗ (x[i]-x[p]) * N[ip]
                 x[p] += Δt * v[p]
             end
         elseif transfer isa TPIC
-            @G2P @threaded grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p]  = @∑ v[i] * N[ip]
                 ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
                 x[p] += Δt * v[p]
@@ -180,7 +180,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
         end
 
         ## update other particle properties
-        @threaded for pt in LazyRows(particles)
+        for pt in LazyRows(particles)
             ∇u = Δt * pt.∇v
             F = (I + ∇u) ⋅ pt.F
             σ = caucy_stress(F)
