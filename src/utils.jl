@@ -123,3 +123,40 @@ end
 @inline SIMD.Vec(x::Vec) = SVec(Tuple(x))
 @inline SIMD.Vec{dim,T}(x::Vec{dim,T}) where {dim,T<:SIMDTypes} = SVec(Tuple(x))
 @inline SIMD.Vec{dim,T}(x::Vec{dim,U}) where {dim,T<:SIMDTypes,U<:SIMDTypes} = SVec(convert(Vec{dim,T}, x))
+
+"""
+```
+@showprogress while t < t_stop
+    # computation...
+end
+```
+
+displays progress of `while` loop.
+"""
+macro showprogress(expr)
+    @assert Meta.isexpr(expr, :while)
+    cnd, blk = expr.args[1], expr.args[2]
+    @assert Meta.isexpr(cnd, :call) && cnd.args[1] == :<
+    thresh = 10000
+    t, t_stop = esc(cnd.args[2]), esc(cnd.args[3])
+    map!(esc, cnd.args, cnd.args)
+    map!(esc, blk.args, blk.args)
+    inner = quote
+        count += 1
+        t_current = time()
+        elapsed = t_current - prog.tinit
+        speed = t_current - prog.tlast
+        ProgressMeter.update!(prog,
+                              min(floor(Int, ($t/$t_stop)*$thresh), $thresh);
+                              showvalues = [(:Elapsed, ProgressMeter.durationstring(elapsed)),
+                                            (:Iterations, commas(count)),
+                                            (:Speed, lstrip(ProgressMeter.speedstring(speed)))])
+    end
+    push!(blk.args, inner)
+    quote
+        prog = ProgressMeter.Progress($thresh)
+        count = 0
+        $expr
+        ProgressMeter.finish!(prog)
+    end
+end
