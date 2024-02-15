@@ -7,6 +7,9 @@ ENV["GKSwstype"] = "100"
 # Setup for doctests in docstrings
 DocMeta.setdocmeta!(Sequoia, :DocTestSetup, :(using Sequoia); recursive=true)
 
+# generate documentation by Literate.jl
+include("literate.jl")
+
 makedocs(;
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
@@ -16,6 +19,9 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "getting_started.md",
+        "Examples" => [
+            "examples/elastic_impact.md"
+        ],
     ],
     doctest = true, # :fix
     warnonly = [:missing_docs],
