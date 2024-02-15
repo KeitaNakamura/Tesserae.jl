@@ -7,3 +7,5 @@ include("sparray.jl")
 include("spspace.jl")
 
 include("grid.jl")
+
+include("examples.jl")
