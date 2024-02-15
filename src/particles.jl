@@ -32,7 +32,7 @@ function generate_particles(::Type{ParticleProperty}, points::AbstractVector{<: 
 end
 
 """
-    generate_particles([::Type{ParticleProperty},] lattice; spacing=0.5, alg=PoissonDiskSampling())
+    generate_particles([ParticleProperty], lattice; spacing=0.5, alg=PoissonDiskSampling())
 
 Generate particles with particle `spacing` by sampling `alg`orithm.
 """
