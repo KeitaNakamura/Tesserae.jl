@@ -21,6 +21,7 @@ makedocs(;
         "getting_started.md",
         "Examples" => [
             "examples/elastic_impact.md"
+            "examples/tlmpm_vortex.md"
         ],
     ],
     doctest = true, # :fix
