@@ -1,4 +1,4 @@
-# # Elastic impact between two rings
+# # Transfer schemes
 #
 # ```@raw html
 # <video autoplay muted loop playsinline controls width="500" src="https://github.com/KeitaNakamura/Sequoia.jl/assets/16015926/adeb872b-036f-4ba8-8915-0b9c6cf331fc"/></video>
@@ -9,7 +9,7 @@
 # * Affine PIC (APIC) transfer[^2]
 # * Taylor PIC (TPIC) transfer[^3]
 #
-# The problem used here is the same as previous studies[^4][^5].
+# The problem evolves the elastic impact between two rings, which is consistent with previous studies[^4][^5].
 #
 # [^1]: [Zhu, Y. and Bridson, R., 2005. Animating sand as a fluid. ACM Transactions on Graphics (TOG), 24(3), pp.965-972.](https://doi.org/10.1145/1073204.1073298)
 # [^2]: [Jiang, C., Schroeder, C., Selle, A., Teran, J. and Stomakhin, A., 2015. The affine particle-in-cell method. ACM Transactions on Graphics (TOG), 34(4), pp.1-10.](https://doi.org/10.1145/2766996)
