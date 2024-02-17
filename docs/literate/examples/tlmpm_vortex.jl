@@ -1,10 +1,14 @@
 # # Total Lagrangian MPM
 #
-# This example demonstrates the total lagrangian material point method[^1],
-# In this implementation, generalized vortex problem[^1] is solved by using linear kernel.
+# ```@raw html
+# <video autoplay muted loop playsinline controls width="300" src="https://github.com/KeitaNakamura/Sequoia.jl/assets/16015926/353e8455-add2-4869-a688-8889e52fa607"/></video>
+# ```
+#
+# This example demonstrates the total lagrangian material point method[^1].
+# The implementation solves generalized vortex problem[^1] using a linear kernel.
 #
 # !!! note
-#     Currently, Bernstein function used in the paper[^1] is not implemented.
+#     Currently, the Bernstein function used in the paper[^1] has not been implemented.
 #
 # [^1]: [de Vaucorbeil, A., Nguyen, V.P. and Hutchinson, C.R., 2020. A Total-Lagrangian Material Point Method for solid mechanics problems involving large deformations. Computer Methods in Applied Mechanics and Engineering, 360, p.112783.](https://doi.org/10.1016/j.cma.2019.112783)
 
