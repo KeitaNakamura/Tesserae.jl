@@ -1,7 +1,7 @@
 # # Total Lagrangian MPM
 #
 # ```@raw html
-# <video autoplay muted loop playsinline controls width="300" src="https://github.com/KeitaNakamura/Sequoia.jl/assets/16015926/353e8455-add2-4869-a688-8889e52fa607"/></video>
+# <video autoplay muted loop playsinline controls width="300" src="https://github.com/KeitaNakamura/Sequoia.jl/assets/16015926/81d2c7a1-d0fc-4122-bd3c-0bc8f73ca3fa"/></video>
 # ```
 #
 # This example demonstrates the total lagrangian material point method[^1].
