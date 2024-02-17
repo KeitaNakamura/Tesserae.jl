@@ -124,6 +124,8 @@ end
 @inline SIMD.Vec{dim,T}(x::Vec{dim,T}) where {dim,T<:SIMDTypes} = SVec(Tuple(x))
 @inline SIMD.Vec{dim,T}(x::Vec{dim,U}) where {dim,T<:SIMDTypes,U<:SIMDTypes} = SVec(convert(Vec{dim,T}, x))
 
+const SHOWPROGRESS = Preferences.@load_preference("showprogress_macro", true)
+
 """
 ```
 @showprogress while t < t_stop
@@ -134,6 +136,7 @@ end
 displays progress of `while` loop.
 """
 macro showprogress(expr)
+    SHOWPROGRESS || return esc(expr)
     @assert Meta.isexpr(expr, :while)
     cnd, blk = expr.args[1], expr.args[2]
     @assert Meta.isexpr(cnd, :call) && cnd.args[1] == :<
