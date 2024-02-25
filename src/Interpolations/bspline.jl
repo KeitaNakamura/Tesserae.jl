@@ -150,33 +150,33 @@ end
 node_position(lattice::Lattice, index::CartesianIndex) = map(node_position, get_axes(lattice), Tuple(index))
 
 
-fract(x) = x - floor(x)
+@inline fract(x) = x - floor(x)
 # Fast calculations for values and gradients
 # `x` must be normalized by `dx`
-@inline function values_gradients(::BSpline{1}, x::SIMDTypes)
+@inline function values_gradients(::BSpline{1}, x::Real)
     T = typeof(x)
-    V = SVec{2, T}
+    V = NTuple{2, T}
     ξ = fract(x)
     V((1-ξ, ξ)), V((-1, 1))
 end
-@inline function values_gradients(::BSpline{2}, x::SIMDTypes)
+@inline function values_gradients(::BSpline{2}, x::Real)
     T = typeof(x)
-    V = SVec{3, T}
+    V = NTuple{3, T}
     x′ = fract(x - T(0.5))
-    ξ = x′ - V((-0.5,0.5,1.5))
-    vals = V((0.5,-1.0,0.5))*ξ^2 + V((-1.5,0.0,1.5))*ξ + V((1.125,0.75,1.125))
-    grads = V((1.0,-2.0,1.0))*ξ + V((-1.5,0.0,1.5))
+    ξ = @. x′ - $V((-0.5,0.5,1.5))
+    vals = @. $V((0.5,-1.0,0.5))*ξ^2 + $V((-1.5,0.0,1.5))*ξ + $V((1.125,0.75,1.125))
+    grads = @. $V((1.0,-2.0,1.0))*ξ + $V((-1.5,0.0,1.5))
     vals, grads
 end
-@inline function values_gradients(::BSpline{3}, x::SIMDTypes)
+@inline function values_gradients(::BSpline{3}, x::Real)
     T = typeof(x)
-    V = SVec{4, T}
+    V = NTuple{4, T}
     x′ = fract(x)
-    ξ = x′ - V((-1,0,1,2))
-    ξ² = ξ * ξ
-    ξ³ = ξ² * ξ
-    vals = V((-1/6,0.5,-0.5,1/6))*ξ³ + V((1,-1,-1,1))*ξ² + V((-2,0,0,2))*ξ + V((4/3,2/3,2/3,4/3))
-    grads = V((-0.5,1.5,-1.5,0.5))*ξ² + V((2,-2,-2,2))*ξ + V((-2,0,0,2))
+    ξ = @. x′ - $V((-1,0,1,2))
+    ξ² = @. ξ * ξ
+    ξ³ = @. ξ² * ξ
+    vals = @. $V((-1/6,0.5,-0.5,1/6))*ξ³ + $V((1,-1,-1,1))*ξ² + $V((-2,0,0,2))*ξ + $V((4/3,2/3,2/3,4/3))
+    grads = @. $V((-0.5,1.5,-1.5,0.5))*ξ² + $V((2,-2,-2,2))*ξ + $V((-2,0,0,2))
     vals, grads
 end
 
@@ -189,7 +189,7 @@ end
         x = (xₚ - first(lattice)) * dx⁻¹
         @nexprs $dim d -> (V_d, ∇V_d) = values_gradients(bspline, x[d])
         V_tuple = @ntuple $dim d -> V_d
-        ∇V_tuple = @ntuple $dim d -> ∇V_d*dx⁻¹
+        ∇V_tuple = @ntuple $dim d -> ∇V_d.*dx⁻¹
         _values_gradients!(N, reinterpret(reshape, eltype(eltype(∇N)), ∇N), V_tuple, ∇V_tuple)
     end
 end
