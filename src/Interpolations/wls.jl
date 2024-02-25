@@ -61,7 +61,7 @@ function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, lattice::La
     F = get_kernel(interpolation(mp))
     xₚ = getx(pt)
     D = zero(Vec{dim, T}) # diagonal entries of M
-    values_gradients!(mp.N, mp.∇N, F, xₚ, lattice)
+    copyto!(mp.N, values(F, xₚ, lattice))
 
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]

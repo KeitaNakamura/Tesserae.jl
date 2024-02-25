@@ -35,7 +35,7 @@ end
     if isnearbounds
         update_property_nearbounds!(mp, pt, lattice, filter)
     else
-        values_gradients!(mp.N, mp.∇N, get_kernel(interpolation(mp)), pt, lattice)
+        map(copyto!, (mp.N, mp.∇N), values(get_kernel(interpolation(mp)), pt, lattice, :withgradient))
     end
 end
 

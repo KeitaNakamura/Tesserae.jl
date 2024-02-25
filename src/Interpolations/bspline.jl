@@ -153,22 +153,30 @@ node_position(lattice::Lattice, index::CartesianIndex) = map(node_position, get_
 @inline fract(x) = x - floor(x)
 # Fast calculations for values and gradients
 # `x` must be normalized by `dx`
-@inline function values_gradients(::BSpline{1}, x::Real)
+@inline function Base.values(::BSpline{1}, x::Real, g=nothing)
     T = typeof(x)
     V = NTuple{2, T}
     ξ = fract(x)
-    V((1-ξ, ξ)), V((-1, 1))
+    vals = V((1-ξ, ξ))
+    if g isa Symbol
+        vals, V((-1, 1))
+    else
+        vals
+    end
 end
-@inline function values_gradients(::BSpline{2}, x::Real)
+@inline function Base.values(::BSpline{2}, x::Real, g=nothing)
     T = typeof(x)
     V = NTuple{3, T}
     x′ = fract(x - T(0.5))
     ξ = @. x′ - $V((-0.5,0.5,1.5))
     vals = @. $V((0.5,-1.0,0.5))*ξ^2 + $V((-1.5,0.0,1.5))*ξ + $V((1.125,0.75,1.125))
-    grads = @. $V((1.0,-2.0,1.0))*ξ + $V((-1.5,0.0,1.5))
-    vals, grads
+    if g isa Symbol
+        vals, @. $V((1.0,-2.0,1.0))*ξ + $V((-1.5,0.0,1.5))
+    else
+        vals
+    end
 end
-@inline function values_gradients(::BSpline{3}, x::Real)
+@inline function Base.values(::BSpline{3}, x::Real, g=nothing)
     T = typeof(x)
     V = NTuple{4, T}
     x′ = fract(x)
@@ -176,55 +184,37 @@ end
     ξ² = @. ξ * ξ
     ξ³ = @. ξ² * ξ
     vals = @. $V((-1/6,0.5,-0.5,1/6))*ξ³ + $V((1,-1,-1,1))*ξ² + $V((-2,0,0,2))*ξ + $V((4/3,2/3,2/3,4/3))
-    grads = @. $V((-0.5,1.5,-1.5,0.5))*ξ² + $V((2,-2,-2,2))*ξ + $V((-2,0,0,2))
-    vals, grads
+    if g isa Symbol
+        vals, @. $V((-0.5,1.5,-1.5,0.5))*ξ² + $V((2,-2,-2,2))*ξ + $V((-2,0,0,2))
+    else
+        vals
+    end
 end
 
-@inline values_gradients!(N, ∇N, bspline::BSpline, pt, lattice::Lattice) = values_gradients!(N, ∇N, bspline, getx(pt), lattice)
-
-@generated function values_gradients!(N, ∇N, bspline::BSpline, xₚ::Vec{dim}, lattice::Lattice{dim}) where {dim}
+@generated function Base.values(bspline::BSpline, x::Vec{dim}, ::Symbol) where {dim}
     quote
         @_inline_meta
-        dx⁻¹ = spacing_inv(lattice)
-        x = (xₚ - first(lattice)) * dx⁻¹
-        @nexprs $dim d -> (V_d, ∇V_d) = values_gradients(bspline, x[d])
-        V_tuple = @ntuple $dim d -> V_d
-        ∇V_tuple = @ntuple $dim d -> ∇V_d.*dx⁻¹
-        _values_gradients!(N, reinterpret(reshape, eltype(eltype(∇N)), ∇N), V_tuple, ∇V_tuple)
+        @nexprs $dim d -> (x_d, ∇x_d) = values(bspline, x[d], :withgradient)
+        vals = @ntuple $dim d -> x_d
+        valsgrads = @ntuple $dim d -> (@ntuple $dim j -> j==d ? ∇x_j : x_j)
+        otimes_tuple(vals), map(Vec, map(otimes_tuple, valsgrads)...)
     end
 end
-
-# 1D
-@inline function _values_gradients!(N, ∇N, (Vx,)::NTuple{1}, (∇Vx,)::NTuple{1})
-    N .= Tuple(Vx)
-    ∇N .= Tuple(∇Vx)
+@inline function Base.values(bspline::BSpline, x::Vec)
+    otimes_tuple(values.((bspline,), Tuple(x)))
 end
+@inline otimes_tuple(x::Tuple) = SArray(otimes(map(Vec, x)...))
 
-# 2D
-@inline function _values_gradients!(N, ∇N, (Vx, Vy)::NTuple{2}, (∇Vx, ∇Vy)::NTuple{2})
-    n = length(Vx)
-    @inbounds for j in 1:n
-        @simd for i in 1:n
-            N[i,j] = Vx[i] * Vy[j]
-            ∇N[1,i,j] = ∇Vx[i] *  Vy[j]
-            ∇N[2,i,j] =  Vx[i] * ∇Vy[j]
-        end
-    end
+@inline function Base.values(bspline::BSpline, x::Vec, lattice::Lattice)
+    dx⁻¹ = spacing_inv(lattice)
+    values(bspline, (x - first(lattice)) * dx⁻¹)
 end
-
-# 3D
-@inline function _values_gradients!(N, ∇N, (Vx, Vy, Vz)::NTuple{3}, (∇Vx, ∇Vy, ∇Vz)::NTuple{3})
-    n = length(Vx)
-    @inbounds for k in 1:n
-        for j in 1:n
-            @simd for i in 1:n
-                N[i,j,k] = Vx[i] * Vy[j] * Vz[k]
-                ∇N[1,i,j,k] = ∇Vx[i] *  Vy[j] *  Vz[k]
-                ∇N[2,i,j,k] =  Vx[i] * ∇Vy[j] *  Vz[k]
-                ∇N[3,i,j,k] =  Vx[i] *  Vy[j] * ∇Vz[k]
-            end
-        end
-    end
+@inline function Base.values(bspline::BSpline, pt, lattice::Lattice, ::Symbol)
+    x = getx(pt)
+    xmin = first(lattice)
+    dx⁻¹ = spacing_inv(lattice)
+    N, ∇N = values(bspline, (x-xmin)*dx⁻¹, :withgradient)
+    (N, ∇N*dx⁻¹)
 end
 
 function update_property!(mp::MPValues{<: BSpline}, pt, lattice::Lattice)
@@ -237,6 +227,6 @@ function update_property!(mp::MPValues{<: BSpline}, pt, lattice::Lattice)
             mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),x,lattice,i,:steffen), getx(pt), :all)
         end
     else
-        values_gradients!(mp.N, mp.∇N, interpolation(mp), pt, lattice)
+        map(copyto!, (mp.N, mp.∇N), values(interpolation(mp), pt, lattice, :withgradient))
     end
 end
