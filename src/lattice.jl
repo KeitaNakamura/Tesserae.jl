@@ -120,7 +120,7 @@ CartesianIndices((1:5,))
 end
 
 """
-    Sequoia.whichcell(x::Vec, lattice::Lattice)
+    whichcell(x::Vec, lattice::Lattice)
 
 Return cell index where `x` locates.
 
@@ -135,7 +135,7 @@ julia> lattice = Lattice(1, (0,5), (0,5))
  [4.0, 0.0]  [4.0, 1.0]  [4.0, 2.0]  [4.0, 3.0]  [4.0, 4.0]  [4.0, 5.0]
  [5.0, 0.0]  [5.0, 1.0]  [5.0, 2.0]  [5.0, 3.0]  [5.0, 4.0]  [5.0, 5.0]
 
-julia> Sequoia.whichcell(Vec(1.5, 1.5), lattice)
+julia> whichcell(Vec(1.5, 1.5), lattice)
 CartesianIndex(2, 2)
 ```
 """

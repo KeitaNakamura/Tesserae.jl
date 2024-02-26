@@ -35,6 +35,7 @@ export
 # lattice
     Lattice,
     isinside,
+    whichcell,
 # Grid
     Grid,
     SpGrid,
