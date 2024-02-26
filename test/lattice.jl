@@ -29,8 +29,8 @@
     @test (@inferred neighbornodes(Vec(0.3,0.1), 2, lattice)) === CartesianIndices((1:4,1:3))
     @test (@inferred neighbornodes(Vec(0.1,0.3), 2, lattice)) === CartesianIndices((1:3,1:4))
     ## exactly on the node
-    @test (@inferred neighbornodes(Vec(0.2,0.4), 1, lattice)) === CartesianIndices((1:2,2:3))
-    @test (@inferred neighbornodes(Vec(0.2,0.4), 2, lattice)) === CartesianIndices((1:3,1:4))
+    @test (@inferred neighbornodes(Vec(0.2,0.4), 1, lattice)) === CartesianIndices((2:3,3:4))
+    @test (@inferred neighbornodes(Vec(0.2,0.4), 2, lattice)) === CartesianIndices((1:4,2:5))
     @test (@inferred neighbornodes(Vec(3.0,4.0), 2, lattice)) === CartesianIndices((0:0,0:0))
     ## outside
     @test (@inferred neighbornodes(Vec(-0.1,3.05), 3, lattice)) === CartesianIndices((0:0,0:0))

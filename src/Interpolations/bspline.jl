@@ -36,28 +36,24 @@ gridspan(::BSpline{1}) = 2
 gridspan(::BSpline{2}) = 3
 gridspan(::BSpline{3}) = 4
 
-@inline function neighbornodes(bs::BSpline, pt, lattice::Lattice{dim, T}) where {dim, T}
+@inline function neighbornodes(bspline::BSpline, pt, lattice::Lattice{dim}) where {dim}
     x = getx(pt)
-    isinside(x, lattice) || return CartesianIndices(nfill(1:0, Val(dim)))
-    _neighbornodes(bs, SVec{dim,T}(x), SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)))
-end
-@inline function _neighbornodes(::BSpline{1}, x::SVec{dim, T}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
-    _bspline_neighborindices(x, 1, T(0), dims, dx⁻¹, xmin)
-end
-@inline function _neighbornodes(::BSpline{2}, x::SVec{dim, T}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
-    _bspline_neighborindices(x, 2, T(0.5), dims, dx⁻¹, xmin)
-end
-@inline function _neighbornodes(::BSpline{3}, x::SVec{dim, T}, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
-    _bspline_neighborindices(x, 3, T(1), dims, dx⁻¹, xmin)
-end
-@inline function _bspline_neighborindices(x::SVec{dim, T}, h::Int, offset::T, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
-    ξ = (x - xmin) * dx⁻¹
-    start = convert(SVec{dim, Int}, floor(ξ - offset)) + 1
-    stop = start + h
-    imin = Tuple(max(start, 1))
-    imax = Tuple(min(stop, dims))
+    xmin = lattice[1]
+    dx⁻¹ = spacing_inv(lattice)
+    dims = size(lattice)
+    ξ = Tuple((x - xmin) * dx⁻¹)
+    isinside(ξ, dims) || return CartesianIndices(nfill(0:0, Val(dim)))
+    offset = _neighbornodes_offset(bspline)
+    h = gridspan(bspline) - 1
+    start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
+    stop = @. start + h
+    imin = Tuple(@. max(start, 1))
+    imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
+@inline _neighbornodes_offset(::BSpline{1}) = 0.0
+@inline _neighbornodes_offset(::BSpline{2}) = 0.5
+@inline _neighbornodes_offset(::BSpline{3}) = 1.0
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)

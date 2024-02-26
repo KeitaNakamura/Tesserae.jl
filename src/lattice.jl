@@ -68,12 +68,17 @@ end
 Check if `x` is inside the `lattice`.
 This returns `true` if `all(lattice[1] .≤ x .< lattice[end])`.
 """
-@inline function isinside(x::Vec, lattice::Lattice{dim, T}) where {dim, T}
-    axes = get_axes(lattice)
-    @inbounds _isinside(SVec{dim, T}(map(first, axes)), SVec{dim, T}(map(last, axes)), SVec{dim, T}(x))
+@inline function isinside(x::Vec{dim}, lattice::Lattice{dim}) where {dim}
+    xmin = lattice[1]
+    dx⁻¹ = spacing_inv(lattice)
+    ξ = Tuple((x - xmin) * dx⁻¹)
+    isinside(ξ, size(lattice))
 end
-@inline function _isinside(start::SVec{dim, T}, stop::SVec{dim, T}, x::SVec{dim, T}) where {dim, T}
-    all(start ≤ x) && all(x < stop)
+@generated function isinside(ξ::NTuple{dim}, dims::Dims{dim}) where {dim}
+    quote
+        @_inline_meta
+        @nall $dim d -> 0 ≤ ξ[d] < dims[d]-1
+    end
 end
 
 """
@@ -102,15 +107,15 @@ CartesianIndices((1:5,))
 ```
 """
 @inline function neighbornodes(x::Vec, h::Real, lattice::Lattice{dim, T}) where {dim, T}
-    isinside(x, lattice) || return CartesianIndices(nfill(0:0, Val(dim)))
-    _neighbornodes(SVec{dim,T}(x), convert(T, h), SVec{dim,Int}(size(lattice)), spacing_inv(lattice), SVec{dim,T}(first(lattice)))
-end
-@inline function _neighbornodes(x::SVec{dim, T}, h::T, dims::SVec{dim, Int}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
-    ξ = (x - xmin) * dx⁻¹
-    start = convert(SVec{dim, Int}, ceil(ξ - h)) + 1
-    stop  = convert(SVec{dim, Int}, ceil(ξ + h))
-    imin = Tuple(max(start, 1))
-    imax = Tuple(min(stop, dims))
+    xmin = lattice[1]
+    dx⁻¹ = spacing_inv(lattice)
+    dims = size(lattice)
+    ξ = Tuple((x - xmin) * dx⁻¹)
+    isinside(ξ, dims) || return CartesianIndices(nfill(0:0, Val(dim)))
+    start = @. unsafe_trunc(Int, floor(ξ - h)) + 2
+    stop  = @. unsafe_trunc(Int, floor(ξ + h)) + 1
+    imin = Tuple(@. max(start, 1))
+    imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
 
@@ -135,10 +140,9 @@ CartesianIndex(2, 2)
 ```
 """
 @inline function whichcell(x::Vec, lattice::Lattice{dim, T}) where {dim, T}
-    isinside(x, lattice) || return nothing
-    _whichcell(SVec{dim, T}(x), spacing_inv(lattice), SVec{dim, T}(first(lattice)))
-end
-@inline function _whichcell(x::SVec{dim, T}, dx⁻¹::T, xmin::SVec{dim, T}) where {dim, T}
-    ξ = (x - xmin) * dx⁻¹
-    CartesianIndex(Tuple(convert(SVec{dim, Int}, floor(ξ)) + 1))
+    xmin = lattice[1]
+    dx⁻¹ = spacing_inv(lattice)
+    ξ = Tuple((x - xmin) * dx⁻¹)
+    isinside(ξ, size(lattice)) || return nothing
+    CartesianIndex(Tuple(@. unsafe_trunc(Int, floor(ξ)) + 1))
 end

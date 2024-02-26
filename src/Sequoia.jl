@@ -12,11 +12,6 @@ export resizedim
 using StructArrays
 export LazyRow, LazyRows
 
-# SIMD
-import SIMD
-const SVec = SIMD.Vec
-const SIMDTypes = Union{SIMD.ScalarTypes, Bool}
-
 # sampling
 import PoissonDiskSampling: generate as poisson_disk_sampling
 import Random
