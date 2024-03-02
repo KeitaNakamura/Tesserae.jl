@@ -6,11 +6,15 @@ Available kernels include `BSpline`s and `uGIMP`.
 
 [^KC]: [Nakamura, K., Matsumura, S., & Mizutani, T. (2023). Taylor particle-in-cell transfer and kernel correction for material point method. *Computer Methods in Applied Mechanics and Engineering*, 403, 115720.](https://doi.org/10.1016/j.cma.2022.115720)
 """
-struct KernelCorrection{K <: Kernel} <: Interpolation
+struct KernelCorrection{K <: Kernel, P <: AbstractPolynomial} <: Interpolation
     kernel::K
+    poly::P
 end
 
+KernelCorrection(k::Kernel) = KernelCorrection(k, LinearPolynomial())
+
 get_kernel(kc::KernelCorrection) = kc.kernel
+get_polynomial(kc::KernelCorrection) = kc.poly
 gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
 @inline neighbornodes(kc::KernelCorrection, pt, lattice::Lattice) = neighbornodes(get_kernel(kc), pt, lattice)
 
@@ -39,32 +43,33 @@ end
     end
 end
 
-@inline function update_property_nearbounds!(mp::MPValues{<: KernelCorrection}, pt, lattice::Lattice, filter::AbstractArray{Bool})
+@inline function update_property_nearbounds!(mp::MPValues{<: KernelCorrection}, pt, lattice::Lattice{dim}, filter::AbstractArray{Bool}) where {dim}
     indices = neighbornodes(mp)
-    F = get_kernel(interpolation(mp))
+    kernel = get_kernel(interpolation(mp))
+    poly = get_polynomial(interpolation(mp))
     xₚ = getx(pt)
     VecType = promote_type(eltype(lattice), typeof(xₚ))
-    dim, T = length(VecType), eltype(VecType)
-    M = zero(Mat{dim+1, dim+1, T})
+    L, T = value_length(poly, xₚ), eltype(VecType)
+    M = zero(Mat{L, L, T})
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = lattice[i]
-        w = value(F, pt, lattice, i) * filter[i]
-        P = [1; xᵢ - xₚ]
+        w = value(kernel, pt, lattice, i) * filter[i]
+        P = value(poly, xᵢ - xₚ)
         M += w * P ⊗ P
         mp.N[ip] = w
     end
     M⁻¹ = inv(M)
-    C₁ = M⁻¹[1,1]
-    C₂ = @Tensor M⁻¹[2:end,1]
-    C₃ = @Tensor M⁻¹[2:end,2:end]
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = lattice[i]
         w = mp.N[ip]
-        mp.N[ip] = (C₁ + C₂ ⋅ (xᵢ - xₚ)) * w
-        mp.∇N[ip] = (C₂ + C₃ ⋅ (xᵢ - xₚ)) * w
+        P = value(poly, xᵢ - xₚ)
+        wq = w * (M⁻¹ ⋅ P)
+        # P₀, ∇P₀ = value(poly, zero(xₚ), :withgradient)
+        mp.N[ip] = wq[1] # wq ⋅ P₀
+        mp.∇N[ip] = @Tensor wq[2:1+dim] # wq ⋅ ∇P₀
     end
 end
 
-Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", get_kernel(kc), ")")
+Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", get_kernel(kc), ", ", get_polynomial(kc), ")")

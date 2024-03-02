@@ -82,6 +82,7 @@ include("particles.jl")
 include("Interpolations/mpvalues.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
+include("Interpolations/polynomials.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
 
