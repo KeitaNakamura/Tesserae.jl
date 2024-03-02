@@ -46,6 +46,12 @@ spacing_inv(x::Lattice) = x.dx_inv
 get_axes(x::Lattice) = get_axes(x.axisarray)
 get_axes(x::Lattice, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
 
+function Lattice(axes::Vararg{AbstractRange, dim}) where {dim}
+    @assert allequal(map(step, axes))
+    dx = step(first(axes))
+    Lattice(AxisArray(axes), dx, inv(dx))
+end
+
 function Lattice(::Type{T}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
     @assert all(map(issorted, minmax))
     axisarray = AxisArray(map(lims->Vector{T}(range(lims...; step=dx)), minmax))

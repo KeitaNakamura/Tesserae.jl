@@ -1,11 +1,17 @@
 @testset "Lattice" begin
     # constructor
+    ## default
     (@inferred Lattice(Float32, 1, (0,3), (1,4)))::Lattice{2, Float32}
     (@inferred Lattice(Float64, 1, (0,3), (1,4), (0,2)))::Lattice{3, Float64}
     lattice = (@inferred Lattice(1, (0,3), (1,4), (0,2)))::Lattice{3, Float64}
     @test lattice[1] === Vec(0.0,1.0,0.0)
     @test lattice[end] === Vec(3.0,4.0,2.0)
     @test lattice == map(Vec, (Iterators.product(range(0,3,step=1), range(1,4,step=1), range(0,2,step=1))))
+    ## from ranges
+    lattice2 = (@inferred Lattice(range(0.0,3,step=1), range(1.0,4,step=1), range(0.0,2,step=1)))::Lattice{3, Float64}
+    (@inferred Lattice(range(0.0f0,3,step=1), range(1.0f0,4,step=1), range(0.0f0,2,step=1)))::Lattice{3, Float32}
+    @test lattice == lattice2
+    @test_throws MethodError Lattice(range(0,3,step=1), range(1,4,step=1), range(0,2,step=1))
 
     # misc
     lattice = Lattice(0.2, (0,3), (0,4))
