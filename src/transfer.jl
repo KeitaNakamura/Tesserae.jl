@@ -279,8 +279,8 @@ function unpair(expr::Expr)
     expr.args[2], expr.args[3]
 end
 
-function issumexpr(expr::Expr, index::Symbol)
-    @assert (expr.head==:(=) || expr.head==:(+=) || expr.head==:(-=)) && isrefexpr(expr.args[1], index)
+function issumexpr(expr::Expr, inds::Symbol...)
+    @assert (expr.head==:(=) || expr.head==:(+=) || expr.head==:(-=)) && isrefexpr(expr.args[1], inds...)
     _issumexpr(expr.args[2])
 end
 
@@ -294,8 +294,8 @@ function _issumexpr(expr::Expr)
 end
 _issumexpr(x) = false
 
-isrefexpr(expr::Expr, index::Symbol) = expr.head==:ref && expr.args[2]==index
-isrefexpr(x, index) = false
+isrefexpr(expr::Expr, inds::Symbol...) = expr.head==:ref && all(expr.args[2:end] .== inds)
+isrefexpr(x, inds...) = false
 
 function complete_sumeq_expr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector)
     # must check `iseqexpr` in advance

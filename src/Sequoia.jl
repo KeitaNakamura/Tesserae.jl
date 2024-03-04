@@ -4,6 +4,8 @@ using Base: @_inline_meta, @_propagate_inbounds_meta
 using Base.Broadcast: Broadcasted, ArrayStyle, DefaultArrayStyle
 using Base.Cartesian: @ntuple, @nall, @nexprs
 
+using SparseArrays
+
 using Reexport
 @reexport using Tensorial
 
@@ -63,6 +65,12 @@ export
 # transfer
     @P2G,
     @G2P,
+# implicit
+    DofMap,
+    ndofs,
+    create_sparse_matrix,
+    getsubset,
+    @P2G_Matrix,
 # VTK
     openvtk,
     openvtm,
@@ -87,6 +95,7 @@ include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
 
 include("transfer.jl")
+include("implicit.jl")
 
 include("vtk.jl")
 
