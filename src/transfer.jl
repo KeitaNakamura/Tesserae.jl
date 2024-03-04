@@ -100,33 +100,39 @@ function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspa
             end
         end
     else
-        if threaded
-            body = quote
-                for blocks in Sequoia.threadsafe_blocks($spspace)
-                    @threaded :dynamic for blk in blocks
-                        for $p in $spspace[blk]
-                            $body
-                        end
-                    end
-                end
-            end
-        else
-            body = quote
-                for blocks in Sequoia.threadsafe_blocks($spspace)
-                    for blk in blocks
-                        for $p in $spspace[blk]
-                            $body
-                        end
-                    end
-                end
-            end
-        end
+        body = blockwise_P2G_expr(threaded, p, spspace, body)
     end
 
     quote
         $(init_gridprops...)
         $body
     end
+end
+
+function blockwise_P2G_expr(threaded, p, spspace, body)
+    @gensym blocks blk
+    if threaded
+        body = quote
+            for $blocks in Sequoia.threadsafe_blocks($spspace)
+                @threaded :dynamic for $blk in $blocks
+                    for $p in $spspace[$blk]
+                        $body
+                    end
+                end
+            end
+        end
+    else
+        body = quote
+            for $blocks in Sequoia.threadsafe_blocks($spspace)
+                for $blk in $blocks
+                    for $p in $spspace[$blk]
+                        $body
+                    end
+                end
+            end
+        end
+    end
+    body
 end
 
 function P2G_nosum_macro(grid_pair, nosum_equations::Vector)
