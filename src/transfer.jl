@@ -82,7 +82,7 @@ function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspa
     body = quote
         $(vars[2]...)
         $mp = $mpvalues[$p]
-        $gridindices = neighbornodes($mp, $grid)
+        $gridindices = surroundingnodes($mp, $grid)
         @inbounds for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(union(vars[1], vars[3])...)
@@ -253,7 +253,7 @@ function G2P_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, equ
         $(vars[2]...)
         $(particles_vars_declare...)
         $mp = $mpvalues[$p]
-        $gridindices = neighbornodes($mp, $grid)
+        $gridindices = surroundingnodes($mp, $grid)
         @inbounds for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(union(vars[1], vars[3])...)

@@ -36,14 +36,14 @@ gridspan(::BSpline{1}) = 2
 gridspan(::BSpline{2}) = 3
 gridspan(::BSpline{3}) = 4
 
-@inline function neighbornodes(bspline::BSpline, pt, lattice::Lattice{dim}) where {dim}
+@inline function surroundingnodes(bspline::BSpline, pt, lattice::Lattice{dim}) where {dim}
     x = getx(pt)
     xmin = lattice[1]
     dx⁻¹ = spacing_inv(lattice)
     dims = size(lattice)
     ξ = Tuple((x - xmin) * dx⁻¹)
     isinside(ξ, dims) || return CartesianIndices(nfill(0:0, Val(dim)))
-    offset = _neighbornodes_offset(bspline)
+    offset = _surroundingnodes_offset(bspline)
     h = gridspan(bspline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
     stop = @. start + h
@@ -51,9 +51,9 @@ gridspan(::BSpline{3}) = 4
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
-@inline _neighbornodes_offset(::BSpline{1}) = 0.0
-@inline _neighbornodes_offset(::BSpline{2}) = 0.5
-@inline _neighbornodes_offset(::BSpline{3}) = 1.0
+@inline _surroundingnodes_offset(::BSpline{1}) = 0.0
+@inline _surroundingnodes_offset(::BSpline{2}) = 0.5
+@inline _surroundingnodes_offset(::BSpline{3}) = 1.0
 
 # simple B-spline calculations
 function value(::BSpline{1}, ξ::Real)
@@ -214,10 +214,9 @@ end
 end
 
 function update_property!(mp::MPValues{<: BSpline}, pt, lattice::Lattice)
-    indices = neighbornodes(mp)
+    indices = surroundingnodes(mp)
     isnearbounds = size(mp.N) != size(indices)
     if isnearbounds
-        indices = neighbornodes(mp)
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
             mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),x,lattice,i,:steffen), getx(pt), :all)

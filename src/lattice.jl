@@ -88,9 +88,9 @@ end
 end
 
 """
-    neighbornodes(x::Vec, h::Real, lattice::Lattice)
+    surroundingnodes(x::Vec, h::Real, lattice::Lattice)
 
-Return `CartesianIndices` storing neighboring node around `x`.
+Return `CartesianIndices` storing surrounding nodes around `x`.
 `h` denotes the range for searching area. In 1D, for example, the range `a`
 becomes ` x-h*Δx ≤ a < x+h*Δx` where `Δx` is `spacing(lattice)`.
 
@@ -105,14 +105,14 @@ julia> lattice = Lattice(1, (0,5))
  [4.0]
  [5.0]
 
-julia> neighbornodes(Vec(1.5), 1, lattice)
+julia> surroundingnodes(Vec(1.5), 1, lattice)
 CartesianIndices((2:3,))
 
-julia> neighbornodes(Vec(1.5), 3, lattice)
+julia> surroundingnodes(Vec(1.5), 3, lattice)
 CartesianIndices((1:5,))
 ```
 """
-@inline function neighbornodes(x::Vec, h::Real, lattice::Lattice{dim, T}) where {dim, T}
+@inline function surroundingnodes(x::Vec, h::Real, lattice::Lattice{dim, T}) where {dim, T}
     xmin = lattice[1]
     dx⁻¹ = spacing_inv(lattice)
     dims = size(lattice)

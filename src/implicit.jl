@@ -155,7 +155,7 @@ function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pa
     body = quote
         $(vars[3]...)
         $mp = $mpvalues[$p]
-        $gridindices = neighbornodes($mp, $grid)
+        $gridindices = surroundingnodes($mp, $grid)
         $localdofs = LinearIndices((size($fulldofs, 1), size($gridindices)...))
         $(create_local_matrices...)
         for $jp in eachindex($gridindices)

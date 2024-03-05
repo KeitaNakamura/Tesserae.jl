@@ -9,9 +9,9 @@ struct uGIMP <: Kernel end
 
 gridspan(::uGIMP) = 3
 
-@inline function neighbornodes(::uGIMP, pt, lattice::Lattice)
+@inline function surroundingnodes(::uGIMP, pt, lattice::Lattice)
     dx⁻¹ = spacing_inv(lattice)
-    neighbornodes(getx(pt), 1+(pt.l/2)*dx⁻¹, lattice)
+    surroundingnodes(getx(pt), 1+(pt.l/2)*dx⁻¹, lattice)
 end
 
 # simple uGIMP calculation
@@ -43,7 +43,7 @@ end
 end
 
 @inline function update_property!(mp::MPValues{uGIMP}, pt, lattice::Lattice)
-    indices = neighbornodes(mp)
+    indices = surroundingnodes(mp)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
         mp.N[ip], mp.∇N[ip] = value_gradient(interpolation(mp), pt, lattice, i)
