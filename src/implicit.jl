@@ -85,7 +85,23 @@ function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int},
     @inbounds @views A[I,J] .+= K
 end
 
-macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, equations)
+macro P2G_Matrix(exprs...)
+    esc(:(@P2G_Matrix(false, $(exprs...))))
+end
+
+macro P2G_Matrix(expr)
+    @assert Meta.isexpr(expr, :macrocall) && expr.args[1] == Symbol("@threaded")
+    esc(:(@P2G_Matrix(true, $(expr.args[3:end]...))))
+end
+
+macro P2G_Matrix(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, equations)
+    P2G_Matrix_macro(threaded, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+end
+macro P2G_Matrix(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+    P2G_Matrix_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+end
+
+function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
     grid, (i,j) = unpair2(grid_pair)
     particles, p = unpair(particles_pair)
     mpvalues, (ip,jp) = unpair2(mpvalues_pair)
@@ -137,30 +153,44 @@ macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, equations)
     end
 
     body = quote
+        $(vars[3]...)
+        $mp = $mpvalues[$p]
+        $gridindices = neighbornodes($mp, $grid)
+        $localdofs = LinearIndices((size($fulldofs, 1), size($gridindices)...))
+        $(create_local_matrices...)
+        for $jp in eachindex($gridindices)
+            $j = $gridindices[$jp]
+            $(union(vars[2], vars[5])...)
+            $J = vec(view($localdofs,:,$jp))
+            for $ip in eachindex($gridindices)
+                $(union(vars[1], vars[4])...)
+                $i = $gridindices[$ip]
+                $I = vec(view($localdofs,:,$ip))
+                $(assemble_local_matrices...)
+            end
+        end
+        $dofs = collect(vec(view($fulldofs, :, $gridindices)))
+        $(add_local_to_global...)
+    end
+
+    if isnothing(spspace)
+        body = quote
+            if $threaded
+                @warn "@P2G_Matrix: `SpSpace` must be given for threaded computation" maxlog=1
+            end
+            for $p in eachindex($particles, $mpvalues)
+                $body
+            end
+        end
+    else
+        body = blockwise_P2G_expr(threaded, p, spspace, body)
+    end
+
+    body = quote
         $(assertions...)
         $(init_global_matrices...)
-        $dofs = Int[]
         $fulldofs = LinearIndices((size($(first(global_matrices)),1)÷length($grid), size($grid)...))
-        for $p in eachindex($particles, $mpvalues)
-            $(vars[3]...)
-            $mp = $mpvalues[$p]
-            $gridindices = neighbornodes($mp, $grid)
-            $localdofs = LinearIndices((size($fulldofs, 1), size($gridindices)...))
-            $(create_local_matrices...)
-            for $jp in eachindex($gridindices)
-                $j = $gridindices[$jp]
-                $(union(vars[2], vars[5])...)
-                $J = vec(view($localdofs,:,$jp))
-                for $ip in eachindex($gridindices)
-                    $(union(vars[1], vars[4])...)
-                    $i = $gridindices[$ip]
-                    $I = vec(view($localdofs,:,$ip))
-                    $(assemble_local_matrices...)
-                end
-            end
-            copy!($dofs, vec(view($fulldofs, :, $gridindices)))
-            $(add_local_to_global...)
-        end
+        $body
     end
 
     if !isempty(grid_sums)
