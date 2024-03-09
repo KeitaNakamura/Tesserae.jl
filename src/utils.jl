@@ -42,16 +42,6 @@ getx(x) = getproperty(x, first(propertynames(x)))
 getx(x::Vec) = x
 getx(x::Vector{<: Vec}) = x
 
-# lazy_getindex
-@inline function lazy_getindex(x::StructArray, i...)
-    @boundscheck checkbounds(x, i...)
-    @inbounds LazyRow(x, i...)
-end
-@inline function lazy_getindex(x::AbstractArray, i...)
-    @boundscheck checkbounds(x, i...)
-    @inbounds x[i...]
-end
-
 ############
 # MapArray #
 ############
