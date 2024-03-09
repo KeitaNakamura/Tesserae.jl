@@ -24,10 +24,14 @@ function (dofmap::DofMap{dim, N})(A::AbstractArray{T, dim}) where {dim, N, T <: 
     @inbounds view(A′, indices′)
 end
 
-function create_sparse_matrix(::Type{Vec{dim, T}}, it::Interpolation, gridsize::Dims) where {dim, T}
-    spy = falses(dim, prod(gridsize), dim, prod(gridsize))
-    LI = LinearIndices(gridsize)
-    mesh = CartesianMesh(float(T), 1, map(d->(0,d-1), gridsize)...)
+function create_sparse_matrix(::Type{Vec{dim}}, it::Interpolation, mesh::AbstractMesh) where {dim}
+    create_sparse_matrix(Vec{dim, Float64}, it, mesh)
+end
+function create_sparse_matrix(::Type{Vec{dim, T}}, it::Interpolation, mesh::CartesianMesh) where {dim, T}
+    dims = size(mesh)
+    spy = falses(dim, prod(dims), dim, prod(dims))
+    LI = LinearIndices(dims)
+    mesh = CartesianMesh(float(T), 1, map(d->(0,d-1), dims)...)
     for i in eachindex(mesh)
         unit = gridspan(it) * oneunit(i)
         indices = intersect((i-unit):(i+unit), eachindex(mesh))
@@ -35,9 +39,8 @@ function create_sparse_matrix(::Type{Vec{dim, T}}, it::Interpolation, gridsize::
             spy[1:dim, LI[i], 1:dim, LI[j]] .= true
         end
     end
-    create_sparse_matrix(T, reshape(spy, dim*prod(gridsize), dim*prod(gridsize)))
+    create_sparse_matrix(T, reshape(spy, dim*prod(dims), dim*prod(dims)))
 end
-create_sparse_matrix(::Type{Vec{dim}}, it::Interpolation, gridsize::Dims) where {dim} = create_sparse_matrix(Vec{dim, Float64}, it, gridsize)
 
 function create_sparse_matrix(::Type{T}, spy::AbstractMatrix{Bool}) where {T}
     I = findall(vec(spy))
