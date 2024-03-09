@@ -72,7 +72,7 @@ function tlmpm_vortex()
     end
 
     ## background grid
-    grid = generate_grid(GridProp, Δx, (-1.5,1.5), (-1.5,1.5))
+    grid = generate_grid(GridProp, CartesianMesh(Δx, (-1.5,1.5), (-1.5,1.5)))
     outside_gridinds = findall(!isinside, grid.X)
 
     ## particles

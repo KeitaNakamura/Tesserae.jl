@@ -67,7 +67,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
     end
 
     ## background grid
-    grid = generate_grid(GridProp, Δx, (-L/2,L/2), (-W/2,W/2))
+    grid = generate_grid(GridProp, CartesianMesh(Δx, (-L/2,L/2), (-W/2,W/2)))
 
     ## particles
     particles = let
@@ -90,9 +90,9 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
         [lhs; rhs]
     end
 
-    @. particles.V  = particles.V⁰
-    @. particles.m  = ρ⁰ * particles.V⁰
-    @. particles.F  = one(particles.F)
+    @. particles.V = particles.V⁰
+    @. particles.m = ρ⁰ * particles.V⁰
+    @. particles.F = one(particles.F)
     @show length(particles)
 
     ## use quadratic B-spline

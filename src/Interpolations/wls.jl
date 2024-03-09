@@ -14,10 +14,10 @@ end
 
 get_kernel(wls::WLS) = wls.kernel
 gridspan(wls::WLS) = gridspan(get_kernel(wls))
-@inline surroundingnodes(wls::WLS, pt, lattice::Lattice) = surroundingnodes(get_kernel(wls), pt, lattice)
+@inline surroundingnodes(wls::WLS, pt, mesh::CartesianMesh) = surroundingnodes(get_kernel(wls), pt, mesh)
 
 # general version
-function update_property!(mp::MPValues{<: WLS}, pt, lattice::Lattice{dim, T}, filter::AbstractArray{Bool} = Trues(size(lattice))) where {dim, T}
+function update_property!(mp::MPValues{<: WLS}, pt, mesh::CartesianMesh{dim, T}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim, T}
     indices = surroundingnodes(mp)
 
     it = interpolation(mp)
@@ -27,8 +27,8 @@ function update_property!(mp::MPValues{<: WLS}, pt, lattice::Lattice{dim, T}, fi
 
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        xᵢ = lattice[i]
-        w = value(F, pt, lattice, i) * filter[i]
+        xᵢ = mesh[i]
+        w = value(F, pt, mesh, i) * filter[i]
         p = [1; xᵢ-xₚ]
         M += w * p ⊗ p
         mp.N[ip] = w
@@ -38,7 +38,7 @@ function update_property!(mp::MPValues{<: WLS}, pt, lattice::Lattice{dim, T}, fi
 
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        xᵢ = lattice[i]
+        xᵢ = mesh[i]
         wq = mp.N[ip] * (M⁻¹ ⋅ [1;xᵢ-xₚ])
         mp.N[ip] = wq[1]
         mp.∇N[ip] = @Tensor wq[2:end]
@@ -46,26 +46,26 @@ function update_property!(mp::MPValues{<: WLS}, pt, lattice::Lattice{dim, T}, fi
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, lattice::Lattice, filter::AbstractArray{Bool} = Trues(size(lattice)))
+function update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = surroundingnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        fast_update_property_nearbounds!(mp, pt, lattice, filter)
+        fast_update_property_nearbounds!(mp, pt, mesh, filter)
     else
-        fast_update_property!(mp, pt, lattice)
+        fast_update_property!(mp, pt, mesh)
     end
 end
 
-function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, lattice::Lattice{dim, T}) where {dim, T}
+function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh{dim, T}) where {dim, T}
     indices = surroundingnodes(mp)
     F = get_kernel(interpolation(mp))
     xₚ = getx(pt)
     D = zero(Vec{dim, T}) # diagonal entries of M
-    copyto!(mp.N, values(F, xₚ, lattice))
+    copyto!(mp.N, values(F, xₚ, mesh))
 
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        xᵢ = lattice[i]
+        xᵢ = mesh[i]
         D += w * (xᵢ - xₚ) .* (xᵢ - xₚ)
         mp.∇N[ip] = w * (xᵢ - xₚ)
     end
@@ -74,7 +74,7 @@ function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, lattice::La
     broadcast!(.*, mp.∇N, mp.∇N, D⁻¹)
 end
 
-function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, lattice::Lattice{dim, T}, filter::AbstractArray{Bool}) where {dim, T}
+function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh{dim, T}, filter::AbstractArray{Bool}) where {dim, T}
     indices = surroundingnodes(mp)
     it = interpolation(mp)
     F = get_kernel(it)
@@ -84,8 +84,8 @@ function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, 
 
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        xᵢ = lattice[i]
-        w = value(F, xₚ, lattice, i) * filter[i]
+        xᵢ = mesh[i]
+        w = value(F, xₚ, mesh, i) * filter[i]
         p = value(P, xᵢ - xₚ)
         M += w * p ⊗ p
         mp.N[ip] = w
@@ -95,7 +95,7 @@ function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, 
 
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        xᵢ = lattice[i]
+        xᵢ = mesh[i]
         wq = mp.N[ip] * (M⁻¹ ⋅ [1;xᵢ-xₚ])
         mp.N[ip] = wq[1]
         mp.∇N[ip] = @Tensor wq[2:end]

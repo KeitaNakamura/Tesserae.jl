@@ -1,5 +1,5 @@
-struct SpSpace{dim, L <: Lattice{dim}, ElType} <: AbstractArray{ElType, dim}
-    lattice::L
+struct SpSpace{dim, L <: CartesianMesh{dim}, ElType} <: AbstractArray{ElType, dim}
+    mesh::L
     particleindices::Vector{Int}
     stops::Array{Int, dim}
     nparticles::Vector{Array{Int, dim}}
@@ -7,13 +7,13 @@ struct SpSpace{dim, L <: Lattice{dim}, ElType} <: AbstractArray{ElType, dim}
     localindices::Vector{Int}
 end
 
-function SpSpace(lattice::Lattice{dim}) where {dim}
-    dims = blocksize(lattice)
+function SpSpace(mesh::CartesianMesh{dim}) where {dim}
+    dims = blocksize(mesh)
     nparticles = [zeros(Int, dims) for _ in 1:Threads.nthreads()]
     particleindices = Int[]
     stops = zeros(Int, dims)
     ElType = Base._return_type(_getindex, Tuple{typeof(particleindices), typeof(stops), Int})
-    SpSpace{dim, typeof(lattice), ElType}(lattice, particleindices, stops, nparticles, Int[], Int[])
+    SpSpace{dim, typeof(mesh), ElType}(mesh, particleindices, stops, nparticles, Int[], Int[])
 end
 
 Base.IndexStyle(::Type{<: SpSpace}) = IndexLinear()
@@ -38,7 +38,7 @@ function update!(s::SpSpace, xₚ::AbstractVector{<: Vec})
 
     @threaded :static for p in 1:n
         id = Threads.threadid()
-        blk = sub2ind(size(s), whichblock(xₚ[p], s.lattice))
+        blk = sub2ind(size(s), whichblock(xₚ[p], s.mesh))
         s.blockindices[p] = blk
         s.localindices[p] = iszero(blk) ? 0 : (s.nparticles[id][blk] += 1)
     end
@@ -123,15 +123,15 @@ blocksize(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCKFACTOR+1
 blocksize(A::AbstractArray) = blocksize(size(A))
 
 """
-    Sequoia.whichblock(x::Vec, lattice::Lattice)
+    Sequoia.whichblock(x::Vec, mesh::CartesianMesh)
 
 Return block index where `x` locates.
 The unit block size is `2^$BLOCKFACTOR` cells.
 
 # Examples
 ```jldoctest
-julia> lattice = Lattice(1, (0,10), (0,10))
-11×11 Lattice{2, Float64, Vector{Float64}}:
+julia> mesh = CartesianMesh(1, (0,10), (0,10))
+11×11 CartesianMesh{2, Float64, Vector{Float64}}:
  [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
  [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
  [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]
@@ -144,17 +144,17 @@ julia> lattice = Lattice(1, (0,10), (0,10))
  [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]      [9.0, 9.0]   [9.0, 10.0]
  [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
 
-julia> Sequoia.whichblock(Vec(8.5, 1.5), lattice)
+julia> Sequoia.whichblock(Vec(8.5, 1.5), mesh)
 CartesianIndex(2, 1)
 ```
 """
-@inline function whichblock(x::Vec, lattice::Lattice)
-    I = whichcell(x, lattice)
+@inline function whichblock(x::Vec, mesh::CartesianMesh)
+    I = whichcell(x, mesh)
     I === nothing && return nothing
     CartesianIndex(@. (I.I-1) >> BLOCKFACTOR + 1)
 end
 
 function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
-    starts = AxisArray(nfill(1:2, Val(dim)))
-    vec(map(st -> map(CartesianIndex{dim}, AxisArray(StepRange.(st, 2, blocksize)))::Array{CartesianIndex{dim}, dim}, starts))
+    starts = collect(Iterators.product(ntuple(i->1:2, Val(dim))...))
+    vec(map(st -> map(CartesianIndex{dim}, Iterators.product(StepRange.(st, 2, blocksize)...)), starts))
 end

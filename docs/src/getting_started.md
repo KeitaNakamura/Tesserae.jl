@@ -31,7 +31,7 @@ ParticleProp = @NamedTuple begin
 end
 
 # background grid
-grid = generate_grid(GridProp, 0.05, (0,1), (0,1))
+grid = generate_grid(GridProp, CartesianMesh(0.05, (0,1), (0,1)))
 
 # particles
 particles = let

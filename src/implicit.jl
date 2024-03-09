@@ -27,10 +27,10 @@ end
 function create_sparse_matrix(::Type{Vec{dim, T}}, it::Interpolation, gridsize::Dims) where {dim, T}
     spy = falses(dim, prod(gridsize), dim, prod(gridsize))
     LI = LinearIndices(gridsize)
-    lattice = Lattice(float(T), 1, map(d->(0,d-1), gridsize)...)
-    for i in eachindex(lattice)
+    mesh = CartesianMesh(float(T), 1, map(d->(0,d-1), gridsize)...)
+    for i in eachindex(mesh)
         unit = gridspan(it) * oneunit(i)
-        indices = intersect((i-unit):(i+unit), eachindex(lattice))
+        indices = intersect((i-unit):(i+unit), eachindex(mesh))
         for j in indices
             spy[1:dim, LI[i], 1:dim, LI[j]] .= true
         end

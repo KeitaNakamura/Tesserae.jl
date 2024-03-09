@@ -5,8 +5,8 @@ function WriteVTK.vtk_grid(vtk::AbstractString, x::AbstractVector{<: Vec}; kwarg
     cells = [MeshCell(VTKCellTypes.VTK_VERTEX, [i]) for i in 1:npts]
     vtk_grid(vtk, coords, cells; kwargs...)
 end
-function WriteVTK.vtk_grid(vtk::AbstractString, lattice::Lattice; kwargs...)
-    vtk_grid(vtk, map(f32, get_axes(lattice))...; kwargs...)
+function WriteVTK.vtk_grid(vtk::AbstractString, mesh::CartesianMesh; kwargs...)
+    vtk_grid(vtk, map(f32, get_axes(mesh))...; kwargs...)
 end
 
 # add_field_data
