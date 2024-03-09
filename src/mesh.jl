@@ -49,7 +49,7 @@ get_axes(x::CartesianMesh) = get_axes(x.axisarray)
 get_axes(x::CartesianMesh, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
 
 function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
-    @assert allequal(map(step, axes))
+    @assert all(ax->step(ax)==step(first(axes)), axes)
     dx = step(first(axes))
     CartesianMesh(AxisArray(axes), dx, inv(dx))
 end

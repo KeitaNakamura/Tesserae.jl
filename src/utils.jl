@@ -60,7 +60,7 @@ struct MapArray{T, N, F, Args <: Tuple} <: AbstractArray{T, N}
     f::F
     args::Args
     function MapArray{T, N, F, Args}(f::F, args::Args) where {T, N, F, Args}
-        @assert allequal(map(size, args))
+        @assert all(x->size(x)==size(first(args)), args)
         new{T, N, F, Args}(f, args)
     end
 end
