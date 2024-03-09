@@ -32,8 +32,8 @@ export
     SpSpace,
     blocksize,
     update_block_sparsity!,
-# lattice
-    Lattice,
+# Mesh
+    CartesianMesh,
     isinside,
     whichcell,
 # Grid
@@ -80,7 +80,7 @@ export
     closepvd
 
 include("utils.jl")
-include("lattice.jl")
+include("mesh.jl")
 include("sparray.jl")
 include("spspace.jl")
 

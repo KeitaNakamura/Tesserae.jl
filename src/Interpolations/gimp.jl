@@ -9,9 +9,9 @@ struct uGIMP <: Kernel end
 
 gridspan(::uGIMP) = 3
 
-@inline function surroundingnodes(::uGIMP, pt, lattice::Lattice)
-    dx⁻¹ = spacing_inv(lattice)
-    surroundingnodes(getx(pt), 1+(pt.l/2)*dx⁻¹, lattice)
+@inline function surroundingnodes(::uGIMP, pt, mesh::CartesianMesh)
+    dx⁻¹ = spacing_inv(mesh)
+    surroundingnodes(getx(pt), 1+(pt.l/2)*dx⁻¹, mesh)
 end
 
 # simple uGIMP calculation
@@ -27,25 +27,25 @@ function value(::uGIMP, ξ::Real, l::Real) # `l` is normalized radius by dx
     ξ < 1+l/2 ? (2+l-2ξ)^2 / 8l       : zero(ξ)
 end
 @inline value(f::uGIMP, ξ::Vec, l::Real) = prod(value.(f, ξ, l))
-@inline function value(f::uGIMP, xₚ::Vec, lₚ::Real, lattice::Lattice, I::CartesianIndex)
+@inline function value(f::uGIMP, xₚ::Vec, lₚ::Real, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
-    xᵢ = lattice[I]
-    dx⁻¹ = spacing_inv(lattice)
+    xᵢ = mesh[I]
+    dx⁻¹ = spacing_inv(mesh)
     ξ = (xₚ - xᵢ) * dx⁻¹
     value(f, ξ, lₚ*dx⁻¹)
 end
-@inline value(f::uGIMP, pt, lattice::Lattice, I::CartesianIndex) = value(f, getx(pt), pt.l, lattice, I)
+@inline value(f::uGIMP, pt, mesh::CartesianMesh, I::CartesianIndex) = value(f, getx(pt), pt.l, mesh, I)
 
-@inline function value_gradient(f::uGIMP, pt, lattice::Lattice, I::CartesianIndex)
+@inline function value_gradient(f::uGIMP, pt, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
-    ∇N, N = gradient(x -> (@_propagate_inbounds_meta; value(f, x, pt.l, lattice, I)), getx(pt), :all)
+    ∇N, N = gradient(x -> (@_propagate_inbounds_meta; value(f, x, pt.l, mesh, I)), getx(pt), :all)
     N, ∇N
 end
 
-@inline function update_property!(mp::MPValues{uGIMP}, pt, lattice::Lattice)
+@inline function update_property!(mp::MPValues{uGIMP}, pt, mesh::CartesianMesh)
     indices = surroundingnodes(mp)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        mp.N[ip], mp.∇N[ip] = value_gradient(interpolation(mp), pt, lattice, i)
+        mp.N[ip], mp.∇N[ip] = value_gradient(interpolation(mp), pt, mesh, i)
     end
 end

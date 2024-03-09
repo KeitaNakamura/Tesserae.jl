@@ -15,7 +15,7 @@ end
 `MPValues` stores properties for interpolation, such as the value of the kernel and its gradient.
 
 ```jldoctest
-julia> lattice = Lattice(1.0, (0,5), (0,5)); # computational domain
+julia> mesh = CartesianMesh(1.0, (0,5), (0,5)); # computational domain
 
 julia> x = Vec(2.2, 3.4); # particle coordinate
 
@@ -25,7 +25,7 @@ MPValues:
   Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
   Neighbor nodes: CartesianIndices((0:0, 0:0))
 
-julia> update!(mp, x, lattice) # update `mp` at position `x` in `lattice`
+julia> update!(mp, x, mesh) # update `mp` at position `x` in `mesh`
 MPValues:
   Interpolation: QuadraticBSpline()
   Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
@@ -165,15 +165,15 @@ end
     true
 end
 
-function update!(mp::MPValues, pt, lattice)
-    set_surroundingnodes!(mp, surroundingnodes(interpolation(mp), pt, lattice))
-    update_property!(mp, pt, lattice)
+function update!(mp::MPValues, pt, mesh)
+    set_surroundingnodes!(mp, surroundingnodes(interpolation(mp), pt, mesh))
+    update_property!(mp, pt, mesh)
     mp
 end
 
-function update!(mp::MPValues, pt, lattice, filter)
-    @debug @assert size(lattice) == size(filter)
-    set_surroundingnodes!(mp, surroundingnodes(interpolation(mp), pt, lattice))
-    update_property!(mp, pt, lattice, filter)
+function update!(mp::MPValues, pt, mesh, filter)
+    @debug @assert size(mesh) == size(filter)
+    set_surroundingnodes!(mp, surroundingnodes(interpolation(mp), pt, mesh))
+    update_property!(mp, pt, mesh, filter)
     mp
 end

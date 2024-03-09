@@ -16,45 +16,45 @@ KernelCorrection(k::Kernel) = KernelCorrection(k, LinearPolynomial())
 get_kernel(kc::KernelCorrection) = kc.kernel
 get_polynomial(kc::KernelCorrection) = kc.poly
 gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
-@inline surroundingnodes(kc::KernelCorrection, pt, lattice::Lattice) = surroundingnodes(get_kernel(kc), pt, lattice)
+@inline surroundingnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = surroundingnodes(get_kernel(kc), pt, mesh)
 
 # general version
-@inline function update_property!(mp::MPValues{<: KernelCorrection}, pt, lattice::Lattice, filter::AbstractArray{Bool} = Trues(size(lattice)))
+@inline function update_property!(mp::MPValues{<: KernelCorrection}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = surroundingnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        update_property_nearbounds!(mp, pt, lattice, filter)
+        update_property_nearbounds!(mp, pt, mesh, filter)
     else
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
-            mp.N[ip], mp.∇N[ip] = value_gradient(get_kernel(interpolation(mp)), pt, lattice, i)
+            mp.N[ip], mp.∇N[ip] = value_gradient(get_kernel(interpolation(mp)), pt, mesh, i)
         end
     end
 end
 
 # fast version for B-spline kernels
-@inline function update_property!(mp::MPValues{<: KernelCorrection{<: BSpline}}, pt, lattice::Lattice, filter::AbstractArray{Bool} = Trues(size(lattice)))
+@inline function update_property!(mp::MPValues{<: KernelCorrection{<: BSpline}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = surroundingnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        update_property_nearbounds!(mp, pt, lattice, filter)
+        update_property_nearbounds!(mp, pt, mesh, filter)
     else
-        map(copyto!, (mp.N, mp.∇N), values(get_kernel(interpolation(mp)), pt, lattice, :withgradient))
+        map(copyto!, (mp.N, mp.∇N), values(get_kernel(interpolation(mp)), pt, mesh, :withgradient))
     end
 end
 
-@inline function update_property_nearbounds!(mp::MPValues{<: KernelCorrection}, pt, lattice::Lattice{dim}, filter::AbstractArray{Bool}) where {dim}
+@inline function update_property_nearbounds!(mp::MPValues{<: KernelCorrection}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
     indices = surroundingnodes(mp)
     kernel = get_kernel(interpolation(mp))
     poly = get_polynomial(interpolation(mp))
     xₚ = getx(pt)
-    VecType = promote_type(eltype(lattice), typeof(xₚ))
+    VecType = promote_type(eltype(mesh), typeof(xₚ))
     L, T = value_length(poly, xₚ), eltype(VecType)
     M = zero(Mat{L, L, T})
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        xᵢ = lattice[i]
-        w = value(kernel, pt, lattice, i) * filter[i]
+        xᵢ = mesh[i]
+        w = value(kernel, pt, mesh, i) * filter[i]
         P = value(poly, xᵢ - xₚ)
         M += w * P ⊗ P
         mp.N[ip] = w
@@ -62,7 +62,7 @@ end
     M⁻¹ = inv(M)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        xᵢ = lattice[i]
+        xᵢ = mesh[i]
         w = mp.N[ip]
         P = value(poly, xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)

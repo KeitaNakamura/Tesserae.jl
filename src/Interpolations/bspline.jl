@@ -36,11 +36,11 @@ gridspan(::BSpline{1}) = 2
 gridspan(::BSpline{2}) = 3
 gridspan(::BSpline{3}) = 4
 
-@inline function surroundingnodes(bspline::BSpline, pt, lattice::Lattice{dim}) where {dim}
+@inline function surroundingnodes(bspline::BSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
-    xmin = lattice[1]
-    dx⁻¹ = spacing_inv(lattice)
-    dims = size(lattice)
+    xmin = mesh[1]
+    dx⁻¹ = spacing_inv(mesh)
+    dims = size(mesh)
     ξ = Tuple((x - xmin) * dx⁻¹)
     isinside(ξ, dims) || return CartesianIndices(nfill(0:0, Val(dim)))
     offset = _surroundingnodes_offset(bspline)
@@ -76,16 +76,16 @@ end
         prod(@ntuple $dim i -> value(bspline, ξ[i]))
     end
 end
-@inline function value(bspline::BSpline, xₚ::Vec, lattice::Lattice, I::CartesianIndex)
+@inline function value(bspline::BSpline, xₚ::Vec, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
-    xᵢ = lattice[I]
-    dx⁻¹ = spacing_inv(lattice)
+    xᵢ = mesh[I]
+    dx⁻¹ = spacing_inv(mesh)
     ξ = (xₚ - xᵢ) * dx⁻¹
     value(bspline, ξ)
 end
-@inline function value(bspline::BSpline, pt, lattice::Lattice, I::CartesianIndex)
+@inline function value(bspline::BSpline, pt, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
-    value(bspline, getx(pt), lattice, I)
+    value(bspline, getx(pt), mesh, I)
 end
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
@@ -130,12 +130,12 @@ end
         prod(@ntuple $dim i -> value(bspline, ξ[i], pos[i]))
     end
 end
-@inline function value(bspline::BSpline, xₚ::Vec, lattice::Lattice, I::CartesianIndex, ::Symbol) # last argument is pseudo argument `:steffen`
+@inline function value(bspline::BSpline, xₚ::Vec, mesh::CartesianMesh, I::CartesianIndex, ::Symbol) # last argument is pseudo argument `:steffen`
     @_propagate_inbounds_meta
-    xᵢ = lattice[I]
-    dx⁻¹ = spacing_inv(lattice)
+    xᵢ = mesh[I]
+    dx⁻¹ = spacing_inv(mesh)
     ξ = (xₚ - xᵢ) * dx⁻¹
-    value(bspline, ξ, node_position(lattice, I))
+    value(bspline, ξ, node_position(mesh, I))
 end
 
 @inline function node_position(ax::AbstractVector, i::Int)
@@ -143,7 +143,7 @@ end
     right = lastindex(ax) - i
     ifelse(left < right, left, -right)
 end
-node_position(lattice::Lattice, index::CartesianIndex) = map(node_position, get_axes(lattice), Tuple(index))
+node_position(mesh::CartesianMesh, index::CartesianIndex) = map(node_position, get_axes(mesh), Tuple(index))
 
 
 @inline fract(x) = x - floor(x)
@@ -201,27 +201,27 @@ end
 end
 @inline otimes_tuple(x::Tuple) = SArray(otimes(map(Vec, x)...))
 
-@inline function Base.values(bspline::BSpline, x::Vec, lattice::Lattice)
-    dx⁻¹ = spacing_inv(lattice)
-    values(bspline, (x - first(lattice)) * dx⁻¹)
+@inline function Base.values(bspline::BSpline, x::Vec, mesh::CartesianMesh)
+    dx⁻¹ = spacing_inv(mesh)
+    values(bspline, (x - first(mesh)) * dx⁻¹)
 end
-@inline function Base.values(bspline::BSpline, pt, lattice::Lattice, ::Symbol)
+@inline function Base.values(bspline::BSpline, pt, mesh::CartesianMesh, ::Symbol)
     x = getx(pt)
-    xmin = first(lattice)
-    dx⁻¹ = spacing_inv(lattice)
+    xmin = first(mesh)
+    dx⁻¹ = spacing_inv(mesh)
     N, ∇N = values(bspline, (x-xmin)*dx⁻¹, :withgradient)
     (N, ∇N*dx⁻¹)
 end
 
-function update_property!(mp::MPValues{<: BSpline}, pt, lattice::Lattice)
+function update_property!(mp::MPValues{<: BSpline}, pt, mesh::CartesianMesh)
     indices = surroundingnodes(mp)
     isnearbounds = size(mp.N) != size(indices)
     if isnearbounds
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
-            mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),x,lattice,i,:steffen), getx(pt), :all)
+            mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),x,mesh,i,:steffen), getx(pt), :all)
         end
     else
-        map(copyto!, (mp.N, mp.∇N), values(interpolation(mp), pt, lattice, :withgradient))
+        map(copyto!, (mp.N, mp.∇N), values(interpolation(mp), pt, mesh, :withgradient))
     end
 end

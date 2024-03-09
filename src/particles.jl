@@ -5,7 +5,7 @@ struct GridSampling <: SamplingAlgorithm end
 function point_sampling(::GridSampling, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
     r = l / 2
     minmax((xmin,xmax), r) = (xmin+r, xmax-r)
-    vec(Lattice(2r, minmax.(domain, r)...))
+    vec(CartesianMesh(2r, minmax.(domain, r)...))
 end
 
 struct PoissonDiskSampling{RNG} <: SamplingAlgorithm
@@ -32,25 +32,25 @@ function generate_particles(::Type{ParticleProperty}, points::AbstractVector{<: 
 end
 
 """
-    generate_particles([ParticleProperty], lattice; spacing=0.5, alg=PoissonDiskSampling())
+    generate_particles([ParticleProperty], mesh; spacing=0.5, alg=PoissonDiskSampling())
 
 Generate particles with particle `spacing` by sampling `alg`orithm.
 """
-function generate_particles(::Type{ParticleProperty}, lattice::Lattice{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProperty, dim, T}
-    domain = tuple.(Tuple(first(lattice)), Tuple(last(lattice)))
-    points = point_sampling(alg, Sequoia.spacing(lattice) * T(spacing), domain...)
+function generate_particles(::Type{ParticleProperty}, mesh::CartesianMesh{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProperty, dim, T}
+    domain = tuple.(Tuple(first(mesh)), Tuple(last(mesh)))
+    points = point_sampling(alg, Sequoia.spacing(mesh) * T(spacing), domain...)
     particles = generate_particles(ParticleProperty, points)
-    _reorder_particles!(particles, lattice)
+    _reorder_particles!(particles, mesh)
 end
 
-function generate_particles(lattice::Lattice{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
-    generate_particles(@NamedTuple{x::Vec{dim, T}}, lattice; spacing, alg)
+function generate_particles(mesh::CartesianMesh{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
+    generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; spacing, alg)
 end
 
-function _reorder_particles!(particles::AbstractVector, lattice::Lattice)
-    ptsinblks = map(_->Int[], CartesianIndices(blocksize(lattice)))
+function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)
+    ptsinblks = map(_->Int[], CartesianIndices(blocksize(mesh)))
     for p in eachindex(particles)
-        I = whichblock(getx(particles)[p], lattice)
+        I = whichblock(getx(particles)[p], mesh)
         I === nothing || push!(ptsinblks[I], p)
     end
     reorder_particles!(particles, ptsinblks)
