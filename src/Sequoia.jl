@@ -54,7 +54,7 @@ export
     LinearBSpline,
     QuadraticBSpline,
     CubicBSpline,
-    uGIMP,
+    GIMP,
     Interpolation,
     WLS,
     KernelCorrection,
