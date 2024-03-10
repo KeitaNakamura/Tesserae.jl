@@ -7,7 +7,7 @@ Particle-to-grid transfer macro.
 
 # Examples
 ```jl
-@P2G grid=>i particles=>p mpvalues=>ip spspace begin
+@P2G grid=>i particles=>p mpvalues=>ip begin
 
     # particle-to-grid transfer
     m[i] = @∑ N[ip] * m[p]
@@ -197,7 +197,7 @@ Grid-to-particle transfer macro.
 
 # Examples
 ```jl
-@P2G grid=>i particles=>p mpvalues=>ip spspace begin
+@G2P grid=>i particles=>p mpvalues=>ip begin
 
     # grid-to-particle transfer
     v[p] = @∑ v[i] * N[ip]
