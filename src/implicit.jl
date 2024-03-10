@@ -181,7 +181,7 @@ function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pa
             if $threaded
                 @warn "@P2G_Matrix: `SpSpace` must be given for threaded computation" maxlog=1
             end
-            for $p in eachindex($particles, $mpvalues)
+            for $p in eachparticleindex($particles, $mpvalues)
                 $body
             end
         end

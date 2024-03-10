@@ -95,7 +95,7 @@ function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspa
             if $threaded
                 @warn "@P2G: `SpSpace` must be given for threaded computation" maxlog=1
             end
-            for $p in eachindex($particles, $mpvalues)
+            for $p in Sequoia.eachparticleindex($particles, $mpvalues)
                 $body
             end
         end
@@ -265,13 +265,13 @@ function G2P_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, equ
 
     if threaded
         body = quote
-            @threaded :dynamic for $p in eachindex($particles, $mpvalues)
+            @threaded :dynamic for $p in Sequoia.eachparticleindex($particles, $mpvalues)
                 $body
             end
         end
     else
         body = quote
-            for $p in eachindex($particles, $mpvalues)
+            for $p in Sequoia.eachparticleindex($particles, $mpvalues)
                 $body
             end
         end
@@ -356,3 +356,8 @@ function findarrays_from_index!(set::Set{Expr}, index::Symbol, expr::Expr)
     end
 end
 findarrays_from_index!(set::Set{Expr}, index::Symbol, expr) = nothing
+
+function eachparticleindex(particles::AbstractVector, mpvalues::AbstractVector{<: MPValues})
+    @assert length(particles) ≤ length(mpvalues)
+    eachindex(particles)
+end
