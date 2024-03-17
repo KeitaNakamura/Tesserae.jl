@@ -34,8 +34,8 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
 
     ## material constants
     K  = 121.7e6 # Bulk modulus
-    G  = 26.1e6  # Shear modulus
-    λ  = K-2G/3  # Lame's first parameter
+    μ  = 26.1e6  # Shear modulus
+    λ  = K-2μ/3  # Lame's first parameter
     ρ⁰ = 1.01e3  # initial density
 
     ## geometry
@@ -102,9 +102,9 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
 
     ## material model (neo-Hookean)
     function caucy_stress(F)
+        b = F ⋅ F'
         J = det(F)
-        b = symmetric(F⋅F', :U)
-        1/J * (G*(b-I) + λ*log(J)*I)
+        (μ*(b-I) + λ*log(J)*I) / J
     end
 
     ## outputs
@@ -122,7 +122,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
         ## calculate timestep based on the wave speed of elastic material
         Δt = CFL * spacing(grid) / maximum(LazyRows(particles)) do pt
             ρ = pt.m / pt.V
-            vc = √((λ+2G) / ρ)
+            vc = √((λ+2μ) / ρ)
             vc + norm(pt.v)
         end
 
