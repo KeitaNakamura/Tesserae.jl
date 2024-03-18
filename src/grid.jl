@@ -8,11 +8,6 @@ get_mesh(grid::Grid) = getx(grid)
 spacing(grid::Grid) = spacing(get_mesh(grid))
 spacing_inv(grid::Grid) = spacing_inv(get_mesh(grid))
 
-# fillzero!
-fillzero!(A::Grid) = (StructArrays.foreachfield(_fillzero!, A); A)
-_fillzero!(x::AbstractMesh) = x
-_fillzero!(x::AbstractArray) = fillzero!(x)
-
 ##########
 # SpGrid #
 ##########

@@ -29,8 +29,11 @@ zero_recursive(x) = zero_recursive(typeof(x))
 
 # fillzero!
 function fillzero!(x::AbstractArray)
-    @assert isbitstype(eltype(x))
     fill!(x, zero_recursive(eltype(x)))
+    x
+end
+function fillzero!(x::StructArray)
+    StructArrays.foreachfield(fillzero!, x)
     x
 end
 

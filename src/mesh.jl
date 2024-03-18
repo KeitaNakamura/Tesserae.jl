@@ -1,5 +1,7 @@
 abstract type AbstractMesh{dim, T, N} <: AbstractArray{Vec{dim, T}, N} end
 
+fillzero!(x::AbstractMesh) = x
+
 struct AxisArray{dim, T, V <:AbstractVector{T}} <: AbstractArray{NTuple{dim, T}, dim}
     axes::NTuple{dim, V}
 end
