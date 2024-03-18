@@ -16,7 +16,7 @@
     @test_throws ArgumentError Sequoia.zero_recursive(zeros(3))
     @test_throws ArgumentError Sequoia.zero_recursive("abc")
     # fillzero!
-    @test (@inferred fillzero!(rand(3)))::Vector{Float64} == zeros(3)
+    @test (@inferred Sequoia.fillzero!(rand(3)))::Vector{Float64} == zeros(3)
     # commas
     @test (@inferred Sequoia.commas(123))::String == "123"
     @test (@inferred Sequoia.commas(1234))::String == "1,234"

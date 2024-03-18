@@ -16,7 +16,7 @@
         @test all(iszero, (grid.v)::Array{Vec{2,Float64}, 2})
         grid.m .= rand()
         grid.v .= rand(Vec{2})
-        fillzero!(grid)
+        Sequoia.fillzero!(grid)
         @test grid.x == mesh
         @test all(iszero, grid.m)
         @test all(iszero, grid.v)

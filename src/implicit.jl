@@ -136,7 +136,7 @@ function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pa
         globalname = lhs.args[1]
         localname = gensym(globalname)
 
-        Meta.isexpr(ex, :(=)) && push!(init_global_matrices, :(fillzero!($globalname)))
+        Meta.isexpr(ex, :(=)) && push!(init_global_matrices, :(Sequoia.fillzero!($globalname)))
         push!(global_matrices, globalname)
         push!(create_local_matrices, :($localname = Array{eltype($globalname)}(undef, length($localdofs), length($localdofs))))
         push!(assemble_local_matrices, :(@inbounds $localname[$I,$J] .= $trySArray($rhs))) # converting `Tensor` to `SArray` is faster for setindex!

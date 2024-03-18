@@ -25,7 +25,6 @@ import ProgressMeter
 
 export
 # utils
-    fillzero!,
     @threaded,
 # SpArray/SpSpace
     SpArray,

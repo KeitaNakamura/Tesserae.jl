@@ -73,7 +73,7 @@ function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspa
         if Meta.isexpr(ex, :(=))
             lhs = ex.args[1]
             @assert Meta.isexpr(lhs, :ref)
-            push!(init_gridprops, :(fillzero!($(lhs.args[1]))))
+            push!(init_gridprops, :(Sequoia.fillzero!($(lhs.args[1]))))
         end
     end
 
