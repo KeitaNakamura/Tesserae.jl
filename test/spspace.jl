@@ -1,6 +1,6 @@
 @testset "SpSpace" begin
     mesh = CartesianMesh(0.2, (0,3), (0,4))
-    xₚ = generate_particles(mesh).x
+    xₚ = generate_particles(mesh)
     filter!(xₚ) do (x,y)
         (x-1.5)^2 + (y-2)^2 < 1
     end

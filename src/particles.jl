@@ -43,7 +43,7 @@ function generate_particles(::Type{ParticleProperty}, mesh::CartesianMesh{dim, T
 end
 
 function generate_particles(mesh::CartesianMesh{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
-    generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; spacing, alg)
+    generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; spacing, alg).x
 end
 
 function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)
