@@ -98,8 +98,8 @@ function tlmpm_vortex()
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # create file
 
-    t::Float64 = 0.0
-    step::Int = 0
+    t = 0.0
+    step = 0
     fps = 60
     savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
