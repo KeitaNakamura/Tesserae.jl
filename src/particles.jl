@@ -9,18 +9,21 @@ end
 
 struct PoissonDiskSampling{RNG} <: SamplingAlgorithm
     rng::RNG
+    margin::Real
     parallel::Bool
 end
-PoissonDiskSampling() = PoissonDiskSampling(Random.default_rng(), true)
-PoissonDiskSampling(rng; parallel=false) = PoissonDiskSampling(rng, parallel)
+PoissonDiskSampling(; margin=0) = PoissonDiskSampling(Random.default_rng(), margin, true)
+PoissonDiskSampling(rng; margin=0, parallel=false) = PoissonDiskSampling(rng, margin, parallel)
 
 # Determine minimum distance between particles for Poisson disk sampling
 # so that the number of generated particles is almost the same as the grid sampling.
 # This empirical equation is slightly different from a previous work (https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
 poisson_disk_sampling_minimum_distance(l::Real, dim::Int) = l/(1.37)^(1/√dim)
 function point_sampling(pds::PoissonDiskSampling, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
+    ϵ = T(pds.margin)
+    minmax((xmin,xmax)) = (xmin+ϵ, xmax-ϵ)
     d = poisson_disk_sampling_minimum_distance(l, dim)
-    reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, domain...; pds.parallel))
+    reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, minmax.(domain)...; pds.parallel))
 end
 
 function generate_particles(::Type{ParticleProperty}, points::AbstractVector{<: Vec}) where {ParticleProperty}
