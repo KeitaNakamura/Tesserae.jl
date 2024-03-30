@@ -1,4 +1,6 @@
-struct SpSpace{dim, L <: CartesianMesh{dim}, ElType} <: AbstractArray{ElType, dim}
+const BLOCKFACTOR = unsigned(Preferences.@load_preference("block_factor", 3)) # 2^n
+
+struct BlockSpace{dim, L <: CartesianMesh{dim}, ElType} <: AbstractArray{ElType, dim}
     mesh::L
     particleindices::Vector{Int}
     stops::Array{Int, dim}
@@ -7,18 +9,18 @@ struct SpSpace{dim, L <: CartesianMesh{dim}, ElType} <: AbstractArray{ElType, di
     localindices::Vector{Int}
 end
 
-function SpSpace(mesh::CartesianMesh{dim}) where {dim}
+function BlockSpace(mesh::CartesianMesh{dim}) where {dim}
     dims = blocksize(mesh)
     nparticles = [zeros(Int, dims) for _ in 1:Threads.nthreads()]
     particleindices = Int[]
     stops = zeros(Int, dims)
     ElType = Base._return_type(_getindex, Tuple{typeof(particleindices), typeof(stops), Int})
-    SpSpace{dim, typeof(mesh), ElType}(mesh, particleindices, stops, nparticles, Int[], Int[])
+    BlockSpace{dim, typeof(mesh), ElType}(mesh, particleindices, stops, nparticles, Int[], Int[])
 end
 
-Base.IndexStyle(::Type{<: SpSpace}) = IndexLinear()
-Base.size(x::SpSpace) = size(x.stops)
-@inline function Base.getindex(x::SpSpace, i::Integer)
+Base.IndexStyle(::Type{<: BlockSpace}) = IndexLinear()
+Base.size(x::BlockSpace) = size(x.stops)
+@inline function Base.getindex(x::BlockSpace, i::Integer)
     @boundscheck checkbounds(x, i)
     @inbounds _getindex(x.particleindices, x.stops, i)
 end
@@ -29,7 +31,7 @@ end
     view(particleindices, start:stop)
 end
 
-function update!(s::SpSpace, xₚ::AbstractVector{<: Vec})
+function update!(s::BlockSpace, xₚ::AbstractVector{<: Vec})
     n = length(xₚ)
     resize!(s.particleindices, n)
     resize!(s.blockindices, n)
@@ -65,22 +67,7 @@ end
 sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
 sub2ind(::Dims, ::Nothing)::Int = 0
 
-function update_block_sparsity!(spinds::SpIndices, s::SpSpace)
-    blocksize(spinds) == size(s) || throw(ArgumentError("block size $(blocksize(spinds)) must match"))
-
-    inds = fillzero!(blockindices(spinds))
-    CI = CartesianIndices(s)
-    @inbounds for I in CI
-        if !isempty(s[I])
-            blks = (I - oneunit(I)):(I + oneunit(I))
-            inds[blks ∩ CI] .= true
-        end
-    end
-
-    numbering!(spinds)
-end
-
-function threadsafe_blocks(s::SpSpace)
+function threadsafe_blocks(s::BlockSpace)
     [filter(I -> !isempty(s[I]), blocks) for blocks in threadsafe_blocks(size(s))]
 end
 

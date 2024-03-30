@@ -26,10 +26,11 @@ import ProgressMeter
 export
 # utils
     @threaded,
-# SpArray/SpSpace
-    SpArray,
-    SpSpace,
+# BlockSpace
+    BlockSpace,
     blocksize,
+# SpArray
+    SpArray,
     update_block_sparsity!,
 # Mesh
     CartesianMesh,
@@ -80,8 +81,8 @@ export
 
 include("utils.jl")
 include("mesh.jl")
+include("blockspace.jl")
 include("sparray.jl")
-include("spspace.jl")
 
 include("grid.jl")
 include("particles.jl")

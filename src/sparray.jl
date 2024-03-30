@@ -1,5 +1,3 @@
-const BLOCKFACTOR = unsigned(Preferences.@load_preference("block_factor", 3)) # 2^n
-
 struct SpIndex{I}
     index::I
     spindex::Int
@@ -73,6 +71,21 @@ function update_block_sparsity!(sp::SpIndices, blkspy::AbstractArray{Bool})
     blocksize(sp) == size(blkspy) || throw(ArgumentError("block size $(blocksize(sp)) must match"))
     blockindices(sp) .= blkspy
     numbering!(sp)
+end
+
+function update_block_sparsity!(spinds::SpIndices, s::BlockSpace)
+    blocksize(spinds) == size(s) || throw(ArgumentError("block size $(blocksize(spinds)) must match"))
+
+    inds = fillzero!(blockindices(spinds))
+    CI = CartesianIndices(s)
+    @inbounds for I in CI
+        if !isempty(s[I])
+            blks = (I - oneunit(I)):(I + oneunit(I))
+            inds[blks ∩ CI] .= true
+        end
+    end
+
+    numbering!(spinds)
 end
 
 """

@@ -100,11 +100,11 @@ end
 macro P2G_Matrix(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_Matrix_macro(threaded, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
 end
-macro P2G_Matrix(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
-    P2G_Matrix_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+macro P2G_Matrix(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+    P2G_Matrix_macro(threaded, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
 end
 
-function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
     grid, (i,j) = unpair2(grid_pair)
     particles, p = unpair(particles_pair)
     mpvalues, (ip,jp) = unpair2(mpvalues_pair)
@@ -176,17 +176,17 @@ function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pa
         $(add_local_to_global...)
     end
 
-    if isnothing(spspace)
+    if isnothing(blockspace)
         body = quote
             if $threaded
-                @warn "@P2G_Matrix: `SpSpace` must be given for threaded computation" maxlog=1
+                @warn "@P2G_Matrix: `blockspace` must be given for threaded computation" maxlog=1
             end
             for $p in eachparticleindex($particles, $mpvalues)
                 $body
             end
         end
     else
-        body = blockwise_P2G_expr(threaded, p, spspace, body)
+        body = blockwise_P2G_expr(threaded, p, blockspace, body)
     end
 
     body = quote

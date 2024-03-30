@@ -1,5 +1,5 @@
 """
-    @P2G grid=>i particles=>p mpvalues=>ip [spspace] begin
+    @P2G grid=>i particles=>p mpvalues=>ip [blockspace] begin
         equations...
     end
 
@@ -33,11 +33,11 @@ end
 macro P2G(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_macro(threaded, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
 end
-macro P2G(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
-    P2G_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+macro P2G(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+    P2G_macro(threaded, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
 end
 
-function P2G_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, spspace, equations)
+function P2G_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
     _, i = unpair(grid_pair)
 
     @assert equations.head == :block
@@ -47,7 +47,7 @@ function P2G_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, sps
     sum_equations = equations.args[sumornot]
     nosum_equations = equations.args[.!sumornot]
 
-    body1 = P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspace, sum_equations)
+    body1 = P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, blockspace, sum_equations)
     body2 = P2G_nosum_macro(grid_pair, nosum_equations)
 
     quote
@@ -56,7 +56,7 @@ function P2G_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, sps
     end |> esc
 end
 
-function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspace, sum_equations::Vector)
+function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, blockspace, sum_equations::Vector)
     isempty(sum_equations) && return Expr(:block)
 
     grid, i = unpair(grid_pair)
@@ -90,17 +90,17 @@ function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspa
         end
     end
 
-    if isnothing(spspace)
+    if isnothing(blockspace)
         body = quote
             if $threaded
-                @warn "@P2G: `SpSpace` must be given for threaded computation" maxlog=1
+                @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
             end
             for $p in Sequoia.eachparticleindex($particles, $mpvalues)
                 $body
             end
         end
     else
-        body = blockwise_P2G_expr(threaded, p, spspace, body)
+        body = blockwise_P2G_expr(threaded, p, blockspace, body)
     end
 
     quote
@@ -109,13 +109,13 @@ function P2G_sum_macro(threaded, grid_pair, particles_pair, mpvalues_pair, spspa
     end
 end
 
-function blockwise_P2G_expr(threaded, p, spspace, body)
+function blockwise_P2G_expr(threaded, p, blockspace, body)
     @gensym blocks blk
     if threaded
         body = quote
-            for $blocks in Sequoia.threadsafe_blocks($spspace)
+            for $blocks in Sequoia.threadsafe_blocks($blockspace)
                 @threaded :dynamic for $blk in $blocks
-                    for $p in $spspace[$blk]
+                    for $p in $blockspace[$blk]
                         $body
                     end
                 end
@@ -123,9 +123,9 @@ function blockwise_P2G_expr(threaded, p, spspace, body)
         end
     else
         body = quote
-            for $blocks in Sequoia.threadsafe_blocks($spspace)
+            for $blocks in Sequoia.threadsafe_blocks($blockspace)
                 for $blk in $blocks
-                    for $p in $spspace[$blk]
+                    for $p in $blockspace[$blk]
                         $body
                     end
                 end
