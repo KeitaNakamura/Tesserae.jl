@@ -88,23 +88,20 @@ function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int},
     @inbounds @views A[I,J] .+= K
 end
 
-macro P2G_Matrix(exprs...)
-    esc(:(@P2G_Matrix(false, $(exprs...))))
+macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, equations)
+    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+end
+macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+end
+macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
+    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+end
+macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
 end
 
-macro P2G_Matrix(expr)
-    @assert Meta.isexpr(expr, :macrocall) && expr.args[1] == Symbol("@threaded")
-    esc(:(@P2G_Matrix(true, $(expr.args[3:end]...))))
-end
-
-macro P2G_Matrix(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, equations)
-    P2G_Matrix_macro(threaded, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
-end
-macro P2G_Matrix(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
-    P2G_Matrix_macro(threaded, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
-end
-
-function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
     grid, (i,j) = unpair2(grid_pair)
     particles, p = unpair(particles_pair)
     mpvalues, (ip,jp) = unpair2(mpvalues_pair)
@@ -178,7 +175,7 @@ function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pa
 
     if isnothing(blockspace)
         body = quote
-            if $threaded
+            if $(schedule.value != :nothing)
                 @warn "@P2G_Matrix: `blockspace` must be given for threaded computation" maxlog=1
             end
             for $p in eachparticleindex($particles, $mpvalues)
@@ -186,7 +183,7 @@ function P2G_Matrix_macro(threaded::Bool, grid_pair, particles_pair, mpvalues_pa
             end
         end
     else
-        body = blockwise_P2G_expr(threaded, p, blockspace, body)
+        body = blockwise_P2G_expr(schedule, p, blockspace, body)
     end
 
     body = quote

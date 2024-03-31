@@ -94,14 +94,24 @@ end
 const THREADED = Preferences.@load_preference("threaded_macro", true)
 
 macro threaded(schedule::QuoteNode, expr)
-    @assert Meta.isexpr(expr, :for)
-    quote
-        if Threads.nthreads() > 1 && $THREADED
-            Threads.@threads $schedule $expr
+    if Meta.isexpr(expr, :for)
+        quote
+            if Threads.nthreads() > 1 && $THREADED
+                Threads.@threads $schedule $expr
+            else
+                $expr
+            end
+        end |> esc
+    elseif Meta.isexpr(expr, :macrocall)
+        if THREADED
+            insert!(expr.args, 3, schedule)
+            esc(expr)
         else
-            $expr
+            esc(expr)
         end
-    end |> esc
+    else
+        error("wrong usage for @threaded")
+    end
 end
 macro threaded(expr)
     quote
