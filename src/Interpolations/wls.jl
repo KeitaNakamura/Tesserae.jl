@@ -65,6 +65,7 @@ function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::Carte
 
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
+        w = mp.N[ip]
         xᵢ = mesh[i]
         D += w * (xᵢ - xₚ) .* (xᵢ - xₚ)
         mp.∇N[ip] = w * (xᵢ - xₚ)
@@ -78,7 +79,6 @@ function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, 
     indices = neighboringnodes(mp)
     it = interpolation(mp)
     F = get_kernel(it)
-    P = get_basis(it)
     M = zero(Mat{dim+1, dim+1, T})
     xₚ = getx(pt)
 
@@ -86,7 +86,7 @@ function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, 
         i = indices[ip]
         xᵢ = mesh[i]
         w = value(F, xₚ, mesh, i) * filter[i]
-        p = value(P, xᵢ - xₚ)
+        p = [1; xᵢ-xₚ]
         M += w * p ⊗ p
         mp.N[ip] = w
     end
