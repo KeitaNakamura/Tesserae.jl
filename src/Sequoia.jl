@@ -59,7 +59,7 @@ export
     WLS,
     KernelCorrection,
 # MPValues
-    surroundingnodes,
+    neighboringnodes,
     MPValues,
     MPValuesVector,
 # transfer

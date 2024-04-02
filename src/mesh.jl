@@ -92,9 +92,9 @@ end
 end
 
 """
-    surroundingnodes(x::Vec, h::Real, mesh::CartesianMesh)
+    neighboringnodes(x::Vec, h::Real, mesh::CartesianMesh)
 
-Return `CartesianIndices` storing surrounding nodes around `x`.
+Return `CartesianIndices` for neighboring nodes around `x`.
 `h` denotes the range for searching area. In 1D, for example, the range `a`
 becomes ` x-h*Δx ≤ a < x+h*Δx` where `Δx` is `spacing(mesh)`.
 
@@ -109,14 +109,14 @@ julia> mesh = CartesianMesh(1, (0,5))
  [4.0]
  [5.0]
 
-julia> surroundingnodes(Vec(1.5), 1, mesh)
+julia> neighboringnodes(Vec(1.5), 1, mesh)
 CartesianIndices((2:3,))
 
-julia> surroundingnodes(Vec(1.5), 3, mesh)
+julia> neighboringnodes(Vec(1.5), 3, mesh)
 CartesianIndices((1:5,))
 ```
 """
-@inline function surroundingnodes(x::Vec, h::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
+@inline function neighboringnodes(x::Vec, h::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
     xmin = mesh[1]
     dx⁻¹ = spacing_inv(mesh)
     dims = size(mesh)

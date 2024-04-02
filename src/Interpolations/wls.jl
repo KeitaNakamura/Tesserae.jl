@@ -14,11 +14,11 @@ end
 
 get_kernel(wls::WLS) = wls.kernel
 gridspan(wls::WLS) = gridspan(get_kernel(wls))
-@inline surroundingnodes(wls::WLS, pt, mesh::CartesianMesh) = surroundingnodes(get_kernel(wls), pt, mesh)
+@inline neighboringnodes(wls::WLS, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(wls), pt, mesh)
 
 # general version
 function update_property!(mp::MPValues{<: WLS}, pt, mesh::CartesianMesh{dim, T}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim, T}
-    indices = surroundingnodes(mp)
+    indices = neighboringnodes(mp)
 
     it = interpolation(mp)
     F = get_kernel(it)
@@ -47,7 +47,7 @@ end
 
 # fast version for `LinearWLS(BSpline{order}())`
 function update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
-    indices = surroundingnodes(mp)
+    indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
         fast_update_property_nearbounds!(mp, pt, mesh, filter)
@@ -57,7 +57,7 @@ function update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianM
 end
 
 function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh{dim, T}) where {dim, T}
-    indices = surroundingnodes(mp)
+    indices = neighboringnodes(mp)
     F = get_kernel(interpolation(mp))
     xₚ = getx(pt)
     D = zero(Vec{dim, T}) # diagonal entries of M
@@ -75,7 +75,7 @@ function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::Carte
 end
 
 function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh{dim, T}, filter::AbstractArray{Bool}) where {dim, T}
-    indices = surroundingnodes(mp)
+    indices = neighboringnodes(mp)
     it = interpolation(mp)
     F = get_kernel(it)
     P = get_basis(it)

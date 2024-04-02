@@ -79,7 +79,7 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     body = quote
         $(vars[2]...)
         $mp = $mpvalues[$p]
-        $gridindices = surroundingnodes($mp, $grid)
+        $gridindices = neighboringnodes($mp, $grid)
         @inbounds for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(union(vars[1], vars[3])...)
@@ -248,7 +248,7 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
         $(vars[2]...)
         $(particles_vars_declare...)
         $mp = $mpvalues[$p]
-        $gridindices = surroundingnodes($mp, $grid)
+        $gridindices = neighboringnodes($mp, $grid)
         @inbounds for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(union(vars[1], vars[3])...)

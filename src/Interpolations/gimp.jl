@@ -9,9 +9,9 @@ struct GIMP <: Kernel end
 
 gridspan(::GIMP) = 3
 
-@inline function surroundingnodes(::GIMP, pt, mesh::CartesianMesh)
+@inline function neighboringnodes(::GIMP, pt, mesh::CartesianMesh)
     dx⁻¹ = spacing_inv(mesh)
-    surroundingnodes(getx(pt), 1+(pt.l/2)*dx⁻¹, mesh)
+    neighboringnodes(getx(pt), 1+(pt.l/2)*dx⁻¹, mesh)
 end
 
 # simple GIMP calculation
@@ -43,7 +43,7 @@ end
 end
 
 @inline function update_property!(mp::MPValues{GIMP}, pt, mesh::CartesianMesh)
-    indices = surroundingnodes(mp)
+    indices = neighboringnodes(mp)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
         mp.N[ip], mp.∇N[ip] = value_gradient(interpolation(mp), pt, mesh, i)

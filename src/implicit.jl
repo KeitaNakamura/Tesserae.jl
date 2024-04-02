@@ -155,7 +155,7 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
     body = quote
         $(vars[3]...)
         $mp = $mpvalues[$p]
-        $gridindices = surroundingnodes($mp, $grid)
+        $gridindices = neighboringnodes($mp, $grid)
         $localdofs = LinearIndices((size($fulldofs, 1), size($gridindices)...))
         $(create_local_matrices...)
         for $jp in eachindex($gridindices)

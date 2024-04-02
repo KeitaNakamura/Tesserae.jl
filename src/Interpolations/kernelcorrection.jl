@@ -16,11 +16,11 @@ KernelCorrection(k::Kernel) = KernelCorrection(k, LinearPolynomial())
 get_kernel(kc::KernelCorrection) = kc.kernel
 get_polynomial(kc::KernelCorrection) = kc.poly
 gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
-@inline surroundingnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = surroundingnodes(get_kernel(kc), pt, mesh)
+@inline neighboringnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(kc), pt, mesh)
 
 # general version
 @inline function update_property!(mp::MPValues{<: KernelCorrection}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
-    indices = surroundingnodes(mp)
+    indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
         update_property_nearbounds!(mp, pt, mesh, filter)
@@ -34,7 +34,7 @@ end
 
 # fast version for B-spline kernels
 @inline function update_property!(mp::MPValues{<: KernelCorrection{<: BSpline}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
-    indices = surroundingnodes(mp)
+    indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
         update_property_nearbounds!(mp, pt, mesh, filter)
@@ -44,7 +44,7 @@ end
 end
 
 @inline function update_property_nearbounds!(mp::MPValues{<: KernelCorrection}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
-    indices = surroundingnodes(mp)
+    indices = neighboringnodes(mp)
     kernel = get_kernel(interpolation(mp))
     poly = get_polynomial(interpolation(mp))
     xₚ = getx(pt)

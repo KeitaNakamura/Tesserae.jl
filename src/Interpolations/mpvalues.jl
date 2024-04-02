@@ -39,7 +39,7 @@ julia> sum(mp.∇N)
  0.0
  5.551115123125783e-17
 
-julia> surroundingnodes(mp) # grid indices within the local domain of a particle
+julia> neighboringnodes(mp) # grid indices within the local domain of a particle
 CartesianIndices((2:4, 3:5))
 ```
 """
@@ -66,14 +66,14 @@ end
 
 @inline interpolation(mp::MPValues) = getfield(mp, :it)
 
-@inline surroundingnodes(mp::MPValues) = getfield(mp, :indices)[]
-@inline function surroundingnodes(mp::MPValues, grid::Grid)
-    inds = surroundingnodes(mp)
+@inline neighboringnodes(mp::MPValues) = getfield(mp, :indices)[]
+@inline function neighboringnodes(mp::MPValues, grid::Grid)
+    inds = neighboringnodes(mp)
     @boundscheck checkbounds(grid, inds)
     inds
 end
-@inline function surroundingnodes(mp::MPValues, grid::SpGrid)
-    inds = surroundingnodes(mp)
+@inline function neighboringnodes(mp::MPValues, grid::SpGrid)
+    inds = neighboringnodes(mp)
     spinds = get_spinds(grid)
     @boundscheck checkbounds(spinds, inds)
     @inbounds neighbors = view(spinds, inds)
@@ -81,7 +81,7 @@ end
     neighbors
 end
 
-@inline function set_surroundingnodes!(mp::MPValues, indices)
+@inline function set_neighboringnodes!(mp::MPValues, indices)
     getfield(mp, :indices)[] = indices
     mp
 end
@@ -93,7 +93,7 @@ function Base.show(io::IO, mp::MPValues)
     print(io, join(map(propertynames(mp)) do name
         string(name, "::", typeof(getproperty(mp, name)))
     end, ", "), "\n")
-    print(io, "  Neighbor nodes: ", surroundingnodes(mp))
+    print(io, "  Neighbor nodes: ", neighboringnodes(mp))
 end
 
 struct MPValuesVector{It, Prop <: NamedTuple, Indices, ElType <: MPValues{It}} <: AbstractVector{ElType}
@@ -166,14 +166,14 @@ end
 end
 
 function update!(mp::MPValues, pt, mesh)
-    set_surroundingnodes!(mp, surroundingnodes(interpolation(mp), pt, mesh))
+    set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
     update_property!(mp, pt, mesh)
     mp
 end
 
 function update!(mp::MPValues, pt, mesh, filter)
     @debug @assert size(mesh) == size(filter)
-    set_surroundingnodes!(mp, surroundingnodes(interpolation(mp), pt, mesh))
+    set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
     update_property!(mp, pt, mesh, filter)
     mp
 end
