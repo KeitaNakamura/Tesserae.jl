@@ -108,7 +108,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
     end
 
     ## outputs
-    outdir = mkpath(joinpath("output.tmp", "elastic_impact"))
+    outdir = mkpath(joinpath("output", "elastic_impact"))
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # create file
 

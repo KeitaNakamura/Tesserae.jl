@@ -94,7 +94,7 @@ function tlmpm_vortex()
     end
 
     ## outputs
-    outdir = mkpath(joinpath("output.tmp", "tlmpm_vortex"))
+    outdir = mkpath(joinpath("output", "tlmpm_vortex"))
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # create file
 
