@@ -27,24 +27,24 @@ struct TPIC <: Transfer end
 
 function elastic_impact(transfer::Transfer = FLIP(1.0))
 
-    ## simulation parameters
+    ## Simulation parameters
     CFL    = 0.8    # Courant number
     Δx     = 1.0e-3 # grid spacing
     t_stop = 4e-3   # simulation stops at t=t_stop
 
-    ## material constants
+    ## Material constants
     K  = 121.7e6 # Bulk modulus
     μ  = 26.1e6  # Shear modulus
     λ  = K-2μ/3  # Lame's first parameter
     ρ⁰ = 1.01e3  # initial density
 
-    ## geometry
+    ## Geometry
     L  = 0.2  # length of domain
     W  = 0.15 # width of domain
     rᵢ = 0.03 # inner radius of rings
     rₒ = 0.04 # outer radius of rings
 
-    ## properties for grid and particles
+    ## Properties for grid and particles
     GridProp = @NamedTuple begin
         x   :: Vec{2, Float64}
         m   :: Float64
@@ -66,10 +66,10 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
         B  :: SecondOrderTensor{2, Float64, 4} # for APIC
     end
 
-    ## background grid
+    ## Background grid
     grid = generate_grid(GridProp, CartesianMesh(Δx, (-L/2,L/2), (-W/2,W/2)))
 
-    ## particles
+    ## Particles
     particles = let
         pts = generate_particles(ParticleProp, grid.x)
         pts.V⁰ .= prod(grid.x[end]-grid.x[1]) / length(pts)
@@ -83,7 +83,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
             rᵢ^2 < (x-L/4)^2+y^2 < rₒ^2
         end
 
-        ## set initial velocity
+        ## Set initial velocity
         @. lhs.v =  Vec(30, 0)
         @. rhs.v = -Vec(30, 0)
 
@@ -95,19 +95,19 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## use quadratic B-spline
+    ## Use quadratic B-spline
     mpvalues = map(eachindex(particles)) do p
         MPValues(Vec{2, Float64}, QuadraticBSpline())
     end
 
-    ## material model (neo-Hookean)
+    ## Material model (neo-Hookean)
     function caucy_stress(F)
         b = F ⋅ F'
         J = det(F)
         (μ*(b-I) + λ*log(J)*I) / J
     end
 
-    ## outputs
+    ## Outputs
     outdir = mkpath(joinpath("output", "elastic_impact"))
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # create file
@@ -119,14 +119,14 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
 
     Sequoia.@showprogress while t < t_stop
 
-        ## calculate timestep based on the wave speed of elastic material
+        ## Calculate timestep based on the wave speed of elastic material
         Δt = CFL * spacing(grid) / maximum(LazyRows(particles)) do pt
             ρ = pt.m / pt.V
             vc = √((λ+2μ) / ρ)
             vc + norm(pt.v)
         end
 
-        ## update MPValues
+        ## Update MPValues
         for p in eachindex(particles, mpvalues)
             update!(mpvalues[p], LazyRow(particles, p), grid.x)
         end
@@ -179,7 +179,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
             end
         end
 
-        ## update other particle properties
+        ## Update other particle properties
         for pt in LazyRows(particles)
             ∇u = Δt * pt.∇v
             F = (I + ∇u) ⋅ pt.F

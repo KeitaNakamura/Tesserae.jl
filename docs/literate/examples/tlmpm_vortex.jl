@@ -16,24 +16,24 @@ using Sequoia
 
 function tlmpm_vortex()
 
-    ## simulation parameters
+    ## Simulation parameters
     CFL    = 0.1  # Courant number
     Δx     = 0.02 # grid spacing
     t_stop = 1.0  # simulation stops at t=t_stop
     α      = 0.99 # PIC-FLIP parameter
 
-    ## material constants
+    ## Material constants
     E  = 1e6                    # Young's modulus
     ν  = 0.3                    # Poisson's ratio
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
     μ  = E / 2(1 + ν)           # shear modulus
     ρ⁰ = 1e3                    # initial density
 
-    ## geometry
+    ## Geometry
     Rᵢ = 0.75
     Rₒ = 1.25
 
-    ## equations for vortex
+    ## Equations for vortex
     G = π
     T = 1.0
     R̄ = (Rᵢ + Rₒ) / 2
@@ -47,7 +47,7 @@ function tlmpm_vortex()
     end
     isinside(x::Vec) = Rᵢ^2 < x⋅x < Rₒ^2
 
-    ## properties for grid and particles
+    ## Properties for grid and particles
     GridProp = @NamedTuple begin
         X    :: Vec{2, Float64}
         m    :: Float64
@@ -71,11 +71,11 @@ function tlmpm_vortex()
         F  :: SecondOrderTensor{2, Float64, 4}
     end
 
-    ## background grid
+    ## Background grid
     grid = generate_grid(GridProp, CartesianMesh(Δx, (-1.5,1.5), (-1.5,1.5)))
     outside_gridinds = findall(!isinside, grid.X)
 
-    ## particles
+    ## Particles
     particles = generate_particles(ParticleProp, grid.X; alg=GridSampling(), spacing=1)
     particles.V⁰ .= prod(grid.X[end]-grid.X[1]) / length(particles)
 
@@ -86,14 +86,14 @@ function tlmpm_vortex()
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## precompute linear kernel values
+    ## Precompute linear kernel values
     mpvalues = map(eachindex(particles)) do p
         mp = MPValues(Vec{2}, LinearBSpline())
         update!(mp, particles[p], grid.X)
         mp
     end
 
-    ## outputs
+    ## Outputs
     outdir = mkpath(joinpath("output", "tlmpm_vortex"))
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # create file
@@ -105,14 +105,14 @@ function tlmpm_vortex()
 
     Sequoia.@showprogress while t < t_stop
 
-        ## calculate timestep based on the wave speed of elastic material
+        ## Calculate timestep based on the wave speed of elastic material
         Δt = CFL * spacing(grid) / maximum(LazyRows(particles)) do pt
             ρ = pt.m / (pt.V⁰ * det(pt.F))
             vc = √((λ+2μ) / ρ)
             vc + norm(pt.v)
         end
 
-        ## compute grid body forces
+        ## Compute grid body forces
         for i in eachindex(grid)
             if isinside(grid.X[i])
                 (x, y) = grid.X[i]
@@ -134,7 +134,7 @@ function tlmpm_vortex()
         @. grid.v    = grid.vⁿ + Δt * (grid.fint + grid.fext) * grid.m⁻¹
         grid.v[outside_gridinds] .= zero(eltype(grid.v))
 
-        ## update particle velocity and position
+        ## Update particle velocity and position
         @G2P grid=>i particles=>p mpvalues=>ip begin
             ṽ[p]  = @∑ v[i] * N[ip]
             ã[p]  = @∑ (v[i] - vⁿ[i])/Δt * N[ip]
@@ -142,14 +142,14 @@ function tlmpm_vortex()
             x[p] += Δt * ṽ[p]
         end
 
-        ## remap updated velocity to grid (MUSL)
+        ## Remap updated velocity to grid (MUSL)
         @P2G grid=>i particles=>p mpvalues=>ip begin
             mv[i] = @∑ N[ip] * m[p] * v[p]
             v[i]  = mv[i] * m⁻¹[i]
         end
         grid.v[outside_gridinds] .= zero(eltype(grid.v))
 
-        ## update stress
+        ## Update stress
         @G2P grid=>i particles=>p mpvalues=>ip begin
             F[p] += @∑ Δt * v[i] ⊗ ∇N[ip]
             P[p]  = μ * (F[p] - inv(F[p])') + λ * log(det(F[p])) * inv(F[p])'
