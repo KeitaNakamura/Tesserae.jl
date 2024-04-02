@@ -11,7 +11,7 @@ gridspan(::GIMP) = 3
 
 @inline function neighboringnodes(::GIMP, pt, mesh::CartesianMesh)
     dx⁻¹ = spacing_inv(mesh)
-    neighboringnodes(getx(pt), 1+(pt.l/2)*dx⁻¹, mesh)
+    neighboringnodes(getx(pt), 1+pt.l*dx⁻¹, mesh)
 end
 
 # simple GIMP calculation
@@ -20,13 +20,13 @@ end
 # The generalized interpolation material point method.
 # Computer Modeling in Engineering and Sciences, 5(6), 477-496.
 # boundary treatment is ignored
-function value(::GIMP, ξ::Real, l::Real) # `l` is normalized radius by dx
+function value(::GIMP, ξ::Real, l::Real) # `2l` is the particle size normalized by dx
     ξ = abs(ξ)
-    ξ < l/2   ? 1 - (4ξ^2 + l^2) / 4l :
-    ξ < 1-l/2 ? 1 - ξ                 :
-    ξ < 1+l/2 ? (2+l-2ξ)^2 / 8l       : zero(ξ)
+    ξ < l   ? 1 - (ξ^2 + l^2) / 2l :
+    ξ < 1-l ? 1 - ξ                :
+    ξ < 1+l ? (1+l-ξ)^2 / 4l       : zero(ξ)
 end
-@inline value(f::GIMP, ξ::Vec, l::Real) = prod(value.(f, ξ, l))
+@inline value(f::GIMP, ξ::Vec, l::Real) = prod(value.((f,), ξ, l))
 @inline function value(f::GIMP, xₚ::Vec, lₚ::Real, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
     xᵢ = mesh[I]
