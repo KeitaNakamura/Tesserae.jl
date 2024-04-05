@@ -49,6 +49,7 @@ spacing(x::CartesianMesh) = x.dx
 spacing_inv(x::CartesianMesh) = x.dx_inv
 get_axes(x::CartesianMesh) = get_axes(x.axisarray)
 get_axes(x::CartesianMesh, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
+@inline get_xmin(x::CartesianMesh{dim}) where {dim} = @inbounds x[oneunit(CartesianIndex{dim})]
 
 function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
     @assert all(ax->step(ax)==step(first(axes)), axes)
@@ -79,7 +80,7 @@ Check if `x` is inside the `mesh`.
 This returns `true` if `all(mesh[1] .≤ x .< mesh[end])`.
 """
 @inline function isinside(x::Vec{dim}, mesh::CartesianMesh{dim}) where {dim}
-    xmin = mesh[1]
+    xmin = get_xmin(mesh)
     dx⁻¹ = spacing_inv(mesh)
     ξ = Tuple((x - xmin) * dx⁻¹)
     isinside(ξ, size(mesh))
@@ -117,7 +118,7 @@ CartesianIndices((1:5,))
 ```
 """
 @inline function neighboringnodes(x::Vec, h::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
-    xmin = mesh[1]
+    xmin = get_xmin(mesh)
     dx⁻¹ = spacing_inv(mesh)
     dims = size(mesh)
     ξ = Tuple((x - xmin) * dx⁻¹)
@@ -150,7 +151,7 @@ CartesianIndex(2, 2)
 ```
 """
 @inline function whichcell(x::Vec, mesh::CartesianMesh{dim, T}) where {dim, T}
-    xmin = mesh[1]
+    xmin = get_xmin(mesh)
     dx⁻¹ = spacing_inv(mesh)
     ξ = Tuple((x - xmin) * dx⁻¹)
     isinside(ξ, size(mesh)) || return nothing
