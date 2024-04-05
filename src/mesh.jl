@@ -158,6 +158,7 @@ CartesianIndex(2, 2)
     xmin = get_xmin(mesh)
     dx⁻¹ = spacing_inv(mesh)
     ξ = Tuple((x - xmin) * dx⁻¹)
-    isinside(ξ, size(mesh)) || return nothing
-    CartesianIndex(Tuple(@. unsafe_trunc(Int, floor(ξ)) + 1))
+    cell = CartesianIndex(Tuple(@. unsafe_trunc(Int, floor(ξ)) + 1))
+    isinside = checkbounds(Bool, CartesianIndices(size(mesh).-1), cell)
+    ifelse(isinside, cell, nothing)
 end
