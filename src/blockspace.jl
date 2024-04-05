@@ -39,10 +39,14 @@ function update!(s::BlockSpace, xₚ::AbstractVector{<: Vec})
     foreach(fillzero!, s.nparticles)
 
     @threaded :static for p in 1:n
-        id = Threads.threadid()
-        blk = sub2ind(size(s), whichblock(xₚ[p], s.mesh))
-        s.blockindices[p] = blk
-        s.localindices[p] = iszero(blk) ? 0 : (s.nparticles[id][blk] += 1)
+        @inbounds begin
+            id = Threads.threadid()
+            blk = sub2ind(size(s), whichblock(xₚ[p], s.mesh))
+            s.blockindices[p] = blk
+            if !iszero(blk)
+                s.localindices[p] = (s.nparticles[id][blk] += 1)
+            end
+        end
     end
     for i in 1:Threads.nthreads()-1
         broadcast!(+, s.nparticles[i+1], s.nparticles[i+1], s.nparticles[i])
@@ -51,21 +55,23 @@ function update!(s::BlockSpace, xₚ::AbstractVector{<: Vec})
 
     cumsum!(vec(s.stops), vec(nptsinblks))
     @threaded :static for p in 1:n
-        blk = s.blockindices[p]
-        if !iszero(blk)
-            id = Threads.threadid()
-            offset = id==1 ? 0 : s.nparticles[id-1][blk]
-            i = offset + s.localindices[p]
-            stop = s.stops[blk]
-            len = nptsinblks[blk]
-            s.particleindices[stop-len+i] = p
+        @inbounds begin
+            blk = s.blockindices[p]
+            if !iszero(blk)
+                id = Threads.threadid()
+                offset = id==1 ? 0 : s.nparticles[id-1][blk]
+                i = offset + s.localindices[p]
+                stop = s.stops[blk]
+                len = nptsinblks[blk]
+                s.particleindices[stop-len+i] = p
+            end
         end
     end
 
     s
 end
-sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
-sub2ind(::Dims, ::Nothing)::Int = 0
+@inline sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
+@inline sub2ind(::Dims, ::Nothing)::Int = 0
 
 function threadsafe_blocks(s::BlockSpace)
     [filter(I -> !isempty(s[I]), blocks) for blocks in threadsafe_blocks(size(s))]
