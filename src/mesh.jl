@@ -19,6 +19,8 @@ end
     AxisArray(map(getindex, A.axes, ranges))
 end
 
+Base.copy(A::AxisArray) = AxisArray(map(copy, A.axes))
+
 """
     CartesianMesh(Δx, (xmin, xmax), (ymin, ymax)...)
     CartesianMesh(T, Δx, (xmin, xmax), (ymin, ymax)...)
@@ -72,6 +74,8 @@ end
     @boundscheck checkbounds(mesh, ranges...)
     @inbounds CartesianMesh(get_axisarray(mesh)[ranges...], spacing(mesh), spacing_inv(mesh))
 end
+
+Base.copy(mesh::CartesianMesh) = CartesianMesh(copy(get_axisarray(mesh)), spacing(mesh), spacing_inv(mesh))
 
 """
     isinside(x::Vec, mesh::CartesianMesh)
