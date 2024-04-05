@@ -78,31 +78,31 @@ function threadsafe_blocks(s::BlockSpace)
 end
 
 function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
-    inds = Vector{Int}(undef, sum(length, ptsinblks))
+    perm = Vector{Int}(undef, sum(length, ptsinblks))
 
-    cnt = 1
+    count = Threads.Atomic{Int}(1)
     for blocks in threadsafe_blocks(size(ptsinblks))
-        @inbounds for blockindex in blocks
+        @threaded for blockindex in blocks
             particleindices = ptsinblks[blockindex]
-            for i in eachindex(particleindices)
-                inds[cnt] = particleindices[i]
-                particleindices[i] = cnt
-                cnt += 1
-            end
+            n = length(particleindices)
+            cnt = Threads.atomic_add!(count, n)
+            rng = cnt:cnt+n-1
+            perm[rng] .= particleindices
+            particleindices .= rng
         end
     end
 
     # keep missing particles aside
-    if length(inds) != length(particles) # some points are missing
-        missed = particles[setdiff(1:length(particles), inds)]
+    if length(perm) != length(particles) # some points are missing
+        missed = particles[setdiff(eachindex(particles), perm)]
     end
 
     # reorder particles
-    @inbounds particles[1:length(inds)] .= view(particles, inds)
+    @inbounds copyto!(particles, 1, particles[perm], 1, length(perm))
 
     # assign missing particles to the end part of `particles`
-    if length(inds) != length(particles)
-        @inbounds particles[length(inds)+1:end] .= missed
+    if length(perm) != length(particles)
+        @inbounds particles[length(perm)+1:end] .= missed
     end
 
     particles
