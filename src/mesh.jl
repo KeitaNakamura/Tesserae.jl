@@ -125,7 +125,8 @@ CartesianIndices((1:5,))
 """
 @inline function neighboringnodes(x::Vec, h::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
     ξ = Tuple(normalize(x, mesh))
-    isinside(ξ, size(mesh)) || return ZeroCartesianIndices(Val(dim))
+    dims = size(mesh)
+    isinside(ξ, dims) || return ZeroCartesianIndices(Val(dim))
     start = @. unsafe_trunc(Int, floor(ξ - h)) + 2
     stop  = @. unsafe_trunc(Int, floor(ξ + h)) + 1
     imin = Tuple(@. max(start, 1))
