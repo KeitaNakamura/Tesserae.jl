@@ -51,7 +51,7 @@ end
 
 function MPValues(::Type{Vec{dim, T}}, it::Interpolation) where {dim, T}
     prop = create_property(Vec{dim, T}, it)
-    indices = CartesianIndices(nfill(0:0, Val(dim)))
+    indices = ZeroCartesianIndices(Val(dim))
     MPValues(it, prop, fill(indices))
 end
 MPValues(::Type{Vec{dim}}, it::Interpolation) where {dim} = MPValues(Vec{dim, Float64}, it)
@@ -93,7 +93,7 @@ function Base.show(io::IO, mp::MPValues)
     print(io, join(map(propertynames(mp)) do name
         string(name, "::", typeof(getproperty(mp, name)))
     end, ", "), "\n")
-    print(io, "  Neighbor nodes: ", neighboringnodes(mp))
+    print(io, "  Neighboring nodes: ", neighboringnodes(mp))
 end
 
 struct MPValuesVector{It, Prop <: NamedTuple, Indices, ElType <: MPValues{It}} <: AbstractVector{ElType}
@@ -106,7 +106,7 @@ function MPValuesVector(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where {d
     prop = map(create_property(Vec{dim, T}, it)) do prop
         fill(zero(eltype(prop)), size(prop)..., n)
     end
-    indices = fill(CartesianIndices(nfill(0:0, Val(dim))), n)
+    indices = fill(ZeroCartesianIndices(Val(dim)), n)
     It = typeof(it)
     Prop = typeof(prop)
     Indices = typeof(indices)

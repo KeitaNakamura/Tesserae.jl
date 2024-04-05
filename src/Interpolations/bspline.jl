@@ -38,11 +38,9 @@ gridspan(::BSpline{3}) = 4
 
 @inline function neighboringnodes(bspline::BSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
-    xmin = mesh[1]
-    dx⁻¹ = spacing_inv(mesh)
+    ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
-    ξ = Tuple((x - xmin) * dx⁻¹)
-    isinside(ξ, dims) || return CartesianIndices(nfill(0:0, Val(dim)))
+    isinside(ξ, dims) || return ZeroCartesianIndices(Val(dim))
     offset = _neighboringnodes_offset(bspline)
     h = gridspan(bspline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1

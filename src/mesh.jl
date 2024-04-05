@@ -77,6 +77,13 @@ end
 
 Base.copy(mesh::CartesianMesh) = CartesianMesh(copy(get_axisarray(mesh)), spacing(mesh), spacing_inv(mesh))
 
+# normalize `x` by `mesh`
+@inline function Tensorial.normalize(x::Vec{dim}, mesh::CartesianMesh{dim}) where {dim}
+    xmin = get_xmin(mesh)
+    dx⁻¹ = spacing_inv(mesh)
+    (x - xmin) * dx⁻¹
+end
+
 """
     isinside(x::Vec, mesh::CartesianMesh)
 
@@ -84,16 +91,11 @@ Check if `x` is inside the `mesh`.
 This returns `true` if `all(mesh[1] .≤ x .< mesh[end])`.
 """
 @inline function isinside(x::Vec{dim}, mesh::CartesianMesh{dim}) where {dim}
-    xmin = get_xmin(mesh)
-    dx⁻¹ = spacing_inv(mesh)
-    ξ = Tuple((x - xmin) * dx⁻¹)
+    ξ = Tuple(normalize(x, mesh))
     isinside(ξ, size(mesh))
 end
-@generated function isinside(ξ::NTuple{dim}, dims::Dims{dim}) where {dim}
-    quote
-        @_inline_meta
-        @nall $dim d -> 0 ≤ ξ[d] < dims[d]-1
-    end
+@inline function isinside(ξ::NTuple{dim}, dims::Dims{dim}) where {dim}
+    !isnothing(whichcell(ξ, dims))
 end
 
 """
@@ -122,17 +124,15 @@ CartesianIndices((1:5,))
 ```
 """
 @inline function neighboringnodes(x::Vec, h::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
-    xmin = get_xmin(mesh)
-    dx⁻¹ = spacing_inv(mesh)
-    dims = size(mesh)
-    ξ = Tuple((x - xmin) * dx⁻¹)
-    isinside(ξ, dims) || return CartesianIndices(nfill(0:0, Val(dim)))
+    ξ = Tuple(normalize(x, mesh))
+    isinside(ξ, size(mesh)) || return ZeroCartesianIndices(Val(dim))
     start = @. unsafe_trunc(Int, floor(ξ - h)) + 2
     stop  = @. unsafe_trunc(Int, floor(ξ + h)) + 1
     imin = Tuple(@. max(start, 1))
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
+@inline ZeroCartesianIndices(::Val{dim}) where {dim} = CartesianIndices(nfill(0:0, Val(dim)))
 
 """
     whichcell(x::Vec, mesh::CartesianMesh)
@@ -155,10 +155,12 @@ CartesianIndex(2, 2)
 ```
 """
 @inline function whichcell(x::Vec, mesh::CartesianMesh{dim, T}) where {dim, T}
-    xmin = get_xmin(mesh)
-    dx⁻¹ = spacing_inv(mesh)
-    ξ = Tuple((x - xmin) * dx⁻¹)
-    cell = CartesianIndex(Tuple(@. unsafe_trunc(Int, floor(ξ)) + 1))
-    isinside = checkbounds(Bool, CartesianIndices(size(mesh).-1), cell)
+    ξ = Tuple(normalize(x, mesh))
+    whichcell(ξ, size(mesh))
+end
+
+@inline function whichcell(ξ::NTuple{dim}, gridsize::Dims{dim}) where {dim}
+    cell = CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
+    isinside = checkbounds(Bool, CartesianIndices(gridsize.-1), cell)
     ifelse(isinside, cell, nothing)
 end
