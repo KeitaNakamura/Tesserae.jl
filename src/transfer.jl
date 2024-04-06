@@ -1,5 +1,5 @@
 """
-    @P2G grid=>i particles=>p mpvalues=>ip [blockspace] begin
+    @P2G grid=>i particles=>p mpvalues=>ip [space] begin
         equations...
     end
 
@@ -24,17 +24,17 @@ end
 macro P2G(grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, nothing, equations)
 end
-macro P2G(grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
-    P2G_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+macro P2G(grid_pair, particles_pair, mpvalues_pair, space, equations)
+    P2G_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, space, equations)
 end
 macro P2G(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_macro(schedule, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
 end
-macro P2G(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
-    P2G_macro(schedule, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+macro P2G(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
+    P2G_macro(schedule, grid_pair, particles_pair, mpvalues_pair, space, equations)
 end
 
-function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
     _, i = unpair(grid_pair)
 
     @assert equations.head == :block
@@ -44,7 +44,7 @@ function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     sum_equations = equations.args[sumornot]
     nosum_equations = equations.args[.!sumornot]
 
-    body1 = P2G_sum_macro(schedule, grid_pair, particles_pair, mpvalues_pair, blockspace, sum_equations)
+    body1 = P2G_sum_macro(schedule, grid_pair, particles_pair, mpvalues_pair, space, sum_equations)
     body2 = P2G_nosum_macro(grid_pair, nosum_equations)
 
     quote
@@ -53,7 +53,7 @@ function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     end |> esc
 end
 
-function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, blockspace, sum_equations::Vector)
+function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, sum_equations::Vector)
     isempty(sum_equations) && return Expr(:block)
 
     grid, i = unpair(grid_pair)
@@ -87,49 +87,40 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
         end
     end
 
-    if isnothing(blockspace)
-        body = quote
-            if $(schedule.value != :nothing)
-                @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
-            end
-            for $p in Sequoia.eachparticleindex($particles, $mpvalues)
-                $body
-            end
-        end
-    else
-        body = blockwise_P2G_expr(schedule, p, blockspace, body)
-    end
-
     quote
         $(init_gridprops...)
-        $body
+        $P2G(Val($schedule), $grid, $particles, $mpvalues, $space) do $p, $grid, $particles, $mpvalues
+            Base.@_inline_meta
+            $body
+        end
     end
 end
 
-function blockwise_P2G_expr(schedule::QuoteNode, p, blockspace, body)
-    @gensym blocks blk
-    if schedule.value == :nothing
-        body = quote
-            for $blocks in Sequoia.threadsafe_blocks($blockspace)
-                for $blk in $blocks
-                    for $p in $blockspace[$blk]
-                        $body
-                    end
-                end
-            end
-        end
-    else
-        body = quote
-            for $blocks in Sequoia.threadsafe_blocks($blockspace)
-                @threaded $schedule for $blk in $blocks
-                    for $p in $blockspace[$blk]
-                        $body
-                    end
-                end
-            end
+# simple for loop
+for schedule in QuoteNode.((:nothing, :dynamic, :static))
+    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, ::Nothing)
+        $schedule != :nothing && @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
+        for p in Sequoia.eachparticleindex(particles, mpvalues)
+            f(p, grid, particles, mpvalues)
         end
     end
-    body
+end
+
+# block-wise computation (BlockSpace)
+for schedule in QuoteNode.((:nothing, :dynamic, :static))
+    body = :(for blk in blocks
+                 for p in blockspace[blk]
+                     f(p, grid, particles, mpvalues)
+                 end
+             end)
+    if schedule.value != :nothing # wrap by @threaded
+        body = :(@threaded $schedule $body)
+    end
+    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, blockspace::BlockSpace)
+        for blocks in Sequoia.threadsafe_blocks(blockspace)
+            $body
+        end
+    end
 end
 
 function P2G_nosum_macro(grid_pair, nosum_equations::Vector)

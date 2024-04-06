@@ -173,17 +173,11 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
         $(add_local_to_global...)
     end
 
-    if isnothing(blockspace)
-        body = quote
-            if $(schedule.value != :nothing)
-                @warn "@P2G_Matrix: `blockspace` must be given for threaded computation" maxlog=1
-            end
-            for $p in eachparticleindex($particles, $mpvalues)
-                $body
-            end
+    body = quote
+        $P2G(Val($schedule), $grid, $particles, $mpvalues, $blockspace) do $p, $grid, $particles, $mpvalues
+            Base.@_inline_meta
+            $body
         end
-    else
-        body = blockwise_P2G_expr(schedule, p, blockspace, body)
     end
 
     body = quote
