@@ -23,13 +23,13 @@ julia> mp = MPValues(Vec{2}, QuadraticBSpline())
 MPValues:
   Interpolation: QuadraticBSpline()
   Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
-  Neighbor nodes: CartesianIndices((0:0, 0:0))
+  Neighboring nodes: CartesianIndices((0:0, 0:0))
 
 julia> update!(mp, x, mesh) # update `mp` at position `x` in `mesh`
 MPValues:
   Interpolation: QuadraticBSpline()
   Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
-  Neighbor nodes: CartesianIndices((2:4, 3:5))
+  Neighboring nodes: CartesianIndices((2:4, 3:5))
 
 julia> sum(mp.N)
 1.0000000000000004
