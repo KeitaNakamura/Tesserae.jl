@@ -143,17 +143,19 @@ macro showprogress(expr)
         count += 1
         t_current = time()
         elapsed = t_current - prog.tinit
-        speed = t_current - prog.tlast
+        speed = t_current - t_last
         ProgressMeter.update!(prog,
                               min(floor(Int, ($t/$t_stop)*$thresh), $thresh);
                               showvalues = [(:Elapsed, ProgressMeter.durationstring(elapsed)),
                                             (:Iterations, commas(count)),
                                             (:Speed, lstrip(ProgressMeter.speedstring(speed)))])
+        t_last = time()
     end
     push!(blk.args, inner)
     quote
         prog = ProgressMeter.Progress($thresh)
         count = 0
+        t_last = time()
         $expr
         ProgressMeter.finish!(prog)
     end
