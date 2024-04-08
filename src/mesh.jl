@@ -52,6 +52,8 @@ spacing_inv(x::CartesianMesh) = x.dx_inv
 get_axes(x::CartesianMesh) = get_axes(x.axisarray)
 get_axes(x::CartesianMesh, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
 @inline get_xmin(x::CartesianMesh{dim}) where {dim} = @inbounds x[oneunit(CartesianIndex{dim})]
+@inline get_xmax(x::CartesianMesh{dim}) where {dim} = @inbounds x[size(x)...]
+volume(x::CartesianMesh) = prod(get_xmax(x) - get_xmin(x))
 
 function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
     @assert all(ax->step(ax)==step(first(axes)), axes)

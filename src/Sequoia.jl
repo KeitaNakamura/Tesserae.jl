@@ -36,6 +36,7 @@ export
     update_block_sparsity!,
 # Mesh
     CartesianMesh,
+    volume,
     isinside,
     whichcell,
 # Grid
