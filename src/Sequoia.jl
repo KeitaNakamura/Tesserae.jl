@@ -8,6 +8,8 @@ using SparseArrays
 
 using Reexport
 @reexport using Tensorial
+using Tensorial: resizedim
+export resizedim
 
 using StructArrays
 export LazyRow, LazyRows
