@@ -116,13 +116,21 @@ end
 generate_mpvalues(::Type{Vec{dim}}, it::Interpolation, n::Int) where {dim} = generate_mpvalues(Vec{dim, Float64}, it, n)
 
 Base.IndexStyle(::Type{<: MPValueVector}) = IndexLinear()
-Base.size(x::MPValueVector) = size(x.indices)
+Base.size(x::MPValueVector) = size(getfield(x, :indices))
 
-@inline interpolation(mp::MPValueVector) = getfield(mp, :it)
+Base.propertynames(x::MPValueVector) = propertynames(getfield(x, :prop))
+@inline function Base.getproperty(x::MPValueVector, name::Symbol)
+    getproperty(getfield(x, :prop), name)
+end
+@inline function Base.setproperty!(x::MPValueVector, name::Symbol, v)
+    setproperty!(getfield(x, :prop), name, v)
+end
+
+@inline interpolation(x::MPValueVector) = getfield(x, :it)
 
 @inline function Base.getindex(x::MPValueVector, i::Integer)
     @boundscheck checkbounds(x, i)
-    @inbounds _getindex(x.it, x.prop, x.indices, i)
+    @inbounds _getindex(getfield(x, :it), getfield(x, :prop), getfield(x, :indices), i)
 end
 @generated function _getindex(it::Interpolation, prop::NamedTuple{names}, indices, i::Integer) where {names}
     exps = [:(viewcol(prop.$name, i)) for name in names]
