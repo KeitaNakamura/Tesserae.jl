@@ -40,6 +40,9 @@ function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     @assert equations.head == :block
     Base.remove_linenums!(equations)
     sumornot = map(ex->issumexpr(ex, i), equations.args)
+    if sort(sumornot; rev=true) != sumornot
+        error("@P2G: Equations without `@∑` must come after those with `@∑`")
+    end
 
     sum_equations = equations.args[sumornot]
     nosum_equations = equations.args[.!sumornot]
@@ -242,6 +245,9 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     @assert equations.head == :block
     Base.remove_linenums!(equations)
     sumornot = map(ex->issumexpr(ex, p), equations.args)
+    if sort(sumornot; rev=true) != sumornot
+        error("@P2G: Equations without `@∑` must come after those with `@∑`")
+    end
 
     sum_equations = equations.args[sumornot]
     nosum_equations = equations.args[.!sumornot]
@@ -305,7 +311,11 @@ function unpair(expr::Expr)
 end
 
 function issumexpr(expr::Expr, inds::Symbol...)
-    @assert (expr.head==:(=) || expr.head==:(+=) || expr.head==:(-=)) && isrefexpr(expr.args[1], inds...)
+    if length(expr.args) == 2 && _issumexpr(expr.args[2])
+        @assert (expr.head==:(=) || expr.head==:(+=) || expr.head==:(-=)) && isrefexpr(expr.args[1], inds...)
+    else
+        false
+    end
     _issumexpr(expr.args[2])
 end
 
