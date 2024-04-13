@@ -60,9 +60,6 @@ Base.propertynames(mp::MPValue) = propertynames(getfield(mp, :prop))
 @inline function Base.getproperty(mp::MPValue, name::Symbol)
     getproperty(getfield(mp, :prop), name)
 end
-@inline function Base.setproperty!(mp::MPValue, name::Symbol, v)
-    setproperty!(getfield(mp, :prop), name, v)
-end
 
 @inline interpolation(mp::MPValue) = getfield(mp, :it)
 
@@ -121,9 +118,6 @@ Base.size(x::MPValueVector) = size(getfield(x, :indices))
 Base.propertynames(x::MPValueVector) = propertynames(getfield(x, :prop))
 @inline function Base.getproperty(x::MPValueVector, name::Symbol)
     getproperty(getfield(x, :prop), name)
-end
-@inline function Base.setproperty!(x::MPValueVector, name::Symbol, v)
-    setproperty!(getfield(x, :prop), name, v)
 end
 
 @inline interpolation(x::MPValueVector) = getfield(x, :it)
