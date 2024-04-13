@@ -62,9 +62,9 @@ export
     WLS,
     KernelCorrection,
 # MPValue
+    generate_mpvalues,
     neighboringnodes,
     MPValue,
-    MPValueVector,
 # transfer
     @P2G,
     @G2P,

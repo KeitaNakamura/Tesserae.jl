@@ -22,11 +22,11 @@ end
 
 @testset "MPValueVector" begin
     for dim in (1,2,3)
-        @test eltype(MPValueVector(Vec{dim}, QuadraticBSpline(), 2)) ==
-              eltype(MPValueVector(Vec{dim, Float64}, QuadraticBSpline(), 2))
+        @test eltype(generate_mpvalues(Vec{dim}, QuadraticBSpline(), 2)) ==
+              eltype(generate_mpvalues(Vec{dim, Float64}, QuadraticBSpline(), 2))
         for T in (Float32, Float64)
             n = 100
-            mpvalues = @inferred MPValueVector(Vec{dim,T}, QuadraticBSpline(), n)
+            mpvalues = @inferred generate_mpvalues(Vec{dim,T}, QuadraticBSpline(), n)
             @test size(mpvalues) === (n,)
             @test interpolation(mpvalues) === QuadraticBSpline()
             @test all(eachindex(mpvalues)) do i

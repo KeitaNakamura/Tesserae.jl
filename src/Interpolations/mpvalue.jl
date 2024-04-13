@@ -102,7 +102,7 @@ struct MPValueVector{It, Prop <: NamedTuple, Indices, ElType <: MPValue{It}} <: 
     indices::Indices
 end
 
-function MPValueVector(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where {dim, T}
+function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where {dim, T}
     prop = map(create_property(Vec{dim, T}, it)) do prop
         fill(zero(eltype(prop)), size(prop)..., n)
     end
@@ -113,7 +113,7 @@ function MPValueVector(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where {di
     ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
     MPValueVector{It, Prop, Indices, ElType}(it, prop, indices)
 end
-MPValueVector(::Type{Vec{dim}}, it::Interpolation, n::Int) where {dim} = MPValueVector(Vec{dim, Float64}, it, n)
+generate_mpvalues(::Type{Vec{dim}}, it::Interpolation, n::Int) where {dim} = generate_mpvalues(Vec{dim, Float64}, it, n)
 
 Base.IndexStyle(::Type{<: MPValueVector}) = IndexLinear()
 Base.size(x::MPValueVector) = size(x.indices)
