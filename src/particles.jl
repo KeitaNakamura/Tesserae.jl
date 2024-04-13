@@ -26,22 +26,22 @@ function point_sampling(pds::PoissonDiskSampling, l::T, domain::Vararg{Tuple{T, 
     reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, minmax.(domain)...; pds.parallel))
 end
 
-function generate_particles(::Type{ParticleProperty}, points::AbstractVector{<: Vec}) where {ParticleProperty}
-    particles = StructVector{ParticleProperty}(undef, length(points))
+function generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec}) where {ParticleProp}
+    particles = StructVector{ParticleProp}(undef, length(points))
     fillzero!(particles)
     getx(particles) .= points
     particles
 end
 
 """
-    generate_particles([ParticleProperty], mesh; spacing=0.5, alg=PoissonDiskSampling())
+    generate_particles([ParticleProp], mesh; spacing=0.5, alg=PoissonDiskSampling())
 
 Generate particles with particle `spacing` by sampling `alg`orithm.
 """
-function generate_particles(::Type{ParticleProperty}, mesh::CartesianMesh{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProperty, dim, T}
+function generate_particles(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp, dim, T}
     domain = tuple.(Tuple(first(mesh)), Tuple(last(mesh)))
     points = point_sampling(alg, Sequoia.spacing(mesh) * T(spacing), domain...)
-    particles = generate_particles(ParticleProperty, points)
+    particles = generate_particles(ParticleProp, points)
     _reorder_particles!(particles, mesh)
 end
 

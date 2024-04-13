@@ -14,27 +14,27 @@ spacing_inv(grid::Grid) = spacing_inv(get_mesh(grid))
 
 const SpGrid{N, T, NT <: NamedTuple{<: Any, <: Tuple{AbstractMesh, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
 
-function check_gridproperty(::Type{GridProperty}, ::Type{Vec{dim, T}}) where {GridProperty, dim, T}
-    V = fieldtype(GridProperty, 1)
+function check_gridproperty(::Type{GridProp}, ::Type{Vec{dim, T}}) where {GridProp, dim, T}
+    V = fieldtype(GridProp, 1)
     if V !== Vec{dim,T}
         error("generate_grid: the first property of grid must be `Vec{$dim, $T}` for given mesh, got $V")
     end
-    if !(isbitstype(GridProperty))
+    if !(isbitstype(GridProp))
         error("generate_grid: the property type of grid must be `isbitstype` type")
     end
 end
 
 """
-    generate_grid([ArrayType], GridProperty, mesh)
+    generate_grid([ArrayType], GridProp, mesh)
 
-Generate background grid with type `GridProperty`.
+Generate background grid with type `GridProp`.
 This returns `StructArray` ([StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl)).
-The first field of `GridProperty` is used to store `mesh` which requires type `Vec{dim, T}`.
+The first field of `GridProp` is used to store `mesh` which requires type `Vec{dim, T}`.
 `ArrayType` can be chosen from `Array` and `SpArray`.
 
 # Examples
 ```jldoctest
-julia> struct GridProperty{dim, T}
+julia> struct GridProp{dim, T}
            x  :: Vec{dim, T}
            m  :: Float64
            mv :: Vec{dim, T}
@@ -43,10 +43,10 @@ julia> struct GridProperty{dim, T}
            vⁿ :: Vec{dim, T}
        end
 
-julia> grid = generate_grid(GridProperty{2, Float64}, CartesianMesh(0.5, (0,3), (0,2)));
+julia> grid = generate_grid(GridProp{2, Float64}, CartesianMesh(0.5, (0,3), (0,2)));
 
 julia> grid[1]
-GridProperty{2, Float64}([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+GridProp{2, Float64}([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
 
 julia> grid.x
 7×5 CartesianMesh{2, Float64, Vector{Float64}}:
@@ -69,25 +69,25 @@ julia> grid.v
  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
 ```
 """
-function generate_grid(::Type{GridProperty}, mesh::AbstractMesh) where {GridProperty}
-    generate_grid(Array, GridProperty, mesh)
+function generate_grid(::Type{GridProp}, mesh::AbstractMesh) where {GridProp}
+    generate_grid(Array, GridProp, mesh)
 end
 
-@generated function generate_grid(::Type{Array}, ::Type{GridProperty}, mesh::AbstractMesh) where {GridProperty}
-    exps = [:(Array{$T}(undef, size(mesh))) for T in fieldtypes(GridProperty)[2:end]]
+@generated function generate_grid(::Type{Array}, ::Type{GridProp}, mesh::AbstractMesh) where {GridProp}
+    exps = [:(Array{$T}(undef, size(mesh))) for T in fieldtypes(GridProp)[2:end]]
     quote
-        check_gridproperty(GridProperty, eltype(mesh))
-        fillzero!(StructArray{GridProperty}(tuple(mesh, $(exps...))))
+        check_gridproperty(GridProp, eltype(mesh))
+        fillzero!(StructArray{GridProp}(tuple(mesh, $(exps...))))
     end
 end
 
 # SpArray is designed for Cartesian mesh
-@generated function generate_grid(::Type{SpArray}, ::Type{GridProperty}, mesh::CartesianMesh) where {GridProperty}
-    exps = [:(SpArray{$T}(spinds)) for T in fieldtypes(GridProperty)[2:end]]
+@generated function generate_grid(::Type{SpArray}, ::Type{GridProp}, mesh::CartesianMesh) where {GridProp}
+    exps = [:(SpArray{$T}(spinds)) for T in fieldtypes(GridProp)[2:end]]
     quote
-        check_gridproperty(GridProperty, eltype(mesh))
+        check_gridproperty(GridProp, eltype(mesh))
         spinds = SpIndices(size(mesh))
-        StructArray{GridProperty}(tuple(mesh, $(exps...)))
+        StructArray{GridProp}(tuple(mesh, $(exps...)))
     end
 end
 
