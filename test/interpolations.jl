@@ -1,12 +1,12 @@
-@testset "MPValues" begin
+@testset "MPValue" begin
     for dim in (1,2,3)
-        @test eltype(MPValues(Vec{dim}, QuadraticBSpline())) ==
-              eltype(MPValues(Vec{dim, Float64}, QuadraticBSpline()))
+        @test eltype(MPValue(Vec{dim}, QuadraticBSpline())) ==
+              eltype(MPValue(Vec{dim, Float64}, QuadraticBSpline()))
         for T in (Float32, Float64)
             for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), GIMP())
                 for extension in (identity, WLS, KernelCorrection)
                     it = extension(kernel)
-                    mp = @inferred MPValues(Vec{dim,T}, it)
+                    mp = @inferred MPValue(Vec{dim,T}, it)
                     @test interpolation(mp) === it
                     @test mp.N isa Array{T}
                     @test mp.∇N isa Array{Vec{dim,T}}
@@ -20,13 +20,13 @@
     end
 end
 
-@testset "MPValuesVector" begin
+@testset "MPValueVector" begin
     for dim in (1,2,3)
-        @test eltype(MPValuesVector(Vec{dim}, QuadraticBSpline(), 2)) ==
-              eltype(MPValuesVector(Vec{dim, Float64}, QuadraticBSpline(), 2))
+        @test eltype(MPValueVector(Vec{dim}, QuadraticBSpline(), 2)) ==
+              eltype(MPValueVector(Vec{dim, Float64}, QuadraticBSpline(), 2))
         for T in (Float32, Float64)
             n = 100
-            mpvalues = @inferred MPValuesVector(Vec{dim,T}, QuadraticBSpline(), n)
+            mpvalues = @inferred MPValueVector(Vec{dim,T}, QuadraticBSpline(), n)
             @test size(mpvalues) === (n,)
             @test interpolation(mpvalues) === QuadraticBSpline()
             @test all(eachindex(mpvalues)) do i
@@ -53,7 +53,7 @@ end
     @testset "$it" for it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
         for T in (Float32, Float64), dim in (1,2,3), it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),)
             Random.seed!(1234)
-            mp = MPValues(Vec{dim,T}, it)
+            mp = MPValue(Vec{dim,T}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             @test all(1:100) do _
                 x = rand(Vec{dim, T})
@@ -70,7 +70,7 @@ end
         it = GIMP()
         for T in (Float32, Float64), dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValues(Vec{dim,T}, it)
+            mp = MPValue(Vec{dim,T}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
@@ -90,7 +90,7 @@ end
         it = WLS(kernel)
         for T in (Float32, Float64), dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValues(Vec{dim,T}, it)
+            mp = MPValue(Vec{dim,T}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
@@ -107,7 +107,7 @@ end
         it = KernelCorrection(kernel)
         for T in (Float32, Float64), dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValues(Vec{dim,T}, it)
+            mp = MPValue(Vec{dim,T}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _

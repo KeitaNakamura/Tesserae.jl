@@ -42,7 +42,7 @@ end
     N, ∇N
 end
 
-@inline function update_property!(mp::MPValues{GIMP}, pt, mesh::CartesianMesh)
+@inline function update_property!(mp::MPValue{GIMP}, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]

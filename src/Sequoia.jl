@@ -61,10 +61,10 @@ export
     Interpolation,
     WLS,
     KernelCorrection,
-# MPValues
+# MPValue
     neighboringnodes,
-    MPValues,
-    MPValuesVector,
+    MPValue,
+    MPValueVector,
 # transfer
     @P2G,
     @G2P,
@@ -90,7 +90,7 @@ include("sparray.jl")
 include("grid.jl")
 include("particles.jl")
 
-include("Interpolations/mpvalues.jl")
+include("Interpolations/mpvalue.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
 include("Interpolations/polynomials.jl")

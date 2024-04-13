@@ -211,7 +211,7 @@ end
     (N, ∇N*dx⁻¹)
 end
 
-function update_property!(mp::MPValues{<: BSpline}, pt, mesh::CartesianMesh)
+function update_property!(mp::MPValue{<: BSpline}, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices)
     if isnearbounds

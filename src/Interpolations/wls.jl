@@ -17,7 +17,7 @@ gridspan(wls::WLS) = gridspan(get_kernel(wls))
 @inline neighboringnodes(wls::WLS, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(wls), pt, mesh)
 
 # general version
-function update_property!(mp::MPValues{<: WLS}, pt, mesh::CartesianMesh{dim, T}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim, T}
+function update_property!(mp::MPValue{<: WLS}, pt, mesh::CartesianMesh{dim, T}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim, T}
     indices = neighboringnodes(mp)
 
     it = interpolation(mp)
@@ -46,7 +46,7 @@ function update_property!(mp::MPValues{<: WLS}, pt, mesh::CartesianMesh{dim, T},
 end
 
 # fast version for `LinearWLS(BSpline{order}())`
-function update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+function update_property!(mp::MPValue{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
@@ -56,7 +56,7 @@ function update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianM
     end
 end
 
-function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh{dim, T}) where {dim, T}
+function fast_update_property!(mp::MPValue{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh{dim, T}) where {dim, T}
     indices = neighboringnodes(mp)
     F = get_kernel(interpolation(mp))
     xₚ = getx(pt)
@@ -75,7 +75,7 @@ function fast_update_property!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::Carte
     broadcast!(.*, mp.∇N, mp.∇N, D⁻¹)
 end
 
-function fast_update_property_nearbounds!(mp::MPValues{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh{dim, T}, filter::AbstractArray{Bool}) where {dim, T}
+function fast_update_property_nearbounds!(mp::MPValue{<: WLS{<: BSpline}}, pt, mesh::CartesianMesh{dim, T}, filter::AbstractArray{Bool}) where {dim, T}
     indices = neighboringnodes(mp)
     it = interpolation(mp)
     F = get_kernel(it)

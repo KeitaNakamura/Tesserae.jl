@@ -107,14 +107,14 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     end
 end
 
-function pre_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, space, ::Val)
+function pre_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, space, ::Val)
 end
-function post_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, space, ::Val)
+function post_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, space, ::Val)
 end
 
 # simple for loop
 for schedule in QuoteNode.((:nothing, :dynamic, :static))
-    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, ::Nothing)
+    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, ::Nothing)
         $schedule != :nothing && @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
         for p in Sequoia.eachparticleindex(particles, mpvalues)
             f(p, grid, particles, mpvalues)
@@ -132,7 +132,7 @@ for schedule in QuoteNode.((:nothing, :dynamic, :static))
     if schedule.value != :nothing # wrap by @threaded
         body = :(@threaded $schedule $body)
     end
-    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, blockspace::BlockSpace)
+    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, blockspace::BlockSpace)
         for blocks in Sequoia.threadsafe_blocks(blockspace)
             $body
         end
@@ -141,17 +141,17 @@ end
 
 # multigrid computation (MultigridSpace)
 for schedule in QuoteNode.((:dynamic, :static))
-    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, multigridspace::MultigridSpace)
+    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, multigridspace::MultigridSpace)
         @threaded :static for p in Sequoia.eachparticleindex(particles, mpvalues)
             id = Threads.threadid()
             f(p, multigridspace.grids[id], particles, mpvalues)
         end
     end
 end
-function pre_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, space::MultigridSpace, ::Val{names}) where {names}
+function pre_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, space::MultigridSpace, ::Val{names}) where {names}
     reinit!(space, grid, Val(names))
 end
-function post_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, space::MultigridSpace, ::Val{names}) where {names}
+function post_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, space::MultigridSpace, ::Val{names}) where {names}
     add!(grid, space, Val(names))
 end
 
@@ -417,7 +417,7 @@ function findarrays_from_index!(set::Set{Expr}, index::Symbol, expr::Expr)
 end
 findarrays_from_index!(set::Set{Expr}, index::Symbol, expr) = nothing
 
-function eachparticleindex(particles::AbstractVector, mpvalues::AbstractVector{<: MPValues})
+function eachparticleindex(particles::AbstractVector, mpvalues::AbstractVector{<: MPValue})
     @assert length(particles) ≤ length(mpvalues)
     eachindex(particles)
 end

@@ -88,7 +88,7 @@ function tlmpm_vortex()
 
     ## Precompute linear kernel values
     mpvalues = map(eachindex(particles)) do p
-        mp = MPValues(Vec{2}, LinearBSpline())
+        mp = MPValue(Vec{2}, LinearBSpline())
         update!(mp, particles[p], grid.X)
         mp
     end

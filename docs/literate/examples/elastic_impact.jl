@@ -97,7 +97,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
 
     ## Use quadratic B-spline
     mpvalues = map(eachindex(particles)) do p
-        MPValues(Vec{2, Float64}, QuadraticBSpline())
+        MPValue(Vec{2, Float64}, QuadraticBSpline())
     end
 
     ## Material model (neo-Hookean)
@@ -126,7 +126,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
             vc + norm(pt.v)
         end
 
-        ## Update MPValues
+        ## Update MPValue
         for p in eachindex(particles, mpvalues)
             update!(mpvalues[p], LazyRow(particles, p), grid.x)
         end
