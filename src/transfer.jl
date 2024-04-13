@@ -157,8 +157,8 @@ end
 
 function P2G_nosum_macro(grid_pair, nosum_equations::Vector)
     isempty(nosum_equations) && return Expr(:block)
-    grid, i = unpair(grid_pair)
 
+    grid, i = unpair(grid_pair)
     foreach(ex->complete_parent_from_index!(ex, [grid=>i]), nosum_equations)
 
     vars = Set{Expr}()
@@ -237,10 +237,8 @@ macro G2P(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equatio
 end
 
 function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
-    grid, i = unpair(grid_pair)
     particles, p = unpair(particles_pair)
-    mpvalues, ip = unpair(mpvalues_pair)
-    @gensym mp gridindices
+    mpvalues, _ = unpair(mpvalues_pair)
 
     @assert equations.head == :block
     Base.remove_linenums!(equations)
@@ -251,6 +249,49 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
 
     sum_equations = equations.args[sumornot]
     nosum_equations = equations.args[.!sumornot]
+
+    body1 = G2P_sum_macro(grid_pair, particles_pair, mpvalues_pair, sum_equations)
+    body2 = G2P_nosum_macro(particles_pair, nosum_equations)
+
+    body = quote
+        $body1
+        $body2
+    end
+
+    if !DEBUG
+        body = :(@inbounds $body)
+    end
+
+    if isallunderscore(mpvalues)
+        iterator = :(eachindex($particles))
+    else
+        iterator = :(Sequoia.eachparticleindex($particles, $mpvalues))
+    end
+
+    if schedule.value == :nothing
+        body = quote
+            for $p in $iterator
+                $body
+            end
+        end
+    else
+        body = quote
+            @threaded $schedule for $p in $iterator
+                $body
+            end
+        end
+    end
+
+    esc(body)
+end
+
+function G2P_sum_macro(grid_pair, particles_pair, mpvalues_pair, sum_equations::Vector)
+    isempty(sum_equations) && return Expr(:block)
+
+    grid, i = unpair(grid_pair)
+    particles, p = unpair(particles_pair)
+    mpvalues, ip = unpair(mpvalues_pair)
+    @gensym mp gridindices
 
     pairs = [grid=>i, particles=>p, mp=>ip]
     vars = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
@@ -268,9 +309,7 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
 
     foreach(ex->ex.head=:(+=), sum_equations)
 
-    foreach(ex->complete_parent_from_index!(ex, [particles=>p]), nosum_equations)
-
-    body = quote
+    quote
         $(vars[2]...)
         $(particles_vars_declare...)
         $mp = $mpvalues[$p]
@@ -281,33 +320,25 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
             $(sum_equations...)
         end
         $(particles_vars_store...)
-        $(nosum_equations...)
     end
+end
 
-    if !DEBUG
-        body = :(@inbounds $body)
-    end
+function G2P_nosum_macro(particles_pair, nosum_equations::Vector)
+    isempty(nosum_equations) && return Expr(:block)
 
-    if schedule.value == :nothing
-        body = quote
-            for $p in Sequoia.eachparticleindex($particles, $mpvalues)
-                $body
-            end
-        end
-    else
-        body = quote
-            @threaded $schedule for $p in Sequoia.eachparticleindex($particles, $mpvalues)
-                $body
-            end
-        end
-    end
+    particles, p = unpair(particles_pair)
+    foreach(ex->complete_parent_from_index!(ex, [particles=>p]), nosum_equations)
 
-    esc(body)
+    Expr(:block, nosum_equations...)
 end
 
 function unpair(expr::Expr)
     @assert expr.head==:call && expr.args[1]==:(=>) && isa(expr.args[2],Symbol) && isa(expr.args[3],Symbol)
     expr.args[2], expr.args[3]
+end
+function unpair(s::Symbol)
+    @assert isallunderscore(s)
+    s, s
 end
 
 function issumexpr(expr::Expr, inds::Symbol...)
@@ -390,3 +421,5 @@ function eachparticleindex(particles::AbstractVector, mpvalues::AbstractVector{<
     @assert length(particles) ≤ length(mpvalues)
     eachindex(particles)
 end
+
+isallunderscore(s::Symbol) = all(==('_'), string(s))
