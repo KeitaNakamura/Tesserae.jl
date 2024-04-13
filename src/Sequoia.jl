@@ -97,6 +97,8 @@ include("Interpolations/polynomials.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
 
+include("multigridspace.jl")
+
 include("transfer.jl")
 include("implicit.jl")
 

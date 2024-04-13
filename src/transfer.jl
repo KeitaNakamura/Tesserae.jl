@@ -65,13 +65,15 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     vars = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
     foreach(ex->complete_sumeq_expr!(ex, pairs, vars), sum_equations)
 
+    sum_names = Any[]
     init_gridprops = Any[]
     for ex in sum_equations
+        # `lhs` is, for example, `grid.m[i]`
+        lhs = ex.args[1]
         if Meta.isexpr(ex, :(=))
-            lhs = ex.args[1]
-            @assert Meta.isexpr(lhs, :ref)
             push!(init_gridprops, :(Sequoia.fillzero!($(lhs.args[1]))))
         end
+        push!(sum_names, lhs.args[1].args[2].value) # extract `m` for `grid.m[i]`
     end
 
     foreach(ex->ex.head=:(+=), sum_equations)
@@ -93,11 +95,18 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
 
     quote
         $(init_gridprops...)
+        $pre_P2G($grid, $particles, $mpvalues, $space, $(Val(tuple(sum_names...))))
         $P2G(Val($schedule), $grid, $particles, $mpvalues, $space) do $p, $grid, $particles, $mpvalues
             Base.@_inline_meta
             $body
         end
+        $post_P2G($grid, $particles, $mpvalues, $space, $(Val(tuple(sum_names...))))
     end
+end
+
+function pre_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, space, ::Val)
+end
+function post_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, space, ::Val)
 end
 
 # simple for loop
@@ -125,6 +134,22 @@ for schedule in QuoteNode.((:nothing, :dynamic, :static))
             $body
         end
     end
+end
+
+# multigrid computation (MultigridSpace)
+for schedule in QuoteNode.((:dynamic, :static))
+    @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, multigridspace::MultigridSpace)
+        @threaded :static for p in Sequoia.eachparticleindex(particles, mpvalues)
+            id = Threads.threadid()
+            f(p, multigridspace.grids[id], particles, mpvalues)
+        end
+    end
+end
+function pre_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, space::MultigridSpace, ::Val{names}) where {names}
+    reinit!(space, grid, Val(names))
+end
+function post_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValues}, space::MultigridSpace, ::Val{names}) where {names}
+    add!(grid, space, Val(names))
 end
 
 function P2G_nosum_macro(grid_pair, nosum_equations::Vector)
