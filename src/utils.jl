@@ -97,18 +97,39 @@ macro threaded(schedule::QuoteNode, expr)
     threaded_expr(schedule, expr)
 end
 macro threaded(expr)
-    threaded_expr(QuoteNode(:static), expr)
+    threaded_expr(QuoteNode(:dynamic), expr)
 end
 
 function threaded_expr(schedule::QuoteNode, expr::Expr)
     if Meta.isexpr(expr, :for)
-        quote
-            if Threads.nthreads() > 1 && $THREADED
-                Threads.@threads $schedule $expr
-            else
-                $expr
+        if schedule.value == :static
+            quote
+                if Threads.nthreads() > 1 && $THREADED
+                    Threads.@threads $schedule $expr
+                else
+                    $expr
+                end
+            end |> esc
+        else
+            head = expr.args[1]
+            index = esc(head.args[1])
+            iter = esc(head.args[2])
+            body = esc(expr.args[2])
+            quote
+                if Threads.nthreads() > 1 && $THREADED
+                    iter = $iter
+                    chunk_size = max(1, length(iter) ÷ (8*Threads.nthreads()))
+                    tasks = map(Iterators.partition(iter, chunk_size)) do chunk
+                        Threads.@spawn for $index in chunk
+                            $body
+                        end
+                    end
+                    fetch.(tasks)
+                else
+                    $(esc(expr))
+                end
             end
-        end |> esc
+        end
     elseif Meta.isexpr(expr, :macrocall) &&
            (expr.args[1] in (Symbol("@P2G"), Symbol("@G2P"), Symbol("@P2G_Matrix")))
         if THREADED
