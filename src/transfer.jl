@@ -107,7 +107,7 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     end
 end
 
-for schedule in QuoteNode.((:nothing, :dynamic, :static))
+for schedule in QuoteNode.((:nothing, :static, :dynamic))
 
     # simple for loop
     @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, ::Nothing)
@@ -131,20 +131,21 @@ for schedule in QuoteNode.((:nothing, :dynamic, :static))
             $body
         end
     end
+end
 
-    # multigrid computation (MultigridSpace)
-    if schedule.value == :nothing
-        function P2G(f, ::Val{:nothing}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, ::MultigridSpace)
-            P2G(f, Val(:nothing), grid, particles, mpvalues, nothing)
-        end
-    else
-        @eval function P2G(f, ::Val{$schedule}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, multigridspace::MultigridSpace)
-            @threaded :static for p in Sequoia.eachparticleindex(particles, mpvalues)
-                id = Threads.threadid()
-                f(p, multigridspace.grids[id], particles, mpvalues)
-            end
-        end
+# multigrid computation (MultigridSpace)
+function P2G(f, ::Val{:nothing}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, ::MultigridSpace)
+    P2G(f, Val(:nothing), grid, particles, mpvalues, nothing)
+end
+function P2G(f, ::Val{:static}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, multigridspace::MultigridSpace)
+    @threaded :static for p in Sequoia.eachparticleindex(particles, mpvalues)
+        id = Threads.threadid()
+        f(p, multigridspace.grids[id], particles, mpvalues)
     end
+end
+function P2G(f, ::Val{:dynamic}, grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, multigridspace::MultigridSpace)
+    @warn "@P2G: :dynamic schedule is not allowed for `MultigridSpace`, changed to :static" maxlog=1
+    P2G(f, Val(:static), grid, particles, mpvalues, multigridspace)
 end
 
 pre_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPValue}, space, ::Val) = nothing

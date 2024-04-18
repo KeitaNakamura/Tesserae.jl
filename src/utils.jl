@@ -97,7 +97,7 @@ macro threaded(schedule::QuoteNode, expr)
     threaded_expr(schedule, expr)
 end
 macro threaded(expr)
-    threaded_expr(QuoteNode(:dynamic), expr)
+    threaded_expr(QuoteNode(:static), expr)
 end
 
 function threaded_expr(schedule::QuoteNode, expr::Expr)
