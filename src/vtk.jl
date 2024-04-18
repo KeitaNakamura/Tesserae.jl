@@ -20,6 +20,12 @@ vtk_format(A::AbstractArray{<: Tensor}) = _vtk_format(A)
 function _vtk_format(A::AbstractArray{<: Tensor})
     reinterpret(reshape, eltype(eltype(A)), A)
 end
+function _vtk_format(A::AbstractArray{<: SymmetricSecondOrderTensor{2, T}}) where {T}
+    _vtk_format(maparray(x->SymmetricSecondOrderTensor{3, T}(x[1,1],x[2,1],NaN,x[2,2],NaN,NaN), A))
+end
+function _vtk_format(A::AbstractArray{<: SymmetricSecondOrderTensor{3, T}}) where {T}
+    _vtk_format(maparray(x->Vec{6, T}(x[1,1],x[2,2],x[3,3],x[1,2],x[2,3],x[3,1]), A))
+end
 
 # open/close
 openvtk(args...; kwargs...) = vtk_grid(args...; kwargs...)
