@@ -48,7 +48,7 @@ function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     nosum_equations = equations.args[.!sumornot]
 
     body1 = P2G_sum_macro(schedule, grid_pair, particles_pair, mpvalues_pair, space, sum_equations)
-    body2 = P2G_nosum_macro(grid_pair, nosum_equations)
+    body2 = P2G_nosum_macro(schedule, grid_pair, nosum_equations)
 
     quote
         $body1
@@ -153,7 +153,7 @@ post_P2G(grid::Grid, particles::AbstractVector, mpvalues::AbstractVector{<: MPVa
 pre_P2G(grid::Grid, ::AbstractVector, ::AbstractVector{<: MPValue}, space::MultigridSpace, ::Val{names}) where {names} = reinit!(space, grid, Val(names))
 post_P2G(grid::Grid, ::AbstractVector, ::AbstractVector{<: MPValue}, space::MultigridSpace, ::Val{names}) where {names} = add!(grid, space, Val(names))
 
-function P2G_nosum_macro(grid_pair, nosum_equations::Vector)
+function P2G_nosum_macro(schedule, grid_pair, nosum_equations::Vector)
     isempty(nosum_equations) && return Expr(:block)
 
     grid, i = unpair(grid_pair)
@@ -163,9 +163,8 @@ function P2G_nosum_macro(grid_pair, nosum_equations::Vector)
     foreach(ex->findarrays_from_index!(vars, i, ex), nosum_equations)
 
     body = quote
-        Sequoia.foreach_gridindex(Sequoia.GridIndexStyle($(vars...)), $grid) do $i
+        Sequoia.foreach_gridindex(Val($schedule), Sequoia.GridIndexStyle($(vars...)), $grid) do $i
             Base.@_inline_meta
-            Base.@_propagate_inbounds_meta
             $(nosum_equations...)
         end
     end
@@ -183,23 +182,27 @@ GridIndexStyle(::IndexLinear, ::IndexLinear) = IndexLinear()
 GridIndexStyle(::IndexSpArray, ::IndexSpArray) = IndexSpArray()
 GridIndexStyle(::IndexStyle, ::IndexStyle) = IndexCartesian()
 
-@inline function foreach_gridindex(f, style::IndexStyle, grid::Grid)
-    @inbounds @simd for i in eachindex(style, grid)
-        f(i)
-    end
+for schedule in QuoteNode.((:nothing, :static, :dynamic))
+    wrap(ex, sch) = sch.value==:nothing ? :(@simd $ex) : :(@threaded $sch $ex)
+
+    body = wrap(:(for i in eachindex(style, grid)
+                      @inbounds f(i)
+                  end), schedule)
+    @eval foreach_gridindex(f, ::Val{$schedule}, style::IndexStyle, grid::Grid) = $body
+
+    body = wrap(:(for i in eachindex(style, grid)
+                      @inbounds if isactive(grid, i)
+                          f(i)
+                      end
+                  end), schedule)
+    @eval foreach_gridindex(f, ::Val{$schedule}, style::IndexCartesian, grid::SpGrid) = $body
+
+    body = wrap(:(for i in eachindex(style, grid)
+                      @inbounds f(UnsafeSpIndex(i))
+                  end), schedule)
+    @eval foreach_gridindex(f, ::Val{$schedule}, style::IndexSpArray, grid::SpGrid) = $body
 end
-@inline function foreach_gridindex(f, style::IndexCartesian, grid::SpGrid)
-    @inbounds @simd for i in eachindex(style, grid)
-        if isactive(grid, i)
-            f(i)
-        end
-    end
-end
-@inline function foreach_gridindex(f, style::IndexSpArray, grid::SpGrid)
-    @inbounds @simd for i in 1:countnnz(get_spinds(grid))
-        f(UnsafeSpIndex(i))
-    end
-end
+
 struct UnsafeSpIndex{I}
     i::I
 end
