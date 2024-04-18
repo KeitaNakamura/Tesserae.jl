@@ -28,23 +28,22 @@ struct TPIC <: Transfer end
 function elastic_impact(transfer::Transfer = FLIP(1.0))
 
     ## Simulation parameters
-    CFL    = 0.8    # Courant number
-    Δx     = 1.0e-3 # grid spacing
-    t_stop = 4e-3   # simulation stops at t=t_stop
+    h   = 1.0e-3 # Grid spacing
+    T   = 4e-3   # Time span
+    CFL = 0.8    # Courant number
 
     ## Material constants
     K  = 121.7e6 # Bulk modulus
     μ  = 26.1e6  # Shear modulus
     λ  = K-2μ/3  # Lame's first parameter
-    ρ⁰ = 1.01e3  # initial density
+    ρ⁰ = 1.01e3  # Initial density
 
     ## Geometry
-    L  = 0.2  # length of domain
-    W  = 0.15 # width of domain
-    rᵢ = 0.03 # inner radius of rings
-    rₒ = 0.04 # outer radius of rings
+    L  = 0.2  # Length of domain
+    W  = 0.15 # Width of domain
+    rᵢ = 0.03 # Inner radius of rings
+    rₒ = 0.04 # Outer radius of rings
 
-    ## Properties for grid and particles
     GridProp = @NamedTuple begin
         x   :: Vec{2, Float64}
         m   :: Float64
@@ -67,38 +66,32 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(Δx, (-L/2,L/2), (-W/2,W/2)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (-L/2,L/2), (-W/2,W/2)))
 
     ## Particles
     particles = let
         pts = generate_particles(ParticleProp, grid.x)
-        pts.V⁰ .= prod(grid.x[end]-grid.x[1]) / length(pts)
+        pts.V .= pts.V⁰ .= volume(grid.x) / length(pts)
 
-        lhs = filter(pts) do pt
-            x, y = pt.x
+        lhs = findall(pts.x) do (x, y)
             rᵢ^2 < (x+L/4)^2+y^2 < rₒ^2
         end
-        rhs = filter(pts) do pt
-            x, y = pt.x
+        rhs = findall(pts.x) do (x, y)
             rᵢ^2 < (x-L/4)^2+y^2 < rₒ^2
         end
 
-        ## Set initial velocity
-        @. lhs.v =  Vec(30, 0)
-        @. rhs.v = -Vec(30, 0)
+        ## Set initial velocities
+        @. pts.v[lhs] =  Vec(30, 0)
+        @. pts.v[rhs] = -Vec(30, 0)
 
-        [lhs; rhs]
+        pts[[lhs; rhs]]
     end
-
-    @. particles.V = particles.V⁰
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Use quadratic B-spline
-    mpvalues = map(eachindex(particles)) do p
-        MPValue(Vec{2, Float64}, QuadraticBSpline())
-    end
+    ## Interpolation
+    mpvalues = generate_mpvalues(Vec{2, Float64}, QuadraticBSpline(), length(particles))
 
     ## Material model (neo-Hookean)
     function caucy_stress(F)
@@ -115,22 +108,20 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
     t = 0.0
     step = 0
     fps = 12e3
-    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
-    Sequoia.@showprogress while t < t_stop
+    Sequoia.@showprogress while t < T
 
-        ## Calculate timestep based on the wave speed of elastic material
-        Δt = CFL * spacing(grid) / maximum(LazyRows(particles)) do pt
-            ρ = pt.m / pt.V
-            vc = √((λ+2μ) / ρ)
-            vc + norm(pt.v)
-        end
+        ## Calculate timestep based on the wave speed
+        vmax = maximum(@. sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v))
+        Δt = CFL * spacing(grid) / vmax
 
-        ## Update MPValue
+        ## Update interpolation values
         for p in eachindex(particles, mpvalues)
-            update!(mpvalues[p], LazyRow(particles, p), grid.x)
+            update!(mpvalues[p], particles.x[p], grid.x)
         end
 
+        ## Particle-to-grid transfer
         if transfer isa FLIP
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ N[ip] * m[p]
@@ -138,7 +129,7 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
                 f[i]  = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
             end
         elseif transfer isa APIC
-            local Dₚ⁻¹ = inv(1/4 * Δx^2 * I)
+            local Dₚ⁻¹ = inv(1/4 * h^2 * I)
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ N[ip] * m[p]
                 mv[i] = @∑ N[ip] * m[p] * (v[p] + B[p] ⋅ Dₚ⁻¹ ⋅ (x[i] - x[p]))
@@ -152,10 +143,12 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
             end
         end
 
+        ## Update grid velocity
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
         @. grid.vⁿ = grid.mv * grid.m⁻¹
         @. grid.v  = grid.vⁿ + Δt * grid.f * grid.m⁻¹
 
+        ## Grid-to-particle transfer
         if transfer isa FLIP
             local α = transfer.α
             @G2P grid=>i particles=>p mpvalues=>ip begin
@@ -180,13 +173,13 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
         end
 
         ## Update other particle properties
-        for pt in LazyRows(particles)
-            ∇u = Δt * pt.∇v
-            F = (I + ∇u) ⋅ pt.F
-            σ = caucy_stress(F)
-            pt.σ = σ
-            pt.F = F
-            pt.V = det(F) * pt.V⁰
+        for p in eachindex(particles)
+            ∇uₚ = Δt * particles.∇v[p]
+            Fₚ = (I + ∇uₚ) ⋅ particles.F[p]
+            σₚ = caucy_stress(Fₚ)
+            particles.σ[p] = σₚ
+            particles.F[p] = Fₚ
+            particles.V[p] = det(Fₚ) * particles.V⁰[p]
         end
 
         t += Δt

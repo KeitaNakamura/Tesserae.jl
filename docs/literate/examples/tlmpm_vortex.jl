@@ -17,17 +17,17 @@ using Sequoia
 function tlmpm_vortex()
 
     ## Simulation parameters
-    CFL    = 0.1  # Courant number
-    Δx     = 0.02 # grid spacing
-    t_stop = 1.0  # simulation stops at t=t_stop
-    α      = 0.99 # PIC-FLIP parameter
+    h   = 0.02 # Grid spacing
+    T   = 1.0  # Time span
+    CFL = 0.1  # Courant number
+    α   = 0.99 # PIC-FLIP parameter
 
     ## Material constants
     E  = 1e6                    # Young's modulus
     ν  = 0.3                    # Poisson's ratio
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
-    μ  = E / 2(1 + ν)           # shear modulus
-    ρ⁰ = 1e3                    # initial density
+    μ  = E / 2(1 + ν)           # Shear modulus
+    ρ⁰ = 1e3                    # Initial density
 
     ## Geometry
     Rᵢ = 0.75
@@ -35,11 +35,10 @@ function tlmpm_vortex()
 
     ## Equations for vortex
     G = π
-    T = 1.0
     R̄ = (Rᵢ + Rₒ) / 2
     function calc_b_Rθ(R, t)
-        h′′, h′, h = hessian(R -> 1-8((R-R̄)/(Rᵢ-Rₒ))^2+16((R-R̄)/(Rᵢ-Rₒ))^4, R, :all)
-        g′′, g′, g = hessian(t -> G*sin(π*t/T), t, :all)
+        local h′′, h′, h = hessian(R -> 1-8((R-R̄)/(Rᵢ-Rₒ))^2+16((R-R̄)/(Rᵢ-Rₒ))^4, R, :all)
+        local g′′, g′, g = hessian(t -> G*sin(π*t/T), t, :all)
         β = g * h
         b_R = ( μ/ρ⁰*(3g*h′+R*g*h′′) - R*g′′*h)*sin(β) + (μ/ρ⁰*R*(g*h′)^2 - R*(g′*h)^2)*cos(β)
         b_θ = (-μ/ρ⁰*(3g*h′+R*g*h′′) + R*g′′*h)*cos(β) + (μ/ρ⁰*R*(g*h′)^2 + R*(g′*h)^2)*sin(β)
@@ -47,7 +46,6 @@ function tlmpm_vortex()
     end
     isinside(x::Vec) = Rᵢ^2 < x⋅x < Rₒ^2
 
-    ## Properties for grid and particles
     GridProp = @NamedTuple begin
         X    :: Vec{2, Float64}
         m    :: Float64
@@ -72,12 +70,12 @@ function tlmpm_vortex()
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(Δx, (-1.5,1.5), (-1.5,1.5)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (-1.5,1.5), (-1.5,1.5)))
     outside_gridinds = findall(!isinside, grid.X)
 
     ## Particles
     particles = generate_particles(ParticleProp, grid.X; alg=GridSampling(), spacing=1)
-    particles.V⁰ .= prod(grid.X[end]-grid.X[1]) / length(particles)
+    particles.V⁰ .= volume(grid.X) / length(particles)
 
     filter!(pt->isinside(pt.x), particles)
 
@@ -87,10 +85,9 @@ function tlmpm_vortex()
     @show length(particles)
 
     ## Precompute linear kernel values
-    mpvalues = map(eachindex(particles)) do p
-        mp = MPValue(Vec{2}, LinearBSpline())
-        update!(mp, particles[p], grid.X)
-        mp
+    mpvalues = generate_mpvalues(Vec{2, Float64}, LinearBSpline(), length(particles))
+    for p in eachindex(particles, mpvalues)
+        update!(mpvalues[p], particles.x[p], grid.X)
     end
 
     ## Outputs
@@ -101,16 +98,14 @@ function tlmpm_vortex()
     t = 0.0
     step = 0
     fps = 60
-    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
-    Sequoia.@showprogress while t < t_stop
+    Sequoia.@showprogress while t < T
 
-        ## Calculate timestep based on the wave speed of elastic material
-        Δt = CFL * spacing(grid) / maximum(LazyRows(particles)) do pt
-            ρ = pt.m / (pt.V⁰ * det(pt.F))
-            vc = √((λ+2μ) / ρ)
-            vc + norm(pt.v)
-        end
+        ## Calculate timestep based on the wave speed
+        vmax = maximum(@. sqrt((λ+2μ) / (particles.m/(particles.V⁰ * det(particles.F)))) +
+                          norm(particles.v))
+        Δt = CFL * spacing(grid) / vmax
 
         ## Compute grid body forces
         for i in eachindex(grid)
@@ -122,12 +117,14 @@ function tlmpm_vortex()
             end
         end
 
+        ## Particle-to-grid transfer
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]    = @∑ N[ip] * m[p]
             mv[i]   = @∑ N[ip] * m[p] * v[p]
             fint[i] = @∑ -V⁰[p] * P[p] ⋅ ∇N[ip]
         end
 
+        ## Update grid velocity
         @. grid.m⁻¹  = inv(grid.m) * !iszero(grid.m)
         @. grid.fext = grid.m * grid.b
         @. grid.vⁿ   = grid.mv * grid.m⁻¹
