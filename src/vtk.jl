@@ -20,9 +20,6 @@ vtk_format(A::AbstractArray{<: Tensor}) = _vtk_format(A)
 function _vtk_format(A::AbstractArray{<: Tensor})
     reinterpret(reshape, eltype(eltype(A)), A)
 end
-function vtk_format(A::AbstractArray{<: Vec{2}})
-    _vtk_format(maparray(x->[x;0], A)) # extend to 3D to draw vector in Glyph
-end
 
 # open/close
 openvtk(args...; kwargs...) = vtk_grid(args...; kwargs...)
