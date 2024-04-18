@@ -94,6 +94,13 @@ end
 const THREADED = Preferences.@load_preference("threaded_macro", true)
 
 macro threaded(schedule::QuoteNode, expr)
+    threaded_expr(schedule, expr)
+end
+macro threaded(expr)
+    threaded_expr(QuoteNode(:dynamic), expr)
+end
+
+function threaded_expr(schedule::QuoteNode, expr::Expr)
     if Meta.isexpr(expr, :for)
         quote
             if Threads.nthreads() > 1 && $THREADED
@@ -102,7 +109,8 @@ macro threaded(schedule::QuoteNode, expr)
                 $expr
             end
         end |> esc
-    elseif Meta.isexpr(expr, :macrocall)
+    elseif Meta.isexpr(expr, :macrocall) &&
+           (expr.args[1] in (Symbol("@P2G"), Symbol("@G2P"), Symbol("@P2G_Matrix")))
         if THREADED
             insert!(expr.args, 3, schedule)
             esc(expr)
@@ -112,11 +120,6 @@ macro threaded(schedule::QuoteNode, expr)
     else
         error("wrong usage for @threaded")
     end
-end
-macro threaded(expr)
-    quote
-        @threaded :dynamic $expr
-    end |> esc
 end
 
 const SHOWPROGRESS = Preferences.@load_preference("showprogress_macro", true)
