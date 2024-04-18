@@ -1,8 +1,8 @@
 @testset "Grid" begin
-    Δx = 0.2
+    h = 0.2
     xlims = (0,3)
     ylims = (0,4)
-    mesh = CartesianMesh(Δx, xlims, ylims)
+    mesh = CartesianMesh(h, xlims, ylims)
 
     # constructors
     ## with Array
@@ -43,7 +43,7 @@
     @test_throws Exception generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, v::Vector{Float64}}, mesh)
 
     # first entry becomes mesh
-    grid = generate_grid(@NamedTuple{v::Vec{3,Float32}, m::Float32, x::Vec{3,Float32}}, CartesianMesh(Float32, Δx, xlims, ylims, ylims))
+    grid = generate_grid(@NamedTuple{v::Vec{3,Float32}, m::Float32, x::Vec{3,Float32}}, CartesianMesh(Float32, h, xlims, ylims, ylims))
     @test grid.v isa CartesianMesh{3,Float32}
     @test all(iszero, (grid.m)::Array{Float32,3})
     @test all(iszero, (grid.x)::Array{Vec{3,Float32},3})

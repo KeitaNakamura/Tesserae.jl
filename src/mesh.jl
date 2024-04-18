@@ -22,10 +22,10 @@ end
 Base.copy(A::AxisArray) = AxisArray(map(copy, A.axes))
 
 """
-    CartesianMesh(Δx, (xmin, xmax), (ymin, ymax)...)
-    CartesianMesh(T, Δx, (xmin, xmax), (ymin, ymax)...)
+    CartesianMesh(h, (xmin, xmax), (ymin, ymax)...)
+    CartesianMesh(T, h, (xmin, xmax), (ymin, ymax)...)
 
-Construct `CartesianMesh` with the spacing `Δx`.
+Construct `CartesianMesh` with the spacing `h`.
 
 # Examples
 ```jldoctest
@@ -39,16 +39,16 @@ julia> CartesianMesh(1.0, (0,3), (1,4))
 """
 struct CartesianMesh{dim, T, V <: AbstractVector{T}} <: AbstractMesh{dim, T, dim}
     axisarray::AxisArray{dim, T, V}
-    dx::T
-    dx_inv::T
+    h::T
+    h_inv::T
 end
 
 get_axisarray(x::CartesianMesh) = x.axisarray
 Base.size(x::CartesianMesh) = size(get_axisarray(x))
 Base.IndexStyle(::Type{<: CartesianMesh}) = IndexCartesian()
 # helpers
-spacing(x::CartesianMesh) = x.dx
-spacing_inv(x::CartesianMesh) = x.dx_inv
+spacing(x::CartesianMesh) = x.h
+spacing_inv(x::CartesianMesh) = x.h_inv
 get_axes(x::CartesianMesh) = get_axes(x.axisarray)
 get_axes(x::CartesianMesh, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
 @inline get_xmin(x::CartesianMesh{dim}) where {dim} = @inbounds x[oneunit(CartesianIndex{dim})]
@@ -57,16 +57,16 @@ volume(x::CartesianMesh) = prod(get_xmax(x) - get_xmin(x))
 
 function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
     @assert all(ax->step(ax)==step(first(axes)), axes)
-    dx = step(first(axes))
-    CartesianMesh(AxisArray(axes), dx, inv(dx))
+    h = step(first(axes))
+    CartesianMesh(AxisArray(axes), h, inv(h))
 end
 
-function CartesianMesh(::Type{T}, dx::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
+function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
     @assert all(map(issorted, minmax))
-    axisarray = AxisArray(map(lims->Vector{T}(range(lims...; step=dx)), minmax))
-    CartesianMesh(axisarray, T(dx), T(inv(dx)))
+    axisarray = AxisArray(map(lims->Vector{T}(range(lims...; step=h)), minmax))
+    CartesianMesh(axisarray, T(h), T(inv(h)))
 end
-CartesianMesh(dx::Real, minmax::Tuple{Real, Real}...) = CartesianMesh(Float64, dx, minmax...)
+CartesianMesh(h::Real, minmax::Tuple{Real, Real}...) = CartesianMesh(Float64, h, minmax...)
 
 @inline function Base.getindex(mesh::CartesianMesh{dim}, i::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(mesh, i...)
@@ -82,8 +82,8 @@ Base.copy(mesh::CartesianMesh) = CartesianMesh(copy(get_axisarray(mesh)), spacin
 # normalize `x` by `mesh`
 @inline function Tensorial.normalize(x::Vec{dim}, mesh::CartesianMesh{dim}) where {dim}
     xmin = get_xmin(mesh)
-    dx⁻¹ = spacing_inv(mesh)
-    (x - xmin) * dx⁻¹
+    h⁻¹ = spacing_inv(mesh)
+    (x - xmin) * h⁻¹
 end
 
 """
@@ -101,11 +101,11 @@ end
 end
 
 """
-    neighboringnodes(x::Vec, h::Real, mesh::CartesianMesh)
+    neighboringnodes(x::Vec, r::Real, mesh::CartesianMesh)
 
 Return `CartesianIndices` for neighboring nodes around `x`.
-`h` denotes the range for searching area. In 1D, for example, the range `a`
-becomes ` x-h*Δx ≤ a < x+h*Δx` where `Δx` is `spacing(mesh)`.
+`r` denotes the range for searching area. In 1D, for example, the range `a`
+becomes ` x-r*h ≤ a < x+r*h` where `h` is `spacing(mesh)`.
 
 # Examples
 ```jldoctest
@@ -125,12 +125,12 @@ julia> neighboringnodes(Vec(1.5), 3, mesh)
 CartesianIndices((1:5,))
 ```
 """
-@inline function neighboringnodes(x::Vec, h::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
+@inline function neighboringnodes(x::Vec, r::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
     isinside(ξ, dims) || return ZeroCartesianIndices(Val(dim))
-    start = @. unsafe_trunc(Int, floor(ξ - h)) + 2
-    stop  = @. unsafe_trunc(Int, floor(ξ + h)) + 1
+    start = @. unsafe_trunc(Int, floor(ξ - r)) + 2
+    stop  = @. unsafe_trunc(Int, floor(ξ + r)) + 1
     imin = Tuple(@. max(start, 1))
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))

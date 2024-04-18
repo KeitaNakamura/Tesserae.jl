@@ -42,9 +42,9 @@ gridspan(::BSpline{3}) = 4
     dims = size(mesh)
     isinside(ξ, dims) || return ZeroCartesianIndices(Val(dim))
     offset = _neighboringnodes_offset(bspline)
-    h = gridspan(bspline) - 1
+    r = gridspan(bspline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
-    stop = @. start + h
+    stop = @. start + r
     imin = Tuple(@. max(start, 1))
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
@@ -77,8 +77,8 @@ end
 @inline function value(bspline::BSpline, xₚ::Vec, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
     xᵢ = mesh[I]
-    dx⁻¹ = spacing_inv(mesh)
-    ξ = (xₚ - xᵢ) * dx⁻¹
+    h⁻¹ = spacing_inv(mesh)
+    ξ = (xₚ - xᵢ) * h⁻¹
     value(bspline, ξ)
 end
 @inline function value(bspline::BSpline, pt, mesh::CartesianMesh, I::CartesianIndex)
@@ -131,8 +131,8 @@ end
 @inline function value(bspline::BSpline, xₚ::Vec, mesh::CartesianMesh, I::CartesianIndex, ::Symbol) # last argument is pseudo argument `:steffen`
     @_propagate_inbounds_meta
     xᵢ = mesh[I]
-    dx⁻¹ = spacing_inv(mesh)
-    ξ = (xₚ - xᵢ) * dx⁻¹
+    h⁻¹ = spacing_inv(mesh)
+    ξ = (xₚ - xᵢ) * h⁻¹
     value(bspline, ξ, node_position(mesh, I))
 end
 
@@ -146,7 +146,7 @@ node_position(mesh::CartesianMesh, index::CartesianIndex) = map(node_position, g
 
 @inline fract(x) = x - floor(x)
 # Fast calculations for values and gradients
-# `x` must be normalized by `dx`
+# `x` must be normalized by `h`
 @inline function Base.values(::BSpline{1}, x::Real, g=nothing)
     T = typeof(x)
     V = NTuple{2, T}
@@ -200,15 +200,15 @@ end
 @inline otimes_tuple(x::Tuple) = SArray(otimes(map(Vec, x)...))
 
 @inline function Base.values(bspline::BSpline, x::Vec, mesh::CartesianMesh)
-    dx⁻¹ = spacing_inv(mesh)
-    values(bspline, (x - first(mesh)) * dx⁻¹)
+    h⁻¹ = spacing_inv(mesh)
+    values(bspline, (x - first(mesh)) * h⁻¹)
 end
 @inline function Base.values(bspline::BSpline, pt, mesh::CartesianMesh, ::Symbol)
     x = getx(pt)
     xmin = first(mesh)
-    dx⁻¹ = spacing_inv(mesh)
-    N, ∇N = values(bspline, (x-xmin)*dx⁻¹, :withgradient)
-    (N, ∇N*dx⁻¹)
+    h⁻¹ = spacing_inv(mesh)
+    N, ∇N = values(bspline, (x-xmin)*h⁻¹, :withgradient)
+    (N, ∇N*h⁻¹)
 end
 
 function update_property!(mp::MPValue{<: BSpline}, pt, mesh::CartesianMesh)
