@@ -27,6 +27,7 @@ import ProgressMeter
 
 export
 # utils
+    fillzero!,
     @threaded,
 # BlockSpace
     BlockSpace,
