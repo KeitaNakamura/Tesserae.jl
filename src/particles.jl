@@ -3,8 +3,8 @@ abstract type SamplingAlgorithm end
 struct GridSampling <: SamplingAlgorithm end
 
 function point_sampling(::GridSampling, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
-    minmax((xmin,xmax)) = (xmin+l/2, xmax)
-    vec(CartesianMesh(l, minmax.(domain)...))
+    axis((xmin,xmax)) = (xmin+l/2):l:(xmax)
+    vec(CartesianMesh(axis.(domain)...))
 end
 
 struct PoissonDiskSampling{RNG} <: SamplingAlgorithm
