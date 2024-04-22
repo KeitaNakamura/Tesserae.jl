@@ -18,7 +18,7 @@ function implicit_jacobian_free()
     ν  = 0.3                    # Poisson's ratio
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
     μ  = E / 2(1 + ν)           # Shear modulus
-    ρ⁰ = 500                    # Density
+    ρ⁰ = 500.0                  # Density
 
     ## Newmark-beta integration
     β = 1/4
@@ -111,11 +111,11 @@ function implicit_jacobian_free()
         dofmap = DofMap(dofmask)
 
         ## Solve the nonlinear equation
-        params = (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt)
+        state = (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt)
         @. grid.u = zero(grid.u) # Set zero dispacement for the first guess of the solution
         U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
-        compute_residual(U) = residual(U, params)
-        compute_jacobian(U) = jacobian(U, params)
+        compute_residual(U) = residual(U, state)
+        compute_jacobian(U) = jacobian(U, state)
         Sequoia.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)->gmres!(x,A,b))
 
         ## Grid dispacement, velocity and acceleration have been updated during Newton's iterations
@@ -138,11 +138,11 @@ function implicit_jacobian_free()
             end
         end
     end
-    mean(particles.x)
+    mean(particles.x) #src
 end
 
-function residual(U::AbstractVector, params)
-    (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt) = params
+function residual(U::AbstractVector, state)
+    (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt) = state
 
     dofmap(grid.u) .= U
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
@@ -161,8 +161,8 @@ function residual(U::AbstractVector, params)
     @. β*Δt^2 * ($dofmap(grid.a) - $dofmap(grid.f) * $dofmap(grid.m⁻¹))
 end
 
-function jacobian(U::AbstractVector, params)
-    (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt) = params
+function jacobian(U::AbstractVector, state)
+    (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt) = state
 
     ## Create a linear map to represent Jacobian-vector product J*δU.
     ## `U` is acutally not used because the stiffness tensor is already calculated
