@@ -1,7 +1,8 @@
 using Literate
 
 const EXAMPLES = ["elastic_impact.jl",
-                  "tlmpm_vortex.jl"]
+                  "tlmpm_vortex.jl",
+                  "implicit_jacobian_free.jl"]
 
 for filename in EXAMPLES
     path = joinpath(@__DIR__, "literate/examples", filename)

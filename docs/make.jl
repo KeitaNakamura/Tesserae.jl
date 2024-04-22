@@ -20,8 +20,9 @@ makedocs(;
         "Home" => "index.md",
         "getting_started.md",
         "Examples" => [
-            "examples/elastic_impact.md"
-            "examples/tlmpm_vortex.md"
+            "examples/elastic_impact.md",
+            "examples/tlmpm_vortex.md",
+            "examples/implicit_jacobian_free.md",
         ],
     ],
     doctest = true, # :fix

@@ -11,4 +11,9 @@ const RUN_TESTS = true
             include(joinpath(@__DIR__, "../docs/literate/examples/tlmpm_vortex.jl"))
         end
     end
+    @testset "Jacobian-free Newton-Krylov method" begin
+        cd(tempdir()) do
+            include(joinpath(@__DIR__, "../docs/literate/examples/implicit_jacobian_free.jl"))
+        end
+    end
 end
