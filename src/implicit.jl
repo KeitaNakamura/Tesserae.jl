@@ -89,10 +89,10 @@ function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int},
 end
 
 macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, equations)
-    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+    P2G_Matrix_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, nothing, equations)
 end
 macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
-    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+    P2G_Matrix_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
 end
 macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
