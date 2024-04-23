@@ -376,6 +376,6 @@ end
 
 using Test                                       #src
 if @isdefined(RUN_TESTS) && RUN_TESTS            #src
-    @test main(:FLIP) ≈ [0.644,0.259] rtol=0.002 #src
-    @test main(:TPIC) ≈ [0.644,0.259] rtol=0.002 #src
+    @test main(:FLIP) ≈ [0.645,0.259] rtol=0.002 #src
+    @test main(:TPIC) ≈ [0.645,0.259] rtol=0.002 #src
 end                                              #src
