@@ -173,6 +173,10 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
         $(add_local_to_global...)
     end
 
+    if !DEBUG
+        body = :(@inbounds $body)
+    end
+
     body = quote
         $P2G(Val($schedule), $grid, $particles, $mpvalues, $blockspace) do $p, $grid, $particles, $mpvalues
             Base.@_inline_meta
