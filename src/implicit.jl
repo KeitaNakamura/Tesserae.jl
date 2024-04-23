@@ -48,7 +48,7 @@ function create_sparse_matrix(::Type{T}, spy::AbstractMatrix{Bool}) where {T}
     SparseArrays.sparse_sortedlinearindices!(I, V, size(spy)...)
 end
 
-function getsubset(S::AbstractMatrix, dofmap::DofMap)
+function submatrix(S::AbstractMatrix, dofmap::DofMap)
     n = dofmap.dimension * prod(dofmap.gridsize)
     @assert size(S) == (n, n)
     I = view(LinearIndices((dofmap.dimension, dofmap.gridsize...)), dofmap.indices)
