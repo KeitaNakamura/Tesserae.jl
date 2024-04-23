@@ -6,9 +6,12 @@ function implicit_jacobian_based()
 
     ## Simulation parameters
     h  = 0.05 # Grid spacing
-    T  = 0.5  # Time span
+    T  = 1.0  # Time span
     g  = 20.0 # Gravity acceleration
     Δt = 0.05  # Timestep
+    if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        T = 0.5                           #src
+    end                                   #src
 
     ## Material constants
     E  = 1e6                    # Young's modulus
