@@ -24,6 +24,7 @@ makedocs(;
             "examples/tlmpm_vortex.md",
             "examples/implicit_jacobian_free.md",
             "examples/implicit_jacobian_based.md",
+            "examples/dam_break.md",
         ],
     ],
     doctest = true, # :fix

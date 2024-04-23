@@ -25,3 +25,10 @@ module TestImplicitJacobianBased
         include(joinpath(@__DIR__, "../docs/literate/examples/implicit_jacobian_based.jl"))
     end
 end
+
+module TestDamBreak
+    const RUN_TESTS = true
+    cd(tempdir()) do
+        include(joinpath(@__DIR__, "../docs/literate/examples/dam_break.jl"))
+    end
+end
