@@ -162,7 +162,7 @@ function residual(U::AbstractVector, state)
 end
 
 function jacobian(U::AbstractVector, state)
-    (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt) = state
+    (; grid, particles, mpvalues, β, dofmap, Δt) = state
 
     ## Create a linear map to represent Jacobian-vector product J*δU.
     ## `U` is acutally not used because the stiffness tensor is already calculated
