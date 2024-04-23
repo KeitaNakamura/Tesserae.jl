@@ -39,11 +39,11 @@ function dam_break(transfer::Symbol = :FLIP)
         ma  :: Vec{2, Float64}
         u   :: Vec{2, Float64}
         p   :: Float64
-        # δ-correction
+        ## δ-correction
         V   :: Float64
         Ṽ   :: Float64
         E   :: Float64
-        # Residuals
+        ## Residuals
         u_p   :: Vec{3, Float64}
         R_mom :: Vec{2, Float64}
         R_mas :: Float64
@@ -60,9 +60,9 @@ function dam_break(transfer::Symbol = :FLIP)
         ∇p  :: Vec{2, Float64}
         s   :: SymmetricSecondOrderTensor{2, Float64, 3}
         b   :: Vec{2, Float64}
-        # δ-correction
+        ## δ-correction
         ∇E² :: Vec{2, Float64}
-        # Stabilization
+        ## Stabilization
         τ₁  :: Float64
         τ₂  :: Float64
     end
