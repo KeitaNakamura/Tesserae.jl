@@ -14,7 +14,7 @@
 
 using Sequoia
 
-function tlmpm_vortex()
+function main()
 
     ## Simulation parameters
     h   = 0.02 # Grid spacing
@@ -177,5 +177,5 @@ end
 
 using Test                            #src
 if @isdefined(RUN_TESTS) && RUN_TESTS #src
-    @test tlmpm_vortex() < 1e-8       #src
+    @test main() < 1e-8               #src
 end                                   #src

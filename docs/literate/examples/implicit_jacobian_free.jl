@@ -5,7 +5,7 @@ using Sequoia
 using IterativeSolvers: gmres!
 using LinearMaps: LinearMap
 
-function implicit_jacobian_free()
+function main()
 
     ## Simulation parameters
     h  = 0.05 # Grid spacing
@@ -182,8 +182,7 @@ function jacobian(U::AbstractVector, state)
     end
 end
 
-## check the result                                      #src
-using Test                                               #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                    #src
-    @test implicit_jacobian_free() ≈ [0.5,1,0] rtol=0.01 #src
-end                                                      #src
+using Test                             #src
+if @isdefined(RUN_TESTS) && RUN_TESTS  #src
+    @test main() ≈ [0.5,1,0] rtol=0.01 #src
+end                                    #src

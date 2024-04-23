@@ -2,7 +2,7 @@
 
 using Sequoia
 
-function implicit_jacobian_based()
+function main()
 
     ## Simulation parameters
     h  = 0.05 # Grid spacing
@@ -176,8 +176,7 @@ function jacobian(U::AbstractVector, state)
     submatrix(A, dofmap)
 end
 
-## check the result                                       #src
-using Test                                                #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                     #src
-    @test implicit_jacobian_based() ≈ [0.5,1,0] rtol=0.02 #src
-end                                                       #src
+using Test                             #src
+if @isdefined(RUN_TESTS) && RUN_TESTS  #src
+    @test main() ≈ [0.5,1,0] rtol=0.02 #src
+end                                    #src

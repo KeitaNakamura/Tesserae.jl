@@ -1,9 +1,11 @@
 # # Stabilized mixed MPM for incompressible fluid
 
+# ## Main function
+
 using Sequoia
 using LinearAlgebra
 
-function dam_break(transfer::Symbol = :FLIP)
+function main(transfer::Symbol = :FLIP)
 
     ## Simulation parameters
     h  = 0.02   # Grid spacing
@@ -215,6 +217,8 @@ function dam_break(transfer::Symbol = :FLIP)
     mean(particles.x) #src
 end
 
+# ## Variational multiscale method
+
 function variational_multiscale_method(state)
 
     ## The simulation might fail occasionally due to regions with very small masses,
@@ -256,6 +260,8 @@ function variational_multiscale_method(state)
     Δt
 end
 
+# ## VMS stabilization coefficients
+
 function compute_VMS_stabilization_coefficients(state)
     (; grid, particles, mpvalues_cell, ρ, μ, Δt) = state
 
@@ -281,6 +287,8 @@ function compute_VMS_stabilization_coefficients(state)
     end
 end
 
+# ## δ-correction
+
 function particle_shifting(state)
     (; grid, particles, mpvalues) = state
 
@@ -304,11 +312,12 @@ function particle_shifting(state)
     end
 end
 
+# ## Residual vector
+
 function residual(U, state)
     (; grid, particles, mpvalues, μ, β, γ, dofmap, Δt) = state
 
     ## Map `U` to grid dispacement and pressure
-    @assert length(U) == ndofs(dofmap)
     dofmap(grid.u_p) .= U
     grid.u .= map(x->@Tensor(x[1:2]), grid.u_p)
     grid.p .= map(x->x[3], grid.u_p)
@@ -340,6 +349,8 @@ function residual(U, state)
     dofmap(map(vcat, grid.R_mom, grid.R_mas))
 end
 
+# ## Jacobian matrix
+
 function jacobian(state)
     (; grid, particles, mpvalues, blockspace, ρ, μ, β, γ, A, dofmap, Δt) = state
 
@@ -363,9 +374,8 @@ function jacobian(state)
     submatrix(A, dofmap)
 end
 
-## check the result                                   #src
-using Test                                            #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                 #src
-    @test dam_break(:FLIP) ≈ [0.644,0.259] rtol=0.002 #src
-    @test dam_break(:TPIC) ≈ [0.644,0.259] rtol=0.002 #src
-end                                                   #src
+using Test                                       #src
+if @isdefined(RUN_TESTS) && RUN_TESTS            #src
+    @test main(:FLIP) ≈ [0.644,0.259] rtol=0.002 #src
+    @test main(:TPIC) ≈ [0.644,0.259] rtol=0.002 #src
+end                                              #src

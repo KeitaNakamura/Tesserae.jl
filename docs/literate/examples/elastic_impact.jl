@@ -25,7 +25,7 @@ struct FLIP <: Transfer α::Float64 end
 struct APIC <: Transfer end
 struct TPIC <: Transfer end
 
-function elastic_impact(transfer::Transfer = FLIP(1.0))
+function main(transfer::Transfer = FLIP(1.0))
 
     ## Simulation parameters
     h   = 1.0e-3 # Grid spacing
@@ -210,12 +210,11 @@ function elastic_impact(transfer::Transfer = FLIP(1.0))
     norm(mean(particles.x)) #src
 end
 
-## check the result                         #src
-using Test                                  #src
-if @isdefined(RUN_TESTS) && RUN_TESTS       #src
-    @test elastic_impact(FLIP(0.0))  < 1e-3 #src
-    @test elastic_impact(FLIP(1.0))  < 1e-3 #src
-    @test elastic_impact(FLIP(0.99)) < 1e-3 #src
-    @test elastic_impact(APIC())     < 1e-3 #src
-    @test elastic_impact(TPIC())     < 1e-3 #src
-end                                         #src
+using Test                            #src
+if @isdefined(RUN_TESTS) && RUN_TESTS #src
+    @test main(FLIP(0.0))  < 1e-3     #src
+    @test main(FLIP(1.0))  < 1e-3     #src
+    @test main(FLIP(0.99)) < 1e-3     #src
+    @test main(APIC())     < 1e-3     #src
+    @test main(TPIC())     < 1e-3     #src
+end                                   #src
