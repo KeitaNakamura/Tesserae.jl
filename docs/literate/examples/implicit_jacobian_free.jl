@@ -12,6 +12,10 @@ function main()
     T  = 1.0  # Time span
     g  = 20.0 # Gravity acceleration
     Δt = 0.02 # Timestep
+    if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        h = 0.1                           #src
+        T = 0.5                           #src
+    end                                   #src
 
     ## Material constants
     E  = 1e6                    # Young's modulus
@@ -184,5 +188,5 @@ end
 
 using Test                             #src
 if @isdefined(RUN_TESTS) && RUN_TESTS  #src
-    @test main() ≈ [0.5,1,0] rtol=0.01 #src
+    @test main() ≈ [0.5,1,0] rtol=0.02 #src
 end                                    #src

@@ -10,6 +10,7 @@ function main()
     g  = 20.0 # Gravity acceleration
     Δt = 0.05  # Timestep
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        h = 0.1                           #src
         T = 0.5                           #src
     end                                   #src
 
