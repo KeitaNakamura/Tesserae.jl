@@ -2,29 +2,25 @@ abstract type SamplingAlgorithm end
 
 struct GridSampling <: SamplingAlgorithm end
 
-function point_sampling(::GridSampling, h::T, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
-    d = h * l
-    axis((xmin,xmax)) = (xmin+d/2):d:(xmax)
+function point_sampling(::GridSampling, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
+    axis((xmin,xmax)) = (xmin+l/2):l:(xmax)
     vec(CartesianMesh(axis.(domain)...))
 end
 
 struct PoissonDiskSampling{RNG} <: SamplingAlgorithm
     rng::RNG
-    margin::Real
     parallel::Bool
 end
-PoissonDiskSampling(; margin=0) = PoissonDiskSampling(Random.default_rng(), margin, true)
-PoissonDiskSampling(rng; margin=0, parallel=false) = PoissonDiskSampling(rng, margin, parallel)
+PoissonDiskSampling() = PoissonDiskSampling(Random.default_rng(), true)
+PoissonDiskSampling(rng; parallel=false) = PoissonDiskSampling(rng, parallel)
 
 # Determine minimum distance between particles for Poisson disk sampling
 # so that the number of generated particles is almost the same as the grid sampling.
 # This empirical equation is slightly different from a previous work (https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
 poisson_disk_sampling_minimum_distance(l::Real, dim::Int) = l/(1.37)^(1/√dim)
-function point_sampling(pds::PoissonDiskSampling, h::T, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
-    ϵ = T(pds.margin)
-    minmax((xmin,xmax)) = (xmin+h*ϵ, xmax-h*ϵ)
-    d = poisson_disk_sampling_minimum_distance(h*l, dim)
-    reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, minmax.(domain)...; pds.parallel))
+function point_sampling(pds::PoissonDiskSampling, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
+    d = poisson_disk_sampling_minimum_distance(l, dim)
+    reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, domain...; pds.parallel))
 end
 
 function generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec}) where {ParticleProp}
@@ -51,7 +47,7 @@ function generate_particles(
 end
 
 function generate_particles(mesh::CartesianMesh{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling(), domain=nothing) where {dim, T}
-    _generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; spacing, alg, domain).x
+    generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; spacing, alg, domain).x
 end
 
 struct Box{dim, T}
@@ -70,15 +66,15 @@ end
 
 function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::SamplingAlgorithm, ::Nothing) where {ParticleProp, dim, T}
     domain = tuple.(Tuple(first(mesh)), Tuple(last(mesh)))
-    point_sampling(alg, Sequoia.spacing(mesh), T(spacing), domain...)
+    point_sampling(alg, Sequoia.spacing(mesh) * T(spacing), domain...)
 end
 function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::GridSampling, box::Box) where {ParticleProp, dim, T}
     domain = tuple.(Tuple(first(mesh)), Tuple(last(mesh)))
-    points = point_sampling(alg, Sequoia.spacing(mesh), T(spacing), domain...)
+    points = point_sampling(alg, Sequoia.spacing(mesh) * T(spacing), domain...)
     filter(x -> isinside(x, box), points)
 end
 function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::PoissonDiskSampling, box::Box) where {ParticleProp, dim, T}
-    points = point_sampling(alg, Sequoia.spacing(mesh), T(spacing), box.domain...)
+    points = point_sampling(alg, Sequoia.spacing(mesh) * T(spacing), box.domain...)
 end
 
 function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)
