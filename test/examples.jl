@@ -32,3 +32,10 @@ module TestDamBreak
         include(joinpath(@__DIR__, "../docs/literate/examples/dam_break.jl"))
     end
 end
+
+module TestRigidBodyContact
+    const RUN_TESTS = true
+    cd(tempdir()) do
+        include(joinpath(@__DIR__, "../docs/literate/examples/rigid_body_contact.jl"))
+    end
+end

@@ -25,6 +25,7 @@ makedocs(;
             "examples/implicit_jacobian_free.md",
             "examples/implicit_jacobian_based.md",
             "examples/dam_break.md",
+            "examples/rigid_body_contact.md",
         ],
     ],
     doctest = true, # :fix
