@@ -139,8 +139,9 @@ function main(transfer::Symbol = :FLIP)
             end
         end
 
-        ## Remove occasionally generated negative mass due to the kernel correction.
-        ## This sufficiently reduces spurious pressure oscillations without sacrificing simulation accuracy.
+        ## Remove negative mass occasionally generated due to the kernel correction
+        ## by forcing negative values to zero. While not an ideal solution, this sufficiently
+        ## reduces spurious pressure oscillations without sacrificing simulation accuracy.
         @. grid.m = max(grid.m, 0)
 
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
