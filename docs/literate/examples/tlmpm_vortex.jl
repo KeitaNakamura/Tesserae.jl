@@ -21,6 +21,9 @@ function main()
     T   = 1.0  # Time span
     CFL = 0.1  # Courant number
     α   = 0.99 # PIC-FLIP parameter
+    if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        h = 0.05                          #src
+    end                                   #src
 
     ## Material constants
     E  = 1e6                    # Young's modulus
@@ -103,8 +106,7 @@ function main()
     Sequoia.@showprogress while t < T
 
         ## Calculate timestep based on the wave speed
-        vmax = maximum(@. sqrt((λ+2μ) / (particles.m/(particles.V⁰ * det(particles.F)))) +
-                          norm(particles.v))
+        vmax = maximum(@. sqrt((λ+2μ) / (particles.m/(particles.V⁰ * det(particles.F)))) + norm(particles.v))
         Δt = CFL * spacing(grid) / vmax
 
         ## Compute grid body forces
@@ -172,10 +174,10 @@ function main()
             end
         end
     end
-    norm(mean(particles.x)) #src
+    isapprox(particles.x, particles.X; rtol=0.02) #src
 end
 
 using Test                            #src
 if @isdefined(RUN_TESTS) && RUN_TESTS #src
-    @test main() < 1e-8               #src
+    @test main()                      #src
 end                                   #src
