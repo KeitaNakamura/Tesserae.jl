@@ -5,7 +5,11 @@
 using Sequoia
 using LinearAlgebra
 
-function main(transfer::Symbol = :FLIP)
+abstract type Transfer end
+struct FLIP  <: Transfer α::Float64 end
+struct TFLIP <: Transfer α::Float64 end
+
+function main(transfer::Transfer = FLIP(1.0))
 
     ## Simulation parameters
     h  = 0.02   # Grid spacing
@@ -26,6 +30,7 @@ function main(transfer::Symbol = :FLIP)
 
     ## Utils
     cellnodes(cell) = cell:(cell+oneunit(cell))
+    cellcenter(cell, mesh) = mean(mesh[cellnodes(cell)])
 
     ## Properties for grid and particles
     GridProp = @NamedTuple begin
@@ -90,7 +95,7 @@ function main(transfer::Symbol = :FLIP)
     mpvalues = map(p -> MPValue(Vec{2}, it), eachindex(particles))
     mpvalues_cell = map(CartesianIndices(size(grid).-1)) do cell
         mp = MPValue(Vec{2}, it)
-        xc = mean(grid.X[cellnodes(cell)])
+        xc = cellcenter(cell, grid.X)
         update!(mp, xc, grid.X)
     end
 
@@ -112,8 +117,8 @@ function main(transfer::Symbol = :FLIP)
 
     Sequoia.@showprogress while t < T
 
-        ## Update interpolation values based on the active nodes
-        ## of cells where the particles are located
+        ## Update interpolation values based on the nodes of active cells
+        ## where the particles are located
         activenodes = falses(size(grid))
         for p in eachindex(particles)
             cell = whichcell(particles.x[p], grid.X)
@@ -122,16 +127,20 @@ function main(transfer::Symbol = :FLIP)
         for p in eachindex(mpvalues, particles)
             update!(mpvalues[p], particles.x[p], grid.X, activenodes)
         end
+        for cell in CartesianIndices(size(grid) .- 1)
+            xc = cellcenter(cell, grid.X)
+            update!(mpvalues_cell[cell], xc, grid.X, activenodes)
+        end
 
         update!(blockspace, particles.x)
 
-        if transfer == :FLIP
+        if transfer isa FLIP
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ N[ip] * m[p]
                 mv[i] = @∑ N[ip] * m[p] * v[p]
                 ma[i] = @∑ N[ip] * m[p] * a[p]
             end
-        elseif transfer == :TPIC
+        elseif transfer isa TFLIP
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ N[ip] * m[p]
                 mv[i] = @∑ N[ip] * m[p] * (v[p] + ∇v[p] ⋅ (X[i] - x[p]))
@@ -169,17 +178,19 @@ function main(transfer::Symbol = :FLIP)
         state = (; grid, particles, mpvalues, mpvalues_cell, blockspace, ρ, μ, β, γ, A, dofmap, Δt)
         Δt′ = variational_multiscale_method(state)
 
-        if transfer == :FLIP
-            @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p] += @∑ (v[i] - vⁿ[i]) * N[ip]
-                a[p]  = @∑ a[i] * N[ip]
-                x[p]  = @∑ x[i] * N[ip]
+        if transfer isa FLIP
+            local α = transfer.α
+            @threaded @G2P grid=>i particles=>p mpvalues=>ip begin
+                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * N[ip]
+                a[p] = @∑ a[i] * N[ip]
+                x[p] = @∑ x[i] * N[ip]
             end
-        elseif transfer == :TPIC
-            @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p]  = @∑ v[i] * N[ip]
-                a[p]  = @∑ a[i] * N[ip]
-                x[p]  = @∑ x[i] * N[ip]
+        elseif transfer isa TFLIP
+            local α = transfer.α
+            @threaded @G2P grid=>i particles=>p mpvalues=>ip begin
+                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * N[ip]
+                a[p] = @∑ a[i] * N[ip]
+                x[p] = @∑ x[i] * N[ip]
                 ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
                 ∇a[p] = @∑ a[i] ⊗ ∇N[ip]
             end
@@ -245,8 +256,8 @@ function variational_multiscale_method(state)
         J = lu(jacobian(state); check=false)
         issuccess(J) || (Δt /= 2; continue)
         
-        ## Initialize nodal dispacement and pressure with zero
-        U = zeros(ndofs(dofmap))
+        ## Solve nonlinear system
+        U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
         solved = Sequoia.newton!(U, U->residual(U,state), U->J;
                                  linsolve=(x,A,b)->ldiv!(x,A,b), atol=1e-10, rtol=1e-10)
 
@@ -375,8 +386,8 @@ function jacobian(state)
     submatrix(A, dofmap)
 end
 
-using Test                                       #src
-if @isdefined(RUN_TESTS) && RUN_TESTS            #src
-    @test main(:FLIP) ≈ [0.645,0.259] rtol=0.005 #src
-    @test main(:TPIC) ≈ [0.645,0.259] rtol=0.005 #src
-end                                              #src
+using Test                                            #src
+if @isdefined(RUN_TESTS) && RUN_TESTS                 #src
+    @test main(FLIP(1.0))  ≈ [0.645,0.259] rtol=0.005 #src
+    @test main(TFLIP(0.0)) ≈ [0.645,0.259] rtol=0.005 #src
+end                                                   #src
