@@ -126,7 +126,7 @@ function main()
         @G2P grid=>i particles=>p mpvalues=>ip begin
             ∇u[p] = @∑ u[i] ⊗ ∇N[ip]
             a[p]  = @∑ a[i] * N[ip]
-            v[p] += @∑ (v[i] - vⁿ[i]) * N[ip]
+            v[p] += @∑ Δt*((1-γ)*a[p] + γ*a[i]) * N[ip]
             x[p]  = @∑ (X[i] + u[i]) * N[ip]
             F[p]  = (I + ∇u[p]) ⋅ F[p]
         end
