@@ -46,27 +46,28 @@ end
 @inline function update_property_nearbounds!(mp::MPValue{<: KernelCorrection}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
     indices = neighboringnodes(mp)
     kernel = get_kernel(interpolation(mp))
-    poly = get_polynomial(interpolation(mp))
+    ℙ = get_polynomial(interpolation(mp))
     xₚ = getx(pt)
     VecType = promote_type(eltype(mesh), typeof(xₚ))
-    L, T = value_length(poly, xₚ), eltype(VecType)
+    L, T = value_length(ℙ, xₚ), eltype(VecType)
     M = zero(Mat{L, L, T})
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]
         w = value(kernel, pt, mesh, i) * filter[i]
-        P = value(poly, xᵢ - xₚ)
+        P = ℙ(xᵢ - xₚ)
         M += w * P ⊗ P
         mp.N[ip] = w
     end
     M⁻¹ = inv(M)
+
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]
         w = mp.N[ip]
-        P = value(poly, xᵢ - xₚ)
+        P = ℙ(xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)
-        # P₀, ∇P₀ = value(poly, zero(xₚ), :withgradient)
+        # ∇P₀, P₀ = gradient(ℙ, zero(xₚ), :all)
         mp.N[ip] = wq[1] # wq ⋅ P₀
         mp.∇N[ip] = @Tensor wq[2:1+dim] # wq ⋅ ∇P₀
     end
