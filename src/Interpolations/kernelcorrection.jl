@@ -48,16 +48,15 @@ end
     kernel = get_kernel(interpolation(mp))
     ℙ = get_polynomial(interpolation(mp))
     xₚ = getx(pt)
-    VecType = promote_type(eltype(mesh), typeof(xₚ))
-    L, T = value_length(ℙ, xₚ), eltype(VecType)
-    M = zero(Mat{L, L, T})
-    @inbounds for ip in eachindex(indices)
-        i = indices[ip]
-        xᵢ = mesh[i]
-        w = value(kernel, pt, mesh, i) * filter[i]
-        P = ℙ(xᵢ - xₚ)
-        M += w * P ⊗ P
-        mp.N[ip] = w
+
+    M = fastsum(eachindex(indices)) do ip
+        @inbounds begin
+            i = indices[ip]
+            xᵢ = mesh[i]
+            w = mp.N[ip] = value(kernel, pt, mesh, i) * filter[i]
+            P = ℙ(xᵢ - xₚ)
+            w * P ⊗ P
+        end
     end
     M⁻¹ = inv(M)
 

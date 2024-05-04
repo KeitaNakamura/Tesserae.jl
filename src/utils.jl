@@ -37,6 +37,15 @@ function fillzero!(x::StructArray)
     x
 end
 
+# fastsum
+@inline function fastsum(f, iter)
+    ret = zero(Base._return_type(f, Tuple{eltype(iter)}))
+    for x in iter
+        ret += @inline f(x)
+    end
+    ret
+end
+
 # commas
 commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")
 
