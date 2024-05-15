@@ -43,7 +43,6 @@ julia> neighboringnodes(mp) # grid indices within the local domain of a particle
 CartesianIndices((2:4, 3:5))
 ```
 """
-struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
     it::It
     prop::Prop
     indices::Indices
@@ -51,7 +50,7 @@ end
 
 function MPValue(::Type{Vec{dim, T}}, it::Interpolation) where {dim, T}
     prop = create_property(Vec{dim, T}, it)
-    indices = ZeroCartesianIndices(Val(dim))
+    indices = EmptyCartesianIndices(Val(dim))
     MPValue(it, prop, fill(indices))
 end
 MPValue(::Type{Vec{dim}}, it::Interpolation) where {dim} = MPValue(Vec{dim, Float64}, it)
@@ -103,7 +102,7 @@ function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where
     prop = map(create_property(Vec{dim, T}, it)) do prop
         fill(zero(eltype(prop)), size(prop)..., n)
     end
-    indices = fill(ZeroCartesianIndices(Val(dim)), n)
+    indices = fill(EmptyCartesianIndices(Val(dim)), n)
     It = typeof(it)
     Prop = typeof(prop)
     Indices = typeof(indices)

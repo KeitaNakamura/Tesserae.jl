@@ -37,9 +37,9 @@
     ## exactly on the node
     @test (@inferred neighboringnodes(Vec(0.2,0.4), 1, mesh)) === CartesianIndices((2:3,3:4))
     @test (@inferred neighboringnodes(Vec(0.2,0.4), 2, mesh)) === CartesianIndices((1:4,2:5))
-    @test (@inferred neighboringnodes(Vec(3.0,4.0), 2, mesh)) === CartesianIndices((0:0,0:0))
+    @test (@inferred neighboringnodes(Vec(3.0,4.0), 2, mesh)) === CartesianIndices((1:0,1:0))
     ## outside
-    @test (@inferred neighboringnodes(Vec(-0.1,3.05), 3, mesh)) === CartesianIndices((0:0,0:0))
+    @test (@inferred neighboringnodes(Vec(-0.1,3.05), 3, mesh)) === CartesianIndices((1:0,1:0))
 
     # whichcell
     @test Sequoia.whichcell(Vec(0.1,0.1), mesh) === CartesianIndex(1,1)

@@ -40,7 +40,7 @@ gridspan(::BSpline{3}) = 4
     x = getx(pt)
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
-    isinside(ξ, dims) || return ZeroCartesianIndices(Val(dim))
+    isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
     offset = _neighboringnodes_offset(bspline)
     r = gridspan(bspline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1

@@ -128,14 +128,14 @@ CartesianIndices((1:5,))
 @inline function neighboringnodes(x::Vec, r::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
-    isinside(ξ, dims) || return ZeroCartesianIndices(Val(dim))
+    isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
     start = @. unsafe_trunc(Int, floor(ξ - r)) + 2
     stop  = @. unsafe_trunc(Int, floor(ξ + r)) + 1
     imin = Tuple(@. max(start, 1))
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
-@inline ZeroCartesianIndices(::Val{dim}) where {dim} = CartesianIndices(nfill(0:0, Val(dim)))
+@inline EmptyCartesianIndices(::Val{dim}) where {dim} = CartesianIndices(nfill(1:0, Val(dim)))
 
 """
     whichcell(x::Vec, mesh::CartesianMesh)
