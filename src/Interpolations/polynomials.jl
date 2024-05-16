@@ -22,6 +22,20 @@ end
 
 const MultiLinearPolynomial = MultiPolynomial{1}
 
-@inline (::MultiPolynomial)(x::Vec{1}) = Vec(one(eltype(x)), x[1])
-@inline (::MultiPolynomial)(x::Vec{2}) = Vec(one(eltype(x)), x[1], x[2], x[1]*x[2])
-@inline (::MultiPolynomial)(x::Vec{3}) = Vec(one(eltype(x)), x[1], x[2], x[3], x[1]*x[2], x[2]*x[3], x[3]*x[1], x[1]*x[2]*x[3])
+@inline (::MultiLinearPolynomial)(x::Vec{1}) = Vec(one(eltype(x)), x[1])
+@inline (::MultiLinearPolynomial)(x::Vec{2}) = Vec(one(eltype(x)), x[1], x[2], x[1]*x[2])
+@inline (::MultiLinearPolynomial)(x::Vec{3}) = Vec(one(eltype(x)), x[1], x[2], x[3], x[1]*x[2], x[2]*x[3], x[3]*x[1], x[1]*x[2]*x[3])
+
+const MultiQuadraticPolynomial = MultiPolynomial{2}
+
+@inline (::MultiQuadraticPolynomial)(x::Vec{1}) = Vec(one(eltype(x)), x[1], x[1]^2)
+@inline (::MultiQuadraticPolynomial)(x::Vec{2}) = Vec(one(eltype(x)), x[1], x[2], x[1]*x[2], x[1]^2, x[2]^2, x[1]^2*x[2], x[1]*x[2]^2, x[1]^2*x[2]^2)
+@inline (::MultiQuadraticPolynomial)(x::Vec{3}) = Vec(one(eltype(x)),
+                                                      x[1], x[2], x[3],
+                                                      x[1]*x[2], x[2]*x[3], x[3]*x[1], x[1]*x[2]*x[3],
+                                                      x[1]^2, x[2]^2, x[3]^2,
+                                                      x[1]^2*x[2], x[1]^2*x[3], x[1]^2*x[2]*x[3],
+                                                      x[2]^2*x[1], x[2]^2*x[3], x[1]*x[2]^2*x[3],
+                                                      x[3]^2*x[1], x[3]^2*x[2], x[1]*x[2]*x[3]^2,
+                                                      x[1]^2*x[2]^2, x[2]^2*x[3]^2, x[3]^2*x[1]^2,
+                                                      x[1]^2*x[2]^2*x[3], x[1]*x[2]^2*x[3]^2, x[1]^2*x[2]*x[3]^2, x[1]^2*x[2]^2*x[3]^2)
