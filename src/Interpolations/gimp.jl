@@ -7,6 +7,7 @@ The unchanged GIMP (generalized interpolation material point) kernel [^GIMP].
 """
 struct GIMP <: Kernel end
 
+get_kernel(k::GIMP) = k
 gridspan(::GIMP) = 3
 
 @inline function neighboringnodes(::GIMP, pt, mesh::CartesianMesh)

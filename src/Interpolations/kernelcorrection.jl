@@ -39,7 +39,7 @@ end
     if isnearbounds
         update_property_nearbounds!(mp, pt, mesh, filter)
     else
-        map(copyto!, (mp.N, mp.∇N), values(get_kernel(interpolation(mp)), pt, mesh, :withgradient))
+        map(copyto!, (mp.N, mp.∇N), values(gradient, get_kernel(interpolation(mp)), getx(pt), mesh))
     end
 end
 

@@ -36,13 +36,13 @@ gridspan(::BSpline{1}) = 2
 gridspan(::BSpline{2}) = 3
 gridspan(::BSpline{3}) = 4
 
-@inline function neighboringnodes(bspline::BSpline, pt, mesh::CartesianMesh{dim}) where {dim}
+@inline function neighboringnodes(spline::BSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
-    offset = _neighboringnodes_offset(bspline)
-    r = gridspan(bspline) - 1
+    offset = _neighboringnodes_offset(spline)
+    r = gridspan(spline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
     stop = @. start + r
     imin = Tuple(@. max(start, 1))
@@ -68,22 +68,19 @@ function value(::BSpline{3}, ξ::Real)
     ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
     ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
 end
-@generated function value(bspline::BSpline, ξ::Vec{dim}) where {dim}
+@generated function value(spline::BSpline, ξ::Vec{dim}) where {dim}
     quote
         @_inline_meta
-        prod(@ntuple $dim i -> value(bspline, ξ[i]))
+        prod(@ntuple $dim i -> value(spline, ξ[i]))
     end
 end
-@inline function value(bspline::BSpline, xₚ::Vec, mesh::CartesianMesh, I::CartesianIndex)
+@inline function value(spline::BSpline, pt, mesh::CartesianMesh, i)
     @_propagate_inbounds_meta
-    xᵢ = mesh[I]
+    xₚ = getx(pt)
+    xᵢ = mesh[i]
     h⁻¹ = spacing_inv(mesh)
     ξ = (xₚ - xᵢ) * h⁻¹
-    value(bspline, ξ)
-end
-@inline function value(bspline::BSpline, pt, mesh::CartesianMesh, I::CartesianIndex)
-    @_propagate_inbounds_meta
-    value(bspline, getx(pt), mesh, I)
+    value(spline, ξ)
 end
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
@@ -122,18 +119,18 @@ function value(spline::BSpline{3}, ξ::Real, pos::Int)::typeof(ξ)
         value(spline, ξ)
     end
 end
-@generated function value(bspline::BSpline, ξ::Vec{dim}, pos::Tuple{Vararg{Int, dim}}) where {dim}
+@generated function value(spline::BSpline, ξ::Vec{dim}, pos::Vec{dim}) where {dim}
     quote
         @_inline_meta
-        prod(@ntuple $dim i -> value(bspline, ξ[i], pos[i]))
+        prod(@ntuple $dim i -> value(spline, ξ[i], pos[i]))
     end
 end
-@inline function value(bspline::BSpline, xₚ::Vec, mesh::CartesianMesh, I::CartesianIndex, ::Symbol) # last argument is pseudo argument `:steffen`
+@inline function value(spline::BSpline, xₚ::Vec, mesh::CartesianMesh, i::CartesianIndex, ::Symbol) # last argument is pseudo argument `:steffen`
     @_propagate_inbounds_meta
-    xᵢ = mesh[I]
+    xᵢ = mesh[i]
     h⁻¹ = spacing_inv(mesh)
     ξ = (xₚ - xᵢ) * h⁻¹
-    value(bspline, ξ, node_position(mesh, I))
+    value(spline, ξ, node_position(mesh, i))
 end
 
 @inline function node_position(ax::AbstractVector, i::Int)
@@ -141,36 +138,41 @@ end
     right = lastindex(ax) - i
     ifelse(left < right, left, -right)
 end
-node_position(mesh::CartesianMesh, index::CartesianIndex) = map(node_position, get_axes(mesh), Tuple(index))
+node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(node_position, get_axes(mesh), Tuple(index)))
 
 
 @inline fract(x) = x - floor(x)
-# Fast calculations for values and gradients
+# Fast calculations for value, gradient and hessian
 # `x` must be normalized by `h`
-@inline function Base.values(::BSpline{1}, x::Real, g=nothing)
+@inline Base.values(spline::BSpline, x::Real) = values(nothing, spline, x)
+@inline function Base.values(diff, ::BSpline{1}, x::Real)
     T = typeof(x)
     V = NTuple{2, T}
     ξ = fract(x)
     vals = V((1-ξ, ξ))
-    if g isa Symbol
-        vals, V((-1, 1))
-    else
-        vals
+    if diff === gradient || diff === hessian
+        vals = (vals, V((-1, 1)))
     end
+    if diff === hessian
+        vals = (vals..., V((0, 0)))
+    end
+    vals
 end
-@inline function Base.values(::BSpline{2}, x::Real, g=nothing)
+@inline function Base.values(diff, ::BSpline{2}, x::Real)
     T = typeof(x)
     V = NTuple{3, T}
     x′ = fract(x - T(0.5))
     ξ = @. x′ - $V((-0.5,0.5,1.5))
     vals = @. $V((0.5,-1.0,0.5))*ξ^2 + $V((-1.5,0.0,1.5))*ξ + $V((1.125,0.75,1.125))
-    if g isa Symbol
-        vals, @. $V((1.0,-2.0,1.0))*ξ + $V((-1.5,0.0,1.5))
-    else
-        vals
+    if diff === gradient || diff === hessian
+        vals = (vals, @.($V((1.0,-2.0,1.0))*ξ + $V((-1.5,0.0,1.5))))
     end
+    if diff === hessian
+        vals = (vals..., @.($V((1.0,-2.0,1.0))))
+    end
+    vals
 end
-@inline function Base.values(::BSpline{3}, x::Real, g=nothing)
+@inline function Base.values(diff, ::BSpline{3}, x::Real)
     T = typeof(x)
     V = NTuple{4, T}
     x′ = fract(x)
@@ -178,37 +180,62 @@ end
     ξ² = @. ξ * ξ
     ξ³ = @. ξ² * ξ
     vals = @. $V((-1/6,0.5,-0.5,1/6))*ξ³ + $V((1,-1,-1,1))*ξ² + $V((-2,0,0,2))*ξ + $V((4/3,2/3,2/3,4/3))
-    if g isa Symbol
-        vals, @. $V((-0.5,1.5,-1.5,0.5))*ξ² + $V((2,-2,-2,2))*ξ + $V((-2,0,0,2))
-    else
-        vals
+    if diff === gradient || diff === hessian
+        vals = (vals, @.($V((-0.5,1.5,-1.5,0.5))*ξ² + $V((2,-2,-2,2))*ξ + $V((-2,0,0,2))))
     end
+    if diff === hessian
+        vals = (vals..., @.($V((-1.0,3.0,-3.0,1.0))*ξ + $V((2,-2,-2,2))))
+    end
+    vals
 end
 
-@generated function Base.values(bspline::BSpline, x::Vec{dim}, ::Symbol) where {dim}
+@generated function Base.values(spline::BSpline, x::Vec{dim}) where {dim}
     quote
         @_inline_meta
-        @nexprs $dim d -> (x_d, ∇x_d) = values(bspline, x[d], :withgradient)
-        vals = @ntuple $dim d -> x_d
-        valsgrads = @ntuple $dim d -> (@ntuple $dim j -> j==d ? ∇x_j : x_j)
-        otimes_tuple(vals), map(Vec, map(otimes_tuple, valsgrads)...)
+        tuple_otimes(@ntuple $dim d -> values(spline, x[d]))
     end
 end
-@inline function Base.values(bspline::BSpline, x::Vec)
-    otimes_tuple(values.((bspline,), Tuple(x)))
+@generated function Base.values(::typeof(gradient), spline::BSpline, x::Vec{dim}) where {dim}
+    quote
+        @_inline_meta
+        @nexprs $dim d -> (x_d, ∇x_d) = values(gradient, spline, x[d])
+        Ns = @ntuple $dim d -> x_d
+        ∇Ns = @ntuple $dim i -> (@ntuple $dim k -> k==i ? ∇x_k : x_k)
+        tuple_otimes(Ns), map(Vec, map(tuple_otimes, ∇Ns)...)
+    end
 end
-@inline otimes_tuple(x::Tuple) = SArray(otimes(map(Vec, x)...))
+@generated function Base.values(::typeof(hessian), spline::BSpline, x::Vec{dim}) where {dim}
+    ∇∇Ns = Expr(:tuple, map(1:dim) do j
+               Expr(:tuple, map(j:dim) do i
+                   :(@ntuple $dim k -> k==$j ? (k==$i ? ∇∇x_k : ∇x_k) : ∇Ns[$i][k])
+               end...)
+           end...)
+    quote
+        @_inline_meta
+        @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d) = values(hessian, spline, x[d])
+        Ns = @ntuple $dim d -> x_d
+        ∇Ns = @ntuple $dim i -> (@ntuple $dim k -> k==i ? ∇x_k : x_k)
+        # ∇∇Ns = @ntuple $dim j -> (@ntuple $dim i -> (@ntuple $dim k -> k==j ? (k==i ? ∇∇x_k : ∇x_k) : ∇Ns[i][k]))
+        tuple_otimes(Ns), map(Vec, map(tuple_otimes, ∇Ns)...), map(SymmetricSecondOrderTensor{dim}, map(tuple_otimes, flatten_tuple($∇∇Ns))...)
+    end
+end
+@inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
 
-@inline function Base.values(bspline::BSpline, x::Vec, mesh::CartesianMesh)
+@inline function Base.values(spline::BSpline, x::Vec, mesh::CartesianMesh)
     h⁻¹ = spacing_inv(mesh)
-    values(bspline, (x - first(mesh)) * h⁻¹)
+    values(spline, (x - first(mesh)) * h⁻¹)
 end
-@inline function Base.values(bspline::BSpline, pt, mesh::CartesianMesh, ::Symbol)
-    x = getx(pt)
+@inline function Base.values(::typeof(gradient), spline::BSpline, x::Vec, mesh::CartesianMesh)
     xmin = first(mesh)
     h⁻¹ = spacing_inv(mesh)
-    N, ∇N = values(bspline, (x-xmin)*h⁻¹, :withgradient)
+    N, ∇N = values(gradient, spline, (x-xmin)*h⁻¹)
     (N, ∇N*h⁻¹)
+end
+@inline function Base.values(::typeof(hessian), spline::BSpline, x::Vec, mesh::CartesianMesh)
+    xmin = first(mesh)
+    h⁻¹ = spacing_inv(mesh)
+    N, ∇N, ∇∇N = values(hessian, spline, (x-xmin)*h⁻¹, gradient)
+    (N, ∇N*h⁻¹, ∇∇N*h⁻¹*h⁻¹)
 end
 
 function update_property!(mp::MPValue{<: BSpline}, pt, mesh::CartesianMesh)
@@ -220,6 +247,6 @@ function update_property!(mp::MPValue{<: BSpline}, pt, mesh::CartesianMesh)
             mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),x,mesh,i,:steffen), getx(pt), :all)
         end
     else
-        map(copyto!, (mp.N, mp.∇N), values(interpolation(mp), pt, mesh, :withgradient))
+        map(copyto!, (mp.N, mp.∇N), values(gradient, interpolation(mp), getx(pt), mesh))
     end
 end
