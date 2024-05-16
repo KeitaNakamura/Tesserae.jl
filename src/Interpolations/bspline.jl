@@ -240,9 +240,8 @@ end
 
 function update_property!(mp::MPValue{<: BSpline}, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
-    isnearbounds = size(mp.N) != size(indices)
-    if isnearbounds
-        @inbounds @simd for ip in eachindex(indices)
+    if isnearbounds(mp)
+        @inbounds for ip in eachindex(indices)
             i = indices[ip]
             mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),x,mesh,i,:steffen), getx(pt), :all)
         end
