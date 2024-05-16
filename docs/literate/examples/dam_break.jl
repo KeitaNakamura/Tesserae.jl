@@ -6,8 +6,8 @@ using Sequoia
 using LinearAlgebra
 
 abstract type Transfer end
-struct FLIP  <: Transfer α::Float64 end
-struct TFLIP <: Transfer α::Float64 end
+struct FLIP <: Transfer α::Float64 end
+struct TPIC <: Transfer end
 
 function main(transfer::Transfer = FLIP(1.0))
 
@@ -140,7 +140,7 @@ function main(transfer::Transfer = FLIP(1.0))
                 mv[i] = @∑ N[ip] * m[p] * v[p]
                 ma[i] = @∑ N[ip] * m[p] * a[p]
             end
-        elseif transfer isa TFLIP
+        elseif transfer isa TPIC
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ N[ip] * m[p]
                 mv[i] = @∑ N[ip] * m[p] * (v[p] + ∇v[p] ⋅ (X[i] - x[p]))
@@ -185,10 +185,9 @@ function main(transfer::Transfer = FLIP(1.0))
                 a[p] = @∑ a[i] * N[ip]
                 x[p] = @∑ x[i] * N[ip]
             end
-        elseif transfer isa TFLIP
-            local α = transfer.α
+        elseif transfer isa TPIC
             @threaded @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * N[ip]
+                v[p] = @∑ v[i] * N[ip]
                 a[p] = @∑ a[i] * N[ip]
                 x[p] = @∑ x[i] * N[ip]
                 ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
@@ -389,5 +388,5 @@ end
 using Test                                            #src
 if @isdefined(RUN_TESTS) && RUN_TESTS                 #src
     @test main(FLIP(1.0))  ≈ [0.645,0.259] rtol=0.005 #src
-    @test main(TFLIP(0.0)) ≈ [0.645,0.259] rtol=0.005 #src
+    @test main(TPIC())     ≈ [0.645,0.259] rtol=0.005 #src
 end                                                   #src
