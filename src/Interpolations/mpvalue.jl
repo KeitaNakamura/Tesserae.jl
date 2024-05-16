@@ -43,17 +43,16 @@ julia> neighboringnodes(mp) # grid indices within the local domain of a particle
 CartesianIndices((2:4, 3:5))
 ```
 """
-struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}, IsNearBounds <: AbstractArray{Bool, 0}}
+struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
     it::It
     prop::Prop
     indices::Indices
-    isnearbounds::IsNearBounds
 end
 
 function MPValue(::Type{Vec{dim, T}}, it::Interpolation) where {dim, T}
     prop = create_property(Vec{dim, T}, it)
     indices = EmptyCartesianIndices(Val(dim))
-    MPValue(it, prop, fill(indices), fill(false))
+    MPValue(it, prop, fill(indices))
 end
 MPValue(::Type{Vec{dim}}, it::Interpolation) where {dim} = MPValue(Vec{dim, Float64}, it)
 
@@ -79,15 +78,8 @@ end
     neighbors
 end
 
-@inline isnearbounds(mp::MPValue) = getfield(mp, :isnearbounds)[]
-
 @inline function set_neighboringnodes!(mp::MPValue, indices)
     getfield(mp, :indices)[] = indices
-    mp
-end
-
-@inline function set_isnearbounds!(mp::MPValue, b)
-    getfield(mp, :isnearbounds)[] = b
     mp
 end
 
@@ -98,15 +90,13 @@ function Base.show(io::IO, mp::MPValue)
     print(io, join(map(propertynames(mp)) do name
         string(name, "::", typeof(getproperty(mp, name)))
     end, ", "), "\n")
-    print(io, "  Neighboring nodes: ", neighboringnodes(mp), "\n")
-    print(io, "  Near bounds: ", isnearbounds(mp))
+    print(io, "  Neighboring nodes: ", neighboringnodes(mp))
 end
 
-struct MPValueVector{It, Prop <: NamedTuple, Indices, IsNearBounds, ElType <: MPValue{It}} <: AbstractVector{ElType}
+struct MPValueVector{It, Prop <: NamedTuple, Indices, ElType <: MPValue{It}} <: AbstractVector{ElType}
     it::It
     prop::Prop
     indices::Indices
-    isnearbounds::IsNearBounds
 end
 
 function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where {dim, T}
@@ -114,13 +104,11 @@ function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where
         fill(zero(eltype(prop)), size(prop)..., n)
     end
     indices = fill(EmptyCartesianIndices(Val(dim)), n)
-    isnearbounds = fill(false, n)
     It = typeof(it)
     Prop = typeof(prop)
     Indices = typeof(indices)
-    IsNearBounds = typeof(isnearbounds)
-    ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, IsNearBounds, Int})
-    MPValueVector{It, Prop, Indices, IsNearBounds, ElType}(it, prop, indices, isnearbounds)
+    ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
+    MPValueVector{It, Prop, Indices, ElType}(it, prop, indices)
 end
 generate_mpvalues(::Type{Vec{dim}}, it::Interpolation, n::Int) where {dim} = generate_mpvalues(Vec{dim, Float64}, it, n)
 
@@ -136,14 +124,14 @@ end
 
 @inline function Base.getindex(x::MPValueVector, i::Integer)
     @boundscheck checkbounds(x, i)
-    @inbounds _getindex(getfield(x, :it), getfield(x, :prop), getfield(x, :indices), getfield(x, :isnearbounds), i)
+    @inbounds _getindex(getfield(x, :it), getfield(x, :prop), getfield(x, :indices), i)
 end
-@generated function _getindex(it::Interpolation, prop::NamedTuple{names}, indices, isnearbounds, i::Integer) where {names}
+@generated function _getindex(it::Interpolation, prop::NamedTuple{names}, indices, i::Integer) where {names}
     exps = [:(viewcol(prop.$name, i)) for name in names]
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        MPValue(it, NamedTuple{names}(tuple($(exps...))), view(indices, i), view(isnearbounds, i))
+        MPValue(it, NamedTuple{names}(tuple($(exps...))), view(indices, i))
     end
 end
 
@@ -180,18 +168,14 @@ end
 end
 
 function update!(mp::MPValue, pt, mesh)
-    indices = neighboringnodes(interpolation(mp), pt, mesh)
-    set_neighboringnodes!(mp, indices)
-    set_isnearbounds!(mp, size(mp.N) != size(indices))
+    set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
     update_property!(mp, pt, mesh)
     mp
 end
 
 function update!(mp::MPValue, pt, mesh, filter)
     @debug @assert size(mesh) == size(filter)
-    indices = neighboringnodes(interpolation(mp), pt, mesh)
-    set_neighboringnodes!(mp, indices)
-    set_isnearbounds!(mp, size(mp.N) != size(indices) || !alltrue(filter, indices))
+    set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
     update_property!(mp, pt, mesh, filter)
     mp
 end

@@ -64,7 +64,6 @@ export
 # MPValue
     generate_mpvalues,
     neighboringnodes,
-    isnearbounds,
     MPValue,
 # transfer
     @P2G,

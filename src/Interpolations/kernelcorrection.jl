@@ -21,7 +21,8 @@ gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
 # general version
 @inline function update_property!(mp::MPValue{<: KernelCorrection}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
-    if isnearbounds(mp)
+    isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
+    if isnearbounds
         update_property_nearbounds!(mp, pt, mesh, filter)
     else
         @inbounds @simd for ip in eachindex(indices)
@@ -34,7 +35,8 @@ end
 # fast version for B-spline kernels
 @inline function update_property!(mp::MPValue{<: KernelCorrection{<: BSpline}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
-    if isnearbounds(mp)
+    isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
+    if isnearbounds
         update_property_nearbounds!(mp, pt, mesh, filter)
     else
         map(copyto!, (mp.N, mp.∇N), values(gradient, get_kernel(interpolation(mp)), getx(pt), mesh))
@@ -64,9 +66,9 @@ end
         w = mp.N[ip]
         P = ℙ(xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)
-        ∇P₀, P₀ = gradient(ℙ, zero(xₚ), :all)
-        mp.N[ip] = wq ⋅ P₀
-        mp.∇N[ip] = wq ⋅ ∇P₀
+        # ∇P₀, P₀ = gradient(ℙ, zero(xₚ), :all)
+        mp.N[ip] = wq[1] # wq ⋅ P₀
+        mp.∇N[ip] = @Tensor wq[2:1+dim] # wq ⋅ ∇P₀
     end
 end
 
