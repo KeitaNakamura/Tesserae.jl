@@ -66,9 +66,9 @@ end
         w = mp.N[ip]
         P = ℙ(xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)
-        # ∇P₀, P₀ = gradient(ℙ, zero(xₚ), :all)
-        mp.N[ip] = wq[1] # wq ⋅ P₀
-        mp.∇N[ip] = @Tensor wq[2:1+dim] # wq ⋅ ∇P₀
+        ∇P₀, P₀ = gradient(ℙ, zero(xₚ), :all)
+        mp.N[ip] = wq ⋅ P₀
+        mp.∇N[ip] = wq ⋅ ∇P₀
     end
 end
 
