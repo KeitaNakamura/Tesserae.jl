@@ -4,7 +4,7 @@
               eltype(MPValue(Vec{dim, Float64}, QuadraticBSpline()))
         for T in (Float32, Float64)
             for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), GIMP())
-                for extension in (identity, WLS, KernelCorrection)
+                for extension in (identity, KernelCorrection)
                     it = extension(kernel)
                     mp = @inferred MPValue(Vec{dim,T}, it)
                     @test interpolation(mp) === it
@@ -82,23 +82,6 @@ end
                 # GIMP doesn't have pertition of unity when very closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
                 isnearbounds ? (!PU && !LFR) : (PU && LFR) # GIMP
-            end
-        end
-    end
-
-    @testset "WLS($kernel)" for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), GIMP())
-        it = WLS(kernel)
-        for T in (Float32, Float64), dim in (1,2,3)
-            Random.seed!(1234)
-            mp = MPValue(Vec{dim,T}, it)
-            mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            l = 0.5*spacing(mesh) / 2
-            @test all(1:100) do _
-                x = rand(Vec{dim, T})
-                update!(mp, (;x,l), mesh)
-                PU = check_partition_of_unity(mp, x)
-                LFR = check_linear_field_reproduction(mp, x, mesh)
-                PU && LFR
             end
         end
     end
