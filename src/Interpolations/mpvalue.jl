@@ -24,7 +24,7 @@ julia> mp = MPValue(Vec{2}, QuadraticBSpline())
 MPValue:
   Interpolation: QuadraticBSpline()
   Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
-  Neighboring nodes: CartesianIndices((0:0, 0:0))
+  Neighboring nodes: CartesianIndices((1:0, 1:0))
 
 julia> update!(mp, x, mesh) # update `mp` at position `x` in `mesh`
 MPValue:
