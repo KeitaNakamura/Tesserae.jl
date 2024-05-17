@@ -10,7 +10,7 @@
                  (@inferred generate_grid(Array, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)),)
         @test grid isa Grid
         @test (@inferred spacing(grid)) === spacing(mesh)
-        @test (@inferred spacing_inv(grid)) === spacing_inv(mesh)
+        @test (@inferred Sequoia.spacing_inv(grid)) === Sequoia.spacing_inv(mesh)
         @test (grid.x)::CartesianMesh{2, Float64} == mesh
         @test all(iszero, (grid.m)::Array{Float64, 2})
         @test all(iszero, (grid.v)::Array{Vec{2,Float64}, 2})
@@ -35,7 +35,7 @@
     @test (grid.x)::CartesianMesh{2, Float64} == mesh
     @test all(iszero, (grid.m)::SpArray{Float64, 2})
     @test all(iszero, (grid.v)::SpArray{Vec{2,Float64}, 2})
-    @test !all(i->isactive(grid,i), eachindex(grid))
+    @test !all(i->Sequoia.isactive(grid,i), eachindex(grid))
     @test all(x->Sequoia.get_spinds(x)===Sequoia.get_spinds(grid), (grid.m, grid.v))
     # wrong type of `x`
     @test_throws Exception generate_grid(SpArray, @NamedTuple{x::Vec{3,Float64}, m::Float64, v::Vec{3,Float64}}, mesh)
@@ -50,9 +50,9 @@
 
     # broadcast for SpArray
     grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)
-    blkspy = rand(Bool, blocksize(grid))
+    blkspy = rand(Bool, Sequoia.blocksize(grid))
     update_block_sparsity!(grid, blkspy)
-    @test all(i->isactive(grid,i), filter(I->blkspy[Sequoia.blocklocal(Tuple(I)...)[1]...]===true, eachindex(grid)))
+    @test all(i->Sequoia.isactive(grid,i), filter(I->blkspy[Sequoia.blocklocal(Tuple(I)...)[1]...]===true, eachindex(grid)))
     grid.m .= rand(size(grid))
     grid.v .= grid.x .* rand(size(grid))
     array_x = Array(grid.x)

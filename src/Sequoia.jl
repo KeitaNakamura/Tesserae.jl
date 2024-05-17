@@ -12,7 +12,6 @@ using Tensorial: resizedim
 export resizedim
 
 using StructArrays
-export LazyRow, LazyRows
 
 # sampling
 import PoissonDiskSampling: generate as poisson_disk_sampling
@@ -31,7 +30,6 @@ export
     @threaded,
 # BlockSpace
     BlockSpace,
-    blocksize,
 # SpArray
     SpArray,
     update_block_sparsity!,
@@ -45,14 +43,11 @@ export
     SpGrid,
     generate_grid,
     spacing,
-    spacing_inv,
-    isactive,
 # Particles
     generate_particles,
     GridSampling,
     PoissonDiskSampling,
 # interpolations
-    interpolation,
     update!,
     BSpline,
     LinearBSpline,

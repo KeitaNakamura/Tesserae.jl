@@ -7,7 +7,7 @@
                 for extension in (identity, KernelCorrection)
                     it = extension(kernel)
                     mp = @inferred MPValue(Vec{dim,T}, it)
-                    @test interpolation(mp) === it
+                    @test Sequoia.interpolation(mp) === it
                     @test mp.N isa Array{T}
                     @test mp.∇N isa Array{Vec{dim,T}}
                     @test ndims(mp.N) == dim
@@ -28,7 +28,7 @@ end
             n = 100
             mpvalues = @inferred generate_mpvalues(Vec{dim,T}, QuadraticBSpline(), n)
             @test size(mpvalues) === (n,)
-            @test interpolation(mpvalues) === QuadraticBSpline()
+            @test Sequoia.interpolation(mpvalues) === QuadraticBSpline()
             @test all(eachindex(mpvalues)) do i
                 typeof(mpvalues[1]) === eltype(mpvalues)
             end

@@ -18,7 +18,7 @@
     @test size(mesh) === (16,21)
     @test IndexStyle(mesh) === IndexCartesian()
     @test (@inferred spacing(mesh)) === 0.2
-    @test (@inferred spacing_inv(mesh)) === inv(0.2)
+    @test (@inferred Sequoia.spacing_inv(mesh)) === inv(0.2)
 
     # isinside
     @test (@inferred Sequoia.isinside(Vec(0.1,0.3), mesh)) === true
