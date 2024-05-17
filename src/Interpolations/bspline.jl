@@ -144,14 +144,14 @@ node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(node_positio
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
 # `x` must be normalized by `h`
-@inline Base.values(spline::BSpline, x::Real) = values(nothing, spline, x)
+@inline Base.values(spline::BSpline, x, args...) = only(values(identity, spline, x, args...))
 @inline function Base.values(diff, ::BSpline{1}, x::Real)
     T = typeof(x)
     V = NTuple{2, T}
     ξ = fract(x)
-    vals = V((1-ξ, ξ))
+    vals = tuple(V((1-ξ, ξ)))
     if diff === gradient || diff === hessian
-        vals = (vals, V((-1, 1)))
+        vals = (vals..., V((-1, 1)))
     end
     if diff === hessian
         vals = (vals..., V((0, 0)))
@@ -163,12 +163,12 @@ end
     V = NTuple{3, T}
     x′ = fract(x - T(0.5))
     ξ = @. x′ - $V((-0.5,0.5,1.5))
-    vals = @. $V((0.5,-1.0,0.5))*ξ^2 + $V((-1.5,0.0,1.5))*ξ + $V((1.125,0.75,1.125))
+    vals = tuple(@. $V((0.5,-1.0,0.5))*ξ^2 + $V((-1.5,0.0,1.5))*ξ + $V((1.125,0.75,1.125)))
     if diff === gradient || diff === hessian
-        vals = (vals, @.($V((1.0,-2.0,1.0))*ξ + $V((-1.5,0.0,1.5))))
+        vals = (vals..., @. $V((1.0,-2.0,1.0))*ξ + $V((-1.5,0.0,1.5)))
     end
     if diff === hessian
-        vals = (vals..., @.($V((1.0,-2.0,1.0))))
+        vals = (vals..., @. $V((1.0,-2.0,1.0)))
     end
     vals
 end
@@ -179,20 +179,20 @@ end
     ξ = @. x′ - $V((-1,0,1,2))
     ξ² = @. ξ * ξ
     ξ³ = @. ξ² * ξ
-    vals = @. $V((-1/6,0.5,-0.5,1/6))*ξ³ + $V((1,-1,-1,1))*ξ² + $V((-2,0,0,2))*ξ + $V((4/3,2/3,2/3,4/3))
+    vals = tuple(@. $V((-1/6,0.5,-0.5,1/6))*ξ³ + $V((1,-1,-1,1))*ξ² + $V((-2,0,0,2))*ξ + $V((4/3,2/3,2/3,4/3)))
     if diff === gradient || diff === hessian
-        vals = (vals, @.($V((-0.5,1.5,-1.5,0.5))*ξ² + $V((2,-2,-2,2))*ξ + $V((-2,0,0,2))))
+        vals = (vals..., @. $V((-0.5,1.5,-1.5,0.5))*ξ² + $V((2,-2,-2,2))*ξ + $V((-2,0,0,2)))
     end
     if diff === hessian
-        vals = (vals..., @.($V((-1.0,3.0,-3.0,1.0))*ξ + $V((2,-2,-2,2))))
+        vals = (vals..., @. $V((-1.0,3.0,-3.0,1.0))*ξ + $V((2,-2,-2,2)))
     end
     vals
 end
 
-@generated function Base.values(spline::BSpline, x::Vec{dim}) where {dim}
+@generated function Base.values(::typeof(identity), spline::BSpline, x::Vec{dim}) where {dim}
     quote
         @_inline_meta
-        tuple_otimes(@ntuple $dim d -> values(spline, x[d]))
+        (tuple_otimes(@ntuple $dim d -> values(spline, x[d])),)
     end
 end
 @generated function Base.values(::typeof(gradient), spline::BSpline, x::Vec{dim}) where {dim}
@@ -221,9 +221,9 @@ end
 end
 @inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
 
-@inline function Base.values(spline::BSpline, x::Vec, mesh::CartesianMesh)
+@inline function Base.values(::typeof(identity), spline::BSpline, x::Vec, mesh::CartesianMesh)
     h⁻¹ = spacing_inv(mesh)
-    values(spline, (x - first(mesh)) * h⁻¹)
+    (values(spline, (x - first(mesh)) * h⁻¹),)
 end
 @inline function Base.values(::typeof(gradient), spline::BSpline, x::Vec, mesh::CartesianMesh)
     xmin = first(mesh)
@@ -234,19 +234,19 @@ end
 @inline function Base.values(::typeof(hessian), spline::BSpline, x::Vec, mesh::CartesianMesh)
     xmin = first(mesh)
     h⁻¹ = spacing_inv(mesh)
-    N, ∇N, ∇∇N = values(hessian, spline, (x-xmin)*h⁻¹, gradient)
+    N, ∇N, ∇∇N = values(hessian, spline, (x-xmin)*h⁻¹)
     (N, ∇N*h⁻¹, ∇∇N*h⁻¹*h⁻¹)
 end
 
-function update_property!(mp::MPValue{<: BSpline}, pt, mesh::CartesianMesh)
+function update_property!(mp::MPValue{<: BSpline, diff}, pt, mesh::CartesianMesh) where {diff}
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices)
     if isnearbounds
-        @inbounds @simd for ip in eachindex(indices)
+        @inbounds for ip in eachindex(indices)
             i = indices[ip]
-            mp.∇N[ip], mp.N[ip] = gradient(x->value(interpolation(mp),x,mesh,i,:steffen), getx(pt), :all)
+            set_shape_values!(mp, ip, value(difftype(mp), interpolation(mp), getx(pt), mesh, i, :steffen))
         end
     else
-        map(copyto!, (mp.N, mp.∇N), values(gradient, interpolation(mp), getx(pt), mesh))
+        set_shape_values!(mp, values(difftype(mp), interpolation(mp), getx(pt), mesh))
     end
 end

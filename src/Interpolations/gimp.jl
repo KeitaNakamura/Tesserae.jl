@@ -37,16 +37,19 @@ end
 end
 @inline value(f::GIMP, pt, mesh::CartesianMesh, I::CartesianIndex) = value(f, getx(pt), pt.l, mesh, I)
 
-@inline function value_gradient(f::GIMP, pt, mesh::CartesianMesh, I::CartesianIndex)
+@inline function value(::typeof(gradient), gimp::GIMP, pt, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
-    ∇N, N = gradient(x -> (@_propagate_inbounds_meta; value(f, x, pt.l, mesh, I)), getx(pt), :all)
-    N, ∇N
+    reverse(gradient(x -> (@_propagate_inbounds_meta; value(gimp, x, pt.l, mesh, I)), getx(pt), :all))
+end
+@inline function value(::typeof(hessian), gimp::GIMP, pt, mesh::CartesianMesh, I::CartesianIndex)
+    @_propagate_inbounds_meta
+    reverse(hessian(x -> (@_propagate_inbounds_meta; value(gimp, x, pt.l, mesh, I)), getx(pt), :all))
 end
 
 @inline function update_property!(mp::MPValue{GIMP}, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        mp.N[ip], mp.∇N[ip] = value_gradient(interpolation(mp), pt, mesh, i)
+        set_shape_values!(mp, ip, value(difftype(mp), interpolation(mp), pt, mesh, i))
     end
 end

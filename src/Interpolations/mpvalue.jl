@@ -1,11 +1,12 @@
 abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
-function create_property(::Type{Vec{dim, T}}, it::Interpolation) where {dim, T}
+function create_property(::Type{Vec{dim, T}}, it::Interpolation, ::Val{diff}) where {dim, T, diff}
     dims = nfill(gridspan(it), Val(dim))
-    N = zeros(T, dims)
-    ∇N = zeros(Vec{dim, T}, dims)
-    (; N, ∇N)
+    diff === 0 && return (; N=zeros(T, dims))
+    diff === 1 && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims))
+    diff === 2 && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims), ∇∇N=zeros(Mat{dim, dim, T}, dims))
+    error("wrong differentiation order, choose `0`, `1` or `2`")
 end
 
 """
@@ -49,12 +50,12 @@ struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
     indices::Indices
 end
 
-function MPValue(::Type{Vec{dim, T}}, it::Interpolation) where {dim, T}
-    prop = create_property(Vec{dim, T}, it)
-    indices = EmptyCartesianIndices(Val(dim))
-    MPValue(it, prop, fill(indices))
+function MPValue(::Type{Vec{dim, T}}, it::Interpolation, diff::Val=Val(1)) where {dim, T}
+    prop = create_property(Vec{dim, T}, it, diff)
+    indices = fill(EmptyCartesianIndices(Val(dim)))
+    MPValue(it, prop, indices)
 end
-MPValue(::Type{Vec{dim}}, it::Interpolation) where {dim} = MPValue(Vec{dim, Float64}, it)
+MPValue(::Type{Vec{dim}}, it::Interpolation, diff::Val=Val(1)) where {dim} = MPValue(Vec{dim, Float64}, it, diff)
 
 Base.propertynames(mp::MPValue) = propertynames(getfield(mp, :prop))
 @inline function Base.getproperty(mp::MPValue, name::Symbol)
@@ -83,6 +84,23 @@ end
     mp
 end
 
+@inline function difftype(mp::MPValue)
+    hasproperty(mp, :∇∇N) && return hessian
+    hasproperty(mp, :∇N)  && return gradient
+    hasproperty(mp, :N)   && return identity
+    error("unreachable")
+end
+@inline @propagate_inbounds value(::typeof(identity), it, x, args...) = (value(it, x, args...),)
+@inline @propagate_inbounds value(::typeof(gradient), it, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(it, x, args...)), x, :all))
+@inline @propagate_inbounds value(::typeof(hessian), it, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(it, x, args...)), x, :all))
+
+@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (N,)::Tuple{Any}) = (mp.N[ip]=N;)
+@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (N,∇N)::Tuple{Any,Any}) = (mp.N[ip]=N; mp.∇N[ip]=∇N;)
+@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (N,∇N,∇∇N)::Tuple{Any,Any,Any}) = (mp.N[ip]=N; mp.∇N[ip]=∇N; mp.∇∇N[ip]=∇∇N;)
+@inline set_shape_values!(mp::MPValue, (N,)::Tuple{Any}) = copyto!(mp.N, N)
+@inline set_shape_values!(mp::MPValue, (N,∇N)::Tuple{Any,Any}) = (copyto!(mp.N,N); copyto!(mp.∇N,∇N);)
+@inline set_shape_values!(mp::MPValue, (N,∇N,∇∇N)::Tuple{Any,Any,Any}) = (copyto!(mp.N,N); copyto!(mp.∇N,∇N); copyto!(mp.∇∇N,∇∇N);)
+
 function Base.show(io::IO, mp::MPValue)
     print(io, "MPValue: \n")
     print(io, "  Interpolation: ", interpolation(mp), "\n")
@@ -99,8 +117,8 @@ struct MPValueVector{It, Prop <: NamedTuple, Indices, ElType <: MPValue{It}} <: 
     indices::Indices
 end
 
-function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where {dim, T}
-    prop = map(create_property(Vec{dim, T}, it)) do prop
+function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, diff::Val, n::Int) where {dim, T}
+    prop = map(create_property(Vec{dim, T}, it, diff)) do prop
         fill(zero(eltype(prop)), size(prop)..., n)
     end
     indices = fill(EmptyCartesianIndices(Val(dim)), n)
@@ -110,7 +128,9 @@ function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int) where
     ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
     MPValueVector{It, Prop, Indices, ElType}(it, prop, indices)
 end
-generate_mpvalues(::Type{Vec{dim}}, it::Interpolation, n::Int) where {dim} = generate_mpvalues(Vec{dim, Float64}, it, n)
+generate_mpvalues(::Type{Vec{dim}}, it::Interpolation, diff::Val, n::Int) where {dim} = generate_mpvalues(Vec{dim, Float64}, it, diff, n)
+
+generate_mpvalues(::Type{V}, it::Interpolation, n::Int) where {V} = generate_mpvalues(V, it, Val(1), n)
 
 Base.IndexStyle(::Type{<: MPValueVector}) = IndexLinear()
 Base.size(x::MPValueVector) = size(getfield(x, :indices))

@@ -27,7 +27,7 @@ gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
     else
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
-            mp.N[ip], mp.∇N[ip] = value_gradient(get_kernel(interpolation(mp)), pt, mesh, i)
+            set_shape_values!(mp, ip, value(difftype(mp), get_kernel(interpolation(mp)), pt, mesh, i))
         end
     end
 end
@@ -39,7 +39,7 @@ end
     if isnearbounds
         update_property_nearbounds!(mp, pt, mesh, filter)
     else
-        map(copyto!, (mp.N, mp.∇N), values(gradient, get_kernel(interpolation(mp)), getx(pt), mesh))
+        set_shape_values!(mp, values(difftype(mp), get_kernel(interpolation(mp)), getx(pt), mesh))
     end
 end
 
@@ -60,15 +60,16 @@ end
     end
     M⁻¹ = inv(M)
 
+    ∇∇P₀, ∇P₀, P₀ = hessian(ℙ, zero(xₚ), :all)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]
         w = mp.N[ip]
         P = ℙ(xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)
-        ∇P₀, P₀ = gradient(ℙ, zero(xₚ), :all)
-        mp.N[ip] = wq ⋅ P₀
-        mp.∇N[ip] = wq ⋅ ∇P₀
+        hasproperty(mp, :N)   && set_shape_values!(mp, ip, (wq⋅P₀,))
+        hasproperty(mp, :∇N)  && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
+        hasproperty(mp, :∇∇N) && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
     end
 end
 
