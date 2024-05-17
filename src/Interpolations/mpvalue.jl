@@ -90,9 +90,9 @@ end
     hasproperty(mp, :N)   && return identity
     error("unreachable")
 end
-@inline @propagate_inbounds value(::typeof(identity), it, x, args...) = (value(it, x, args...),)
-@inline @propagate_inbounds value(::typeof(gradient), it, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(it, x, args...)), x, :all))
-@inline @propagate_inbounds value(::typeof(hessian), it, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(it, x, args...)), x, :all))
+@inline @propagate_inbounds value(::typeof(identity), f, x, args...) = (value(f, x, args...),)
+@inline @propagate_inbounds value(::typeof(gradient), f, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
+@inline @propagate_inbounds value(::typeof(hessian), f, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
 
 @inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (N,)::Tuple{Any}) = (mp.N[ip]=N;)
 @inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (N,∇N)::Tuple{Any,Any}) = (mp.N[ip]=N; mp.∇N[ip]=∇N;)
