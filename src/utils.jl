@@ -158,35 +158,6 @@ function threaded_expr(schedule::QuoteNode, expr::Expr)
     end
 end
 
-##########################
-# Simple Newton's method #
-##########################
-
-function newton!(
-        x::AbstractVector{T}, f, ∇f;
-        maxiter::Int=100, atol::Real=zero(T), rtol::Real=sqrt(eps(T)),
-        linsolve=(x,A,b)->copyto!(x,A\b), verbose::Bool=false) where {T}
-
-    fx = f(x)
-    f0 = norm(fx)
-    δx = similar(x)
-
-    iter = 0
-    solved = f0 ≤ atol
-    giveup = any(!isfinite, fx)
-
-    while !(solved || giveup)
-        linsolve(fillzero!(δx), ∇f(x), fx)
-        @. x -= δx
-        fx = f(x)
-        verbose && println("| f | = ", norm(fx))
-        solved = norm(fx) ≤ max(atol, rtol*f0)
-        giveup = ((iter += 1) ≥ maxiter || any(!isfinite, fx))
-    end
-
-    solved
-end
-
 const SHOWPROGRESS = Preferences.@load_preference("showprogress_macro", true)
 
 """
