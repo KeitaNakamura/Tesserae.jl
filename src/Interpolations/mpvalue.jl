@@ -5,7 +5,7 @@ function create_property(::Type{Vec{dim, T}}, it::Interpolation, ::Val{diff}) wh
     dims = nfill(gridspan(it), Val(dim))
     diff === 0 && return (; N=zeros(T, dims))
     diff === 1 && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims))
-    diff === 2 && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims), ∇∇N=zeros(Mat{dim, dim, T}, dims))
+    diff === 2 && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims), ∇∇N=zeros(SymmetricSecondOrderTensor{dim, T}, dims))
     error("wrong differentiation order, choose `0`, `1` or `2`")
 end
 
