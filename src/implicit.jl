@@ -163,8 +163,8 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
             $(union(vars[2], vars[5])...)
             $J = vec(view($localdofs,:,$jp))
             for $ip in eachindex($gridindices)
-                $(union(vars[1], vars[4])...)
                 $i = $gridindices[$ip]
+                $(union(vars[1], vars[4])...)
                 $I = vec(view($localdofs,:,$ip))
                 $(assemble_local_matrices...)
             end
