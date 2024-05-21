@@ -50,11 +50,16 @@ struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
     indices::Indices
 end
 
-function MPValue(::Type{Vec{dim, T}}, it::Interpolation, diff::Val=Val(1)) where {dim, T}
-    prop = create_property(Vec{dim, T}, it, diff)
+function _MPValue(it::Union{Nothing, Interpolation}, prop::NamedTuple)
+    @assert hasproperty(prop, :N)
+    @assert prop.N isa AbstractArray{<: Real}
+    dim = ndims(prop.N)
     indices = fill(EmptyCartesianIndices(Val(dim)))
     MPValue(it, prop, indices)
 end
+
+MPValue(prop::NamedTuple) = _MPValue(nothing, prop)
+MPValue(::Type{Vec{dim, T}}, it::Interpolation, diff::Val=Val(1)) where {dim, T} = _MPValue(it, create_property(Vec{dim, T}, it, diff))
 MPValue(::Type{Vec{dim}}, it::Interpolation, diff::Val=Val(1)) where {dim} = MPValue(Vec{dim, Float64}, it, diff)
 
 Base.propertynames(mp::MPValue) = propertynames(getfield(mp, :prop))
@@ -187,17 +192,17 @@ end
     true
 end
 
-function update!(mp::MPValue, it::Interpolation, pt, mesh)
+function update!(mp::MPValue, it::Interpolation, pt, mesh::AbstractMesh)
     set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
     update_property!(mp, it, pt, mesh)
     mp
 end
-function update!(mp::MPValue, it::Interpolation, pt, mesh, filter)
+function update!(mp::MPValue, it::Interpolation, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @debug @assert size(mesh) == size(filter)
     set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
     update_property!(mp, it, pt, mesh, filter)
     mp
 end
 
-update!(mp::MPValue, pt, mesh) = update!(mp, interpolation(mp), pt, mesh)
-update!(mp::MPValue, pt, mesh, filter) = update!(mp, interpolation(mp), pt, mesh, filter)
+update!(mp::MPValue{<: Interpolation}, pt, mesh::AbstractMesh) = update!(mp, interpolation(mp), pt, mesh)
+update!(mp::MPValue{<: Interpolation}, pt, mesh::AbstractMesh, filter::AbstractArray{Bool}) = update!(mp, interpolation(mp), pt, mesh, filter)
