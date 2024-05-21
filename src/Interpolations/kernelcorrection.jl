@@ -19,34 +19,34 @@ gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
 @inline neighboringnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(kc), pt, mesh)
 
 # general version
-@inline function update_property!(mp::MPValue{<: KernelCorrection}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline function update_property!(mp::MPValue, it::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        update_property_nearbounds!(mp, pt, mesh, filter)
+        update_property_nearbounds!(mp, it, pt, mesh, filter)
     else
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
-            set_shape_values!(mp, ip, value(difftype(mp), get_kernel(interpolation(mp)), pt, mesh, i))
+            set_shape_values!(mp, ip, value(difftype(mp), get_kernel(it), pt, mesh, i))
         end
     end
 end
 
 # fast version for B-spline kernels
-@inline function update_property!(mp::MPValue{<: KernelCorrection{<: BSpline}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline function update_property!(mp::MPValue, it::KernelCorrection{<: BSpline}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        update_property_nearbounds!(mp, pt, mesh, filter)
+        update_property_nearbounds!(mp, it, pt, mesh, filter)
     else
-        set_shape_values!(mp, values(difftype(mp), get_kernel(interpolation(mp)), getx(pt), mesh))
+        set_shape_values!(mp, values(difftype(mp), get_kernel(it), getx(pt), mesh))
     end
 end
 
-@inline function update_property_nearbounds!(mp::MPValue{<: KernelCorrection}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
+@inline function update_property_nearbounds!(mp::MPValue, it::KernelCorrection, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
     indices = neighboringnodes(mp)
-    kernel = get_kernel(interpolation(mp))
-    poly = get_polynomial(interpolation(mp))
+    kernel = get_kernel(it)
+    poly = get_polynomial(it)
     xₚ = getx(pt)
 
     M = fastsum(eachindex(indices)) do ip

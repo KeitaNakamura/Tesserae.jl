@@ -238,15 +238,15 @@ end
     (N, ∇N*h⁻¹, ∇∇N*h⁻¹*h⁻¹)
 end
 
-function update_property!(mp::MPValue{<: BSpline, diff}, pt, mesh::CartesianMesh) where {diff}
+function update_property!(mp::MPValue, it::BSpline, pt, mesh::CartesianMesh) where {diff}
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices)
     if isnearbounds
         @inbounds for ip in eachindex(indices)
             i = indices[ip]
-            set_shape_values!(mp, ip, value(difftype(mp), interpolation(mp), getx(pt), mesh, i, :steffen))
+            set_shape_values!(mp, ip, value(difftype(mp), it, getx(pt), mesh, i, :steffen))
         end
     else
-        set_shape_values!(mp, values(difftype(mp), interpolation(mp), getx(pt), mesh))
+        set_shape_values!(mp, values(difftype(mp), it, getx(pt), mesh))
     end
 end

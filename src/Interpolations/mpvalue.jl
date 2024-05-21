@@ -187,15 +187,17 @@ end
     true
 end
 
-function update!(mp::MPValue, pt, mesh)
+function update!(mp::MPValue, it::Interpolation, pt, mesh)
     set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
-    update_property!(mp, pt, mesh)
+    update_property!(mp, it, pt, mesh)
+    mp
+end
+function update!(mp::MPValue, it::Interpolation, pt, mesh, filter)
+    @debug @assert size(mesh) == size(filter)
+    set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
+    update_property!(mp, it, pt, mesh, filter)
     mp
 end
 
-function update!(mp::MPValue, pt, mesh, filter)
-    @debug @assert size(mesh) == size(filter)
-    set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
-    update_property!(mp, pt, mesh, filter)
-    mp
-end
+update!(mp::MPValue, pt, mesh) = update!(mp, interpolation(mp), pt, mesh)
+update!(mp::MPValue, pt, mesh, filter) = update!(mp, interpolation(mp), pt, mesh, filter)

@@ -46,10 +46,10 @@ end
     reverse(hessian(x -> (@_propagate_inbounds_meta; value(gimp, x, pt.l, mesh, I)), getx(pt), :all))
 end
 
-@inline function update_property!(mp::MPValue{GIMP}, pt, mesh::CartesianMesh)
+@inline function update_property!(mp::MPValue, it::GIMP, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        set_shape_values!(mp, ip, value(difftype(mp), interpolation(mp), pt, mesh, i))
+        set_shape_values!(mp, ip, value(difftype(mp), it, pt, mesh, i))
     end
 end
