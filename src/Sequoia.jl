@@ -91,8 +91,6 @@ include("Interpolations/gimp.jl")
 include("Interpolations/polynomials.jl")
 include("Interpolations/kernelcorrection.jl")
 
-include("multigridspace.jl")
-
 include("transfer.jl")
 include("implicit.jl")
 
