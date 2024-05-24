@@ -51,7 +51,7 @@ end
     end
 
     @testset "$it" for it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-        for T in (Float32, Float64), dim in (1,2,3), it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(),)
+        for T in (Float32, Float64), dim in (1,2,3)
             Random.seed!(1234)
             mp = MPValue(Vec{dim,T}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)

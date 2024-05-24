@@ -147,44 +147,41 @@ node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(node_positio
 @inline Base.values(spline::BSpline, x, args...) = only(values(identity, spline, x, args...))
 @inline function Base.values(diff, ::BSpline{1}, x::Real)
     T = typeof(x)
-    V = NTuple{2, T}
     ξ = fract(x)
-    vals = tuple(V((1-ξ, ξ)))
+    vals = tuple(@. T((1-ξ, ξ)))
     if diff === gradient || diff === hessian
-        vals = (vals..., V((-1, 1)))
+        vals = (vals..., @. T((-1, 1)))
     end
     if diff === hessian
-        vals = (vals..., V((0, 0)))
+        vals = (vals..., @. T((0, 0)))
     end
     vals
 end
 @inline function Base.values(diff, ::BSpline{2}, x::Real)
     T = typeof(x)
-    V = NTuple{3, T}
     x′ = fract(x - T(0.5))
-    ξ = @. x′ - $V((-0.5,0.5,1.5))
-    vals = tuple(@. $V((0.5,-1.0,0.5))*ξ^2 + $V((-1.5,0.0,1.5))*ξ + $V((1.125,0.75,1.125)))
+    ξ = @. x′ - T((-0.5,0.5,1.5))
+    vals = tuple(@. muladd(T((0.5,-1.0,0.5)), ξ^2, muladd(T((-1.5,0.0,1.5)), ξ, T((1.125,0.75,1.125)))))
     if diff === gradient || diff === hessian
-        vals = (vals..., @. $V((1.0,-2.0,1.0))*ξ + $V((-1.5,0.0,1.5)))
+        vals = (vals..., @. muladd(T((1.0,-2.0,1.0)), ξ, T((-1.5,0.0,1.5))))
     end
     if diff === hessian
-        vals = (vals..., @. $V((1.0,-2.0,1.0)))
+        vals = (vals..., @. T((1.0,-2.0,1.0)))
     end
     vals
 end
 @inline function Base.values(diff, ::BSpline{3}, x::Real)
     T = typeof(x)
-    V = NTuple{4, T}
     x′ = fract(x)
-    ξ = @. x′ - $V((-1,0,1,2))
+    ξ = @. x′ - T((-1,0,1,2))
     ξ² = @. ξ * ξ
     ξ³ = @. ξ² * ξ
-    vals = tuple(@. $V((-1/6,0.5,-0.5,1/6))*ξ³ + $V((1,-1,-1,1))*ξ² + $V((-2,0,0,2))*ξ + $V((4/3,2/3,2/3,4/3)))
+    vals = tuple(@. muladd(T((-1/6,0.5,-0.5,1/6)), ξ³, muladd(T((1,-1,-1,1)), ξ², muladd(T((-2,0,0,2)), ξ, T((4/3,2/3,2/3,4/3))))))
     if diff === gradient || diff === hessian
-        vals = (vals..., @. $V((-0.5,1.5,-1.5,0.5))*ξ² + $V((2,-2,-2,2))*ξ + $V((-2,0,0,2)))
+        vals = (vals..., @. muladd(T((-0.5,1.5,-1.5,0.5)), ξ², muladd(T((2,-2,-2,2)), ξ, T((-2,0,0,2)))))
     end
     if diff === hessian
-        vals = (vals..., @. $V((-1.0,3.0,-3.0,1.0))*ξ + $V((2,-2,-2,2)))
+        vals = (vals..., @. muladd(T((-1.0,3.0,-3.0,1.0)), ξ, T((2,-2,-2,2))))
     end
     vals
 end
