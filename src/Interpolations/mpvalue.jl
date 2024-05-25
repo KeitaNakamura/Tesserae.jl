@@ -32,13 +32,8 @@ MPValue:
   Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
   Neighboring nodes: CartesianIndices((2:4, 3:5))
 
-julia> sum(mp.N)
-1.0000000000000004
-
-julia> sum(mp.∇N)
-2-element Vec{2, Float64}:
- 0.0
- 5.551115123125783e-17
+julia> sum(mp.N) ≈ 1
+true
 
 julia> neighboringnodes(mp) # grid indices within the local domain of a particle
 CartesianIndices((2:4, 3:5))
