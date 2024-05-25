@@ -14,6 +14,27 @@
                     @test ndims(mp.∇N) == dim
                     @test size(mp.N) == size(mp.∇N)
                     @test all(size(neighboringnodes(mp)) .< size(mp.N))
+
+                    # diff = nothing
+                    mp = @inferred MPValue(Vec{dim,T}, it; diff=nothing)
+                    @test hasproperty(mp, :N) && mp.N isa Array{T}
+                    @test !hasproperty(mp, :∇N)
+                    @test !hasproperty(mp, :∇∇N)
+                    @test ndims(mp.N) == dim
+                    # diff = gradient
+                    mp = @inferred MPValue(Vec{dim,T}, it; diff=gradient)
+                    @test hasproperty(mp, :N)  && mp.N  isa Array{T}
+                    @test hasproperty(mp, :∇N) && mp.∇N isa Array{Vec{dim,T}}
+                    @test !hasproperty(mp, :∇∇N)
+                    @test ndims(mp.N) == ndims(mp.∇N) == dim
+                    @test size(mp.N) == size(mp.∇N)
+                    # diff = hessian
+                    mp = @inferred MPValue(Vec{dim,T}, it; diff=hessian)
+                    @test hasproperty(mp, :N)   && mp.N   isa Array{T}
+                    @test hasproperty(mp, :∇N)  && mp.∇N  isa Array{Vec{dim,T}}
+                    @test hasproperty(mp, :∇∇N) && mp.∇∇N isa Array{<: SymmetricSecondOrderTensor{dim,T}}
+                    @test ndims(mp.N) == ndims(mp.∇N) == ndims(mp.∇∇N) == dim
+                    @test size(mp.N) == size(mp.∇N) == size(mp.∇∇N)
                 end
             end
         end

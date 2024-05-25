@@ -1,12 +1,12 @@
 abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
-function create_property(::Type{Vec{dim, T}}, it::Interpolation, ::Val{diff}) where {dim, T, diff}
+function create_property(::Type{Vec{dim, T}}, it::Interpolation, diff) where {dim, T}
     dims = nfill(gridspan(it), Val(dim))
-    diff === 0 && return (; N=zeros(T, dims))
-    diff === 1 && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims))
-    diff === 2 && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims), ∇∇N=zeros(SymmetricSecondOrderTensor{dim, T}, dims))
-    error("wrong differentiation order, choose `0`, `1` or `2`")
+    (diff === nothing || diff === identity) && return (; N=zeros(T, dims))
+    diff === gradient && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims))
+    diff === hessian  && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims), ∇∇N=zeros(SymmetricSecondOrderTensor{dim, T}, dims))
+    error("wrong differentiation type, choose `nothing`, `gradient` or `hessian`")
 end
 
 """
@@ -59,8 +59,8 @@ function _MPValue(it::Union{Nothing, Interpolation}, prop::NamedTuple)
 end
 
 MPValue(prop::NamedTuple) = _MPValue(nothing, prop)
-MPValue(::Type{Vec{dim, T}}, it::Interpolation, diff::Val=Val(1)) where {dim, T} = _MPValue(it, create_property(Vec{dim, T}, it, diff))
-MPValue(::Type{Vec{dim}}, it::Interpolation, diff::Val=Val(1)) where {dim} = MPValue(Vec{dim, Float64}, it, diff)
+MPValue(::Type{Vec{dim, T}}, it::Interpolation; diff=gradient) where {dim, T} = _MPValue(it, create_property(Vec{dim, T}, it, diff))
+MPValue(::Type{Vec{dim}}, it::Interpolation; diff=gradient) where {dim} = MPValue(Vec{dim, Float64}, it; diff)
 
 Base.propertynames(mp::MPValue) = propertynames(getfield(mp, :prop))
 @inline function Base.getproperty(mp::MPValue, name::Symbol)
@@ -122,7 +122,7 @@ struct MPValueVector{It, Prop <: NamedTuple, Indices, ElType <: MPValue{It}} <: 
     indices::Indices
 end
 
-function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, diff::Val, n::Int) where {dim, T}
+function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int; diff=gradient) where {dim, T}
     prop = map(create_property(Vec{dim, T}, it, diff)) do prop
         fill(zero(eltype(prop)), size(prop)..., n)
     end
@@ -133,7 +133,7 @@ function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, diff::Val, n:
     ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
     MPValueVector{It, Prop, Indices, ElType}(it, prop, indices)
 end
-generate_mpvalues(::Type{Vec{dim}}, it::Interpolation, diff::Val, n::Int) where {dim} = generate_mpvalues(Vec{dim, Float64}, it, diff, n)
+generate_mpvalues(::Type{Vec{dim}}, it::Interpolation, n::Int; diff=gradient) where {dim} = generate_mpvalues(Vec{dim, Float64}, it, n; diff)
 
 generate_mpvalues(::Type{V}, it::Interpolation, n::Int) where {V} = generate_mpvalues(V, it, Val(1), n)
 
