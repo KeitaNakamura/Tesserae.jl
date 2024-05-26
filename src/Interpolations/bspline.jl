@@ -235,7 +235,7 @@ end
     (N, ∇N*h⁻¹, ∇∇N*h⁻¹*h⁻¹)
 end
 
-function update_property!(mp::MPValue, it::BSpline, pt, mesh::CartesianMesh) where {diff}
+function update_property!(mp::MPValue, it::BSpline, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.N) != size(indices)
     if isnearbounds
