@@ -39,16 +39,17 @@ function main()
         f   :: Vec{3, Float64}
     end
     ParticleProp = @NamedTuple begin
-        x   :: Vec{3, Float64}
-        m   :: Float64
-        V⁰  :: Float64
-        v   :: Vec{3, Float64}
-        a   :: Vec{3, Float64}
-        b   :: Vec{3, Float64}
-        ∇u  :: SecondOrderTensor{3, Float64, 9}
-        F   :: SecondOrderTensor{3, Float64, 9}
-        τ   :: SymmetricSecondOrderTensor{3, Float64, 6}
-        c   :: Tensor{Tuple{@Symmetry{3,3}, 3,3}, Float64, 4, 54}
+        x    :: Vec{3, Float64}
+        m    :: Float64
+        V⁰   :: Float64
+        v    :: Vec{3, Float64}
+        a    :: Vec{3, Float64}
+        b    :: Vec{3, Float64}
+        ∇u   :: SecondOrderTensor{3, Float64, 9}
+        F    :: SecondOrderTensor{3, Float64, 9}
+        ΔF⁻¹ :: SecondOrderTensor{3, Float64, 9}
+        τ    :: SecondOrderTensor{3, Float64, 9}
+        c    :: FourthOrderTensor{3, Float64, 81}
     end
 
     ## Background grid
@@ -56,7 +57,7 @@ function main()
 
     ## Particles
     beam = Sequoia.Box((0,1), (0.85,1.15), (-0.15,0.15))
-    particles = generate_particles(ParticleProp, grid.X; domain=beam)
+    particles = generate_particles(ParticleProp, grid.X; domain=beam, alg=GridSampling())
     particles.V⁰ .= volume(beam) / length(particles)
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
@@ -153,14 +154,17 @@ function residual(U::AbstractVector, state)
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + Δt*((1-γ)*grid.aⁿ + γ*grid.a)
 
+    transposing_tensor(σ) = @einsum (i,j,k,l) -> σ[i,l] * one(σ)[j,k]
     @G2P grid=>i particles=>p mpvalues=>ip begin
         ## In addition to updating the stress tensor, the stiffness tensor,
         ## which is utilized in the Jacobian-vector product, is also updated.
         ∇u[p] = @∑ u[i] ⊗ ∇N[ip]
+        ΔF⁻¹[p] = inv(I + ∇u[p])
         c[p], τ[p] = gradient(∇u -> kirchhoff_stress((I + ∇u) ⋅ F[p]), ∇u[p], :all)
+        c[p] = c[p] - transposing_tensor(τ[p] ⋅ ΔF⁻¹[p]')
     end
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ -V⁰[p] * τ[p] ⋅ ∇N[ip] + m[p] * b[p] * N[ip]
+        f[i] = @∑ -V⁰[p] * τ[p] ⋅ (∇N[ip] ⋅ ΔF⁻¹[p]) + m[p] * b[p] * N[ip]
     end
 
     @. $dofmap(grid.m) * $dofmap(grid.a) - $dofmap(grid.f)
@@ -170,8 +174,9 @@ function jacobian(U::AbstractVector, state)
     (; grid, particles, mpvalues, β, A, dofmap, Δt) = state
 
     I(i,j) = ifelse(i===j, one(Mat{3,3}), zero(Mat{3,3}))
+    dotdot(a,C,b) = @einsum (i,j) -> a[k] * C[i,k,j,l] * b[l]
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
-        A[i,j] = @∑ (∇N[ip] ⋅ c[p] ⋅ ∇N[jp]) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * N[jp]
+        A[i,j] = @∑ (dotdot(∇N[ip] ⋅ ΔF⁻¹[p], c[p], ∇N[jp])) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * N[jp]
     end
 
     submatrix(A, dofmap)
