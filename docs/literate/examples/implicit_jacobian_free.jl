@@ -60,7 +60,7 @@ function main()
 
     ## Particles
     beam = Sequoia.Box((0,1), (0.85,1.15), (-0.15,0.15))
-    particles = generate_particles(ParticleProp, grid.X; domain=beam)
+    particles = generate_particles(ParticleProp, grid.X; domain=beam, alg=GridSampling())
     particles.V⁰ .= volume(beam) / length(particles)
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
