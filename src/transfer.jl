@@ -39,6 +39,7 @@ function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
 
     @assert equations.head == :block
     Base.remove_linenums!(equations)
+    replace_dollar_by_identity!(equations)
     sumornot = map(ex->issumexpr(ex, i), equations.args)
     if sort(sumornot; rev=true) != sumornot
         error("@P2G: Equations without `@∑` must come after those with `@∑`")
@@ -219,6 +220,7 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
 
     @assert equations.head == :block
     Base.remove_linenums!(equations)
+    replace_dollar_by_identity!(equations)
     sumornot = map(ex->issumexpr(ex, p), equations.args)
     if sort(sumornot; rev=true) != sumornot
         error("@P2G: Equations without `@∑` must come after those with `@∑`")
@@ -352,7 +354,7 @@ function remove_∑(rhs::Expr)
 end
 
 function complete_parent_from_index!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}})
-    if Meta.isexpr(expr, :ref)
+    if Meta.isexpr(expr, :ref) && length(expr.args) == 2 # support only single index
         for p in pairs
             if p.second == expr.args[2] # same index
                 expr.args[1] = :($(p.first).$(expr.args[1]))
@@ -400,3 +402,15 @@ function eachparticleindex(particles::AbstractVector, mpvalues::AbstractVector{<
 end
 
 isallunderscore(s::Symbol) = all(==('_'), string(s))
+
+function replace_dollar_by_identity!(expr::Expr)
+    if Meta.isexpr(expr, :$)
+        expr.head = :call
+        pushfirst!(expr.args, :identity)
+    end
+    for ex in expr.args
+        replace_dollar_by_identity!(ex)
+    end
+    expr
+end
+replace_dollar_by_identity!(x) = x

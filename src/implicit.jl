@@ -109,6 +109,7 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
 
     @assert equations.head == :block
     Base.remove_linenums!(equations)
+    replace_dollar_by_identity!(equations)
     sumornot = map(ex->_issumexpr(ex.args[2]), equations.args)
 
     sum_equations = equations.args[sumornot]
