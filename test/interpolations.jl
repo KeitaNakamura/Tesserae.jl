@@ -124,4 +124,123 @@ end
         end
     end
 
+    @testset "Positivity condition in kernel correction" begin
+        function kernelvalue(mp, xp, mesh, i)
+            fillzero!(mp.N)
+            update!(mp, xp, mesh)
+            j = findfirst(==(i), neighboringnodes(mp))
+            j === nothing ? zero(eltype(mp.N)) : mp.N[j]
+        end
+        function kernelvalues(mesh::CartesianMesh{dim, T}, kernel, poly, index::CartesianIndex{dim}) where {dim, T}
+            mp = MPValue(Vec{dim}, KernelCorrection(kernel, poly))
+            L = kernel isa QuadraticBSpline ? 1.5 :
+                kernel isa CubicBSpline     ? 2.0 : error()
+            X = ntuple(i -> range(max(mesh[1][i],index[i]-L-1), min(mesh[end][i],index[i]+L-1)-sqrt(eps(T)), step=0.04), Val(dim))
+            Z = Array{Float64}(undef, length.(X))
+            for i in CartesianIndices(Z)
+                @inbounds Z[i] = kernelvalue(mp, Vec(map(getindex, X, Tuple(i))), mesh, index)
+            end
+            Z
+        end
+        function ispositive(x)
+            tol = sqrt(eps(typeof(x)))
+            x > -tol
+        end
+        @testset "QuadraticBSpline" begin
+            kern = QuadraticBSpline()
+            lin = Sequoia.LinearPolynomial()
+            multilin = Sequoia.MultiLinearPolynomial()
+            @testset "2D" begin
+                # boundaries
+                mesh = CartesianMesh(1, (0,10), (0,10))
+                for i in CartesianIndices((3,3))
+                    if i == CartesianIndex(2,2)
+                        @test !all(ispositive, kernelvalues(mesh, kern, lin, i))
+                    else
+                        @test all(ispositive, kernelvalues(mesh, kern, lin, i))
+                    end
+                    @test all(ispositive, kernelvalues(mesh, kern, multilin, i))
+                end
+                # greedy kernel correction (only for hyperrectangle)
+                for I in CartesianIndices((3,3))
+                    @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, lin,      i)), CartesianIndices(Tuple(I)))
+                    @test  all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, multilin, i)), CartesianIndices(Tuple(I)))
+                end
+            end
+            @testset "3D" begin
+                # for boundaries
+                mesh = CartesianMesh(1, (0,10), (0,10), (0,10))
+                for i in CartesianIndices((3,3,3))
+                    if length(findall(==(2), Tuple(i))) > 1
+                        @test !all(ispositive, kernelvalues(mesh, kern, lin, i))
+                    else
+                        @test all(ispositive, kernelvalues(mesh, kern, lin, i))
+                    end
+                    @test all(ispositive, kernelvalues(mesh, kern, multilin, i))
+                end
+                # greedy kernel correction (only for hyperrectangle)
+                for I in CartesianIndices((3,3,3))
+                    @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, lin,      i)), CartesianIndices(Tuple(I)))
+                    @test  all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, multilin, i)), CartesianIndices(Tuple(I)))
+                end
+            end
+        end
+        @testset "CubicBSpline" begin
+            kern = CubicBSpline()
+            lin = Sequoia.LinearPolynomial()
+            multilin = Sequoia.MultiLinearPolynomial()
+            @testset "2D" begin
+                # for boundaries
+                mesh = CartesianMesh(1, (0,10), (0,10))
+                for i in CartesianIndices((4,4))
+                    if length(findall(==(3), Tuple(i))) > 0
+                        @test !all(ispositive, kernelvalues(mesh, kern, lin,      i))
+                        @test !all(ispositive, kernelvalues(mesh, kern, multilin, i))
+                    else
+                        if i == CartesianIndex(2,2)
+                            @test !all(ispositive, kernelvalues(mesh, kern, lin, i))
+                        else
+                            @test all(ispositive, kernelvalues(mesh, kern, lin, i))
+                        end
+                        @test all(ispositive, kernelvalues(mesh, kern, multilin, i))
+                    end
+                end
+                # greedy kernel correction (only for hyperrectangle)
+                for I in CartesianIndices((4,4))
+                    @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, lin, i)), CartesianIndices(Tuple(I)))
+                    if I == CartesianIndex(1,1)
+                        @test all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, multilin, i)), CartesianIndices(Tuple(I)))
+                    else
+                        @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, multilin, i)), CartesianIndices(Tuple(I)))
+                    end
+                end
+            end
+            @testset "3D" begin
+                # for boundaries
+                mesh = CartesianMesh(1, (0,10), (0,10), (0,10))
+                for i in CartesianIndices((4,4,4))
+                    if length(findall(==(3), Tuple(i))) > 0
+                        @test !all(ispositive, kernelvalues(mesh, kern, lin,      i))
+                        @test !all(ispositive, kernelvalues(mesh, kern, multilin, i))
+                    else
+                        if length(findall(==(2), Tuple(i))) > 1
+                            @test !all(ispositive, kernelvalues(mesh, kern, lin, i))
+                        else
+                            @test all(ispositive, kernelvalues(mesh, kern, lin, i))
+                        end
+                        @test all(ispositive, kernelvalues(mesh, kern, multilin, i))
+                    end
+                end
+                # greedy kernel correction (only for hyperrectangle)
+                for I in CartesianIndices((4,4,4))
+                    @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, lin, i)), CartesianIndices(Tuple(I)))
+                    if I == CartesianIndex(1,1,1)
+                        @test all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, multilin, i)), CartesianIndices(Tuple(I)))
+                    else
+                        @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, multilin, i)), CartesianIndices(Tuple(I)))
+                    end
+                end
+            end
+        end
+    end
 end
