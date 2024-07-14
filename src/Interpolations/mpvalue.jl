@@ -4,10 +4,11 @@ abstract type Kernel <: Interpolation end
 function create_property(::Type{Vec{dim, T}}, it::Interpolation, diff) where {dim, T}
     dims = nfill(gridspan(it), Val(dim))
     (diff === nothing || diff === identity) && return (; N=zeros(T, dims))
-    diff === gradient && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims))
-    diff === hessian  && return (; N=zeros(T, dims), ∇N=zeros(Vec{dim, T}, dims), ∇∇N=zeros(SymmetricSecondOrderTensor{dim, T}, dims))
+    diff === gradient && return (; N=_zeros(T, dims), ∇N=_zeros(Vec{dim, T}, dims))
+    diff === hessian  && return (; N=_zeros(T, dims), ∇N=_zeros(Vec{dim, T}, dims), ∇∇N=_zeros(SymmetricSecondOrderTensor{dim, T}, dims))
     error("wrong differentiation type, choose `nothing`, `gradient` or `hessian`")
 end
+_zeros(::Type{T}, dims) where {T} = map(i->zero(T), CartesianIndices(dims))
 
 """
     MPValue(Vec{dim}, interpolation)
