@@ -40,7 +40,7 @@ end
 # fastsum
 @inline function fastsum(f, iter)
     ret = zero(Base._return_type(f, Tuple{eltype(iter)}))
-    for x in iter
+    @simd for x in iter
         ret += @inline f(x)
     end
     ret
