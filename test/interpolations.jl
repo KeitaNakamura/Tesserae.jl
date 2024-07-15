@@ -62,7 +62,6 @@ end
     function check_partition_of_unity(mp, x; atol=sqrt(eps(eltype(mp.N))))
         indices = neighboringnodes(mp)
         CI = CartesianIndices(indices) # local indices
-        @test Sequoia.pu(mp) ≈ sum(mp.N[CI])
         isapprox(sum(mp.N[CI]), 1) && isapprox(sum(mp.∇N[CI]), zero(eltype(mp.∇N)); atol)
     end
     function check_linear_field_reproduction(mp, x, X; atol=sqrt(eps(eltype(mp.N))))

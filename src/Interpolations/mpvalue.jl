@@ -101,11 +101,6 @@ end
 @inline set_shape_values!(mp::MPValue, (N,∇N)::Tuple{Any,Any}) = (copyto!(mp.N,N); copyto!(mp.∇N,∇N);)
 @inline set_shape_values!(mp::MPValue, (N,∇N,∇∇N)::Tuple{Any,Any,Any}) = (copyto!(mp.N,N); copyto!(mp.∇N,∇N); copyto!(mp.∇∇N,∇∇N);)
 
-# partition of unity
-@inline function pu(mp::MPValue)
-    fastsum(ip -> @inbounds(mp.N[ip]), eachindex(neighboringnodes(mp)))
-end
-
 function Base.show(io::IO, mp::MPValue)
     print(io, "MPValue: \n")
     print(io, "  Interpolation: ", interpolation(mp), "\n")
