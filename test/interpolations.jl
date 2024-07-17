@@ -8,33 +8,33 @@
                     it = extension(kernel)
                     mp = @inferred MPValue(Vec{dim,T}, it)
                     @test Sequoia.interpolation(mp) === it
-                    @test mp.N isa Array{T}
-                    @test mp.∇N isa Array{Vec{dim,T}}
-                    @test ndims(mp.N) == dim
-                    @test ndims(mp.∇N) == dim
-                    @test size(mp.N) == size(mp.∇N)
-                    @test all(size(neighboringnodes(mp)) .< size(mp.N))
+                    @test mp.w isa Array{T}
+                    @test mp.∇w isa Array{Vec{dim,T}}
+                    @test ndims(mp.w) == dim
+                    @test ndims(mp.∇w) == dim
+                    @test size(mp.w) == size(mp.∇w)
+                    @test all(size(neighboringnodes(mp)) .< size(mp.w))
 
                     # diff = nothing
                     mp = @inferred MPValue(Vec{dim,T}, it; diff=nothing)
-                    @test hasproperty(mp, :N) && mp.N isa Array{T}
-                    @test !hasproperty(mp, :∇N)
-                    @test !hasproperty(mp, :∇∇N)
-                    @test ndims(mp.N) == dim
+                    @test hasproperty(mp, :w) && mp.w isa Array{T}
+                    @test !hasproperty(mp, :∇w)
+                    @test !hasproperty(mp, :∇∇w)
+                    @test ndims(mp.w) == dim
                     # diff = gradient
                     mp = @inferred MPValue(Vec{dim,T}, it; diff=gradient)
-                    @test hasproperty(mp, :N)  && mp.N  isa Array{T}
-                    @test hasproperty(mp, :∇N) && mp.∇N isa Array{Vec{dim,T}}
-                    @test !hasproperty(mp, :∇∇N)
-                    @test ndims(mp.N) == ndims(mp.∇N) == dim
-                    @test size(mp.N) == size(mp.∇N)
+                    @test hasproperty(mp, :w)  && mp.w  isa Array{T}
+                    @test hasproperty(mp, :∇w) && mp.∇w isa Array{Vec{dim,T}}
+                    @test !hasproperty(mp, :∇∇w)
+                    @test ndims(mp.w) == ndims(mp.∇w) == dim
+                    @test size(mp.w) == size(mp.∇w)
                     # diff = hessian
                     mp = @inferred MPValue(Vec{dim,T}, it; diff=hessian)
-                    @test hasproperty(mp, :N)   && mp.N   isa Array{T}
-                    @test hasproperty(mp, :∇N)  && mp.∇N  isa Array{Vec{dim,T}}
-                    @test hasproperty(mp, :∇∇N) && mp.∇∇N isa Array{<: SymmetricSecondOrderTensor{dim,T}}
-                    @test ndims(mp.N) == ndims(mp.∇N) == ndims(mp.∇∇N) == dim
-                    @test size(mp.N) == size(mp.∇N) == size(mp.∇∇N)
+                    @test hasproperty(mp, :w)   && mp.w   isa Array{T}
+                    @test hasproperty(mp, :∇w)  && mp.∇w  isa Array{Vec{dim,T}}
+                    @test hasproperty(mp, :∇∇w) && mp.∇∇w isa Array{<: SymmetricSecondOrderTensor{dim,T}}
+                    @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇∇w) == dim
+                    @test size(mp.w) == size(mp.∇w) == size(mp.∇∇w)
                 end
             end
         end
@@ -59,16 +59,16 @@ end
 
 @testset "Interpolations" begin
 
-    function check_partition_of_unity(mp, x; atol=sqrt(eps(eltype(mp.N))))
+    function check_partition_of_unity(mp, x; atol=sqrt(eps(eltype(mp.w))))
         indices = neighboringnodes(mp)
         CI = CartesianIndices(indices) # local indices
-        isapprox(sum(mp.N[CI]), 1) && isapprox(sum(mp.∇N[CI]), zero(eltype(mp.∇N)); atol)
+        isapprox(sum(mp.w[CI]), 1) && isapprox(sum(mp.∇w[CI]), zero(eltype(mp.∇w)); atol)
     end
-    function check_linear_field_reproduction(mp, x, X; atol=sqrt(eps(eltype(mp.N))))
+    function check_linear_field_reproduction(mp, x, X; atol=sqrt(eps(eltype(mp.w))))
         indices = neighboringnodes(mp)
         CI = CartesianIndices(indices) # local indices
-        isapprox(mapreduce((j,i) -> X[i]*mp.N[j],  +, CI, indices), x; atol) &&
-        isapprox(mapreduce((j,i) -> X[i]⊗mp.∇N[j], +, CI, indices), I; atol)
+        isapprox(mapreduce((j,i) -> X[i]*mp.w[j],  +, CI, indices), x; atol) &&
+        isapprox(mapreduce((j,i) -> X[i]⊗mp.∇w[j], +, CI, indices), I; atol)
     end
 
     @testset "$it" for it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
@@ -79,7 +79,7 @@ end
             @test all(1:100) do _
                 x = rand(Vec{dim, T})
                 update!(mp, x, mesh)
-                isnearbounds = size(mp.N) != size(neighboringnodes(mp))
+                isnearbounds = size(mp.w) != size(neighboringnodes(mp))
                 PU = check_partition_of_unity(mp, x)
                 LFR = check_linear_field_reproduction(mp, x, mesh)
                 isnearbounds ? (PU && !LFR) : (PU && LFR)
@@ -126,10 +126,10 @@ end
 
     @testset "Positivity condition in kernel correction" begin
         function kernelvalue(mp, xp, mesh, i)
-            fillzero!(mp.N)
+            fillzero!(mp.w)
             update!(mp, xp, mesh)
             j = findfirst(==(i), neighboringnodes(mp))
-            j === nothing ? zero(eltype(mp.N)) : mp.N[j]
+            j === nothing ? zero(eltype(mp.w)) : mp.w[j]
         end
         function kernelvalues(mesh::CartesianMesh{dim, T}, kernel, poly, index::CartesianIndex{dim}) where {dim, T}
             mp = MPValue(Vec{dim}, KernelCorrection(kernel, poly))

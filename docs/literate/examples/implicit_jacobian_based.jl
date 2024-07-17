@@ -94,9 +94,9 @@ function main()
         end
 
         @P2G grid=>i particles=>p mpvalues=>ip begin
-            m[i]  = @∑ N[ip] * m[p]
-            mv[i] = @∑ N[ip] * m[p] * v[p]
-            ma[i] = @∑ N[ip] * m[p] * a[p]
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            ma[i] = @∑ w[ip] * m[p] * a[p]
         end
 
         ## Compute the grid velocity and acceleration at t = tⁿ
@@ -126,10 +126,10 @@ function main()
 
         ## Grid dispacement, velocity and acceleration have been updated during Newton's iterations
         @G2P grid=>i particles=>p mpvalues=>ip begin
-            ∇u[p] = @∑ u[i] ⊗ ∇N[ip]
-            a[p]  = @∑ a[i] * N[ip]
-            v[p] += @∑ Δt*((1-γ)*a[p] + γ*a[i]) * N[ip]
-            x[p]  = @∑ (X[i] + u[i]) * N[ip]
+            ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
+            a[p]  = @∑ a[i] * w[ip]
+            v[p] += @∑ Δt*((1-γ)*a[p] + γ*a[i]) * w[ip]
+            x[p]  = @∑ (X[i] + u[i]) * w[ip]
             F[p]  = (I + ∇u[p]) ⋅ F[p]
         end
 
@@ -158,13 +158,13 @@ function residual(U::AbstractVector, state)
     @G2P grid=>i particles=>p mpvalues=>ip begin
         ## In addition to updating the stress tensor, the stiffness tensor,
         ## which is utilized in the Jacobian-vector product, is also updated.
-        ∇u[p] = @∑ u[i] ⊗ ∇N[ip]
+        ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
         ΔF⁻¹[p] = inv(I + ∇u[p])
         c[p], τ[p] = gradient(∇u -> kirchhoff_stress((I + ∇u) ⋅ F[p]), ∇u[p], :all)
         c[p] = c[p] - transposing_tensor(τ[p] ⋅ ΔF⁻¹[p]')
     end
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ -V⁰[p] * τ[p] ⋅ (∇N[ip] ⋅ ΔF⁻¹[p]) + m[p] * b[p] * N[ip]
+        f[i] = @∑ -V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p]) + m[p] * b[p] * w[ip]
     end
 
     @. $dofmap(grid.m) * $dofmap(grid.a) - $dofmap(grid.f)
@@ -176,7 +176,7 @@ function jacobian(U::AbstractVector, state)
     I(i,j) = ifelse(i===j, one(Mat{3,3}), zero(Mat{3,3}))
     dotdot(a,C,b) = @einsum (i,j) -> a[k] * C[i,k,j,l] * b[l]
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
-        A[i,j] = @∑ (dotdot(∇N[ip] ⋅ ΔF⁻¹[p], c[p], ∇N[jp])) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * N[jp]
+        A[i,j] = @∑ (dotdot(∇w[ip] ⋅ ΔF⁻¹[p], c[p], ∇w[jp])) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
     end
 
     submatrix(A, dofmap)

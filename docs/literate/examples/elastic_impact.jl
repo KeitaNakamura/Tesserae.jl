@@ -124,22 +124,22 @@ function main(transfer::Transfer = FLIP(1.0))
         ## Particle-to-grid transfer
         if transfer isa FLIP
             @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ N[ip] * m[p]
-                mv[i] = @∑ N[ip] * m[p] * v[p]
-                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
             end
         elseif transfer isa APIC
             local Dₚ⁻¹ = inv(1/4 * h^2 * I)
             @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ N[ip] * m[p]
-                mv[i] = @∑ N[ip] * m[p] * (v[p] + B[p] ⋅ Dₚ⁻¹ ⋅ (x[i] - x[p]))
-                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] ⋅ Dₚ⁻¹ ⋅ (x[i] - x[p]))
+                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
             end
         elseif transfer isa TPIC
             @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ N[ip] * m[p]
-                mv[i] = @∑ N[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
-                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
+                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
             end
         end
 
@@ -152,22 +152,22 @@ function main(transfer::Transfer = FLIP(1.0))
         if transfer isa FLIP
             local α = transfer.α
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p]  = @∑ ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i]))) * N[ip]
-                ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
-                x[p] += @∑ Δt * v[i] * N[ip]
+                v[p]  = @∑ ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i]))) * w[ip]
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                x[p] += @∑ Δt * v[i] * w[ip]
 
             end
         elseif transfer isa APIC
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p]  = @∑ v[i] * N[ip]
-                ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
-                B[p]  = @∑ v[i] ⊗ (x[i]-x[p]) * N[ip]
+                v[p]  = @∑ v[i] * w[ip]
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                B[p]  = @∑ v[i] ⊗ (x[i]-x[p]) * w[ip]
                 x[p] += Δt * v[p]
             end
         elseif transfer isa TPIC
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p]  = @∑ v[i] * N[ip]
-                ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
+                v[p]  = @∑ v[i] * w[ip]
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 x[p] += Δt * v[p]
             end
         end

@@ -196,24 +196,24 @@ end
     quote
         @_inline_meta
         @nexprs $dim d -> (x_d, ∇x_d) = values(gradient, spline, x[d])
-        Ns = @ntuple $dim d -> x_d
-        ∇Ns = @ntuple $dim i -> (@ntuple $dim k -> k==i ? ∇x_k : x_k)
-        tuple_otimes(Ns), map(Vec, map(tuple_otimes, ∇Ns)...)
+        ws = @ntuple $dim d -> x_d
+        ∇ws = @ntuple $dim i -> (@ntuple $dim k -> k==i ? ∇x_k : x_k)
+        tuple_otimes(ws), map(Vec, map(tuple_otimes, ∇ws)...)
     end
 end
 @generated function Base.values(::typeof(hessian), spline::BSpline, x::Vec{dim}) where {dim}
-    ∇∇Ns = Expr(:tuple, map(1:dim) do j
+    ∇∇ws = Expr(:tuple, map(1:dim) do j
                Expr(:tuple, map(j:dim) do i
-                   :(@ntuple $dim k -> k==$j ? (k==$i ? ∇∇x_k : ∇x_k) : ∇Ns[$i][k])
+                   :(@ntuple $dim k -> k==$j ? (k==$i ? ∇∇x_k : ∇x_k) : ∇ws[$i][k])
                end...)
            end...)
     quote
         @_inline_meta
         @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d) = values(hessian, spline, x[d])
-        Ns = @ntuple $dim d -> x_d
-        ∇Ns = @ntuple $dim i -> (@ntuple $dim k -> k==i ? ∇x_k : x_k)
-        # ∇∇Ns = @ntuple $dim j -> (@ntuple $dim i -> (@ntuple $dim k -> k==j ? (k==i ? ∇∇x_k : ∇x_k) : ∇Ns[i][k]))
-        tuple_otimes(Ns), map(Vec, map(tuple_otimes, ∇Ns)...), map(SymmetricSecondOrderTensor{dim}, map(tuple_otimes, flatten_tuple($∇∇Ns))...)
+        ws = @ntuple $dim d -> x_d
+        ∇ws = @ntuple $dim i -> (@ntuple $dim k -> k==i ? ∇x_k : x_k)
+        # ∇∇ws = @ntuple $dim j -> (@ntuple $dim i -> (@ntuple $dim k -> k==j ? (k==i ? ∇∇x_k : ∇x_k) : ∇ws[i][k]))
+        tuple_otimes(ws), map(Vec, map(tuple_otimes, ∇ws)...), map(SymmetricSecondOrderTensor{dim}, map(tuple_otimes, flatten_tuple($∇∇ws))...)
     end
 end
 @inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
@@ -225,19 +225,19 @@ end
 @inline function Base.values(::typeof(gradient), spline::BSpline, x::Vec, mesh::CartesianMesh)
     xmin = first(mesh)
     h⁻¹ = spacing_inv(mesh)
-    N, ∇N = values(gradient, spline, (x-xmin)*h⁻¹)
-    (N, ∇N*h⁻¹)
+    w, ∇w = values(gradient, spline, (x-xmin)*h⁻¹)
+    (w, ∇w*h⁻¹)
 end
 @inline function Base.values(::typeof(hessian), spline::BSpline, x::Vec, mesh::CartesianMesh)
     xmin = first(mesh)
     h⁻¹ = spacing_inv(mesh)
-    N, ∇N, ∇∇N = values(hessian, spline, (x-xmin)*h⁻¹)
-    (N, ∇N*h⁻¹, ∇∇N*h⁻¹*h⁻¹)
+    w, ∇w, ∇∇w = values(hessian, spline, (x-xmin)*h⁻¹)
+    (w, ∇w*h⁻¹, ∇∇w*h⁻¹*h⁻¹)
 end
 
 function update_property!(mp::MPValue, it::BSpline, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
-    isnearbounds = size(mp.N) != size(indices)
+    isnearbounds = size(mp.w) != size(indices)
     if isnearbounds
         @inbounds for ip in eachindex(indices)
             i = indices[ip]

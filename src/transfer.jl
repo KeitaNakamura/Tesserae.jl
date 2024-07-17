@@ -10,9 +10,9 @@ Particle-to-grid transfer macro.
 @P2G grid=>i particles=>p mpvalues=>ip begin
 
     # particle-to-grid transfer
-    m[i] = @∑ N[ip] * m[p]
-    mv[i] = @∑ N[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
-    f[i] = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
+    m[i] = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
+    f[i] = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
 
     # calculation on grid
     vⁿ[i] = mv[i] / m[i]
@@ -198,8 +198,8 @@ Grid-to-particle transfer macro.
 @G2P grid=>i particles=>p mpvalues=>ip begin
 
     # grid-to-particle transfer
-    v[p] = @∑ v[i] * N[ip]
-    ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
+    v[p] = @∑ v[i] * w[ip]
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
 
     # calculation on particle
     x[p] = x[p] + Δt * v[p]

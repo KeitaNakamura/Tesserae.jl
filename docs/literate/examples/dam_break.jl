@@ -136,15 +136,15 @@ function main(transfer::Transfer = FLIP(1.0))
 
         if transfer isa FLIP
             @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ N[ip] * m[p]
-                mv[i] = @∑ N[ip] * m[p] * v[p]
-                ma[i] = @∑ N[ip] * m[p] * a[p]
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                ma[i] = @∑ w[ip] * m[p] * a[p]
             end
         elseif transfer isa TPIC
             @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ N[ip] * m[p]
-                mv[i] = @∑ N[ip] * m[p] * (v[p] + ∇v[p] ⋅ (X[i] - x[p]))
-                ma[i] = @∑ N[ip] * m[p] * (a[p] + ∇a[p] ⋅ (X[i] - x[p]))
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (X[i] - x[p]))
+                ma[i] = @∑ w[ip] * m[p] * (a[p] + ∇a[p] ⋅ (X[i] - x[p]))
             end
         end
 
@@ -181,17 +181,17 @@ function main(transfer::Transfer = FLIP(1.0))
         if transfer isa FLIP
             local α = transfer.α
             @threaded @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * N[ip]
-                a[p] = @∑ a[i] * N[ip]
-                x[p] = @∑ x[i] * N[ip]
+                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * w[ip]
+                a[p] = @∑ a[i] * w[ip]
+                x[p] = @∑ x[i] * w[ip]
             end
         elseif transfer isa TPIC
             @threaded @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p] = @∑ v[i] * N[ip]
-                a[p] = @∑ a[i] * N[ip]
-                x[p] = @∑ x[i] * N[ip]
-                ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
-                ∇a[p] = @∑ a[i] ⊗ ∇N[ip]
+                v[p] = @∑ v[i] * w[ip]
+                a[p] = @∑ a[i] * w[ip]
+                x[p] = @∑ x[i] * w[ip]
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                ∇a[p] = @∑ a[i] ⊗ ∇w[ip]
             end
         end
 
@@ -289,7 +289,7 @@ function compute_VMS_stabilization_coefficients(state)
         gridindices = neighboringnodes(mp, grid)
         for ip in eachindex(gridindices)
             i = gridindices[ip]
-            v̄ₚ += mp.N[ip] * grid.v[i]
+            v̄ₚ += mp.w[ip] * grid.v[i]
         end
         τ₁ = inv(ρ*τdyn/Δt + c₂*ρ*norm(v̄ₚ)/h + c₁*μ/h^2)
         τ₂ = h^2 / (c₁*τ₁)
@@ -304,13 +304,13 @@ function particle_shifting(state)
     (; grid, particles, mpvalues) = state
 
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        Ṽ[i] = @∑ V[p] * N[ip]
+        Ṽ[i] = @∑ V[p] * w[ip]
         E[i] = max(0, -V[i] + Ṽ[i])
     end
 
     E² = sum(E->E^2, grid.E)
     @G2P grid=>i particles=>p mpvalues=>ip begin
-        ∇E²[p] = @∑ 2V[p] * E[i] * ∇N[ip]
+        ∇E²[p] = @∑ 2V[p] * E[i] * ∇w[ip]
     end
 
     b₀ = E² / sum(∇E²->∇E²⋅∇E², particles.∇E²)
@@ -339,10 +339,10 @@ function residual(U, state)
 
     ## Recompute particle properties for residual vector
     @G2P grid=>i particles=>p mpvalues=>ip begin
-        a[p]  = @∑ a[i] * N[ip]
-        p[p]  = @∑ p[i] * N[ip]
-        ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
-        ∇p[p] = @∑ p[i] * ∇N[ip]
+        a[p]  = @∑ a[i] * w[ip]
+        p[p]  = @∑ p[i] * w[ip]
+        ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+        ∇p[p] = @∑ p[i] * ∇w[ip]
         s[p]  = 2μ * symmetric(∇v[p])
     end
 
@@ -351,8 +351,8 @@ function residual(U, state)
 
     ## Compute residual values
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        R_mom[i]  = @∑ V[p]*s[p]⋅∇N[ip] - m[p]*b[p]*N[ip] - V[p]*p[p]*∇N[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇N[ip]
-        R_mas[i]  = @∑ V[p]*tr(∇v[p])*N[ip] + τ₁[p]*m[p]*(a[p]-b[p])⋅∇N[ip] + τ₁[p]*V[p]*∇p[p]⋅∇N[ip]
+        R_mom[i]  = @∑ V[p]*s[p]⋅∇w[ip] - m[p]*b[p]*w[ip] - V[p]*p[p]*∇w[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇w[ip]
+        R_mas[i]  = @∑ V[p]*tr(∇v[p])*w[ip] + τ₁[p]*m[p]*(a[p]-b[p])⋅∇w[ip] + τ₁[p]*V[p]*∇p[p]⋅∇w[ip]
         R_mom[i] += m[i]*a[i]
     end
 
@@ -370,12 +370,12 @@ function jacobian(state)
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
     @threaded @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) blockspace begin
         A[i,j] = @∑ begin
-            Kᵤᵤ = (γ/(β*Δt) * ∇N[ip] ⋅ cₚ ⋅ ∇N[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * N[jp]
-            Kᵤₚ = -∇N[ip] * N[jp] * V[p]
-            Kₚᵤ = (γ/(β*Δt)) * N[ip] * ∇N[jp] * V[p]
-            K̂ᵤᵤ = γ/(β*Δt) * τ₂[p] * ∇N[ip] ⊗ ∇N[jp] * V[p]
-            K̂ₚᵤ = 1/(β*Δt^2) * τ₁[p] * ρ * ∇N[ip] * N[jp] * V[p]
-            K̂ₚₚ = τ₁[p] * ∇N[ip] ⋅ ∇N[jp] * V[p]
+            Kᵤᵤ = (γ/(β*Δt) * ∇w[ip] ⋅ cₚ ⋅ ∇w[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
+            Kᵤₚ = -∇w[ip] * w[jp] * V[p]
+            Kₚᵤ = (γ/(β*Δt)) * w[ip] * ∇w[jp] * V[p]
+            K̂ᵤᵤ = γ/(β*Δt) * τ₂[p] * ∇w[ip] ⊗ ∇w[jp] * V[p]
+            K̂ₚᵤ = 1/(β*Δt^2) * τ₁[p] * ρ * ∇w[ip] * w[jp] * V[p]
+            K̂ₚₚ = τ₁[p] * ∇w[ip] ⋅ ∇w[jp] * V[p]
             [Kᵤᵤ+K̂ᵤᵤ           Kᵤₚ
              Mat{1,2}(Kₚᵤ+K̂ₚᵤ) K̂ₚₚ]
         end

@@ -119,10 +119,10 @@ function main()
         end
 
         @P2G grid=>i particles=>p mpvalues=>ip begin
-            m[i]  = @∑ N[ip] * m[p]
-            mv[i] = @∑ N[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p])) # Taylor transfer
-            fint[i] = @∑ -V[p] * resizedim(σ[p], Val(2)) ⋅ ∇N[ip] + N[ip] * m[p] * b[p]
-            fext[i] = @∑ N[ip] * contact_force_normal(x[p], r[p], disk.x)
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p])) # Taylor transfer
+            fint[i] = @∑ -V[p] * resizedim(σ[p], Val(2)) ⋅ ∇w[ip] + w[ip] * m[p] * b[p]
+            fext[i] = @∑ w[ip] * contact_force_normal(x[p], r[p], disk.x)
         end
 
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
@@ -139,8 +139,8 @@ function main()
         end
 
         @G2P grid=>i particles=>p mpvalues=>ip begin
-            v[p]  = @∑ v[i] * N[ip] # PIC transfer
-            ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
+            v[p]  = @∑ v[i] * w[ip] # PIC transfer
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += Δt * v[p]
         end
 

@@ -121,9 +121,9 @@ function main()
 
         ## Particle-to-grid transfer
         @P2G grid=>i particles=>p mpvalues=>ip begin
-            m[i]    = @∑ N[ip] * m[p]
-            mv[i]   = @∑ N[ip] * m[p] * v[p]
-            fint[i] = @∑ -V⁰[p] * P[p] ⋅ ∇N[ip]
+            m[i]    = @∑ w[ip] * m[p]
+            mv[i]   = @∑ w[ip] * m[p] * v[p]
+            fint[i] = @∑ -V⁰[p] * P[p] ⋅ ∇w[ip]
         end
 
         ## Update grid velocity
@@ -135,22 +135,22 @@ function main()
 
         ## Update particle velocity and position
         @G2P grid=>i particles=>p mpvalues=>ip begin
-            ṽ[p]  = @∑ v[i] * N[ip]
-            ã[p]  = @∑ (v[i] - vⁿ[i])/Δt * N[ip]
+            ṽ[p]  = @∑ v[i] * w[ip]
+            ã[p]  = @∑ (v[i] - vⁿ[i])/Δt * w[ip]
             v[p]  = (1-α)*ṽ[p] + α*(v[p] + Δt*ã[p])
             x[p] += Δt * ṽ[p]
         end
 
         ## Remap updated velocity to grid (MUSL)
         @P2G grid=>i particles=>p mpvalues=>ip begin
-            mv[i] = @∑ N[ip] * m[p] * v[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
             v[i]  = mv[i] * m⁻¹[i]
         end
         grid.v[outside_gridinds] .= zero(eltype(grid.v))
 
         ## Update stress
         @G2P grid=>i particles=>p mpvalues=>ip begin
-            F[p] += @∑ Δt * v[i] ⊗ ∇N[ip]
+            F[p] += @∑ Δt * v[i] ⊗ ∇w[ip]
             P[p]  = μ * (F[p] - inv(F[p])') + λ * log(det(F[p])) * inv(F[p])'
         end
 

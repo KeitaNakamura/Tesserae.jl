@@ -72,17 +72,17 @@ Plots.@gif for t in range(0, 4-Δt, step=Δt)
     end
 
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        m[i]  = @∑ N[ip] * m[p]
-        mv[i] = @∑ N[ip] * m[p] * v[p]
-        f[i]  = @∑ -V[p] * σ[p] ⋅ ∇N[ip]
+        m[i]  = @∑ w[ip] * m[p]
+        mv[i] = @∑ w[ip] * m[p] * v[p]
+        f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
         vⁿ[i] = mv[i] / m[i]
         v[i]  = vⁿ[i] + Δt * (f[i]/m[i])
     end
 
     @G2P grid=>i particles=>p mpvalues=>ip begin
-        v[p] += @∑ (v[i] - vⁿ[i]) * N[ip]
-        ∇v[p] = @∑ v[i] ⊗ ∇N[ip]
-        x[p] += @∑ Δt * v[i] * N[ip]
+        v[p] += @∑ (v[i] - vⁿ[i]) * w[ip]
+        ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+        x[p] += @∑ Δt * v[i] * w[ip]
     end
 
     for p in 1:length(particles)

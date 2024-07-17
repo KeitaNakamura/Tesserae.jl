@@ -3,9 +3,9 @@ abstract type Kernel <: Interpolation end
 
 function create_property(::Type{Vec{dim, T}}, it::Interpolation, diff) where {dim, T}
     dims = nfill(gridspan(it), Val(dim))
-    (diff === nothing || diff === identity) && return (; N=zeros(T, dims))
-    diff === gradient && return (; N=fill(zero(T), dims), ∇N=fill(zero(Vec{dim, T}), dims))
-    diff === hessian  && return (; N=fill(zero(T), dims), ∇N=fill(zero(Vec{dim, T}), dims), ∇∇N=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims))
+    (diff === nothing || diff === identity) && return (; w=zeros(T, dims))
+    diff === gradient && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims))
+    diff === hessian  && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims))
     error("wrong differentiation type, choose `nothing`, `gradient` or `hessian`")
 end
 
@@ -23,16 +23,16 @@ julia> x = Vec(2.2, 3.4); # particle coordinate
 julia> mp = MPValue(Vec{2}, QuadraticBSpline())
 MPValue:
   Interpolation: QuadraticBSpline()
-  Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
+  Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
   Neighboring nodes: CartesianIndices((1:0, 1:0))
 
 julia> update!(mp, x, mesh) # update `mp` at position `x` in `mesh`
 MPValue:
   Interpolation: QuadraticBSpline()
-  Property names: N::Matrix{Float64}, ∇N::Matrix{Vec{2, Float64}}
+  Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
   Neighboring nodes: CartesianIndices((2:4, 3:5))
 
-julia> sum(mp.N) ≈ 1
+julia> sum(mp.w) ≈ 1
 true
 
 julia> neighboringnodes(mp) # grid indices within the local domain of a particle
@@ -46,9 +46,9 @@ struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
 end
 
 function _MPValue(it::Union{Nothing, Interpolation}, prop::NamedTuple)
-    @assert hasproperty(prop, :N)
-    @assert prop.N isa AbstractArray{<: Real}
-    dim = ndims(prop.N)
+    @assert hasproperty(prop, :w)
+    @assert prop.w isa AbstractArray{<: Real}
+    dim = ndims(prop.w)
     indices = fill(EmptyCartesianIndices(Val(dim)))
     MPValue(it, prop, indices)
 end
@@ -85,21 +85,21 @@ end
 end
 
 @inline function difftype(mp::MPValue)
-    hasproperty(mp, :∇∇N) && return hessian
-    hasproperty(mp, :∇N)  && return gradient
-    hasproperty(mp, :N)   && return identity
+    hasproperty(mp, :∇∇w) && return hessian
+    hasproperty(mp, :∇w)  && return gradient
+    hasproperty(mp, :w)   && return identity
     error("unreachable")
 end
 @inline @propagate_inbounds value(::typeof(identity), f, x, args...) = (value(f, x, args...),)
 @inline @propagate_inbounds value(::typeof(gradient), f, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
 @inline @propagate_inbounds value(::typeof(hessian), f, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
 
-@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (N,)::Tuple{Any}) = (mp.N[ip]=N;)
-@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (N,∇N)::Tuple{Any,Any}) = (mp.N[ip]=N; mp.∇N[ip]=∇N;)
-@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (N,∇N,∇∇N)::Tuple{Any,Any,Any}) = (mp.N[ip]=N; mp.∇N[ip]=∇N; mp.∇∇N[ip]=∇∇N;)
-@inline set_shape_values!(mp::MPValue, (N,)::Tuple{Any}) = copyto!(mp.N, N)
-@inline set_shape_values!(mp::MPValue, (N,∇N)::Tuple{Any,Any}) = (copyto!(mp.N,N); copyto!(mp.∇N,∇N);)
-@inline set_shape_values!(mp::MPValue, (N,∇N,∇∇N)::Tuple{Any,Any,Any}) = (copyto!(mp.N,N); copyto!(mp.∇N,∇N); copyto!(mp.∇∇N,∇∇N);)
+@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,)::Tuple{Any}) = (mp.w[ip]=w;)
+@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,∇w)::Tuple{Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w;)
+@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w;)
+@inline set_shape_values!(mp::MPValue, (w,)::Tuple{Any}) = copyto!(mp.w, w)
+@inline set_shape_values!(mp::MPValue, (w,∇w)::Tuple{Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w);)
+@inline set_shape_values!(mp::MPValue, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w);)
 
 function Base.show(io::IO, mp::MPValue)
     print(io, "MPValue: \n")
