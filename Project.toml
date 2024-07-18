@@ -1,7 +1,7 @@
 name = "Sequoia"
 uuid = "30a04e26-4a89-4862-aa00-4d71e820c402"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
-version = "0.2.3"
+version = "0.1.0"
 
 [deps]
 PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
