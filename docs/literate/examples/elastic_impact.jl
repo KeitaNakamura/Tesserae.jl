@@ -1,9 +1,5 @@
 # # Transfer schemes
 #
-# ```@raw html
-# <video autoplay muted loop playsinline controls width="500" src="https://github.com/KeitaNakamura/Sequoia.jl/assets/16015926/adeb872b-036f-4ba8-8915-0b9c6cf331fc"/></video>
-# ```
-#
 # In this example, the following transfer schemes are demonstrated:
 # * PIC--FLIP mixed transfer[^1]
 # * Affine PIC (APIC) transfer[^2]
