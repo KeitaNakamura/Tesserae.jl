@@ -149,10 +149,13 @@ node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(node_positio
     T = typeof(x)
     ξ = fract(x)
     vals = tuple(@. T((1-ξ, ξ)))
-    if diff === gradient || diff === hessian
+    if diff === gradient || diff === hessian || diff === all
         vals = (vals..., @. T((-1, 1)))
     end
-    if diff === hessian
+    if diff === hessian || diff === all
+        vals = (vals..., @. T((0, 0)))
+    end
+    if diff === all
         vals = (vals..., @. T((0, 0)))
     end
     vals
@@ -162,11 +165,14 @@ end
     x′ = fract(x - T(0.5))
     ξ = @. x′ - T((-0.5,0.5,1.5))
     vals = tuple(@. muladd(T((0.5,-1.0,0.5)), ξ^2, muladd(T((-1.5,0.0,1.5)), ξ, T((1.125,0.75,1.125)))))
-    if diff === gradient || diff === hessian
+    if diff === gradient || diff === hessian || diff === all
         vals = (vals..., @. muladd(T((1.0,-2.0,1.0)), ξ, T((-1.5,0.0,1.5))))
     end
-    if diff === hessian
+    if diff === hessian || diff === all
         vals = (vals..., @. T((1.0,-2.0,1.0)))
+    end
+    if diff === all
+        vals = (vals..., @. T((0.0,0.0,0.0)))
     end
     vals
 end
@@ -177,43 +183,60 @@ end
     ξ² = @. ξ * ξ
     ξ³ = @. ξ² * ξ
     vals = tuple(@. muladd(T((-1/6,0.5,-0.5,1/6)), ξ³, muladd(T((1,-1,-1,1)), ξ², muladd(T((-2,0,0,2)), ξ, T((4/3,2/3,2/3,4/3))))))
-    if diff === gradient || diff === hessian
+    if diff === gradient || diff === hessian || diff === all
         vals = (vals..., @. muladd(T((-0.5,1.5,-1.5,0.5)), ξ², muladd(T((2,-2,-2,2)), ξ, T((-2,0,0,2)))))
     end
-    if diff === hessian
+    if diff === hessian || diff === all
         vals = (vals..., @. muladd(T((-1.0,3.0,-3.0,1.0)), ξ, T((2,-2,-2,2))))
+    end
+    if diff === all
+        vals = (vals..., @. T((-1.0,3.0,-3.0,1.0)))
     end
     vals
 end
 
-@generated function Base.values(::typeof(identity), spline::BSpline, x::Vec{dim}) where {dim}
-    quote
-        @_inline_meta
-        (tuple_otimes(@ntuple $dim d -> values(spline, x[d])),)
+@generated function Base.values(diff, spline::BSpline, x::Vec{dim}) where {dim}
+    T_∇∇ws = SymmetricSecondOrderTensor{dim}
+    ∇∇ws = Array{Expr}(undef,dim,dim)
+    for j in 1:dim, i in 1:dim
+        ∇∇ws[i,j] = :(@ntuple $dim α -> α==$j ? (α==$i ? ∇∇x_α : ∇x_α) : ∇ws[$i][α])
     end
-end
-@generated function Base.values(::typeof(gradient), spline::BSpline, x::Vec{dim}) where {dim}
-    quote
-        @_inline_meta
-        @nexprs $dim d -> (x_d, ∇x_d) = values(gradient, spline, x[d])
-        ws = @ntuple $dim d -> x_d
-        ∇ws = @ntuple $dim i -> (@ntuple $dim k -> k==i ? ∇x_k : x_k)
-        tuple_otimes(ws), map(Vec, map(tuple_otimes, ∇ws)...)
+    T_∇∇∇ws = Tensor{Tuple{@Symmetry{dim,dim,dim}}}
+    ∇∇∇ws = Array{Expr}(undef,dim,dim,dim)
+    for k in 1:dim, j in 1:dim, i in 1:dim
+        ∇∇∇ws[i,j,k] = :(@ntuple $dim α -> α==$k ? (α==$j ? (α==$i ? ∇∇∇x_α : ∇∇x_α) : ∇x_α) : $∇∇ws[$i,$j][α])
     end
-end
-@generated function Base.values(::typeof(hessian), spline::BSpline, x::Vec{dim}) where {dim}
-    ∇∇ws = Expr(:tuple, map(1:dim) do j
-               Expr(:tuple, map(j:dim) do i
-                   :(@ntuple $dim k -> k==$j ? (k==$i ? ∇∇x_k : ∇x_k) : ∇ws[$i][k])
-               end...)
-           end...)
+    ∇∇ws = ∇∇ws[Tensorial.indices_unique(T_∇∇ws)]
+    ∇∇∇ws = ∇∇∇ws[Tensorial.indices_unique(T_∇∇∇ws)]
     quote
         @_inline_meta
-        @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d) = values(hessian, spline, x[d])
+        if diff === identity
+            @nexprs $dim d -> (x_d,) = values(identity, spline, x[d])
+        elseif diff === gradient
+            @nexprs $dim d -> (x_d, ∇x_d) = values(gradient, spline, x[d])
+        elseif diff === hessian
+            @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d) = values(hessian, spline, x[d])
+        elseif diff === all
+            @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d, ∇∇∇x_d) = values(all, spline, x[d])
+        else
+            error("wrong diff type, got $diff")
+        end
+
         ws = @ntuple $dim d -> x_d
-        ∇ws = @ntuple $dim i -> (@ntuple $dim k -> k==i ? ∇x_k : x_k)
-        # ∇∇ws = @ntuple $dim j -> (@ntuple $dim i -> (@ntuple $dim k -> k==j ? (k==i ? ∇∇x_k : ∇x_k) : ∇ws[i][k]))
-        tuple_otimes(ws), map(Vec, map(tuple_otimes, ∇ws)...), map(SymmetricSecondOrderTensor{dim}, map(tuple_otimes, flatten_tuple($∇∇ws))...)
+        wᵢ = tuple_otimes(ws)
+        diff === identity && return (wᵢ,)
+
+        ∇ws = @ntuple $dim i -> (@ntuple $dim α -> α==i ? ∇x_α : x_α)
+        ∇wᵢ = map(Vec, map(tuple_otimes, ∇ws)...)
+        diff === gradient && return (wᵢ,∇wᵢ)
+
+        ∇∇ws = tuple($(∇∇ws...))
+        ∇∇wᵢ = map($T_∇∇ws, map(tuple_otimes, ∇∇ws)...)
+        diff === hessian && return (wᵢ,∇wᵢ,∇∇wᵢ)
+
+        ∇∇∇ws = tuple($(∇∇∇ws...))
+        ∇∇∇wᵢ = map($T_∇∇∇ws, map(tuple_otimes, ∇∇∇ws)...)
+        diff === all && return (wᵢ,∇wᵢ,∇∇wᵢ,∇∇∇wᵢ)
     end
 end
 @inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
@@ -233,6 +256,12 @@ end
     h⁻¹ = spacing_inv(mesh)
     w, ∇w, ∇∇w = values(hessian, spline, (x-xmin)*h⁻¹)
     (w, ∇w*h⁻¹, ∇∇w*h⁻¹*h⁻¹)
+end
+@inline function Base.values(::typeof(all), spline::BSpline, x::Vec, mesh::CartesianMesh)
+    xmin = first(mesh)
+    h⁻¹ = spacing_inv(mesh)
+    w, ∇w, ∇∇w, ∇∇∇w = values(all, spline, (x-xmin)*h⁻¹)
+    (w, ∇w*h⁻¹, ∇∇w*h⁻¹*h⁻¹, ∇∇∇w*h⁻¹*h⁻¹*h⁻¹)
 end
 
 function update_property!(mp::MPValue, it::BSpline, pt, mesh::CartesianMesh)

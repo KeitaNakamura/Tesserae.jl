@@ -60,16 +60,17 @@ end
     end
     M⁻¹ = inv(M)
 
-    P₀, ∇P₀, ∇∇P₀ = value(hessian, poly, zero(xₚ))
+    P₀, ∇P₀, ∇∇P₀, ∇∇∇P₀ = value(all, poly, zero(xₚ))
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]
         w = mp.w[ip]
         P = value(poly, xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)
-        hasproperty(mp, :w)   && set_shape_values!(mp, ip, (wq⋅P₀,))
-        hasproperty(mp, :∇w)  && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
-        hasproperty(mp, :∇∇w) && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
+        hasproperty(mp, :w)    && set_shape_values!(mp, ip, (wq⋅P₀,))
+        hasproperty(mp, :∇w)   && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
+        hasproperty(mp, :∇∇w)  && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
+        hasproperty(mp, :∇∇∇w) && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀, wq⋅∇∇∇P₀))
     end
 end
 

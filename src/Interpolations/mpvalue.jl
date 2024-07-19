@@ -6,7 +6,8 @@ function create_property(::Type{Vec{dim, T}}, it::Interpolation, diff) where {di
     (diff === nothing || diff === identity) && return (; w=zeros(T, dims))
     diff === gradient && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims))
     diff === hessian  && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims))
-    error("wrong differentiation type, choose `nothing`, `gradient` or `hessian`")
+    diff === all      && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims), ∇∇∇w=fill(zero(Tensor{Tuple{@Symmetry{dim,dim,dim}}, T}), dims))
+    error("wrong differentiation type, choose `nothing`, `gradient`, `hessian` or `all`(third-order)")
 end
 
 """
@@ -85,21 +86,31 @@ end
 end
 
 @inline function difftype(mp::MPValue)
-    hasproperty(mp, :∇∇w) && return hessian
-    hasproperty(mp, :∇w)  && return gradient
-    hasproperty(mp, :w)   && return identity
+    hasproperty(mp, :∇∇∇w) && return all
+    hasproperty(mp, :∇∇w)  && return hessian
+    hasproperty(mp, :∇w)   && return gradient
+    hasproperty(mp, :w)    && return identity
     error("unreachable")
 end
 @inline @propagate_inbounds value(::typeof(identity), f, x, args...) = (value(f, x, args...),)
 @inline @propagate_inbounds value(::typeof(gradient), f, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
 @inline @propagate_inbounds value(::typeof(hessian), f, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
+@inline @propagate_inbounds function value(::typeof(all), f, x, args...)
+    @inline function ∇∇f(x)
+        @_propagate_inbounds_meta
+        hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x)
+    end
+    (value(hessian, f, x, args...)..., gradient(∇∇f, x))
+end
 
 @inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,)::Tuple{Any}) = (mp.w[ip]=w;)
 @inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,∇w)::Tuple{Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w;)
 @inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w;)
+@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,∇w,∇∇w,∇∇∇w)::Tuple{Any,Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w; mp.∇∇∇w[ip]=∇∇∇w;)
 @inline set_shape_values!(mp::MPValue, (w,)::Tuple{Any}) = copyto!(mp.w, w)
 @inline set_shape_values!(mp::MPValue, (w,∇w)::Tuple{Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w);)
 @inline set_shape_values!(mp::MPValue, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w);)
+@inline set_shape_values!(mp::MPValue, (w,∇w,∇∇w,∇∇∇w)::Tuple{Any,Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w); copyto!(mp.∇∇∇w,∇∇∇w);)
 
 function Base.show(io::IO, mp::MPValue)
     print(io, "MPValue: \n")
