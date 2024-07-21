@@ -5,13 +5,12 @@
 # * Affine PIC (APIC) transfer[^2]
 # * Taylor PIC (TPIC) transfer[^3]
 #
-# The problem evolves the elastic impact between two rings, which is consistent with previous studies[^4][^5].
+# The problem evolves the elastic impact between two rings, which is consistent with previous studies[^4].
 #
 # [^1]: [Zhu, Y. and Bridson, R., 2005. Animating sand as a fluid. ACM Transactions on Graphics (TOG), 24(3), pp.965-972.](https://doi.org/10.1145/1073204.1073298)
 # [^2]: [Jiang, C., Schroeder, C., Selle, A., Teran, J. and Stomakhin, A., 2015. The affine particle-in-cell method. ACM Transactions on Graphics (TOG), 34(4), pp.1-10.](https://doi.org/10.1145/2766996)
 # [^3]: [Nakamura, K., Matsumura, S. and Mizutani, T., 2023. Taylor particle-in-cell transfer and kernel correction for material point method. Computer Methods in Applied Mechanics and Engineering, 403, p.115720.](https://doi.org/10.1016/j.cma.2022.115720)
-# [^4]: [de Vaucorbeil, A. and Nguyen, V.P., 2020. A numerical evaluation of the material point method for slid mechanics problems.](https://doi.org/10.13140/RG.2.2.36622.28485)
-# [^5]: [Huang, P., Zhang, X., Ma, S. and Huang, X., 2011. Contact algorithms for the material point method in impact and penetration simulation. International journal for numerical methods in engineering, 85(4), pp.498-517.](https://doi.org/10.1002/nme.2981)
+# [^4]: [Li, X., Fang, Y., Li, M. and Jiang, C., 2022. BFEMP: Interpenetration-free MPM–FEM coupling with barrier contact. Computer Methods in Applied Mechanics and Engineering, 390, p.114350.](https://doi.org/10.1016/j.cma.2021.114350)
 #
 
 using Sequoia
@@ -24,21 +23,22 @@ struct TPIC <: Transfer end
 function main(transfer::Transfer = FLIP(1.0))
 
     ## Simulation parameters
-    h   = 1.0e-3 # Grid spacing
-    T   = 4e-3   # Time span
-    CFL = 0.8    # Courant number
+    h   = 0.1 # Grid spacing
+    T   = 0.6 # Time span
+    CFL = 0.8 # Courant number
 
     ## Material constants
-    K  = 121.7e6 # Bulk modulus
-    μ  = 26.1e6  # Shear modulus
-    λ  = K-2μ/3  # Lame's first parameter
-    ρ⁰ = 1.01e3  # Initial density
+    E  = 100e6                  # Young's modulus
+    ν  = 0.2                    # Poisson's ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
+    μ  = E / 2(1 + ν)           # Shear modulus
+    ρ⁰ = 1e3                    # Initial density
 
     ## Geometry
-    L  = 0.2  # Length of domain
-    W  = 0.15 # Width of domain
-    rᵢ = 0.03 # Inner radius of rings
-    rₒ = 0.04 # Outer radius of rings
+    L  = 20.0 # Length of domain
+    W  = 15.0 # Width of domain
+    rᵢ = 3.0  # Inner radius of rings
+    rₒ = 4.0  # Outer radius of rings
 
     GridProp = @NamedTuple begin
         x   :: Vec{2, Float64}
@@ -62,7 +62,7 @@ function main(transfer::Transfer = FLIP(1.0))
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(h, (-L/2,L/2), (-W/2,W/2)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (-L,L), (-W/2,W/2)))
 
     ## Particles
     particles = let
@@ -103,7 +103,7 @@ function main(transfer::Transfer = FLIP(1.0))
 
     t = 0.0
     step = 0
-    fps = 12e3
+    fps = 120
     savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
     Sequoia.@showprogress while t < T
@@ -208,9 +208,9 @@ end
 
 using Test                            #src
 if @isdefined(RUN_TESTS) && RUN_TESTS #src
-    @test main(FLIP(0.0))  < 1e-3     #src
-    @test main(FLIP(1.0))  < 1e-3     #src
-    @test main(FLIP(0.99)) < 1e-3     #src
-    @test main(APIC())     < 1e-3     #src
-    @test main(TPIC())     < 1e-3     #src
+    @test main(FLIP(0.0))  < 0.1      #src
+    @test main(FLIP(1.0))  < 0.1      #src
+    @test main(FLIP(0.99)) < 0.1      #src
+    @test main(APIC())     < 0.1      #src
+    @test main(TPIC())     < 0.1      #src
 end                                   #src
