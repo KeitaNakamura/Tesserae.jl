@@ -18,17 +18,17 @@
     @test size(mesh) === (16,21)
     @test IndexStyle(mesh) === IndexCartesian()
     @test (@inferred spacing(mesh)) === 0.2
-    @test (@inferred Sequoia.spacing_inv(mesh)) === inv(0.2)
+    @test (@inferred Tesserae.spacing_inv(mesh)) === inv(0.2)
 
     # isinside
-    @test (@inferred Sequoia.isinside(Vec(0.1,0.3), mesh)) === true
-    @test (@inferred Sequoia.isinside(Vec(0.2,0.4), mesh)) === true
+    @test (@inferred Tesserae.isinside(Vec(0.1,0.3), mesh)) === true
+    @test (@inferred Tesserae.isinside(Vec(0.2,0.4), mesh)) === true
     ## exactly on the boundary
-    @test (@inferred Sequoia.isinside(Vec(0.0,0.0), mesh)) === true
-    @test (@inferred Sequoia.isinside(Vec(3.0,4.0), mesh)) === false
+    @test (@inferred Tesserae.isinside(Vec(0.0,0.0), mesh)) === true
+    @test (@inferred Tesserae.isinside(Vec(3.0,4.0), mesh)) === false
     ## outside
-    @test (@inferred Sequoia.isinside(Vec(-1.0,3.0), mesh)) === false
-    @test (@inferred Sequoia.isinside(Vec(1.0,-3.0), mesh)) === false
+    @test (@inferred Tesserae.isinside(Vec(-1.0,3.0), mesh)) === false
+    @test (@inferred Tesserae.isinside(Vec(1.0,-3.0), mesh)) === false
 
     # neighboringnodes
     @test (@inferred neighboringnodes(Vec(0.1,0.1), 1, mesh)) === CartesianIndices((1:2,1:2))
@@ -42,9 +42,9 @@
     @test (@inferred neighboringnodes(Vec(-0.1,3.05), 3, mesh)) === CartesianIndices((1:0,1:0))
 
     # whichcell
-    @test Sequoia.whichcell(Vec(0.1,0.1), mesh) === CartesianIndex(1,1)
-    @test Sequoia.whichcell(Vec(2.3,1.1), mesh) === CartesianIndex(12,6)
+    @test Tesserae.whichcell(Vec(0.1,0.1), mesh) === CartesianIndex(1,1)
+    @test Tesserae.whichcell(Vec(2.3,1.1), mesh) === CartesianIndex(12,6)
     ## exactly on the node
-    @test Sequoia.whichcell(Vec(0.0,0.0), mesh) === CartesianIndex(1,1)
-    @test Sequoia.whichcell(Vec(3.0,4.0), mesh) === nothing
+    @test Tesserae.whichcell(Vec(0.0,0.0), mesh) === CartesianIndex(1,1)
+    @test Tesserae.whichcell(Vec(3.0,4.0), mesh) === nothing
 end

@@ -1,6 +1,6 @@
 # # Jacobian-free Newton--Krylov method
 
-using Sequoia
+using Tesserae
 
 using IterativeSolvers: gmres!
 using LinearMaps: LinearMap
@@ -59,7 +59,7 @@ function main()
     grid = generate_grid(GridProp, CartesianMesh(h, (0.0,1.2), (0.0,2.0), (-0.2,0.2)))
 
     ## Particles
-    beam = Sequoia.Box((0,1), (0.85,1.15), (-0.15,0.15))
+    beam = Tesserae.Box((0,1), (0.85,1.15), (-0.15,0.15))
     particles = generate_particles(ParticleProp, grid.X; domain=beam, alg=GridSampling())
     particles.V⁰ .= volume(beam) / length(particles)
     @. particles.m = ρ⁰ * particles.V⁰
@@ -86,7 +86,7 @@ function main()
     t = 0.0
     step = 0
 
-    Sequoia.@showprogress while t < T
+    Tesserae.@showprogress while t < T
 
         for p in eachindex(particles, mpvalues)
             update!(mpvalues[p], particles.x[p], grid.X)
@@ -121,7 +121,7 @@ function main()
         U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
         compute_residual(U) = residual(U, state)
         compute_jacobian(U) = jacobian(U, state)
-        Sequoia.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)->gmres!(x,A,b))
+        Tesserae.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)->gmres!(x,A,b))
 
         ## Grid dispacement, velocity and acceleration have been updated during Newton's iterations
         @G2P grid=>i particles=>p mpvalues=>ip begin

@@ -75,7 +75,7 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
         # `lhs` is, for example, `grid.m[i]`
         lhs = ex.args[1]
         if Meta.isexpr(ex, :(=))
-            push!(init_gridprops, :(Sequoia.fillzero!($(lhs.args[1]))))
+            push!(init_gridprops, :(Tesserae.fillzero!($(lhs.args[1]))))
         end
         push!(sum_names, lhs.args[1].args[2].value) # extract `m` for `grid.m[i]`
     end
@@ -107,7 +107,7 @@ function P2G_expr(schedule::QuoteNode, grid, particles, mpvalues, space, p, body
     if isnothing(space)
         body = quote
             $(schedule.value != :nothing) && @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
-            for $p in Sequoia.eachparticleindex($particles, $mpvalues)
+            for $p in Tesserae.eachparticleindex($particles, $mpvalues)
                 $body
             end
         end
@@ -122,7 +122,7 @@ function P2G_expr(schedule::QuoteNode, grid, particles, mpvalues, space, p, body
             body = :(@threaded $schedule $body)
         end
         body = quote
-            for $blocks in Sequoia.threadsafe_blocks($space)
+            for $blocks in Tesserae.threadsafe_blocks($space)
                 $body
             end
         end
@@ -140,7 +140,7 @@ function P2G_nosum_macro(schedule, grid_pair, nosum_equations::Vector)
     foreach(ex->findarrays_from_index!(vars, i, ex), nosum_equations)
 
     body = quote
-        Sequoia.foreach_gridindex(Val($schedule), Sequoia.GridIndexStyle($(vars...)), $grid) do $i
+        Tesserae.foreach_gridindex(Val($schedule), Tesserae.GridIndexStyle($(vars...)), $grid) do $i
             Base.@_inline_meta
             $(nosum_equations...)
         end
@@ -244,7 +244,7 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     if isallunderscore(mpvalues)
         iterator = :(eachindex($particles))
     else
-        iterator = :(Sequoia.eachparticleindex($particles, $mpvalues))
+        iterator = :(Tesserae.eachparticleindex($particles, $mpvalues))
     end
 
     if schedule.value == :nothing

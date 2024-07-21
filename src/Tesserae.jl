@@ -1,4 +1,4 @@
-module Sequoia
+module Tesserae
 
 using Base: @propagate_inbounds, @_inline_meta, @_propagate_inbounds_meta
 using Base.Broadcast: Broadcasted, ArrayStyle, DefaultArrayStyle
@@ -96,4 +96,4 @@ include("implicit.jl")
 
 include("vtk.jl")
 
-end # module Sequoia
+end # module Tesserae

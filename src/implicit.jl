@@ -134,11 +134,11 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
         globalname = lhs.args[1]
         localname = gensym(globalname)
 
-        Meta.isexpr(ex, :(=)) && push!(init_global_matrices, :(Sequoia.fillzero!($globalname)))
+        Meta.isexpr(ex, :(=)) && push!(init_global_matrices, :(Tesserae.fillzero!($globalname)))
         push!(global_matrices, globalname)
         push!(create_local_matrices, :($localname = Array{eltype($globalname)}(undef, length($localdofs), length($localdofs))))
         push!(assemble_local_matrices, :(@inbounds $localname[$I,$J] .= $trySArray($rhs))) # converting `Tensor` to `SArray` is faster for setindex!
-        push!(add_local_to_global, :(Sequoia.add!($globalname, $dofs, $dofs, $localname)))
+        push!(add_local_to_global, :(Tesserae.add!($globalname, $dofs, $dofs, $localname)))
         push!(assertions, :(@assert $globalname isa AbstractMatrix && size($globalname, 1) == size($globalname, 2)))
     end
     push!(assertions, :(@assert allequal($([:(size($m)) for m in global_matrices]...,))))
@@ -150,7 +150,7 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
         @assert Meta.isexpr(lhs, :ref) && all(lhs.args[2:end] .== i) # currently support only `A[i,i] = ...`
         complete_parent_from_index!(ex.args[2], [grid=>i])
         globalname = lhs.args[1]
-        push!(grid_sums, :(Sequoia.add!($globalname, $I, $I, $(ex.args[2]))))
+        push!(grid_sums, :(Tesserae.add!($globalname, $I, $I, $(ex.args[2]))))
     end
 
     body = quote

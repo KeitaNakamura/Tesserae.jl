@@ -1,6 +1,6 @@
 # # Frictional contact with rigid body
 
-using Sequoia
+using Tesserae
 
 mutable struct Disk{dim, T}
     x::Vec{dim, T}
@@ -109,7 +109,7 @@ function main()
     fps = 20
     savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
-    Sequoia.@showprogress while t < T
+    Tesserae.@showprogress while t < T
 
         vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * spacing(grid) / vmax

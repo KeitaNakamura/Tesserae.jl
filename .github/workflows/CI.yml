@@ -81,6 +81,6 @@ jobs:
         shell: julia --project=docs --color=yes {0}
         run: |
           using Documenter: DocMeta, doctest
-          using Sequoia
-          DocMeta.setdocmeta!(Sequoia, :DocTestSetup, :(using Sequoia); recursive=true)
-          doctest(Sequoia)
+          using Tesserae
+          DocMeta.setdocmeta!(Tesserae, :DocTestSetup, :(using Tesserae); recursive=true)
+          doctest(Tesserae)

@@ -8,7 +8,7 @@
 #
 # [^1]: [de Vaucorbeil, A., Nguyen, V.P. and Hutchinson, C.R., 2020. A Total-Lagrangian Material Point Method for solid mechanics problems involving large deformations. Computer Methods in Applied Mechanics and Engineering, 360, p.112783.](https://doi.org/10.1016/j.cma.2019.112783)
 
-using Sequoia
+using Tesserae
 
 function main()
 
@@ -99,7 +99,7 @@ function main()
     fps = 60
     savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
-    Sequoia.@showprogress while t < T
+    Tesserae.@showprogress while t < T
 
         ## Calculate timestep based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/(particles.V⁰ * det(particles.F)))) + norm(particles.v))

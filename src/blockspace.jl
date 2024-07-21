@@ -116,7 +116,7 @@ blocksize(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCKFACTOR+1
 blocksize(A::AbstractArray) = blocksize(size(A))
 
 """
-    Sequoia.whichblock(x::Vec, mesh::CartesianMesh)
+    Tesserae.whichblock(x::Vec, mesh::CartesianMesh)
 
 Return block index where `x` locates.
 The unit block size is `2^$BLOCKFACTOR` cells.
@@ -137,7 +137,7 @@ julia> mesh = CartesianMesh(1, (0,10), (0,10))
  [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]      [9.0, 9.0]   [9.0, 10.0]
  [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
 
-julia> Sequoia.whichblock(Vec(8.5, 1.5), mesh)
+julia> Tesserae.whichblock(Vec(8.5, 1.5), mesh)
 CartesianIndex(2, 1)
 ```
 """

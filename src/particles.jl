@@ -66,15 +66,15 @@ end
 
 function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::SamplingAlgorithm, ::Nothing) where {ParticleProp, dim, T}
     domain = tuple.(Tuple(first(mesh)), Tuple(last(mesh)))
-    point_sampling(alg, Sequoia.spacing(mesh) * T(spacing), domain...)
+    point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), domain...)
 end
 function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::GridSampling, box::Box) where {ParticleProp, dim, T}
     domain = tuple.(Tuple(first(mesh)), Tuple(last(mesh)))
-    points = point_sampling(alg, Sequoia.spacing(mesh) * T(spacing), domain...)
+    points = point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), domain...)
     filter(x -> isinside(x, box), points)
 end
 function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::PoissonDiskSampling, box::Box) where {ParticleProp, dim, T}
-    points = point_sampling(alg, Sequoia.spacing(mesh) * T(spacing), box.domain...)
+    points = point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), box.domain...)
 end
 
 function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)

@@ -116,10 +116,10 @@ julia> A[1,1] # still zero
 
 This is because the block where index `(1,1)` is located is not activated yet.
 To activate the block, update sparsity pattern by `update_block_sparsity!(A, spy)`
-where `spy` must have `Sequoia.blocksize(A)`.
+where `spy` must have `Tesserae.blocksize(A)`.
 
 ```jldoctest sparray
-julia> spy = trues(Sequoia.blocksize(A))
+julia> spy = trues(Tesserae.blocksize(A))
 1×1 BitMatrix:
  1
 

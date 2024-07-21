@@ -2,7 +2,7 @@
 
 # ## Main function
 
-using Sequoia
+using Tesserae
 using LinearAlgebra
 
 abstract type Transfer end
@@ -115,7 +115,7 @@ function main(transfer::Transfer = FLIP(1.0))
     fps = 30
     savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
-    Sequoia.@showprogress while t < T
+    Tesserae.@showprogress while t < T
 
         ## Update interpolation values based on the nodes of active cells
         ## where the particles are located
@@ -257,8 +257,8 @@ function variational_multiscale_method(state)
         
         ## Solve nonlinear system
         U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-        solved = Sequoia.newton!(U, U->residual(U,state), U->J;
-                                 linsolve=(x,A,b)->ldiv!(x,A,b), atol=1e-10, rtol=1e-10)
+        solved = Tesserae.newton!(U, U->residual(U,state), U->J;
+                                  linsolve=(x,A,b)->ldiv!(x,A,b), atol=1e-10, rtol=1e-10)
 
         ## If the simulation fails to solve, retry with a smaller time step
         solved || (Δt /= 2)

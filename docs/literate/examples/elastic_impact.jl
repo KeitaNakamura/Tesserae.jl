@@ -13,7 +13,7 @@
 # [^4]: [Li, X., Fang, Y., Li, M. and Jiang, C., 2022. BFEMP: Interpenetration-free MPM–FEM coupling with barrier contact. Computer Methods in Applied Mechanics and Engineering, 390, p.114350.](https://doi.org/10.1016/j.cma.2021.114350)
 #
 
-using Sequoia
+using Tesserae
 
 abstract type Transfer end
 struct FLIP <: Transfer α::Float64 end
@@ -106,7 +106,7 @@ function main(transfer::Transfer = FLIP(1.0))
     fps = 120
     savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
-    Sequoia.@showprogress while t < T
+    Tesserae.@showprogress while t < T
 
         ## Calculate timestep based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v))

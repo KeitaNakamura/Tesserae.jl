@@ -7,7 +7,7 @@
                 for extension in (identity, KernelCorrection)
                     it = extension(kernel)
                     mp = @inferred MPValue(Vec{dim,T}, it)
-                    @test Sequoia.interpolation(mp) === it
+                    @test Tesserae.interpolation(mp) === it
                     @test mp.w isa Array{T}
                     @test mp.∇w isa Array{Vec{dim,T}}
                     @test ndims(mp.w) == dim
@@ -49,7 +49,7 @@ end
             n = 100
             mpvalues = @inferred generate_mpvalues(Vec{dim,T}, QuadraticBSpline(), n)
             @test size(mpvalues) === (n,)
-            @test Sequoia.interpolation(mpvalues) === QuadraticBSpline()
+            @test Tesserae.interpolation(mpvalues) === QuadraticBSpline()
             @test all(eachindex(mpvalues)) do i
                 typeof(mpvalues[1]) === eltype(mpvalues)
             end
@@ -183,8 +183,8 @@ end
     end
     @testset "QuadraticBSpline" begin
         kern = QuadraticBSpline()
-        lin = Sequoia.LinearPolynomial()
-        multilin = Sequoia.MultiLinearPolynomial()
+        lin = Tesserae.LinearPolynomial()
+        multilin = Tesserae.MultiLinearPolynomial()
         @testset "2D" begin
             # boundaries
             mesh = CartesianMesh(1, (0,10), (0,10))
@@ -222,8 +222,8 @@ end
     end
     @testset "CubicBSpline" begin
         kern = CubicBSpline()
-        lin = Sequoia.LinearPolynomial()
-        multilin = Sequoia.MultiLinearPolynomial()
+        lin = Tesserae.LinearPolynomial()
+        multilin = Tesserae.MultiLinearPolynomial()
         @testset "2D" begin
             # for boundaries
             mesh = CartesianMesh(1, (0,10), (0,10))

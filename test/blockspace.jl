@@ -5,13 +5,13 @@
         (x-1.5)^2 + (y-2)^2 < 1
     end
     blockspace = (@inferred BlockSpace(mesh))
-    @test size(blockspace) === Sequoia.blocksize(mesh)
+    @test size(blockspace) === Tesserae.blocksize(mesh)
     @test all(isempty, blockspace)
     @test typeof(blockspace[1]) === eltype(blockspace)
     update!(blockspace, xₚ)
-    ptsinblks = map(_->Int[], CartesianIndices(Sequoia.blocksize(mesh)))
+    ptsinblks = map(_->Int[], CartesianIndices(Tesserae.blocksize(mesh)))
     for p in eachindex(xₚ)
-        I = Sequoia.whichblock(xₚ[p], mesh)
+        I = Tesserae.whichblock(xₚ[p], mesh)
         I === nothing || push!(ptsinblks[I], p)
     end
     @test blockspace == ptsinblks

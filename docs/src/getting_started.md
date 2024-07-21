@@ -1,7 +1,7 @@
 # Getting Started
 
 ```@example
-using Sequoia
+using Tesserae
 import Plots
 
 # Material constants
