@@ -131,8 +131,8 @@ function main()
 
         ## Update particle velocity and position
         @G2P grid=>i particles=>p mpvalues=>ip begin
-            ṽ[p]  = @∑ v[i] * w[ip]
-            ã[p]  = @∑ (v[i] - vⁿ[i])/Δt * w[ip]
+            ṽ[p]  = @∑ w[ip] * v[i]
+            ã[p]  = @∑ w[ip] * (v[i] - vⁿ[i]) / Δt
             v[p]  = (1-α)*ṽ[p] + α*(v[p] + Δt*ã[p])
             x[p] += Δt * ṽ[p]
         end

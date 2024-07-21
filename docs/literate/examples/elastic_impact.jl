@@ -148,21 +148,21 @@ function main(transfer::Transfer = FLIP(1.0))
         if transfer isa FLIP
             local α = transfer.α
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p]  = @∑ ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i]))) * w[ip]
+                v[p]  = @∑ w[ip] * ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i])))
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-                x[p] += @∑ Δt * v[i] * w[ip]
+                x[p] += @∑ Δt * (w[ip] * v[i])
 
             end
         elseif transfer isa APIC
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p]  = @∑ v[i] * w[ip]
+                v[p]  = @∑ w[ip] * v[i]
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-                B[p]  = @∑ v[i] ⊗ (x[i]-x[p]) * w[ip]
+                B[p]  = @∑ w[ip] * v[i] ⊗ (x[i]-x[p])
                 x[p] += Δt * v[p]
             end
         elseif transfer isa TPIC
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p]  = @∑ v[i] * w[ip]
+                v[p]  = @∑ w[ip] * v[i]
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 x[p] += Δt * v[p]
             end

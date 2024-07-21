@@ -139,7 +139,7 @@ function main()
         end
 
         @G2P grid=>i particles=>p mpvalues=>ip begin
-            v[p]  = @∑ v[i] * w[ip] # PIC transfer
+            v[p]  = @∑ w[ip] * v[i] # PIC transfer
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += Δt * v[p]
         end

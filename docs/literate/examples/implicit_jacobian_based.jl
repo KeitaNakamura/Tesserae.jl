@@ -127,9 +127,9 @@ function main()
         ## Grid dispacement, velocity and acceleration have been updated during Newton's iterations
         @G2P grid=>i particles=>p mpvalues=>ip begin
             ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
-            a[p]  = @∑ a[i] * w[ip]
-            v[p] += @∑ Δt*((1-γ)*a[p] + γ*a[i]) * w[ip]
-            x[p]  = @∑ (X[i] + u[i]) * w[ip]
+            a[p]  = @∑ w[ip] * a[i]
+            v[p] += @∑ Δt * w[ip] * ((1-γ)*a[p] + γ*a[i])
+            x[p]  = @∑ w[ip] * (X[i] + u[i])
             F[p]  = (I + ∇u[p]) ⋅ F[p]
         end
 
@@ -164,7 +164,7 @@ function residual(U::AbstractVector, state)
         c[p] = c[p] - transposing_tensor(τ[p] ⋅ ΔF⁻¹[p]')
     end
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ -V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p]) + m[p] * b[p] * w[ip]
+        f[i] = @∑ -V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p]) + w[ip] * m[p] * b[p]
     end
 
     @. $dofmap(grid.m) * $dofmap(grid.a) - $dofmap(grid.f)
