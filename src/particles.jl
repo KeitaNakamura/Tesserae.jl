@@ -9,10 +9,10 @@ end
 
 struct PoissonDiskSampling{RNG} <: SamplingAlgorithm
     rng::RNG
-    parallel::Bool
+    multithreading::Bool
 end
 PoissonDiskSampling() = PoissonDiskSampling(Random.default_rng(), true)
-PoissonDiskSampling(rng; parallel=false) = PoissonDiskSampling(rng, parallel)
+PoissonDiskSampling(rng; multithreading=false) = PoissonDiskSampling(rng, multithreading)
 
 # Determine minimum distance between particles for Poisson disk sampling
 # so that the number of generated particles is almost the same as the grid sampling.
@@ -20,7 +20,7 @@ PoissonDiskSampling(rng; parallel=false) = PoissonDiskSampling(rng, parallel)
 poisson_disk_sampling_minimum_distance(l::Real, dim::Int) = l/(1.37)^(1/√dim)
 function point_sampling(pds::PoissonDiskSampling, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
     d = poisson_disk_sampling_minimum_distance(l, dim)
-    reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, domain...; pds.parallel))
+    reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, domain...; pds.multithreading))
 end
 
 function generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec}) where {ParticleProp}
