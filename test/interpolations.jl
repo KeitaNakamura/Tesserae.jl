@@ -3,7 +3,7 @@
         @test eltype(MPValue(Vec{dim}, QuadraticBSpline())) ==
               eltype(MPValue(Vec{dim, Float64}, QuadraticBSpline()))
         for T in (Float32, Float64)
-            for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), GIMP())
+            for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), uGIMP())
                 for extension in (identity, KernelCorrection)
                     it = extension(kernel)
                     mp = @inferred MPValue(Vec{dim,T}, it)
@@ -104,8 +104,8 @@ end
         end
     end
 
-    @testset "GIMP()" begin
-        it = GIMP()
+    @testset "uGIMP()" begin
+        it = uGIMP()
         for dim in (1,2,3)
             Random.seed!(1234)
             mp = MPValue(Vec{dim}, it)
@@ -117,14 +117,14 @@ end
                 isnearbounds = any(.!(l .< x .< 1-l))
                 PU = check_partition_of_unity(mp, x)
                 LFR = check_linear_field_reproduction(mp, x, mesh)
-                # GIMP doesn't have pertition of unity when very closed to boundaries
+                # uGIMP doesn't have pertition of unity when very closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
-                isnearbounds ? (!PU && !LFR) : (PU && LFR) # GIMP
+                isnearbounds ? (!PU && !LFR) : (PU && LFR)
             end
         end
     end
 
-    @testset "KernelCorrection($kernel)" for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), GIMP())
+    @testset "KernelCorrection($kernel)" for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), uGIMP())
         it = KernelCorrection(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)

@@ -57,7 +57,7 @@ export
     SteffenLinearBSpline,
     SteffenQuadraticBSpline,
     SteffenCubicBSpline,
-    GIMP,
+    uGIMP,
     Interpolation,
     KernelCorrection,
 # MPValue
