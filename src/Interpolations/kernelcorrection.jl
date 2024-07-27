@@ -27,19 +27,19 @@ gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
     else
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
-            set_shape_values!(mp, ip, value(difftype(mp), get_kernel(it), pt, mesh, i))
+            set_kernel_values!(mp, ip, value(difftype(mp), get_kernel(it), pt, mesh, i))
         end
     end
 end
 
 # fast version for B-spline kernels
-@inline function update_property!(mp::MPValue, it::KernelCorrection{<: BSpline}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline function update_property!(mp::MPValue, it::KernelCorrection{<: AbstractBSpline}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.w) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
         update_property_nearbounds!(mp, it, pt, mesh, filter)
     else
-        set_shape_values!(mp, values(difftype(mp), get_kernel(it), getx(pt), mesh))
+        set_kernel_values!(mp, values(difftype(mp), get_kernel(it), getx(pt), mesh))
     end
 end
 
@@ -67,10 +67,10 @@ end
         w = mp.w[ip]
         P = value(poly, xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)
-        hasproperty(mp, :w)    && set_shape_values!(mp, ip, (wq⋅P₀,))
-        hasproperty(mp, :∇w)   && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
-        hasproperty(mp, :∇∇w)  && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
-        hasproperty(mp, :∇∇∇w) && set_shape_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀, wq⋅∇∇∇P₀))
+        hasproperty(mp, :w)    && set_kernel_values!(mp, ip, (wq⋅P₀,))
+        hasproperty(mp, :∇w)   && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
+        hasproperty(mp, :∇∇w)  && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
+        hasproperty(mp, :∇∇∇w) && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀, wq⋅∇∇∇P₀))
     end
 end
 

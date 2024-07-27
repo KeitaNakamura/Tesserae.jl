@@ -50,6 +50,6 @@ end
     indices = neighboringnodes(mp)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        set_shape_values!(mp, ip, value(difftype(mp), it, pt, mesh, i))
+        set_kernel_values!(mp, ip, value(difftype(mp), it, pt, mesh, i))
     end
 end

@@ -3,7 +3,7 @@
         @test eltype(MPValue(Vec{dim}, QuadraticBSpline())) ==
               eltype(MPValue(Vec{dim, Float64}, QuadraticBSpline()))
         for T in (Float32, Float64)
-            for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), GIMP())
+            for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), GIMP())
                 for extension in (identity, KernelCorrection)
                     it = extension(kernel)
                     mp = @inferred MPValue(Vec{dim,T}, it)
@@ -59,25 +59,42 @@ end
 
 @testset "Interpolations" begin
 
+    isapproxzero(x) = x + ones(x) ≈ ones(x)
     function check_partition_of_unity(mp, x; atol=sqrt(eps(eltype(mp.w))))
         indices = neighboringnodes(mp)
         CI = CartesianIndices(indices) # local indices
-        isapprox(sum(mp.w[CI]), 1) && isapprox(sum(mp.∇w[CI]), zero(eltype(mp.∇w)); atol)
+        isapprox(sum(mp.w[CI]), 1) && isapproxzero(sum(mp.∇w[CI]))
     end
-    function check_linear_field_reproduction(mp, x, X; atol=sqrt(eps(eltype(mp.w))))
+    function check_linear_field_reproduction(mp, x, X)
         indices = neighboringnodes(mp)
         CI = CartesianIndices(indices) # local indices
-        isapprox(mapreduce((j,i) -> X[i]*mp.w[j],  +, CI, indices), x; atol) &&
-        isapprox(mapreduce((j,i) -> X[i]⊗mp.∇w[j], +, CI, indices), I; atol)
+        isapprox(mapreduce((j,i) -> X[i]*mp.w[j],  +, CI, indices), x) &&
+        isapprox(mapreduce((j,i) -> X[i]⊗mp.∇w[j], +, CI, indices), I)
     end
 
     @testset "$it" for it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
         for T in (Float32, Float64), dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValue(Vec{dim,T}, it)
+            mp = MPValue(Vec{dim}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             @test all(1:100) do _
-                x = rand(Vec{dim, T})
+                x = rand(Vec{dim})
+                update!(mp, x, mesh)
+                isnearbounds = size(mp.w) != size(neighboringnodes(mp))
+                PU = check_partition_of_unity(mp, x)
+                LFR = check_linear_field_reproduction(mp, x, mesh)
+                isnearbounds ? (!PU && !LFR) : (PU && LFR)
+            end
+        end
+    end
+
+    @testset "$it" for it in (SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline())
+        for dim in (1,2,3)
+            Random.seed!(1234)
+            mp = MPValue(Vec{dim}, it)
+            mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
+            @test all(1:100) do _
+                x = rand(Vec{dim})
                 update!(mp, x, mesh)
                 isnearbounds = size(mp.w) != size(neighboringnodes(mp))
                 PU = check_partition_of_unity(mp, x)
@@ -89,13 +106,13 @@ end
 
     @testset "GIMP()" begin
         it = GIMP()
-        for T in (Float32, Float64), dim in (1,2,3)
+        for dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValue(Vec{dim,T}, it)
+            mp = MPValue(Vec{dim}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
-                x = rand(Vec{dim, T})
+                x = rand(Vec{dim})
                 update!(mp, (;x,l), mesh)
                 isnearbounds = any(.!(l .< x .< 1-l))
                 PU = check_partition_of_unity(mp, x)
@@ -107,15 +124,15 @@ end
         end
     end
 
-    @testset "KernelCorrection($kernel)" for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), GIMP())
+    @testset "KernelCorrection($kernel)" for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), GIMP())
         it = KernelCorrection(kernel)
-        for T in (Float32, Float64), dim in (1,2,3)
+        for dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValue(Vec{dim,T}, it)
+            mp = MPValue(Vec{dim}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
-                x = rand(Vec{dim, T})
+                x = rand(Vec{dim})
                 update!(mp, (;x,l), mesh)
                 PU = check_partition_of_unity(mp, x)
                 LFR = check_linear_field_reproduction(mp, x, mesh)

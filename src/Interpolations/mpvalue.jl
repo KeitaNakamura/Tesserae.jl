@@ -103,14 +103,14 @@ end
     (value(hessian, f, x, args...)..., gradient(∇∇f, x))
 end
 
-@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,)::Tuple{Any}) = (mp.w[ip]=w;)
-@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,∇w)::Tuple{Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w;)
-@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w;)
-@inline @propagate_inbounds set_shape_values!(mp::MPValue, ip, (w,∇w,∇∇w,∇∇∇w)::Tuple{Any,Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w; mp.∇∇∇w[ip]=∇∇∇w;)
-@inline set_shape_values!(mp::MPValue, (w,)::Tuple{Any}) = copyto!(mp.w, w)
-@inline set_shape_values!(mp::MPValue, (w,∇w)::Tuple{Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w);)
-@inline set_shape_values!(mp::MPValue, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w);)
-@inline set_shape_values!(mp::MPValue, (w,∇w,∇∇w,∇∇∇w)::Tuple{Any,Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w); copyto!(mp.∇∇∇w,∇∇∇w);)
+@inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,)::Tuple{Any}) = (mp.w[ip]=w;)
+@inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,∇w)::Tuple{Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w;)
+@inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w;)
+@inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,∇w,∇∇w,∇∇∇w)::Tuple{Any,Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w; mp.∇∇∇w[ip]=∇∇∇w;)
+@inline set_kernel_values!(mp::MPValue, (w,)::Tuple{Any}) = copyto!(mp.w, w)
+@inline set_kernel_values!(mp::MPValue, (w,∇w)::Tuple{Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w);)
+@inline set_kernel_values!(mp::MPValue, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w);)
+@inline set_kernel_values!(mp::MPValue, (w,∇w,∇∇w,∇∇∇w)::Tuple{Any,Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w); copyto!(mp.∇∇∇w,∇∇∇w);)
 
 function Base.show(io::IO, mp::MPValue)
     print(io, "MPValue: \n")
