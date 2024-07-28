@@ -139,25 +139,25 @@ end
 
 @inline function Base.values(::typeof(identity), spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
     h⁻¹ = spacing_inv(mesh)
-    (values(spline, (x - first(mesh)) * h⁻¹),)
+    (values(spline, (x - get_xmin(mesh)) * h⁻¹),)
 end
 @inline function Base.values(::typeof(gradient), spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
-    xmin = first(mesh)
+    xmin = get_xmin(mesh)
     h⁻¹ = spacing_inv(mesh)
     w, ∇w = values(gradient, spline, (x-xmin)*h⁻¹)
     (w, ∇w*h⁻¹)
 end
 @inline function Base.values(::typeof(hessian), spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
-    xmin = first(mesh)
+    xmin = get_xmin(mesh)
     h⁻¹ = spacing_inv(mesh)
     w, ∇w, ∇∇w = values(hessian, spline, (x-xmin)*h⁻¹)
-    (w, ∇w*h⁻¹, ∇∇w*h⁻¹*h⁻¹)
+    (w, ∇w*h⁻¹, ∇∇w*h⁻¹^2)
 end
 @inline function Base.values(::typeof(all), spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
-    xmin = first(mesh)
+    xmin = get_xmin(mesh)
     h⁻¹ = spacing_inv(mesh)
     w, ∇w, ∇∇w, ∇∇∇w = values(all, spline, (x-xmin)*h⁻¹)
-    (w, ∇w*h⁻¹, ∇∇w*h⁻¹*h⁻¹, ∇∇∇w*h⁻¹*h⁻¹*h⁻¹)
+    (w, ∇w*h⁻¹, ∇∇w*h⁻¹^2, ∇∇∇w*h⁻¹^3)
 end
 
 function update_property!(mp::MPValue, it::AbstractBSpline, pt, mesh::CartesianMesh)

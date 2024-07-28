@@ -65,11 +65,11 @@ function volume(box::Box)
 end
 
 function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::SamplingAlgorithm, ::Nothing) where {ParticleProp, dim, T}
-    domain = tuple.(Tuple(first(mesh)), Tuple(last(mesh)))
+    domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
     point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), domain...)
 end
 function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::GridSampling, box::Box) where {ParticleProp, dim, T}
-    domain = tuple.(Tuple(first(mesh)), Tuple(last(mesh)))
+    domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
     points = point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), domain...)
     filter(x -> isinside(x, box), points)
 end
