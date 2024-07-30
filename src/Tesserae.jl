@@ -59,6 +59,7 @@ export
     SteffenCubicBSpline,
     uGIMP,
     Interpolation,
+    WLS,
     KernelCorrection,
 # MPValue
     generate_mpvalues,
@@ -93,6 +94,7 @@ include("Interpolations/mpvalue.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
 include("Interpolations/polynomials.jl")
+include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
 
 include("transfer.jl")

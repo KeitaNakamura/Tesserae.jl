@@ -124,8 +124,8 @@ end
         end
     end
 
-    @testset "KernelCorrection($kernel)" for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), uGIMP())
-        it = KernelCorrection(kernel)
+    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), uGIMP())
+        it = Wrapper(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)
             mp = MPValue(Vec{dim}, it)

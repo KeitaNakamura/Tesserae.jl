@@ -23,7 +23,7 @@ gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.w) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        update_property_nearbounds!(mp, it, pt, mesh, filter)
+        update_property!(mp, WLS(get_kernel(it), get_polynomial(it)), pt, mesh, filter)
     else
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
@@ -37,40 +37,9 @@ end
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.w) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        update_property_nearbounds!(mp, it, pt, mesh, filter)
+        update_property!(mp, WLS(get_kernel(it), get_polynomial(it)), pt, mesh, filter)
     else
         set_kernel_values!(mp, values(difftype(mp), get_kernel(it), getx(pt), mesh))
-    end
-end
-
-@inline function update_property_nearbounds!(mp::MPValue, it::KernelCorrection, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
-    indices = neighboringnodes(mp)
-    kernel = get_kernel(it)
-    poly = get_polynomial(it)
-    xₚ = getx(pt)
-
-    M = fastsum(eachindex(indices)) do ip
-        @inbounds begin
-            i = indices[ip]
-            xᵢ = mesh[i]
-            w = mp.w[ip] = value(kernel, pt, mesh, i) * filter[i]
-            P = value(poly, xᵢ - xₚ)
-            w * P ⊗ P
-        end
-    end
-    M⁻¹ = inv(M)
-
-    P₀, ∇P₀, ∇∇P₀, ∇∇∇P₀ = value(all, poly, zero(xₚ))
-    @inbounds for ip in eachindex(indices)
-        i = indices[ip]
-        xᵢ = mesh[i]
-        w = mp.w[ip]
-        P = value(poly, xᵢ - xₚ)
-        wq = w * (M⁻¹ ⋅ P)
-        hasproperty(mp, :w)    && set_kernel_values!(mp, ip, (wq⋅P₀,))
-        hasproperty(mp, :∇w)   && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
-        hasproperty(mp, :∇∇w)  && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
-        hasproperty(mp, :∇∇∇w) && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀, wq⋅∇∇∇P₀))
     end
 end
 
