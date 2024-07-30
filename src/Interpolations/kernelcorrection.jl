@@ -37,7 +37,7 @@ end
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.w) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        update_property!(mp, WLS(get_kernel(it), get_polynomial(it)), pt, mesh, filter)
+        update_property_general!(mp, WLS(get_kernel(it), get_polynomial(it)), pt, mesh, filter)
     else
         set_kernel_values!(mp, values(difftype(mp), get_kernel(it), getx(pt), mesh))
     end
