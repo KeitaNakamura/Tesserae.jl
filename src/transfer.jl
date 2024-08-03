@@ -196,12 +196,6 @@ function check_arguments_for_P2G(grid, particles, mpvalues, space)
         end
     end
     @assert length(particles) ≤ length(mpvalues)
-    @debug begin
-        for p in eachparticleindex(particles, mpvalues)
-            mp = mpvalues[p]
-            checkbounds(grid, neighboringnodes(mp))
-        end
-    end
     if space isa BlockSpace
         @assert blocksize(grid) == size(space)
         sum(length, space) == 0 && error("@P2G: BlockSpace not activated")
@@ -446,10 +440,4 @@ function check_arguments_for_G2P(grid, particles, mpvalues)
         end
     end
     @assert length(particles) ≤ length(mpvalues)
-    @debug begin
-        for p in eachparticleindex(particles, mpvalues)
-            mp = mpvalues[p]
-            checkbounds(grid, neighboringnodes(mp))
-        end
-    end
 end
