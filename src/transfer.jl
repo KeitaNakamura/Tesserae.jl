@@ -35,7 +35,9 @@ macro P2G(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, 
 end
 
 function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
-    _, i = unpair(grid_pair)
+    grid, i = unpair(grid_pair)
+    particles, _ = unpair(particles_pair)
+    mpvalues, _ = unpair(mpvalues_pair)
 
     @assert equations.head == :block
     Base.remove_linenums!(equations)
@@ -52,6 +54,7 @@ function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     body2 = P2G_nosum_macro(schedule, grid_pair, nosum_equations)
 
     quote
+        $check_arguments_for_P2G($grid, $particles, $mpvalues, $space)
         $body1
         $body2
     end |> esc
@@ -186,6 +189,25 @@ end
 @inline Base.getindex(A::SpArray, i::UnsafeSpIndex) = (@_propagate_inbounds_meta; get_data(A)[i.i])
 @inline Base.setindex!(A::SpArray, v, i::UnsafeSpIndex) = (@_propagate_inbounds_meta; get_data(A)[i.i]=v; A)
 
+function check_arguments_for_P2G(grid, particles, mpvalues, space)
+    if grid isa SpGrid
+        if length(propertynames(grid)) > 1
+            isempty(get_data(getproperty(grid, 2))) && error("@P2G: SpGrid indices not activated")
+        end
+    end
+    @assert length(particles) ≤ length(mpvalues)
+    @debug begin
+        for p in eachparticleindex(particles, mpvalues)
+            mp = mpvalues[p]
+            checkbounds(grid, neighboringnodes(mp))
+        end
+    end
+    if space isa BlockSpace
+        @assert blocksize(grid) == size(space)
+        sum(length, space) == 0 && error("@P2G: BlockSpace not activated")
+    end
+end
+
 """
     @G2P grid=>i particles=>p mpvalues=>ip begin
         equations...
@@ -215,6 +237,7 @@ macro G2P(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equatio
 end
 
 function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
+    grid, _ = unpair(grid_pair)
     particles, p = unpair(particles_pair)
     mpvalues, _ = unpair(mpvalues_pair)
 
@@ -233,6 +256,7 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     body2 = G2P_nosum_macro(particles_pair, nosum_equations)
 
     body = quote
+        $check_arguments_for_G2P($grid, $particles, $mpvalues)
         $body1
         $body2
     end
@@ -414,3 +438,18 @@ function replace_dollar_by_identity!(expr::Expr)
     expr
 end
 replace_dollar_by_identity!(x) = x
+
+function check_arguments_for_G2P(grid, particles, mpvalues)
+    if grid isa SpGrid
+        if length(propertynames(grid)) > 1
+            isempty(get_data(getproperty(grid, 2))) && error("@G2P: SpGrid indices not activated")
+        end
+    end
+    @assert length(particles) ≤ length(mpvalues)
+    @debug begin
+        for p in eachparticleindex(particles, mpvalues)
+            mp = mpvalues[p]
+            checkbounds(grid, neighboringnodes(mp))
+        end
+    end
+end
