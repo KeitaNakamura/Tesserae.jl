@@ -62,10 +62,17 @@ end
         w = mp.w[ip]
         P = value(poly, xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)
-        hasproperty(mp, :w)    && set_kernel_values!(mp, ip, (wq⋅P₀,))
-        hasproperty(mp, :∇w)   && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
-        hasproperty(mp, :∇∇w)  && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
-        hasproperty(mp, :∇∇∇w) && set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀, wq⋅∇∇∇P₀))
+        if hasproperty(mp, :∇∇∇w)
+            set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀, wq⋅∇∇∇P₀))
+        elseif hasproperty(mp, :∇∇w)
+            set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
+        elseif hasproperty(mp, :∇w)
+            set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
+        elseif hasproperty(mp, :w)
+            set_kernel_values!(mp, ip, (wq⋅P₀,))
+        else
+            error("unreachable")
+        end
     end
 end
 
