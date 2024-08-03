@@ -162,8 +162,11 @@ CartesianIndex(2, 2)
     whichcell(ξ, size(mesh))
 end
 
-@inline function whichcell(ξ::NTuple{dim}, gridsize::Dims{dim}) where {dim}
-    cell = CartesianIndex(@. unsafe_trunc(Int, floor(ξ)) + 1)
-    isinside = checkbounds(Bool, CartesianIndices(gridsize.-1), cell)
-    ifelse(isinside, cell, nothing)
+@generated function whichcell(ξ::NTuple{dim, T}, gridsize::Dims{dim}) where {dim, T}
+    quote
+        @_inline_meta
+        index = map(floor, ξ)
+        isinside = @nall $dim d -> T(0) ≤ index[d] ≤ T(gridsize[d]-2)
+        ifelse(isinside, CartesianIndex(@. unsafe_trunc(Int, index) + 1), nothing)
+    end
 end
