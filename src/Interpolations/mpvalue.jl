@@ -7,7 +7,7 @@ function create_property(::Type{Vec{dim, T}}, it::Interpolation, diff) where {di
     diff === gradient && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims))
     diff === hessian  && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims))
     diff === all      && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims), ∇∇∇w=fill(zero(Tensor{Tuple{@Symmetry{dim,dim,dim}}, T}), dims))
-    error("wrong differentiation type, choose `nothing`, `gradient`, `hessian` or `all`(third-order)")
+    error("wrong differentiation type, choose `nothing`, `gradient` and `hessian`")
 end
 
 """
