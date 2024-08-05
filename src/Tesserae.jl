@@ -82,8 +82,6 @@ export
     closevtm,
     closepvd
 
-abstract type Interpolation end
-
 include("utils.jl")
 include("mesh.jl")
 include("blockspace.jl")

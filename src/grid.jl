@@ -12,7 +12,7 @@ spacing_inv(grid::Grid) = spacing_inv(get_mesh(grid))
 # SpGrid #
 ##########
 
-const SpGrid{N, T, NT <: NamedTuple{<: Any, <: Tuple{AbstractMesh, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
+const SpGrid{N, T, NT <: NamedTuple{<: Any, <: Tuple{CartesianMesh, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
 
 function check_gridproperty(::Type{GridProp}, ::Type{Vec{dim, T}}) where {GridProp, dim, T}
     V = fieldtype(GridProp, 1)

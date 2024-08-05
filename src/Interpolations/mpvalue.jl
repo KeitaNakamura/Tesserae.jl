@@ -1,3 +1,4 @@
+abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
 #=
@@ -16,6 +17,8 @@ function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim};
     diff === all      && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims), ∇∇∇w=fill(zero(Tensor{Tuple{@Symmetry{dim,dim,dim}}, T}), dims))
     error("wrong differentiation type, choose `nothing`, `gradient` and `hessian`")
 end
+
+NeighboringNodesType(::Interpolation, ::CartesianMesh{dim}) where {dim} = CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
 
 """
     MPValue(Vec{dim}, interpolation)
@@ -73,10 +76,14 @@ end
 
 @inline neighboringnodes(mp::MPValue) = getfield(mp, :indices)[]
 @inline function neighboringnodes(mp::MPValue, grid::Grid)
+    neighboringnodes(mp, get_mesh(grid))
+end
+@inline function neighboringnodes(mp::MPValue, mesh::CartesianMesh)
     inds = neighboringnodes(mp)
-    @boundscheck checkbounds(grid, inds)
+    @boundscheck checkbounds(mesh, inds)
     inds
 end
+# SpGrid always use CartesianMesh
 @inline function neighboringnodes(mp::MPValue, grid::SpGrid)
     inds = neighboringnodes(mp)
     spinds = get_spinds(grid)
