@@ -31,11 +31,7 @@ julia> mesh = CartesianMesh(1.0, (0,5), (0,5)); # computational domain
 
 julia> x = Vec(2.2, 3.4); # particle coordinate
 
-julia> mp = MPValue(Vec{2}, QuadraticBSpline())
-MPValue:
-  Interpolation: QuadraticBSpline()
-  Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
-  Neighboring nodes: CartesianIndices((1:0, 1:0))
+julia> mp = MPValue(QuadraticBSpline(), mesh);
 
 julia> update!(mp, x, mesh) # update `mp` at position `x` in `mesh`
 MPValue:

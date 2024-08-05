@@ -60,7 +60,7 @@ end
 @. particles.m = ρ * particles.V
 
 # Interpolation
-mpvalues = [MPValue(Vec{2}, LinearBSpline()) for _ in 1:length(particles)]
+mpvalues = [MPValue(LinearBSpline(), mesh) for _ in 1:length(particles)]
 
 # Plot results by `Plots.@gif`
 Δt = 0.001
