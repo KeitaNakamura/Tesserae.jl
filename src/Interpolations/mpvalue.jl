@@ -1,7 +1,7 @@
 abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
-function create_property(::Type{Vec{dim, T}}, it::Interpolation, diff) where {dim, T}
+function create_property(::Type{Vec{dim, T}}, it::Interpolation; diff=gradient) where {dim, T}
     dims = nfill(gridspan(it), Val(dim))
     (diff === nothing || diff === identity) && return (; w=zeros(T, dims))
     diff === gradient && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims))
@@ -55,8 +55,8 @@ function _MPValue(it::Union{Nothing, Interpolation}, prop::NamedTuple)
 end
 
 MPValue(prop::NamedTuple) = _MPValue(nothing, prop)
-MPValue(::Type{Vec{dim, T}}, it::Interpolation; diff=gradient) where {dim, T} = _MPValue(it, create_property(Vec{dim, T}, it, diff))
-MPValue(::Type{Vec{dim}}, it::Interpolation; diff=gradient) where {dim} = MPValue(Vec{dim, Float64}, it; diff)
+MPValue(::Type{Vec{dim, T}}, it::Interpolation; kwargs...) where {dim, T} = _MPValue(it, create_property(Vec{dim, T}, it; kwargs...))
+MPValue(::Type{Vec{dim}}, it::Interpolation; kwargs...) where {dim} = MPValue(Vec{dim, Float64}, it; kwargs...)
 
 Base.propertynames(mp::MPValue) = propertynames(getfield(mp, :prop))
 @inline function Base.getproperty(mp::MPValue, name::Symbol)
@@ -128,8 +128,8 @@ struct MPValueVector{It, Prop <: NamedTuple, Indices, ElType <: MPValue{It}} <: 
     indices::Indices
 end
 
-function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int; diff=gradient) where {dim, T}
-    prop = map(create_property(Vec{dim, T}, it, diff)) do prop
+function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int; kwargs...) where {dim, T}
+    prop = map(create_property(Vec{dim, T}, it; kwargs...)) do prop
         fill(zero(eltype(prop)), size(prop)..., n)
     end
     indices = fill(EmptyCartesianIndices(Val(dim)), n)
