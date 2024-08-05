@@ -99,11 +99,11 @@ function main(transfer::Transfer = FLIP(1.0))
         update!(mp, xc, grid.X)
     end
 
-    ## BlockSpace for threaded computation
+    ## BlockSpace for multithreading
     blockspace = BlockSpace(grid.X)
 
     ## Sparse matrix
-    A = create_sparse_matrix(Vec{3}, it, grid.X)
+    A = create_sparse_matrix(it, grid.X; ndofs=3)
 
     ## Output
     outdir = mkpath(joinpath("output", "dam_break"))

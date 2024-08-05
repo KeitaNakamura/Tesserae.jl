@@ -77,7 +77,7 @@ function main()
     end
 
     ## Sparse matrix
-    A = create_sparse_matrix(Vec{3}, it, grid.X)
+    A = create_sparse_matrix(it, grid.X)
 
     ## Outputs
     outdir = mkpath(joinpath("output", "implicit_jacobian_based"))
