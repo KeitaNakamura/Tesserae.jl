@@ -87,7 +87,7 @@ function main(transfer::Transfer = FLIP(1.0))
     @show length(particles)
 
     ## Interpolation
-    mpvalues = generate_mpvalues(Vec{2, Float64}, QuadraticBSpline(), length(particles))
+    mpvalues = generate_mpvalues(QuadraticBSpline(), grid.x, length(particles))
 
     ## Material model (neo-Hookean)
     function caucy_stress(F)

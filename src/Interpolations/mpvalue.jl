@@ -1,7 +1,14 @@
-abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
-function create_property(::Type{Vec{dim, T}}, it::Interpolation; diff=gradient) where {dim, T}
+#=
+To create a new interpolation, following methods need to be implemented.
+* Tesserae.create_property(::Type{T}, it::Interpolation, mesh; kwargs...) -> NamedTuple
+* Tesserae.update_property!(mp::MPValue, it::Interpolation, pt, mesh)
+* Tesserae.neighboringnodes(it::Interpolation, pt, mesh)
+* Tesserae.NeighboringNodesType(it::Interpolation, mesh)
+=#
+
+function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; diff=gradient) where {dim, T}
     dims = nfill(gridspan(it), Val(dim))
     (diff === nothing || diff === identity) && return (; w=zeros(T, dims))
     diff === gradient && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims))
@@ -46,17 +53,16 @@ struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
     indices::Indices
 end
 
-function _MPValue(it::Union{Nothing, Interpolation}, prop::NamedTuple)
-    @assert hasproperty(prop, :w)
-    @assert prop.w isa AbstractArray{<: Real}
-    dim = ndims(prop.w)
-    indices = fill(EmptyCartesianIndices(Val(dim)))
-    MPValue(it, prop, indices)
+function MPValue(it::Interpolation, prop::NamedTuple, ::Type{Tinds}) where {Tinds}
+    MPValue(it, prop, Array{Tinds}(undef))
 end
 
-MPValue(prop::NamedTuple) = _MPValue(nothing, prop)
-MPValue(::Type{Vec{dim, T}}, it::Interpolation; kwargs...) where {dim, T} = _MPValue(it, create_property(Vec{dim, T}, it; kwargs...))
-MPValue(::Type{Vec{dim}}, it::Interpolation; kwargs...) where {dim} = MPValue(Vec{dim, Float64}, it; kwargs...)
+function MPValue(::Type{T}, it::Interpolation, mesh::AbstractMesh; kwargs...) where {T}
+    prop = create_property(T, it, mesh; kwargs...)
+    Tinds = NeighboringNodesType(it, mesh)
+    MPValue(it, prop, Tinds)
+end
+MPValue(it::Interpolation, mesh::AbstractMesh; kwargs...) = MPValue(Float64, it, mesh; kwargs...)
 
 Base.propertynames(mp::MPValue) = propertynames(getfield(mp, :prop))
 @inline function Base.getproperty(mp::MPValue, name::Symbol)
@@ -128,20 +134,18 @@ struct MPValueVector{It, Prop <: NamedTuple, Indices, ElType <: MPValue{It}} <: 
     indices::Indices
 end
 
-function generate_mpvalues(::Type{Vec{dim, T}}, it::Interpolation, n::Int; kwargs...) where {dim, T}
-    prop = map(create_property(Vec{dim, T}, it; kwargs...)) do prop
+function generate_mpvalues(::Type{T}, it::Interpolation, mesh::AbstractMesh, n::Int; kwargs...) where {T}
+    prop = map(create_property(T, it, mesh; kwargs...)) do prop
         fill(zero(eltype(prop)), size(prop)..., n)
     end
-    indices = fill(EmptyCartesianIndices(Val(dim)), n)
+    indices = Array{NeighboringNodesType(it, mesh)}(undef, n)
     It = typeof(it)
     Prop = typeof(prop)
     Indices = typeof(indices)
     ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
     MPValueVector{It, Prop, Indices, ElType}(it, prop, indices)
 end
-generate_mpvalues(::Type{Vec{dim}}, it::Interpolation, n::Int; diff=gradient) where {dim} = generate_mpvalues(Vec{dim, Float64}, it, n; diff)
-
-generate_mpvalues(::Type{V}, it::Interpolation, n::Int) where {V} = generate_mpvalues(V, it, Val(1), n)
+generate_mpvalues(it::Interpolation, mesh::AbstractMesh, n::Int; kwargs...) = generate_mpvalues(Float64, it, mesh, n; kwargs...)
 
 Base.IndexStyle(::Type{<: MPValueVector}) = IndexLinear()
 Base.size(x::MPValueVector) = size(getfield(x, :indices))
@@ -198,17 +202,16 @@ end
     true
 end
 
-function update!(mp::MPValue, it::Interpolation, pt, mesh::AbstractMesh)
-    set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
+function update!(mp::MPValue, pt, mesh::AbstractMesh)
+    it = interpolation(mp)
+    set_neighboringnodes!(mp, neighboringnodes(it, pt, mesh))
     update_property!(mp, it, pt, mesh)
     mp
 end
-function update!(mp::MPValue, it::Interpolation, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
+function update!(mp::MPValue, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @debug @assert size(mesh) == size(filter)
-    set_neighboringnodes!(mp, neighboringnodes(interpolation(mp), pt, mesh))
+    it = interpolation(mp)
+    set_neighboringnodes!(mp, neighboringnodes(it, pt, mesh))
     update_property!(mp, it, pt, mesh, filter)
     mp
 end
-
-update!(mp::MPValue{<: Interpolation}, pt, mesh::AbstractMesh) = update!(mp, interpolation(mp), pt, mesh)
-update!(mp::MPValue{<: Interpolation}, pt, mesh::AbstractMesh, filter::AbstractArray{Bool}) = update!(mp, interpolation(mp), pt, mesh, filter)

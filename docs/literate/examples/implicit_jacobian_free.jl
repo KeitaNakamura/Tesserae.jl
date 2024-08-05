@@ -69,7 +69,7 @@ function main()
 
     ## Interpolation
     ## Use the kernel correction to properly handle the boundary conditions
-    mpvalues = generate_mpvalues(Vec{3}, KernelCorrection(QuadraticBSpline()), length(particles))
+    mpvalues = generate_mpvalues(KernelCorrection(QuadraticBSpline()), grid.X, length(particles))
 
     ## Neo-Hookean model
     function kirchhoff_stress(F)

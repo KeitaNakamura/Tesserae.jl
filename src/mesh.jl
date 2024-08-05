@@ -137,6 +137,8 @@ CartesianIndices((1:5,))
 end
 @inline EmptyCartesianIndices(::Val{dim}) where {dim} = CartesianIndices(nfill(1:0, Val(dim)))
 
+NeighboringNodesType(::Interpolation, ::CartesianMesh{dim}) where {dim} = CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
+
 """
     whichcell(x::Vec, mesh::CartesianMesh)
 

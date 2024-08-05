@@ -1,40 +1,41 @@
 @testset "MPValue" begin
-    for dim in (1,2,3)
-        @test eltype(MPValue(Vec{dim}, QuadraticBSpline())) ==
-              eltype(MPValue(Vec{dim, Float64}, QuadraticBSpline()))
-        for T in (Float32, Float64)
-            for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), uGIMP())
-                for extension in (identity, KernelCorrection)
-                    it = extension(kernel)
-                    mp = @inferred MPValue(Vec{dim,T}, it)
-                    @test Tesserae.interpolation(mp) === it
-                    @test mp.w isa Array{T}
-                    @test mp.∇w isa Array{Vec{dim,T}}
-                    @test ndims(mp.w) == dim
-                    @test ndims(mp.∇w) == dim
-                    @test size(mp.w) == size(mp.∇w)
-                    @test all(size(neighboringnodes(mp)) .< size(mp.w))
+    @testset "CartesianMesh" begin
+        for dim in (1,2,3)
+            mesh = CartesianMesh(1, ntuple(d->(0,10), dim)...)
+            for T in (Float32, Float64)
+                for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), uGIMP())
+                    for extension in (identity, KernelCorrection)
+                        it = extension(kernel)
+                        mp = @inferred MPValue(T, it, mesh)
+                        @test Tesserae.interpolation(mp) === it
+                        @test mp.w isa Array{T}
+                        @test mp.∇w isa Array{Vec{dim,T}}
+                        @test ndims(mp.w) == dim
+                        @test ndims(mp.∇w) == dim
+                        @test size(mp.w) == size(mp.∇w)
+                        @test typeof(neighboringnodes(mp)) === CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
 
-                    # diff = nothing
-                    mp = @inferred MPValue(Vec{dim,T}, it; diff=nothing)
-                    @test hasproperty(mp, :w) && mp.w isa Array{T}
-                    @test !hasproperty(mp, :∇w)
-                    @test !hasproperty(mp, :∇∇w)
-                    @test ndims(mp.w) == dim
-                    # diff = gradient
-                    mp = @inferred MPValue(Vec{dim,T}, it; diff=gradient)
-                    @test hasproperty(mp, :w)  && mp.w  isa Array{T}
-                    @test hasproperty(mp, :∇w) && mp.∇w isa Array{Vec{dim,T}}
-                    @test !hasproperty(mp, :∇∇w)
-                    @test ndims(mp.w) == ndims(mp.∇w) == dim
-                    @test size(mp.w) == size(mp.∇w)
-                    # diff = hessian
-                    mp = @inferred MPValue(Vec{dim,T}, it; diff=hessian)
-                    @test hasproperty(mp, :w)   && mp.w   isa Array{T}
-                    @test hasproperty(mp, :∇w)  && mp.∇w  isa Array{Vec{dim,T}}
-                    @test hasproperty(mp, :∇∇w) && mp.∇∇w isa Array{<: SymmetricSecondOrderTensor{dim,T}}
-                    @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇∇w) == dim
-                    @test size(mp.w) == size(mp.∇w) == size(mp.∇∇w)
+                        # diff = nothing
+                        mp = @inferred MPValue(T, it, mesh; diff=nothing)
+                        @test hasproperty(mp, :w) && mp.w isa Array{T}
+                        @test !hasproperty(mp, :∇w)
+                        @test !hasproperty(mp, :∇∇w)
+                        @test ndims(mp.w) == dim
+                        # diff = gradient
+                        mp = @inferred MPValue(T, it, mesh; diff=gradient)
+                        @test hasproperty(mp, :w)  && mp.w  isa Array{T}
+                        @test hasproperty(mp, :∇w) && mp.∇w isa Array{Vec{dim,T}}
+                        @test !hasproperty(mp, :∇∇w)
+                        @test ndims(mp.w) == ndims(mp.∇w) == dim
+                        @test size(mp.w) == size(mp.∇w)
+                        # diff = hessian
+                        mp = @inferred MPValue(T, it, mesh; diff=hessian)
+                        @test hasproperty(mp, :w)   && mp.w   isa Array{T}
+                        @test hasproperty(mp, :∇w)  && mp.∇w  isa Array{Vec{dim,T}}
+                        @test hasproperty(mp, :∇∇w) && mp.∇∇w isa Array{<: SymmetricSecondOrderTensor{dim,T}}
+                        @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇∇w) == dim
+                        @test size(mp.w) == size(mp.∇w) == size(mp.∇∇w)
+                    end
                 end
             end
         end
@@ -42,16 +43,17 @@
 end
 
 @testset "MPValueVector" begin
-    for dim in (1,2,3)
-        @test eltype(generate_mpvalues(Vec{dim}, QuadraticBSpline(), 2)) ==
-              eltype(generate_mpvalues(Vec{dim, Float64}, QuadraticBSpline(), 2))
-        for T in (Float32, Float64)
-            n = 100
-            mpvalues = @inferred generate_mpvalues(Vec{dim,T}, QuadraticBSpline(), n)
-            @test size(mpvalues) === (n,)
-            @test Tesserae.interpolation(mpvalues) === QuadraticBSpline()
-            @test all(eachindex(mpvalues)) do i
-                typeof(mpvalues[1]) === eltype(mpvalues)
+    @testset "CartesianMesh" begin
+        for dim in (1,2,3)
+            mesh = CartesianMesh(1, ntuple(d->(0,10), dim)...)
+            for T in (Float32, Float64)
+                n = 100
+                mpvalues = @inferred generate_mpvalues(T, QuadraticBSpline(), mesh, n)
+                @test size(mpvalues) === (n,)
+                @test Tesserae.interpolation(mpvalues) === QuadraticBSpline()
+                @test all(eachindex(mpvalues)) do i
+                    typeof(mpvalues[i]) === eltype(mpvalues)
+                end
             end
         end
     end
@@ -73,10 +75,10 @@ end
     end
 
     @testset "$it" for it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
-        for T in (Float32, Float64), dim in (1,2,3)
+        for dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValue(Vec{dim}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
+            mp = MPValue(it, mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
                 update!(mp, x, mesh)
@@ -91,8 +93,8 @@ end
     @testset "$it" for it in (SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline())
         for dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValue(Vec{dim}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
+            mp = MPValue(it, mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
                 update!(mp, x, mesh)
@@ -108,8 +110,8 @@ end
         it = uGIMP()
         for dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValue(Vec{dim}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
+            mp = MPValue(it, mesh)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
                 x = rand(Vec{dim})
@@ -128,8 +130,8 @@ end
         it = Wrapper(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)
-            mp = MPValue(Vec{dim}, it)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
+            mp = MPValue(it, mesh)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
                 x = rand(Vec{dim})
@@ -183,11 +185,11 @@ end
         j = findfirst(==(i), neighboringnodes(mp))
         j === nothing ? zero(eltype(mp.w)) : mp.w[j]
     end
-    function kernelvalues(mesh::CartesianMesh{dim, T}, kernel, poly, index::CartesianIndex{dim}) where {dim, T}
-        mp = MPValue(Vec{dim}, KernelCorrection(kernel, poly))
+    function kernelvalues(mesh::CartesianMesh{dim}, kernel, poly, index::CartesianIndex{dim}) where {dim}
+        mp = MPValue(KernelCorrection(kernel, poly), mesh)
         L = kernel isa QuadraticBSpline ? 1.5 :
             kernel isa CubicBSpline     ? 2.0 : error()
-        X = ntuple(i -> range(max(mesh[1][i],index[i]-L-1), min(mesh[end][i],index[i]+L-1)-sqrt(eps(T)), step=0.04), Val(dim))
+        X = ntuple(i -> range(max(mesh[1][i],index[i]-L-1), min(mesh[end][i],index[i]+L-1)-sqrt(eps(Float64)), step=0.04), Val(dim))
         Z = Array{Float64}(undef, length.(X))
         for i in CartesianIndices(Z)
             @inbounds Z[i] = kernelvalue(mp, Vec(map(getindex, X, Tuple(i))), mesh, index)

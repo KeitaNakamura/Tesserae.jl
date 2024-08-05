@@ -97,7 +97,7 @@ function main()
     @show length(particles)
 
     ## Interpolation
-    mpvalues = generate_mpvalues(Vec{2}, KernelCorrection(QuadraticBSpline()), length(particles))
+    mpvalues = generate_mpvalues(KernelCorrection(QuadraticBSpline()), grid.x, length(particles))
 
     ## Output
     outdir = mkpath(joinpath("output", "rigid_body_contact"))

@@ -92,9 +92,9 @@ function main(transfer::Transfer = FLIP(1.0))
 
     ## Interpolation
     it = KernelCorrection(QuadraticBSpline())
-    mpvalues = map(p -> MPValue(Vec{2}, it), eachindex(particles))
+    mpvalues = map(p -> MPValue(it, grid.X), eachindex(particles))
     mpvalues_cell = map(CartesianIndices(size(grid).-1)) do cell
-        mp = MPValue(Vec{2}, it)
+        mp = MPValue(it, grid.X)
         xc = cellcenter(cell, grid.X)
         update!(mp, xc, grid.X)
     end
