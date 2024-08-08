@@ -84,7 +84,7 @@ function main()
     @show length(particles)
 
     ## Precompute linear kernel values
-    mpvalues = generate_mpvalues(LinearBSpline(), grid.X, length(particles))
+    mpvalues = generate_mpvalues(BSpline(Linear()), grid.X, length(particles))
     for p in eachindex(particles, mpvalues)
         update!(mpvalues[p], particles.x[p], grid.X)
     end

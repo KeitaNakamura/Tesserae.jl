@@ -37,11 +37,11 @@ end
 end
 @inline value(f::uGIMP, pt, mesh::CartesianMesh, I::CartesianIndex) = value(f, getx(pt), pt.l, mesh, I)
 
-@inline function value(::typeof(gradient), gimp::uGIMP, pt, mesh::CartesianMesh, I::CartesianIndex)
+@inline function value(::Order{1}, gimp::uGIMP, pt, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
     reverse(gradient(x -> (@_propagate_inbounds_meta; value(gimp, x, pt.l, mesh, I)), getx(pt), :all))
 end
-@inline function value(::typeof(hessian), gimp::uGIMP, pt, mesh::CartesianMesh, I::CartesianIndex)
+@inline function value(::Order{2}, gimp::uGIMP, pt, mesh::CartesianMesh, I::CartesianIndex)
     @_propagate_inbounds_meta
     reverse(hessian(x -> (@_propagate_inbounds_meta; value(gimp, x, pt.l, mesh, I)), getx(pt), :all))
 end
@@ -50,6 +50,6 @@ end
     indices = neighboringnodes(mp)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        set_kernel_values!(mp, ip, value(difftype(mp), it, pt, mesh, i))
+        set_kernel_values!(mp, ip, value(derivative_order(mp), it, pt, mesh, i))
     end
 end

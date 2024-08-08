@@ -22,8 +22,7 @@ end
 Base.copy(A::AxisArray) = AxisArray(map(copy, A.axes))
 
 """
-    CartesianMesh(h, (xmin, xmax), (ymin, ymax)...)
-    CartesianMesh(T, h, (xmin, xmax), (ymin, ymax)...)
+    CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...)
 
 Construct `CartesianMesh` with the spacing `h`.
 

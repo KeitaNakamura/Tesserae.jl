@@ -66,7 +66,7 @@ function main()
 
     ## Interpolation
     ## Use the kernel correction to properly handle the boundary conditions
-    it = KernelCorrection(QuadraticBSpline())
+    it = KernelCorrection(BSpline(Quadratic()))
     mpvalues = generate_mpvalues(it, grid.X, length(particles))
 
     ## Neo-Hookean model

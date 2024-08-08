@@ -1,6 +1,19 @@
 abstract type Interpolation end
 abstract type Kernel <: Interpolation end
 
+struct Order{n}
+    Order{n}() where {n} = new{n::Int}()
+end
+Order(n::Int) = Order{n}()
+
+struct Degree{n}
+    Degree{n}() where {n} = new{n::Int}()
+end
+Degree(n::Int) = Degree{n}()
+const Linear    = Degree{1}
+const Quadratic = Degree{2}
+const Cubic     = Degree{3}
+
 #=
 To create a new interpolation, following methods need to be implemented.
 * Tesserae.create_property(::Type{T}, it::Interpolation, mesh; kwargs...) -> NamedTuple
@@ -9,33 +22,32 @@ To create a new interpolation, following methods need to be implemented.
 * Tesserae.NeighboringNodesType(it::Interpolation, mesh)
 =#
 
-function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; diff=gradient) where {dim, T}
+function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; derivative::Order=Order(1)) where {dim, T}
     dims = nfill(gridspan(it), Val(dim))
-    (diff === nothing || diff === identity) && return (; w=zeros(T, dims))
-    diff === gradient && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims))
-    diff === hessian  && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims))
-    diff === all      && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims), ∇∇∇w=fill(zero(Tensor{Tuple{@Symmetry{dim,dim,dim}}, T}), dims))
-    error("wrong differentiation type, choose `nothing`, `gradient` and `hessian`")
+    derivative isa Order{0} && return (; w=zeros(T, dims))
+    derivative isa Order{1} && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims))
+    derivative isa Order{2} && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims))
+    derivative isa Order{3} && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims), ∇∇∇w=fill(zero(Tensor{Tuple{@Symmetry{dim,dim,dim}}, T}), dims))
+    error("wrong derivative type, got $derivative")
 end
 
 NeighboringNodesType(::Interpolation, ::CartesianMesh{dim}) where {dim} = CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
 
 """
-    MPValue(Vec{dim}, interpolation)
-    MPValue(Vec{dim, T}, interpolation)
+    MPValue([T,] interpolation, mesh)
 
-`MPValue` stores properties for interpolation, such as the value of the kernel and its gradient.
+`MPValue` stores properties for interpolation, such as the value of the kernel and its derivatives.
 
 ```jldoctest
 julia> mesh = CartesianMesh(1.0, (0,5), (0,5)); # computational domain
 
 julia> x = Vec(2.2, 3.4); # particle coordinate
 
-julia> mp = MPValue(QuadraticBSpline(), mesh);
+julia> mp = MPValue(BSpline(Quadratic()), mesh);
 
 julia> update!(mp, x, mesh) # update `mp` at position `x` in `mesh`
 MPValue:
-  Interpolation: QuadraticBSpline()
+  Interpolation: BSpline(Quadratic())
   Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
   Neighboring nodes: CartesianIndices((2:4, 3:5))
 
@@ -94,22 +106,22 @@ end
     mp
 end
 
-@inline function difftype(mp::MPValue)
-    hasproperty(mp, :∇∇∇w) && return all
-    hasproperty(mp, :∇∇w)  && return hessian
-    hasproperty(mp, :∇w)   && return gradient
-    hasproperty(mp, :w)    && return identity
+@inline function derivative_order(mp::MPValue)
+    hasproperty(mp, :∇∇∇w) && return Order(3)
+    hasproperty(mp, :∇∇w)  && return Order(2)
+    hasproperty(mp, :∇w)   && return Order(1)
+    hasproperty(mp, :w)    && return Order(0)
     error("unreachable")
 end
-@inline @propagate_inbounds value(::typeof(identity), f, x, args...) = (value(f, x, args...),)
-@inline @propagate_inbounds value(::typeof(gradient), f, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
-@inline @propagate_inbounds value(::typeof(hessian), f, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
-@inline @propagate_inbounds function value(::typeof(all), f, x, args...)
+@inline @propagate_inbounds value(::Order{0}, f, x, args...) = (value(f, x, args...),)
+@inline @propagate_inbounds value(::Order{1}, f, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
+@inline @propagate_inbounds value(::Order{2}, f, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
+@inline @propagate_inbounds function value(::Order{3}, f, x, args...)
     @inline function ∇∇f(x)
         @_propagate_inbounds_meta
         hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x)
     end
-    (value(hessian, f, x, args...)..., gradient(∇∇f, x))
+    (value(Order(2), f, x, args...)..., gradient(∇∇f, x))
 end
 
 @inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,)::Tuple{Any}) = (mp.w[ip]=w;)

@@ -91,7 +91,7 @@ function main(transfer::Transfer = FLIP(1.0))
     @show length(particles)
 
     ## Interpolation
-    it = KernelCorrection(QuadraticBSpline())
+    it = KernelCorrection(BSpline(Quadratic()))
     mpvalues = map(p -> MPValue(it, grid.X), eachindex(particles))
     mpvalues_cell = map(CartesianIndices(size(grid).-1)) do cell
         mp = MPValue(it, grid.X)

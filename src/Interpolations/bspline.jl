@@ -1,8 +1,8 @@
-abstract type AbstractBSpline{order} <: Kernel end
+abstract type AbstractBSpline{D <: Degree} <: Kernel end
 
-gridspan(::AbstractBSpline{1}) = 2
-gridspan(::AbstractBSpline{2}) = 3
-gridspan(::AbstractBSpline{3}) = 4
+gridspan(::AbstractBSpline{Degree{1}}) = 2
+gridspan(::AbstractBSpline{Degree{2}}) = 3
+gridspan(::AbstractBSpline{Degree{3}}) = 4
 
 @inline function neighboringnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
@@ -17,21 +17,21 @@ gridspan(::AbstractBSpline{3}) = 4
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
-@inline _neighboringnodes_offset(::AbstractBSpline{1}) = 0.0
-@inline _neighboringnodes_offset(::AbstractBSpline{2}) = 0.5
-@inline _neighboringnodes_offset(::AbstractBSpline{3}) = 1.0
+@inline _neighboringnodes_offset(::AbstractBSpline{Degree{1}}) = 0.0
+@inline _neighboringnodes_offset(::AbstractBSpline{Degree{2}}) = 0.5
+@inline _neighboringnodes_offset(::AbstractBSpline{Degree{3}}) = 1.0
 
 # simple B-spline calculations
-function value(::AbstractBSpline{1}, ξ::Real)
+function value(::AbstractBSpline{Linear}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
 end
-function value(::AbstractBSpline{2}, ξ::Real)
+function value(::AbstractBSpline{Quadratic}, ξ::Real)
     ξ = abs(ξ)
     ξ < 0.5 ? (3 - 4ξ^2) / 4 :
     ξ < 1.5 ? (3 - 2ξ)^2 / 8 : zero(ξ)
 end
-function value(::AbstractBSpline{3}, ξ::Real)
+function value(::AbstractBSpline{Cubic}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
     ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
@@ -40,58 +40,58 @@ end
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
 # `x` must be normalized by `h`
-@inline Base.values(spline::AbstractBSpline, x, args...) = only(values(identity, spline, x, args...))
-@inline function Base.values(diff, ::AbstractBSpline{1}, x::Real)
+@inline Base.values(spline::AbstractBSpline, x, args...) = only(values(Order(0), spline, x, args...))
+@inline function Base.values(order, ::AbstractBSpline{Linear}, x::Real)
     T = typeof(x)
     ξ = fract(x)
     vals = tuple(@. T((1-ξ, ξ)))
-    if diff === gradient || diff === hessian || diff === all
+    if order isa Union{Order{1}, Order{2}, Order{3}}
         vals = (vals..., @. T((-1, 1)))
     end
-    if diff === hessian || diff === all
+    if order isa Union{Order{2}, Order{3}}
         vals = (vals..., @. T((0, 0)))
     end
-    if diff === all
+    if order isa Order{3}
         vals = (vals..., @. T((0, 0)))
     end
     vals
 end
-@inline function Base.values(diff, ::AbstractBSpline{2}, x::Real)
+@inline function Base.values(order, ::AbstractBSpline{Quadratic}, x::Real)
     T = typeof(x)
     x′ = fract(x - T(0.5))
     ξ = @. x′ - T((-0.5,0.5,1.5))
     vals = tuple(@. muladd(T((0.5,-1.0,0.5)), ξ^2, muladd(T((-1.5,0.0,1.5)), ξ, T((1.125,0.75,1.125)))))
-    if diff === gradient || diff === hessian || diff === all
+    if order isa Union{Order{1}, Order{2}, Order{3}}
         vals = (vals..., @. muladd(T((1.0,-2.0,1.0)), ξ, T((-1.5,0.0,1.5))))
     end
-    if diff === hessian || diff === all
+    if order isa Union{Order{2}, Order{3}}
         vals = (vals..., @. T((1.0,-2.0,1.0)))
     end
-    if diff === all
+    if order isa Order{3}
         vals = (vals..., @. T((0.0,0.0,0.0)))
     end
     vals
 end
-@inline function Base.values(diff, ::AbstractBSpline{3}, x::Real)
+@inline function Base.values(order, ::AbstractBSpline{Cubic}, x::Real)
     T = typeof(x)
     x′ = fract(x)
     ξ = @. x′ - T((-1,0,1,2))
     ξ² = @. ξ * ξ
     ξ³ = @. ξ² * ξ
     vals = tuple(@. muladd(T((-1/6,0.5,-0.5,1/6)), ξ³, muladd(T((1,-1,-1,1)), ξ², muladd(T((-2,0,0,2)), ξ, T((4/3,2/3,2/3,4/3))))))
-    if diff === gradient || diff === hessian || diff === all
+    if order isa Union{Order{1}, Order{2}, Order{3}}
         vals = (vals..., @. muladd(T((-0.5,1.5,-1.5,0.5)), ξ², muladd(T((2,-2,-2,2)), ξ, T((-2,0,0,2)))))
     end
-    if diff === hessian || diff === all
+    if order isa Union{Order{2}, Order{3}}
         vals = (vals..., @. muladd(T((-1.0,3.0,-3.0,1.0)), ξ, T((2,-2,-2,2))))
     end
-    if diff === all
+    if order isa Order{3}
         vals = (vals..., @. T((-1.0,3.0,-3.0,1.0)))
     end
     vals
 end
 
-@generated function Base.values(diff, spline::AbstractBSpline, x::Vec{dim}) where {dim}
+@generated function Base.values(order, spline::AbstractBSpline, x::Vec{dim}) where {dim}
     T_∇∇ws = SymmetricSecondOrderTensor{dim}
     ∇∇ws = Array{Expr}(undef,dim,dim)
     for j in 1:dim, i in 1:dim
@@ -106,57 +106,57 @@ end
     ∇∇∇ws = ∇∇∇ws[Tensorial.indices_unique(T_∇∇∇ws)]
     quote
         @_inline_meta
-        if diff === identity
-            @nexprs $dim d -> (x_d,) = values(identity, spline, x[d])
-        elseif diff === gradient
-            @nexprs $dim d -> (x_d, ∇x_d) = values(gradient, spline, x[d])
-        elseif diff === hessian
-            @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d) = values(hessian, spline, x[d])
-        elseif diff === all
-            @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d, ∇∇∇x_d) = values(all, spline, x[d])
+        if order isa Order{0}
+            @nexprs $dim d -> (x_d,) = values(order, spline, x[d])
+        elseif order isa Order{1}
+            @nexprs $dim d -> (x_d, ∇x_d) = values(order, spline, x[d])
+        elseif order isa Order{2}
+            @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d) = values(order, spline, x[d])
+        elseif order isa Order{3}
+            @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d, ∇∇∇x_d) = values(order, spline, x[d])
         else
-            error("wrong diff type, got $diff")
+            error("wrong order, got $order")
         end
 
         ws = @ntuple $dim d -> x_d
         wᵢ = tuple_otimes(ws)
-        diff === identity && return (wᵢ,)
+        order isa Order{0} && return (wᵢ,)
 
         ∇ws = @ntuple $dim i -> (@ntuple $dim α -> α==i ? ∇x_α : x_α)
         ∇wᵢ = map(Vec, map(tuple_otimes, ∇ws)...)
-        diff === gradient && return (wᵢ,∇wᵢ)
+        order isa Order{1} && return (wᵢ,∇wᵢ)
 
         ∇∇ws = tuple($(∇∇ws...))
         ∇∇wᵢ = map($T_∇∇ws, map(tuple_otimes, ∇∇ws)...)
-        diff === hessian && return (wᵢ,∇wᵢ,∇∇wᵢ)
+        order isa Order{2} && return (wᵢ,∇wᵢ,∇∇wᵢ)
 
         ∇∇∇ws = tuple($(∇∇∇ws...))
         ∇∇∇wᵢ = map($T_∇∇∇ws, map(tuple_otimes, ∇∇∇ws)...)
-        diff === all && return (wᵢ,∇wᵢ,∇∇wᵢ,∇∇∇wᵢ)
+        order isa Order{3} && return (wᵢ,∇wᵢ,∇∇wᵢ,∇∇∇wᵢ)
     end
 end
 @inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
 
-@inline function Base.values(::typeof(identity), spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
+@inline function Base.values(::Order{0}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
     h⁻¹ = spacing_inv(mesh)
     (values(spline, (x - get_xmin(mesh)) * h⁻¹),)
 end
-@inline function Base.values(::typeof(gradient), spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
+@inline function Base.values(order::Order{1}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
     xmin = get_xmin(mesh)
     h⁻¹ = spacing_inv(mesh)
-    w, ∇w = values(gradient, spline, (x-xmin)*h⁻¹)
+    w, ∇w = values(order, spline, (x-xmin)*h⁻¹)
     (w, ∇w*h⁻¹)
 end
-@inline function Base.values(::typeof(hessian), spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
+@inline function Base.values(order::Order{2}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
     xmin = get_xmin(mesh)
     h⁻¹ = spacing_inv(mesh)
-    w, ∇w, ∇∇w = values(hessian, spline, (x-xmin)*h⁻¹)
+    w, ∇w, ∇∇w = values(order, spline, (x-xmin)*h⁻¹)
     (w, ∇w*h⁻¹, ∇∇w*h⁻¹^2)
 end
-@inline function Base.values(::typeof(all), spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
+@inline function Base.values(order::Order{3}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
     xmin = get_xmin(mesh)
     h⁻¹ = spacing_inv(mesh)
-    w, ∇w, ∇∇w, ∇∇∇w = values(all, spline, (x-xmin)*h⁻¹)
+    w, ∇w, ∇∇w, ∇∇∇w = values(order, spline, (x-xmin)*h⁻¹)
     (w, ∇w*h⁻¹, ∇∇w*h⁻¹^2, ∇∇∇w*h⁻¹^3)
 end
 
@@ -166,40 +166,22 @@ function update_property!(mp::MPValue, it::AbstractBSpline, pt, mesh::CartesianM
     if isnearbounds
         @inbounds for ip in eachindex(indices)
             i = indices[ip]
-            set_kernel_values!(mp, ip, value(difftype(mp), it, getx(pt), mesh, i))
+            set_kernel_values!(mp, ip, value(derivative_order(mp), it, getx(pt), mesh, i))
         end
     else
-        set_kernel_values!(mp, values(difftype(mp), it, getx(pt), mesh))
+        set_kernel_values!(mp, values(derivative_order(mp), it, getx(pt), mesh))
     end
 end
 
-struct BSpline{order} <: AbstractBSpline{order}
-    BSpline{order}() where {order} = new{order::Int}()
+"""
+    BSpline(degree)
+
+B-spline kernel.
+"""
+struct BSpline{D} <: AbstractBSpline{D}
+    degree::D
 end
-
-"""
-    BSpline{1}()
-    LinearBSpline()
-
-Linear B-spline kernel.
-"""
-const LinearBSpline = BSpline{1}
-
-"""
-    BSpline{2}()
-    QuadraticBSpline()
-
-Quadratic B-spline kernel.
-"""
-const QuadraticBSpline = BSpline{2}
-
-"""
-    BSpline{3}()
-    CubicBSpline()
-
-Cubic B-spline kernel.
-"""
-const CubicBSpline = BSpline{3}
+Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
 
 @generated function value(spline::BSpline, ξ::Vec{dim}) where {dim}
     quote
@@ -216,45 +198,25 @@ end
     value(spline, ξ)
 end
 
-struct SteffenBSpline{order} <: AbstractBSpline{order}
-    SteffenBSpline{order}() where {order} = new{order::Int}()
+"""
+    BSpline(degree)
+
+B-spline kernel with boundary treatments by [^Steffen].
+
+[^Steffen]: [Steffen, M., Kirby, R. M., & Berzins, M. (2008). Analysis and reduction of quadrature errors in the material point method (MPM). *International journal for numerical methods in engineering*, 76(6), 922-948.](https://doi.org/10.1002/nme.2360)
+"""
+struct SteffenBSpline{D} <: AbstractBSpline{D}
+    degree::D
 end
-
-"""
-    SteffenBSpline{1}()
-    SteffenLinearBSpline()
-
-Linear B-spline kernel.
-"""
-const SteffenLinearBSpline = SteffenBSpline{1}
-
-"""
-    SteffenBSpline{2}()
-    SteffenQuadraticBSpline()
-
-Quadratic B-spline kernel proposed by [^Steffen].
-
-[^Steffen]: [Steffen, M., Kirby, R. M., & Berzins, M. (2008). Analysis and reduction of quadrature errors in the material point method (MPM). *International journal for numerical methods in engineering*, 76(6), 922-948.](https://doi.org/10.1002/nme.2360)
-"""
-const SteffenQuadraticBSpline = SteffenBSpline{2}
-
-"""
-    SteffenBSpline{3}()
-    SteffenCubicBSpline()
-
-Cubic B-spline kernel proposed by [^Steffen].
-
-[^Steffen]: [Steffen, M., Kirby, R. M., & Berzins, M. (2008). Analysis and reduction of quadrature errors in the material point method (MPM). *International journal for numerical methods in engineering*, 76(6), 922-948.](https://doi.org/10.1002/nme.2360)
-"""
-const SteffenCubicBSpline = SteffenBSpline{3}
+Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", spline.degree, ")")
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
 # International journal for numerical methods in engineering, 76(6), 922-948.
-function value(spline::SteffenBSpline{1}, ξ::Real, pos::Int)::typeof(ξ)
+function value(spline::SteffenBSpline{Linear}, ξ::Real, pos::Int)::typeof(ξ)
     value(spline, ξ)
 end
-function value(spline::SteffenBSpline{2}, ξ::Real, pos::Int)::typeof(ξ)
+function value(spline::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)::typeof(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 0.5 ? (3 - 4ξ^2) / 3 :
@@ -269,7 +231,7 @@ function value(spline::SteffenBSpline{2}, ξ::Real, pos::Int)::typeof(ξ)
         value(spline, ξ)
     end
 end
-function value(spline::SteffenBSpline{3}, ξ::Real, pos::Int)::typeof(ξ)
+function value(spline::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 4 :

@@ -3,7 +3,7 @@
         for dim in (1,2,3)
             mesh = CartesianMesh(1, ntuple(d->(0,10), dim)...)
             for T in (Float32, Float64)
-                for kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), uGIMP())
+                for kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
                     for extension in (identity, KernelCorrection)
                         it = extension(kernel)
                         mp = @inferred MPValue(T, it, mesh)
@@ -15,21 +15,21 @@
                         @test size(mp.w) == size(mp.∇w)
                         @test typeof(neighboringnodes(mp)) === CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
 
-                        # diff = nothing
-                        mp = @inferred MPValue(T, it, mesh; diff=nothing)
+                        # derivative = Order(0)
+                        mp = @inferred MPValue(T, it, mesh; derivative=Order(0))
                         @test hasproperty(mp, :w) && mp.w isa Array{T}
                         @test !hasproperty(mp, :∇w)
                         @test !hasproperty(mp, :∇∇w)
                         @test ndims(mp.w) == dim
-                        # diff = gradient
-                        mp = @inferred MPValue(T, it, mesh; diff=gradient)
+                        # derivative = Order(1)
+                        mp = @inferred MPValue(T, it, mesh; derivative=Order(1))
                         @test hasproperty(mp, :w)  && mp.w  isa Array{T}
                         @test hasproperty(mp, :∇w) && mp.∇w isa Array{Vec{dim,T}}
                         @test !hasproperty(mp, :∇∇w)
                         @test ndims(mp.w) == ndims(mp.∇w) == dim
                         @test size(mp.w) == size(mp.∇w)
-                        # diff = hessian
-                        mp = @inferred MPValue(T, it, mesh; diff=hessian)
+                        # derivative = Order(2)
+                        mp = @inferred MPValue(T, it, mesh; derivative=Order(2))
                         @test hasproperty(mp, :w)   && mp.w   isa Array{T}
                         @test hasproperty(mp, :∇w)  && mp.∇w  isa Array{Vec{dim,T}}
                         @test hasproperty(mp, :∇∇w) && mp.∇∇w isa Array{<: SymmetricSecondOrderTensor{dim,T}}
@@ -48,9 +48,9 @@ end
             mesh = CartesianMesh(1, ntuple(d->(0,10), dim)...)
             for T in (Float32, Float64)
                 n = 100
-                mpvalues = @inferred generate_mpvalues(T, QuadraticBSpline(), mesh, n)
+                mpvalues = @inferred generate_mpvalues(T, BSpline(Quadratic()), mesh, n)
                 @test size(mpvalues) === (n,)
-                @test Tesserae.interpolation(mpvalues) === QuadraticBSpline()
+                @test Tesserae.interpolation(mpvalues) === BSpline(Quadratic())
                 @test all(eachindex(mpvalues)) do i
                     typeof(mpvalues[i]) === eltype(mpvalues)
                 end
@@ -74,7 +74,7 @@ end
         isapprox(mapreduce((j,i) -> X[i]⊗mp.∇w[j], +, CI, indices), I)
     end
 
-    @testset "$it" for it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
+    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
@@ -90,7 +90,7 @@ end
         end
     end
 
-    @testset "$it" for it in (SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline())
+    @testset "$it" for it in (SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
@@ -126,7 +126,7 @@ end
         end
     end
 
-    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (LinearBSpline(), QuadraticBSpline(), CubicBSpline(), SteffenLinearBSpline(), SteffenQuadraticBSpline(), SteffenCubicBSpline(), uGIMP())
+    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
         it = Wrapper(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)
@@ -146,29 +146,29 @@ end
 
 @testset "B-spline fast computation" begin
     # check by autodiff
-    @testset "$it" for it in (LinearBSpline(), QuadraticBSpline(), CubicBSpline())
+    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             xp = rand(Vec{dim})
             # gradient
-            grad = values(gradient, it, xp)[end]
-            grad_autodiff = gradient(xp -> Tensor(values(identity, it, xp)[1]), xp)
+            grad = values(Order(1), it, xp)[end]
+            grad_autodiff = gradient(xp -> Tensor(values(it, xp)), xp)
             for i in CartesianIndices(grad)
                 for j in CartesianIndices(grad[i])
                     @test grad[i][j] ≈ grad_autodiff[i,j]
                 end
             end
             # hessian
-            hess = values(hessian, it, xp)[end]
-            hess_autodiff = hessian(xp -> Tensor(values(identity, it, xp)[1]), xp)
+            hess = values(Order(2), it, xp)[end]
+            hess_autodiff = hessian(xp -> Tensor(values(it, xp)), xp)
             for i in CartesianIndices(hess)
                 for j in CartesianIndices(hess[i])
                     @test hess[i][j] ≈ hess_autodiff[i,j]
                 end
             end
             # all
-            al = values(all, it, xp)[end]
-            al_autodiff = gradient(xp -> hessian(xp -> Tensor(values(identity, it, xp)[1]), xp), xp)
+            al = values(Order(3), it, xp)[end]
+            al_autodiff = gradient(xp -> hessian(xp -> Tensor(values(it, xp)), xp), xp)
             for i in CartesianIndices(al)
                 for j in CartesianIndices(al[i])
                     @test al[i][j] ≈ al_autodiff[i,j]
@@ -187,8 +187,8 @@ end
     end
     function kernelvalues(mesh::CartesianMesh{dim}, kernel, poly, index::CartesianIndex{dim}) where {dim}
         mp = MPValue(KernelCorrection(kernel, poly), mesh)
-        L = kernel isa QuadraticBSpline ? 1.5 :
-            kernel isa CubicBSpline     ? 2.0 : error()
+        L = kernel isa BSpline{Quadratic} ? 1.5 :
+            kernel isa BSpline{Cubic}     ? 2.0 : error()
         X = ntuple(i -> range(max(mesh[1][i],index[i]-L-1), min(mesh[end][i],index[i]+L-1)-sqrt(eps(Float64)), step=0.04), Val(dim))
         Z = Array{Float64}(undef, length.(X))
         for i in CartesianIndices(Z)
@@ -200,10 +200,10 @@ end
         tol = sqrt(eps(typeof(x)))
         x > -tol
     end
-    @testset "QuadraticBSpline" begin
-        kern = QuadraticBSpline()
-        lin = Tesserae.LinearPolynomial()
-        multilin = Tesserae.MultiLinearPolynomial()
+    @testset "Quadratic B-spline" begin
+        kern = BSpline(Quadratic())
+        lin = Polynomial(Linear())
+        multilin = Polynomial(MultiLinear())
         @testset "2D" begin
             # boundaries
             mesh = CartesianMesh(1, (0,10), (0,10))
@@ -239,10 +239,10 @@ end
             end
         end
     end
-    @testset "CubicBSpline" begin
-        kern = CubicBSpline()
-        lin = Tesserae.LinearPolynomial()
-        multilin = Tesserae.MultiLinearPolynomial()
+    @testset "Cubic B-spline" begin
+        kern = BSpline(Cubic())
+        lin = Polynomial(Linear())
+        multilin = Polynomial(MultiLinear())
         @testset "2D" begin
             # for boundaries
             mesh = CartesianMesh(1, (0,10), (0,10))
