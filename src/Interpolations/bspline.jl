@@ -41,7 +41,7 @@ end
 # Fast calculations for value, gradient and hessian
 # `x` must be normalized by `h`
 @inline Base.values(spline::AbstractBSpline, x, args...) = only(values(Order(0), spline, x, args...))
-@inline function Base.values(order, ::AbstractBSpline{Linear}, x::Real)
+@inline function Base.values(order::Order, ::AbstractBSpline{Linear}, x::Real)
     T = typeof(x)
     ξ = fract(x)
     vals = tuple(@. T((1-ξ, ξ)))
@@ -56,7 +56,7 @@ end
     end
     vals
 end
-@inline function Base.values(order, ::AbstractBSpline{Quadratic}, x::Real)
+@inline function Base.values(order::Order, ::AbstractBSpline{Quadratic}, x::Real)
     T = typeof(x)
     x′ = fract(x - T(0.5))
     ξ = @. x′ - T((-0.5,0.5,1.5))
@@ -72,7 +72,7 @@ end
     end
     vals
 end
-@inline function Base.values(order, ::AbstractBSpline{Cubic}, x::Real)
+@inline function Base.values(order::Order, ::AbstractBSpline{Cubic}, x::Real)
     T = typeof(x)
     x′ = fract(x)
     ξ = @. x′ - T((-1,0,1,2))
@@ -91,7 +91,7 @@ end
     vals
 end
 
-@generated function Base.values(order, spline::AbstractBSpline, x::Vec{dim}) where {dim}
+@generated function Base.values(order::Order, spline::AbstractBSpline, x::Vec{dim}) where {dim}
     T_∇∇ws = SymmetricSecondOrderTensor{dim}
     ∇∇ws = Array{Expr}(undef,dim,dim)
     for j in 1:dim, i in 1:dim
