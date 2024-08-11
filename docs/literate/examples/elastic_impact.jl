@@ -19,6 +19,7 @@ abstract type Transfer end
 struct FLIP <: Transfer α::Float64 end
 struct APIC <: Transfer end
 struct TPIC <: Transfer end
+struct XPIC <: Transfer m::Int end
 
 function main(transfer::Transfer = FLIP(1.0))
 
@@ -48,6 +49,9 @@ function main(transfer::Transfer = FLIP(1.0))
         f   :: Vec{2, Float64}
         v   :: Vec{2, Float64}
         vⁿ  :: Vec{2, Float64}
+        # XPIC
+        vᵣ★ :: Vec{2, Float64}
+        v★  :: Vec{2, Float64}
     end
     ParticleProp = @NamedTuple begin
         x  :: Vec{2, Float64}
@@ -58,7 +62,11 @@ function main(transfer::Transfer = FLIP(1.0))
         ∇v :: SecondOrderTensor{2, Float64, 4}
         σ  :: SymmetricSecondOrderTensor{2, Float64, 3}
         F  :: SecondOrderTensor{2, Float64, 4}
-        B  :: SecondOrderTensor{2, Float64, 4} # for APIC
+        # APIC
+        B  :: SecondOrderTensor{2, Float64, 4}
+        # XPIC
+        vᵣ★ :: Vec{2, Float64}
+        a★  :: Vec{2, Float64}
     end
 
     ## Background grid
@@ -118,7 +126,7 @@ function main(transfer::Transfer = FLIP(1.0))
         end
 
         ## Particle-to-grid transfer
-        if transfer isa FLIP
+        if transfer isa Union{FLIP, XPIC}
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * v[p]
@@ -165,6 +173,27 @@ function main(transfer::Transfer = FLIP(1.0))
                 v[p]  = @∑ w[ip] * v[i]
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 x[p] += Δt * v[p]
+            end
+        elseif transfer isa XPIC
+            local m = transfer.m
+            @. grid.vᵣ★ = grid.vⁿ
+            @. grid.v★ = zero(grid.v★)
+            for r in 2:m
+                @G2P grid=>i particles=>p mpvalues=>ip begin
+                    vᵣ★[p] = @∑ w[ip] * vᵣ★[i]
+                end
+                @P2G grid=>i particles=>p mpvalues=>ip begin
+                    vᵣ★[i] = @∑ (m-r+1)/r * w[ip] * m[p] * vᵣ★[p] * m⁻¹[i]
+                    v★[i] += (-1)^r * vᵣ★[i]
+                end
+            end
+            @G2P grid=>i particles=>p mpvalues=>ip begin
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                a★[p] = @∑ w[ip] * (v[p] + m*(v★[i] - vⁿ[i])) / Δt
+                v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+                x[p] += @∑ w[ip] * (v[i] + vⁿ[i]) * Δt / 2
+                v[p] -= a★[p] * Δt
+                x[p] -= a★[p] * Δt^2 / 2
             end
         end
 
@@ -213,4 +242,5 @@ if @isdefined(RUN_TESTS) && RUN_TESTS #src
     @test main(FLIP(0.99)) < 0.1      #src
     @test main(APIC())     < 0.1      #src
     @test main(TPIC())     < 0.1      #src
+    @test main(XPIC(5))    < 0.1      #src
 end                                   #src
