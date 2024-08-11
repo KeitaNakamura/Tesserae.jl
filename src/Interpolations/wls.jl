@@ -15,7 +15,7 @@ gridspan(wls::WLS) = gridspan(get_kernel(wls))
 end
 
 # a bit faster implementation for B-splines
-@inline function update_property!(mp::MPValue, it::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline function update_property!(mp::MPValue, it::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
     isnearbounds = size(mp.w) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
