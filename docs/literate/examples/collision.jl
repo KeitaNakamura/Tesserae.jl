@@ -1,16 +1,18 @@
 # # Transfer schemes
 #
 # In this example, the following transfer schemes are demonstrated:
-# * PIC--FLIP mixed transfer[^1]
-# * Affine PIC (APIC) transfer[^2]
-# * Taylor PIC (TPIC) transfer[^3]
+# * PIC--FLIP mixed velocity[^1]
+# * Affine PIC (APIC)[^2]
+# * Taylor PIC (TPIC)[^3]
+# * eXtended PIC (XPIC)[^4]
 #
-# The problem evolves the elastic impact between two rings, which is consistent with previous studies[^4].
+# The problem involves the collision between two elastic rings, which is consistent with previous study[^5].
 #
-# [^1]: [Zhu, Y. and Bridson, R., 2005. Animating sand as a fluid. ACM Transactions on Graphics (TOG), 24(3), pp.965-972.](https://doi.org/10.1145/1073204.1073298)
+# [^1]: [Stomakhin, A., Schroeder, C., Chai, L., Teran, J. and Selle, A., 2013. A material point method for snow simulation. ACM Transactions on Graphics (TOG), 32(4), pp.1-10.](https://doi.org/10.1145/2461912.2461948)
 # [^2]: [Jiang, C., Schroeder, C., Selle, A., Teran, J. and Stomakhin, A., 2015. The affine particle-in-cell method. ACM Transactions on Graphics (TOG), 34(4), pp.1-10.](https://doi.org/10.1145/2766996)
 # [^3]: [Nakamura, K., Matsumura, S. and Mizutani, T., 2023. Taylor particle-in-cell transfer and kernel correction for material point method. Computer Methods in Applied Mechanics and Engineering, 403, p.115720.](https://doi.org/10.1016/j.cma.2022.115720)
-# [^4]: [Li, X., Fang, Y., Li, M. and Jiang, C., 2022. BFEMP: Interpenetration-free MPM–FEM coupling with barrier contact. Computer Methods in Applied Mechanics and Engineering, 390, p.114350.](https://doi.org/10.1016/j.cma.2021.114350)
+# [^4]: [Hammerquist, C.C. and Nairn, J.A., 2017. A new method for material point method particle updates that reduces noise and enhances stability. Computer methods in applied mechanics and engineering, 318, pp.724-738.](https://doi.org/10.1016/j.cma.2017.01.035)
+# [^5]: [Li, X., Fang, Y., Li, M. and Jiang, C., 2022. BFEMP: Interpenetration-free MPM–FEM coupling with barrier contact. Computer Methods in Applied Mechanics and Engineering, 390, p.114350.](https://doi.org/10.1016/j.cma.2021.114350)
 #
 
 using Tesserae
@@ -50,7 +52,7 @@ function main(transfer::Transfer = FLIP(1.0))
         f   :: Vec{2, Float64}
         v   :: Vec{2, Float64}
         vⁿ  :: Vec{2, Float64}
-        # XPIC
+        ## XPIC
         vᵣ★ :: Vec{2, Float64}
         v★  :: Vec{2, Float64}
     end
@@ -63,9 +65,9 @@ function main(transfer::Transfer = FLIP(1.0))
         ∇v :: SecondOrderTensor{2, Float64, 4}
         σ  :: SymmetricSecondOrderTensor{2, Float64, 3}
         F  :: SecondOrderTensor{2, Float64, 4}
-        # APIC
+        ## APIC
         B  :: SecondOrderTensor{2, Float64, 4}
-        # XPIC
+        ## XPIC
         vᵣ★ :: Vec{2, Float64}
         a★  :: Vec{2, Float64}
     end
@@ -115,7 +117,7 @@ function main(transfer::Transfer = FLIP(1.0))
     end
 
     ## Outputs
-    outdir = mkpath(joinpath("output", "elastic_impact"))
+    outdir = mkpath(joinpath("output", "collision"))
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # create file
 
