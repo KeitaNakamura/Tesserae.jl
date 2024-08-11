@@ -20,7 +20,7 @@ makedocs(;
         "Home" => "index.md",
         "getting_started.md",
         "Examples" => [
-            "examples/elastic_impact.md",
+            "examples/collision.md",
             "examples/tlmpm_vortex.md",
             "examples/implicit_jacobian_free.md",
             "examples/implicit_jacobian_based.md",
