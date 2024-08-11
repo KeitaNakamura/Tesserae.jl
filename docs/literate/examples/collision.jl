@@ -14,6 +14,7 @@
 #
 
 using Tesserae
+using StableRNGs #src
 
 abstract type Transfer end
 struct FLIP <: Transfer α::Float64 end
@@ -74,7 +75,11 @@ function main(transfer::Transfer = FLIP(1.0))
 
     ## Particles
     particles = let
+        if @isdefined(RUN_TESTS) && RUN_TESTS                                                    #src
+        pts = generate_particles(ParticleProp, grid.x; alg=PoissonDiskSampling(StableRNG(1234))) #src
+        else                                                                                     #src
         pts = generate_particles(ParticleProp, grid.x)
+        end                                                                                      #src
         pts.V .= pts.V⁰ .= volume(grid.x) / length(pts)
 
         lhs = findall(pts.x) do (x, y)
@@ -98,10 +103,15 @@ function main(transfer::Transfer = FLIP(1.0))
     mpvalues = generate_mpvalues(BSpline(Quadratic()), grid.x, length(particles))
 
     ## Material model (neo-Hookean)
+    function stored_energy(C)
+        dim = size(C, 1)
+        J = √det(C)
+        μ/2*(tr(C)-dim) - μ*log(J) + λ/2*(log(J))^2
+    end
     function caucy_stress(F)
-        b = F ⋅ F'
         J = det(F)
-        (μ*(b-I) + λ*log(J)*I) / J
+        S = 2 * gradient(stored_energy, F' ⋅ F)
+        symmetric(inv(J) * F ⋅ S ⋅ F')
     end
 
     ## Outputs
@@ -232,15 +242,17 @@ function main(transfer::Transfer = FLIP(1.0))
             end
         end
     end
-    norm(mean(particles.x)) #src
+    Wₖ = sum(pt -> pt.m * (pt.v ⋅ pt.v) / 2, particles)           #src
+    Wₑ = sum(pt -> pt.V * stored_energy(pt.F' ⋅ pt.F), particles) #src
+    Wₖ + Wₑ                                                       #src
 end
 
-using Test                            #src
-if @isdefined(RUN_TESTS) && RUN_TESTS #src
-    @test main(FLIP(0.0))  < 0.1      #src
-    @test main(FLIP(1.0))  < 0.1      #src
-    @test main(FLIP(0.99)) < 0.1      #src
-    @test main(APIC())     < 0.1      #src
-    @test main(TPIC())     < 0.1      #src
-    @test main(XPIC(5))    < 0.1      #src
-end                                   #src
+using Test                                     #src
+if @isdefined(RUN_TESTS) && RUN_TESTS          #src
+    @test main(FLIP(0.0))  ≈ 8.004e6 rtol=1e-3 #src
+    @test main(FLIP(1.0))  ≈ 1.365e7 rtol=1e-3 #src
+    @test main(FLIP(0.99)) ≈ 1.355e7 rtol=1e-3 #src
+    @test main(APIC())     ≈ 1.347e7 rtol=1e-3 #src
+    @test main(TPIC())     ≈ 1.348e7 rtol=1e-3 #src
+    @test main(XPIC(5))    ≈ 1.338e7 rtol=1e-3 #src
+end                                            #src
