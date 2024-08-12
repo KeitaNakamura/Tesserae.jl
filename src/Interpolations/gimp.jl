@@ -21,11 +21,11 @@ end
 # The generalized interpolation material point method.
 # Computer Modeling in Engineering and Sciences, 5(6), 477-496.
 # boundary treatment is ignored
-function value(::uGIMP, ξ::Real, l::Real) # `2l` is the particle size normalized by h
+function value(::uGIMP, ξ::Real, l::Real) # `l` is the particle size normalized by h
     ξ = abs(ξ)
-    ξ < l   ? 1 - (ξ^2 + l^2) / 2l :
-    ξ < 1-l ? 1 - ξ                :
-    ξ < 1+l ? (1+l-ξ)^2 / 4l       : zero(ξ)
+    ξ < l/2   ? 1 - (4ξ^2+l^2)/4l :
+    ξ < 1-l/2 ? 1 - ξ             :
+    ξ < 1+l/2 ? (1+l/2-ξ)^2 / 2l  : zero(ξ)
 end
 @inline value(f::uGIMP, ξ::Vec, l::Real) = prod(value.((f,), ξ, l))
 @inline function value(f::uGIMP, xₚ::Vec, lₚ::Real, mesh::CartesianMesh, I::CartesianIndex)

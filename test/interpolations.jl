@@ -112,11 +112,11 @@ end
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             mp = MPValue(it, mesh)
-            l = 0.5*spacing(mesh) / 2
+            l = 0.5*spacing(mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
                 update!(mp, (;x,l), mesh)
-                isnearbounds = any(.!(l .< x .< 1-l))
+                isnearbounds = any(.!(l/2 .< x .< 1-l/2))
                 PU = check_partition_of_unity(mp, x)
                 LFR = check_linear_field_reproduction(mp, x, mesh)
                 # uGIMP doesn't have pertition of unity when very closed to boundaries
