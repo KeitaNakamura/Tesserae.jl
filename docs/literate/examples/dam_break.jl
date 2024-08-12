@@ -5,11 +5,10 @@
 using Tesserae
 using LinearAlgebra
 
-abstract type Transfer end
-struct FLIP <: Transfer α::Float64 end
-struct TPIC <: Transfer end
+struct FLIP α::Float64 end
+struct TPIC end
 
-function main(transfer::Transfer = FLIP(1.0))
+function main(transfer = FLIP(1.0))
 
     ## Simulation parameters
     h  = 0.02   # Grid spacing

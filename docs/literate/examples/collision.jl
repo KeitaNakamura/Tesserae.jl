@@ -18,13 +18,12 @@
 using Tesserae
 using StableRNGs #src
 
-abstract type Transfer end
-struct FLIP <: Transfer α::Float64 end
-struct APIC <: Transfer end
-struct TPIC <: Transfer end
-struct XPIC <: Transfer m::Int end
+struct FLIP α::Float64 end
+struct APIC end
+struct TPIC end
+struct XPIC m::Int end
 
-function main(transfer::Transfer = FLIP(1.0))
+function main(transfer = FLIP(1.0))
 
     ## Simulation parameters
     h   = 0.1 # Grid spacing
