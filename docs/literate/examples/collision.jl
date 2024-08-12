@@ -1,5 +1,9 @@
 # # Transfer schemes
 #
+# ```@raw html
+# <img src="https://github.com/user-attachments/assets/3a76429f-2306-4d67-810d-b5e19208fc4c" width="600"/>
+# ```
+#
 # In this example, the following transfer schemes are demonstrated:
 # * PIC--FLIP mixed velocity[^1]
 # * Affine PIC (APIC)[^2]
