@@ -21,10 +21,10 @@ makedocs(;
         "getting_started.md",
         "Examples" => [
             "examples/collision.md",
-            "examples/tlmpm_vortex.md",
             "examples/implicit_jacobian_free.md",
             "examples/implicit_jacobian_based.md",
             # "examples/dam_break.md",
+            "examples/tlmpm_vortex.md",
             "examples/rigid_body_contact.md",
         ],
     ],

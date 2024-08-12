@@ -1,5 +1,9 @@
 # # Total Lagrangian MPM
 #
+# ```@raw html
+# <img src="https://github.com/user-attachments/assets/81937c2e-4149-4a5f-8011-a6249fd66ea4" width="300"/>
+# ```
+#
 # This example demonstrates the total lagrangian material point method[^1].
 # The implementation solves generalized vortex problem[^1] using a linear kernel.
 #
