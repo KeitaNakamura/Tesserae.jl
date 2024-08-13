@@ -1,7 +1,7 @@
 # # Transfer schemes
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/3a76429f-2306-4d67-810d-b5e19208fc4c" width="600"/>
+# <img src="https://github.com/user-attachments/assets/1bb2dd02-34af-43ef-a42f-60fc09eea8d3" width="600"/>
 # ```
 #
 # In this example, the following transfer schemes are demonstrated:

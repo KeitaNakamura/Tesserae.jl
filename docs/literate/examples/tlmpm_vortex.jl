@@ -1,7 +1,7 @@
 # # Total Lagrangian MPM
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/81937c2e-4149-4a5f-8011-a6249fd66ea4" width="300"/>
+# <img src="https://github.com/user-attachments/assets/7d134011-eaaf-4a0b-8e2e-ed492438cebf" width="300"/>
 # ```
 #
 # This example demonstrates the total lagrangian material point method[^1].
