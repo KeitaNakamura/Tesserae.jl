@@ -1,4 +1,12 @@
 # # Stabilized mixed MPM for incompressible fluid
+#
+# ```@raw html
+# <img src="https://github.com/user-attachments/assets/76fd800e-fda7-4d89-afcd-9a8a2178ab41" width="600"/>
+# ```
+#
+# This example employs stabilized mixed MPM with the variational multiscale method (VMS)[^1].
+#
+# [^1]: [Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.](https://doi.org/10.1016/j.cma.2023.116644)
 
 # ## Main function
 
@@ -14,7 +22,7 @@ function main(transfer = FLIP(1.0))
     h  = 0.02   # Grid spacing
     T  = 7.0    # Time span
     g  = 9.81   # Gravity acceleration
-    Δt = 2.5e-3 # Timestep
+    Δt = 2.0e-3 # Timestep
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
         T = 0.2                           #src
     end                                   #src
@@ -147,9 +155,7 @@ function main(transfer = FLIP(1.0))
             end
         end
 
-        ## Remove negative mass occasionally generated due to the kernel correction
-        ## by forcing negative values to zero. While not an ideal solution, this sufficiently
-        ## reduces spurious pressure oscillations without sacrificing simulation accuracy.
+        ## Truncate the negative mass caused by the kernel correction to zero.
         @. grid.m = max(grid.m, 0)
 
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
@@ -212,9 +218,9 @@ function main(transfer = FLIP(1.0))
                 openvtm(string(pvdfile, step)) do vtm
                     vorticity(∇v) = ∇v[2,1] - ∇v[1,2]
                     openvtk(vtm, particles.x) do vtk
-                        vtk["pressure"] = particles.p
-                        vtk["velocity"] = particles.v
-                        vtk["vorticity"] = vorticity.(particles.∇v)
+                        vtk["Pressure (Pa)"] = particles.p
+                        vtk["Velocity (m/s)"] = particles.v
+                        vtk["Vorticity (1/s)"] = vorticity.(particles.∇v)
                     end
                     openvtk(vtm, grid.X) do vtk
                     end
