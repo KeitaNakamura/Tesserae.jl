@@ -1,7 +1,7 @@
 # # Total Lagrangian MPM
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/7d134011-eaaf-4a0b-8e2e-ed492438cebf" width="300"/>
+# <img src="https://github.com/user-attachments/assets/94d84128-aee3-4de7-a142-b000569ae1ff" width="300"/>
 # ```
 #
 # This example demonstrates the total lagrangian material point method[^1].
@@ -163,11 +163,11 @@ function main()
                 openvtm(string(pvdfile, step)) do vtm
                     angle(x) = atan(x[2], x[1])
                     openvtk(vtm, particles.x) do vtk
-                        vtk["velocity"] = particles.v
-                        vtk["initial angle"] = angle.(particles.X)
+                        vtk["Velocity (m/s)"] = particles.v
+                        vtk["Initial angle (rad)"] = angle.(particles.X)
                     end
                     openvtk(vtm, grid.X) do vtk
-                        vtk["external force"] = grid.fext
+                        vtk["External force (N)"] = grid.fext
                     end
                     pvd[t] = vtm
                 end
