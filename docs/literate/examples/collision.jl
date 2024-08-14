@@ -1,7 +1,7 @@
 # # Transfer schemes
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/1bb2dd02-34af-43ef-a42f-60fc09eea8d3" width="600"/>
+# <img src="https://github.com/user-attachments/assets/a069b594-389f-4082-8755-3d8b90908c67" width="600"/>
 # ```
 #
 # In this example, the following transfer schemes are demonstrated:
@@ -235,11 +235,11 @@ function main(transfer = FLIP(1.0))
                         caucy_stress(F3x3)
                     end
                     openvtk(vtm, particles.x) do vtk
-                        vtk["velocity"] = particles.v
-                        vtk["von Mises"] = @. vonmises(stress3x3(particles.F))
+                        vtk["Velocity (m/s)"] = particles.v
+                        vtk["von Mises stress (MPa)"] = @. 1e-6 * vonmises(stress3x3(particles.F))
                     end
                     openvtk(vtm, grid.x) do vtk
-                        vtk["velocity"] = grid.v
+                        vtk["Velocity (m/s)"] = grid.v
                     end
                     pvd[t] = vtm
                 end
