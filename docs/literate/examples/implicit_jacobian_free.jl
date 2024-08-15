@@ -103,21 +103,21 @@ function main()
         @. grid.vⁿ = grid.mv * grid.m⁻¹
         @. grid.aⁿ = grid.ma * grid.m⁻¹
 
-        ## Update a dof map
+        ## Create dofmask
         dofmask = trues(3, size(grid)...)
         for i in eachindex(grid)
-            dofmask[:,i] .= !iszero(grid.m[i])
+            iszero(grid.m[i]) && (dofmask[:,i] .= false)
         end
+
+        ## Update boundary conditions
+        @. grid.u = zero(grid.u)
         for i in eachindex(grid)[1,:,:]
             dofmask[:,i] .= false
-            grid.vⁿ[i] = zero(Vec{3})
-            grid.aⁿ[i] = zero(Vec{3})
         end
         dofmap = DofMap(dofmask)
 
         ## Solve the nonlinear equation
         state = (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt)
-        @. grid.u = zero(grid.u) # Set zero dispacement for the first guess of the solution
         U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
         compute_residual(U) = residual(U, state)
         compute_jacobian(U) = jacobian(U, state)
