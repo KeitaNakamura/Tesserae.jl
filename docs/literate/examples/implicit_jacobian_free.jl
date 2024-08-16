@@ -1,7 +1,7 @@
 # # Jacobian-free Newton--Krylov method
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/fe0b0318-9f02-44e3-b9e8-24fd4f3995b6" width="600"/>
+# <img src="https://github.com/user-attachments/assets/fe0b0318-9f02-44e3-b9e8-24fd4f3995b6" width="800"/>
 # ```
 
 using Tesserae
