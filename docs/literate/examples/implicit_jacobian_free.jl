@@ -1,7 +1,7 @@
 # # Jacobian-free Newton--Krylov method
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/fe0b0318-9f02-44e3-b9e8-24fd4f3995b6" width="800"/>
+# <img src="https://github.com/user-attachments/assets/f1d80c46-a8ff-44d4-ae82-768b480f25ea" width="800"/>
 # ```
 
 using Tesserae
@@ -50,7 +50,6 @@ function main()
         V⁰   :: Float64
         v    :: Vec{3, Float64}
         a    :: Vec{3, Float64}
-        ∇v   :: SecondOrderTensor{3, Float64, 9}
         ∇a   :: SecondOrderTensor{3, Float64, 9}
         ∇u   :: SecondOrderTensor{3, Float64, 9}
         F    :: SecondOrderTensor{3, Float64, 9}
@@ -125,7 +124,7 @@ function main()
         end
         for i in eachindex(grid)[end,:,:]
             dofmask[:,i] .= false
-            grid.u[i] = rotate(grid.X[i], rotmat(2π*Δt, Vec(1,0,0))) - grid.X[i]
+            grid.u[i] = (rotmat(2π*Δt, Vec(1,0,0)) - I) ⋅ grid.X[i]
         end
         dofmap = DofMap(dofmask)
 
