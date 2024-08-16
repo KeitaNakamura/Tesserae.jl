@@ -1,7 +1,7 @@
 # # Jacobian-free Newton--Krylov method
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/139ea30f-d1d7-4876-bc78-d5e6a1feea3e" width="400"/>
+# <img src="https://github.com/user-attachments/assets/fe0b0318-9f02-44e3-b9e8-24fd4f3995b6" width="600"/>
 # ```
 
 using Tesserae
@@ -9,21 +9,18 @@ using Tesserae
 using IterativeSolvers: gmres!
 using LinearMaps: LinearMap
 
-struct FLIP end
-struct TPIC end
-
-function main(transfer = FLIP())
+function main()
 
     ## Simulation parameters
-    h  = 0.1   # Grid spacing
-    T  = 3.0   # Time span
-    Δt = 0.002 # Timestep
+    h  = 0.05 # Grid spacing
+    T  = 3.0  # Time span
+    Δt = 0.01 # Timestep
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        T = 0.2                           #src
+        h = 0.1                           #src
     end                                   #src
 
     ## Material constants
-    E  = 1e6                    # Young's modulus
+    E  = 100e3                  # Young's modulus
     ν  = 0.3                    # Poisson's ratio
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
     μ  = E / 2(1 + ν)           # Shear modulus
@@ -63,12 +60,16 @@ function main(transfer = FLIP())
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(h, (0,2), (-0.75,0.75), (-0.75,0.75)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (0,1.5), (-0.6,0.6), (-0.6,0.6)))
 
     ## Particles
-    beam = Tesserae.Box((0,2), (-0.25,0.25), (-0.25,0.25))
-    particles = generate_particles(ParticleProp, grid.X; domain=beam, spacing=1/3, alg=GridSampling())
+    beam = Tesserae.Box((0,1.5), (-0.3,0.3), (-0.3,0.3))
+    particles = generate_particles(ParticleProp, grid.X; domain=beam, spacing=1/6, alg=GridSampling())
     particles.V⁰ .= volume(beam) / length(particles)
+    filter!(particles) do pt
+        x, y, z = pt.x
+        (-0.3<y<-0.25 || 0.25<y<0.3) && (-0.3<z<-0.25 || 0.25<z<0.3)
+    end
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
     @show length(particles)
@@ -78,14 +79,10 @@ function main(transfer = FLIP())
     mpvalues = generate_mpvalues(KernelCorrection(BSpline(Quadratic())), grid.X, length(particles))
 
     ## Neo-Hookean model
-    function stored_energy(C)
-        dim = size(C, 1)
-        J = √det(C)
-        μ/2*(tr(C)-dim) - μ*log(J) + λ/2*(log(J))^2
-    end
     function kirchhoff_stress(F)
-        S = 2 * gradient(stored_energy, F' ⋅ F)
-        symmetric(F ⋅ S ⋅ F')
+        J = det(F)
+        b = symmetric(F ⋅ F')
+        μ*(b-I) + λ*log(J)*I
     end
 
     ## Outputs
@@ -104,18 +101,10 @@ function main(transfer = FLIP())
             update!(mpvalues[p], particles.x[p], grid.X)
         end
 
-        if transfer isa FLIP
-            @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ w[ip] * m[p]
-                mv[i] = @∑ w[ip] * m[p] * v[p]
-                ma[i] = @∑ w[ip] * m[p] * a[p]
-            end
-        elseif transfer isa TPIC
-            @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ w[ip] * m[p]
-                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (X[i] - x[p]))
-                ma[i] = @∑ w[ip] * m[p] * (a[p] + ∇a[p] ⋅ (X[i] - x[p]))
-            end
+        @P2G grid=>i particles=>p mpvalues=>ip begin
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            ma[i] = @∑ w[ip] * m[p] * a[p]
         end
 
         ## Compute the grid velocity and acceleration at t = tⁿ
@@ -135,12 +124,8 @@ function main(transfer = FLIP())
             dofmask[:,i] .= false
         end
         for i in eachindex(grid)[end,:,:]
-            if t < 1.0
-                dofmask[:,i] .= false
-                grid.u[i] = rotate(grid.X[i], rotmat(2π*Δt, Vec(1,0,0))) - grid.X[i]
-            else
-                dofmask[1,i] = false
-            end
+            dofmask[:,i] .= false
+            grid.u[i] = rotate(grid.X[i], rotmat(2π*Δt, Vec(1,0,0))) - grid.X[i]
         end
         dofmap = DofMap(dofmask)
 
@@ -152,24 +137,12 @@ function main(transfer = FLIP())
         Tesserae.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)->gmres!(x,A,b))
 
         ## Grid dispacement, velocity and acceleration have been updated during Newton's iterations
-        if transfer isa FLIP
-            @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p] += @∑ Δt * w[ip] * ((1-γ)*a[p] + γ*a[i])
-                a[p]  = @∑ w[ip] * a[i]
-                x[p]  = @∑ w[ip] * (X[i] + u[i])
-                ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
-                F[p]  = (I + ∇u[p]) ⋅ F[p]
-            end
-        elseif transfer isa TPIC
-            @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p]  = @∑ w[ip] * v[i]
-                a[p]  = @∑ w[ip] * a[i]
-                x[p]  = @∑ w[ip] * (X[i] + u[i])
-                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-                ∇a[p] = @∑ a[i] ⊗ ∇w[ip]
-                ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
-                F[p]  = (I + ∇u[p]) ⋅ F[p]
-            end
+        @G2P grid=>i particles=>p mpvalues=>ip begin
+            v[p] += @∑ Δt * w[ip] * ((1-γ)*a[p] + γ*a[i])
+            a[p]  = @∑ w[ip] * a[i]
+            x[p]  = @∑ w[ip] * (X[i] + u[i])
+            ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
+            F[p]  = (I + ∇u[p]) ⋅ F[p]
         end
 
         t += Δt
@@ -186,9 +159,7 @@ function main(transfer = FLIP())
             end
         end
     end
-    Wₖ = sum(pt -> pt.m * (pt.v ⋅ pt.v) / 2, particles)                        #src
-    Wₑ = sum(pt -> pt.V⁰ * det(pt.F) * stored_energy(pt.F' ⋅ pt.F), particles) #src
-    Wₖ + Wₑ                                                                    #src
+    mean(particles.x)
 end
 
 function residual(U::AbstractVector, state)
@@ -238,6 +209,5 @@ end
 
 using Test                                #src
 if @isdefined(RUN_TESTS) && RUN_TESTS     #src
-    @test main(FLIP()) ≈ 1635.9 rtol=1e-4 #src
-    @test main(TPIC()) ≈ 1487.1 rtol=1e-4 #src
+    @test main() ≈ [0.7406,0,0] rtol=1e-4 #src
 end                                       #src
