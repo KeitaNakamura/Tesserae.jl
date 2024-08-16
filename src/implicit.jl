@@ -217,6 +217,8 @@ function newton!(
         maxiter::Int=100, atol::Real=zero(T), rtol::Real=sqrt(eps(T)),
         linsolve=(x,A,b)->copyto!(x,A\b), verbose::Bool=false) where {T}
 
+    compact(val) = rpad(sprint(show, val; context = :compact=>true), 11)
+
     fx = f(x)
     f0 = norm(fx)
     δx = similar(x)
@@ -229,8 +231,11 @@ function newton!(
         linsolve(fillzero!(δx), ∇f(x), fx)
         @. x -= δx
         fx = f(x)
-        verbose && println("| f | = ", norm(fx))
-        solved = norm(fx) ≤ max(atol, rtol*f0)
+        fx_norm = norm(fx)
+        if verbose
+            println("‖f‖ = ", compact(fx_norm), "  ", "‖f‖/‖f₀‖ = ", compact(fx_norm/f0))
+        end
+        solved = fx_norm ≤ max(atol, rtol*f0)
         giveup = ((iter += 1) ≥ maxiter || any(!isfinite, fx))
     end
 
