@@ -1,68 +1,71 @@
 # # Jacobian-based implicit method
+#
+# ```@raw html
+# <img src="https://github.com/user-attachments/assets/44eaa91f-ff22-4768-abe5-9fd76079612a" width="300"/>
+# ```
 
 using Tesserae
 
 function main()
 
     ## Simulation parameters
-    h  = 0.05 # Grid spacing
-    T  = 1.0  # Time span
-    g  = 20.0 # Gravity acceleration
-    Δt = 0.05  # Timestep
-    if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        h = 0.1                           #src
-        T = 0.5                           #src
-    end                                   #src
+    h  = 0.25 # Grid spacing
+    T  = 3.0  # Time span
+    g  = 10.0 # Gravity acceleration
+    Δt = 0.01 # Timestep
 
     ## Material constants
     E  = 1e6                    # Young's modulus
     ν  = 0.3                    # Poisson's ratio
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
     μ  = E / 2(1 + ν)           # Shear modulus
-    ρ⁰ = 500.0                  # Density
+    ρ⁰ = 1050.0                 # Density
 
     ## Newmark-beta integration
     β = 1/4
     γ = 1/2
 
     GridProp = @NamedTuple begin
-        X   :: Vec{3, Float64}
+        X   :: Vec{2, Float64}
         m   :: Float64
         m⁻¹ :: Float64
-        v   :: Vec{3, Float64}
-        vⁿ  :: Vec{3, Float64}
-        mv  :: Vec{3, Float64}
-        a   :: Vec{3, Float64}
-        aⁿ  :: Vec{3, Float64}
-        ma  :: Vec{3, Float64}
-        u   :: Vec{3, Float64}
-        f   :: Vec{3, Float64}
+        v   :: Vec{2, Float64}
+        vⁿ  :: Vec{2, Float64}
+        mv  :: Vec{2, Float64}
+        a   :: Vec{2, Float64}
+        aⁿ  :: Vec{2, Float64}
+        ma  :: Vec{2, Float64}
+        u   :: Vec{2, Float64}
+        f   :: Vec{2, Float64}
     end
     ParticleProp = @NamedTuple begin
-        x    :: Vec{3, Float64}
+        x    :: Vec{2, Float64}
         m    :: Float64
         V⁰   :: Float64
-        v    :: Vec{3, Float64}
-        a    :: Vec{3, Float64}
-        b    :: Vec{3, Float64}
-        ∇u   :: SecondOrderTensor{3, Float64, 9}
-        F    :: SecondOrderTensor{3, Float64, 9}
-        ΔF⁻¹ :: SecondOrderTensor{3, Float64, 9}
-        τ    :: SecondOrderTensor{3, Float64, 9}
-        c    :: FourthOrderTensor{3, Float64, 81}
+        v    :: Vec{2, Float64}
+        a    :: Vec{2, Float64}
+        b    :: Vec{2, Float64}
+        ∇u   :: SecondOrderTensor{2, Float64, 4}
+        F    :: SecondOrderTensor{2, Float64, 4}
+        ΔF⁻¹ :: SecondOrderTensor{2, Float64, 4}
+        τ    :: SecondOrderTensor{2, Float64, 4}
+        c    :: FourthOrderTensor{2, Float64, 16}
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(h, (0.0,1.2), (0.0,2.0), (-0.2,0.2)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (-1,5), (-5,1)))
 
     ## Particles
-    beam = Tesserae.Box((0,1), (0.85,1.15), (-0.15,0.15))
-    particles = generate_particles(ParticleProp, grid.X; domain=beam, alg=GridSampling())
+    beam = Tesserae.Box((0,4), (0,1))
+    particles = generate_particles(ParticleProp, grid.X; domain=beam, spacing=1/3, alg=GridSampling())
     particles.V⁰ .= volume(beam) / length(particles)
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
-    @. particles.b = Vec(0,-g,0)
+    @. particles.b = Vec(0,-g)
     @show length(particles)
+    η = 1/3                                                                       #src
+    corner_p = argmin(p -> norm(particles.x[p] - Vec(4,0)), eachindex(particles)) #src
+    corner_0 = particles.x[corner_p] + η*h/2*Vec(1,-1)                            #src
 
     ## Interpolation
     ## Use the kernel correction to properly handle the boundary conditions
@@ -86,11 +89,19 @@ function main()
 
     t = 0.0
     step = 0
+    fps = 60
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
     Tesserae.@showprogress while t < T
 
+        activenodes = trues(size(grid))
+        for i in eachindex(grid)
+            if grid.X[i][1] < 0 && grid.X[i][2] > -(1+2h)
+                activenodes[i] = false
+            end
+        end
         for p in eachindex(particles, mpvalues)
-            update!(mpvalues[p], particles.x[p], grid.X)
+            update!(mpvalues[p], particles.x[p], grid.X, activenodes)
         end
 
         @P2G grid=>i particles=>p mpvalues=>ip begin
@@ -105,15 +116,17 @@ function main()
         @. grid.aⁿ = grid.ma * grid.m⁻¹
 
         ## Create dofmask
-        dofmask = trues(3, size(grid)...)
+        dofmask = trues(2, size(grid)...)
         for i in eachindex(grid)
             iszero(grid.m[i]) && (dofmask[:,i] .= false)
         end
 
         ## Update boundary conditions and dofmap
         @. grid.u = zero(grid.u)
-        for i in eachindex(grid)[1,:,:]
-            dofmask[:,i] .= false
+        for i in eachindex(grid)
+            if grid.X[i][1] ≤ 0 && grid.X[i][2] > -(1+2h)
+                dofmask[:,i] .= false
+            end
         end
         dofmap = DofMap(dofmask)
 
@@ -136,15 +149,27 @@ function main()
         t += Δt
         step += 1
 
-        openpvd(pvdfile; append=true) do pvd
-            openvtk(string(pvdfile, step), particles.x) do vtk
-                vtk["velocity"] = particles.v
-                vtk["von Mises"] = @. vonmises(particles.τ / det(particles.F))
-                pvd[t] = vtk
+        if t > first(savepoints)
+            popfirst!(savepoints)
+            openpvd(pvdfile; append=true) do pvd
+                openvtk(string(pvdfile, step), particles.x) do vtk
+                    function stress3x3(F)
+                        z = zero(Mat{2,1})
+                        F3x3 = [F  z
+                                z' 1]
+                        kirchhoff_stress(F3x3) * inv(det(F3x3))
+                    end
+                    vtk["Velocity"] = particles.v
+                    vtk["von Mises stress (kPa)"] = @. 1e-3 * vonmises(stress3x3(particles.F))
+                    pvd[t] = vtk
+                end
             end
         end
     end
-    mean(particles.x) #src
+    lx = particles.F[corner_p] ⋅ Vec(η*h,0)                 #src
+    ly = particles.F[corner_p] ⋅ Vec(0,η*h)                 #src
+    disp = particles.x[corner_p] + (lx/2 - ly/2) - corner_0 #src
+    disp[2]                                                 #src
 end
 
 function residual(U::AbstractVector, state)
@@ -173,7 +198,7 @@ end
 function jacobian(U::AbstractVector, state)
     (; grid, particles, mpvalues, β, A, dofmap, Δt) = state
 
-    I(i,j) = ifelse(i===j, one(Mat{3,3}), zero(Mat{3,3}))
+    I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
     dotdot(a,C,b) = @einsum (i,j) -> a[k] * C[i,k,j,l] * b[l]
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
         A[i,j] = @∑ (dotdot(∇w[ip] ⋅ ΔF⁻¹[p], c[p], ∇w[jp])) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
@@ -182,7 +207,7 @@ function jacobian(U::AbstractVector, state)
     submatrix(A, dofmap)
 end
 
-using Test                             #src
-if @isdefined(RUN_TESTS) && RUN_TESTS  #src
-    @test main() ≈ [0.5,1,0] rtol=0.02 #src
-end                                    #src
+using Test                            #src
+if @isdefined(RUN_TESTS) && RUN_TESTS #src
+    @test main() ≈ -0.8325 rtol=1e-4  #src
+end                                   #src
