@@ -1,62 +1,62 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Jacobian-based implicit method · Tesserae.jl</title><meta name="title" content="Jacobian-based implicit method · Tesserae.jl"/><meta property="og:title" content="Jacobian-based implicit method · Tesserae.jl"/><meta property="twitter:title" content="Jacobian-based implicit method · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../collision/">Transfer schemes</a></li><li><input class="collapse-toggle" id="menuitem-3-2" type="checkbox" checked/><label class="tocitem" for="menuitem-3-2"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../implicit_jacobian_free/">Jacobian-free Newton–Krylov method</a></li><li class="is-active"><a class="tocitem" href>Jacobian-based implicit method</a></li></ul></li><li><a class="tocitem" href="../dam_break/">Stabilized mixed MPM for incompressible fluid</a></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><a class="tocitem" href="../rigid_body_contact/">Frictional contact with rigid body</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li><a class="is-disabled">Implicit methods</a></li><li class="is-active"><a href>Jacobian-based implicit method</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Jacobian-based implicit method</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/literate/examples/implicit_jacobian_based.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Jacobian-based-implicit-method"><a class="docs-heading-anchor" href="#Jacobian-based-implicit-method">Jacobian-based implicit method</a><a id="Jacobian-based-implicit-method-1"></a><a class="docs-heading-anchor-permalink" href="#Jacobian-based-implicit-method" title="Permalink"></a></h1><pre><code class="language-julia hljs">using Tesserae
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Jacobian-based implicit method · Tesserae.jl</title><meta name="title" content="Jacobian-based implicit method · Tesserae.jl"/><meta property="og:title" content="Jacobian-based implicit method · Tesserae.jl"/><meta property="twitter:title" content="Jacobian-based implicit method · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../collision/">Transfer schemes</a></li><li><input class="collapse-toggle" id="menuitem-3-2" type="checkbox" checked/><label class="tocitem" for="menuitem-3-2"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../implicit_jacobian_free/">Jacobian-free Newton–Krylov method</a></li><li class="is-active"><a class="tocitem" href>Jacobian-based implicit method</a></li></ul></li><li><a class="tocitem" href="../dam_break/">Stabilized mixed MPM for incompressible fluid</a></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><a class="tocitem" href="../rigid_body_contact/">Frictional contact with rigid body</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li><a class="is-disabled">Implicit methods</a></li><li class="is-active"><a href>Jacobian-based implicit method</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Jacobian-based implicit method</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/literate/examples/implicit_jacobian_based.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Jacobian-based-implicit-method"><a class="docs-heading-anchor" href="#Jacobian-based-implicit-method">Jacobian-based implicit method</a><a id="Jacobian-based-implicit-method-1"></a><a class="docs-heading-anchor-permalink" href="#Jacobian-based-implicit-method" title="Permalink"></a></h1><img src="https://github.com/user-attachments/assets/64b61a32-1b18-4b1f-b4e7-e6d4cbd744b6" width="300"/><pre><code class="language-julia hljs">using Tesserae
 
 function main()
 
     # Simulation parameters
-    h  = 0.05 # Grid spacing
-    T  = 1.0  # Time span
-    g  = 20.0 # Gravity acceleration
-    Δt = 0.05  # Timestep
+    h  = 0.25 # Grid spacing
+    T  = 3.0  # Time span
+    g  = 10.0 # Gravity acceleration
+    Δt = 0.01 # Timestep
 
     # Material constants
     E  = 1e6                    # Young&#39;s modulus
     ν  = 0.3                    # Poisson&#39;s ratio
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame&#39;s first parameter
     μ  = E / 2(1 + ν)           # Shear modulus
-    ρ⁰ = 500.0                  # Density
+    ρ⁰ = 1050.0                 # Density
 
     # Newmark-beta integration
     β = 1/4
     γ = 1/2
 
     GridProp = @NamedTuple begin
-        X   :: Vec{3, Float64}
+        X   :: Vec{2, Float64}
         m   :: Float64
         m⁻¹ :: Float64
-        v   :: Vec{3, Float64}
-        vⁿ  :: Vec{3, Float64}
-        mv  :: Vec{3, Float64}
-        a   :: Vec{3, Float64}
-        aⁿ  :: Vec{3, Float64}
-        ma  :: Vec{3, Float64}
-        u   :: Vec{3, Float64}
-        f   :: Vec{3, Float64}
+        v   :: Vec{2, Float64}
+        vⁿ  :: Vec{2, Float64}
+        mv  :: Vec{2, Float64}
+        a   :: Vec{2, Float64}
+        aⁿ  :: Vec{2, Float64}
+        ma  :: Vec{2, Float64}
+        u   :: Vec{2, Float64}
+        f   :: Vec{2, Float64}
     end
     ParticleProp = @NamedTuple begin
-        x    :: Vec{3, Float64}
+        x    :: Vec{2, Float64}
         m    :: Float64
         V⁰   :: Float64
-        v    :: Vec{3, Float64}
-        a    :: Vec{3, Float64}
-        b    :: Vec{3, Float64}
-        ∇u   :: SecondOrderTensor{3, Float64, 9}
-        F    :: SecondOrderTensor{3, Float64, 9}
-        ΔF⁻¹ :: SecondOrderTensor{3, Float64, 9}
-        τ    :: SecondOrderTensor{3, Float64, 9}
-        c    :: FourthOrderTensor{3, Float64, 81}
+        v    :: Vec{2, Float64}
+        a    :: Vec{2, Float64}
+        b    :: Vec{2, Float64}
+        ∇u   :: SecondOrderTensor{2, Float64, 4}
+        F    :: SecondOrderTensor{2, Float64, 4}
+        ΔF⁻¹ :: SecondOrderTensor{2, Float64, 4}
+        τ    :: SecondOrderTensor{2, Float64, 4}
+        c    :: FourthOrderTensor{2, Float64, 16}
     end
 
     # Background grid
-    grid = generate_grid(GridProp, CartesianMesh(h, (0.0,1.2), (0.0,2.0), (-0.2,0.2)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (-1,5), (-5,1)))
 
     # Particles
-    beam = Tesserae.Box((0,1), (0.85,1.15), (-0.15,0.15))
-    particles = generate_particles(ParticleProp, grid.X; domain=beam, alg=GridSampling())
+    beam = Tesserae.Box((0,4), (0,1))
+    particles = generate_particles(ParticleProp, grid.X; domain=beam, spacing=1/3, alg=GridSampling())
     particles.V⁰ .= volume(beam) / length(particles)
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
-    @. particles.b = Vec(0,-g,0)
+    @. particles.b = Vec(0,-g)
     @show length(particles)
 
     # Interpolation
@@ -81,11 +81,19 @@ function main()
 
     t = 0.0
     step = 0
+    fps = 60
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
     Tesserae.@showprogress while t &lt; T
 
+        activenodes = trues(size(grid))
+        for i in eachindex(grid)
+            if grid.X[i][1] &lt; 0 &amp;&amp; grid.X[i][2] &gt; -(1+2h)
+                activenodes[i] = false
+            end
+        end
         for p in eachindex(particles, mpvalues)
-            update!(mpvalues[p], particles.x[p], grid.X)
+            update!(mpvalues[p], particles.x[p], grid.X, activenodes)
         end
 
         @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
@@ -100,15 +108,17 @@ function main()
         @. grid.aⁿ = grid.ma * grid.m⁻¹
 
         # Create dofmask
-        dofmask = trues(3, size(grid)...)
+        dofmask = trues(2, size(grid)...)
         for i in eachindex(grid)
             iszero(grid.m[i]) &amp;&amp; (dofmask[:,i] .= false)
         end
 
         # Update boundary conditions and dofmap
         @. grid.u = zero(grid.u)
-        for i in eachindex(grid)[1,:,:]
-            dofmask[:,i] .= false
+        for i in eachindex(grid)
+            if grid.X[i][1] ≤ 0 &amp;&amp; grid.X[i][2] &gt; -(1+2h)
+                dofmask[:,i] .= false
+            end
         end
         dofmap = DofMap(dofmask)
 
@@ -131,11 +141,20 @@ function main()
         t += Δt
         step += 1
 
-        openpvd(pvdfile; append=true) do pvd
-            openvtk(string(pvdfile, step), particles.x) do vtk
-                vtk[&quot;velocity&quot;] = particles.v
-                vtk[&quot;von Mises&quot;] = @. vonmises(particles.τ / det(particles.F))
-                pvd[t] = vtk
+        if t &gt; first(savepoints)
+            popfirst!(savepoints)
+            openpvd(pvdfile; append=true) do pvd
+                openvtk(string(pvdfile, step), particles.x) do vtk
+                    function stress3x3(F)
+                        z = zero(Mat{2,1})
+                        F3x3 = [F  z
+                                z&#39; 1]
+                        kirchhoff_stress(F3x3) * inv(det(F3x3))
+                    end
+                    vtk[&quot;Velocity&quot;] = particles.v
+                    vtk[&quot;von Mises stress (kPa)&quot;] = @. 1e-3 * vonmises(stress3x3(particles.F))
+                    pvd[t] = vtk
+                end
             end
         end
     end
@@ -167,11 +186,11 @@ end
 function jacobian(U::AbstractVector, state)
     (; grid, particles, mpvalues, β, A, dofmap, Δt) = state
 
-    I(i,j) = ifelse(i===j, one(Mat{3,3}), zero(Mat{3,3}))
+    I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
     dotdot(a,C,b) = @einsum (i,j) -&gt; a[k] * C[i,k,j,l] * b[l]
     @P2G_Matrix grid=&gt;(i,j) particles=&gt;p mpvalues=&gt;(ip,jp) begin
         A[i,j] = @∑ (dotdot(∇w[ip] ⋅ ΔF⁻¹[p], c[p], ∇w[jp])) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
     end
 
     submatrix(A, dofmap)
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_free/">« Jacobian-free Newton–Krylov method</a><a class="docs-footer-nextpage" href="../dam_break/">Stabilized mixed MPM for incompressible fluid »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.5.0 on <span class="colophon-date" title="Saturday 17 August 2024 02:46">Saturday 17 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_free/">« Jacobian-free Newton–Krylov method</a><a class="docs-footer-nextpage" href="../dam_break/">Stabilized mixed MPM for incompressible fluid »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.5.0 on <span class="colophon-date" title="Saturday 17 August 2024 12:37">Saturday 17 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
