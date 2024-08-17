@@ -1,4 +1,8 @@
 # # Frictional contact with rigid body
+#
+# ```@raw html
+# <img src="https://github.com/user-attachments/assets/ad776d53-3c39-44a5-8357-7b3bbc2ee051" width="300"/>
+# ```
 
 using Tesserae
 
@@ -20,12 +24,12 @@ function main()
     end                                   #src
 
     ## Material constants
-    E  = 1000e3                 # Young's modulus
+    E  = 1e6                    # Young's modulus
     ν  = 0.49                   # Poisson's ratio
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
     G  = E / 2(1 + ν)           # Shear modulus
-    σy = 1.0e3                  # Yield stress
-    ρ⁰ = 1.0e3                  # Initial density
+    σy = 1e3                    # Yield stress
+    ρ⁰ = 1e3                    # Initial density
 
     ## Disk
     D = 0.04
@@ -163,8 +167,8 @@ function main()
                 openvtm(string(pvdfile, step)) do vtm
                     deviatoric_strain(ϵ) = sqrt(2/3 * dev(ϵ) ⊡ dev(ϵ))
                     openvtk(vtm, particles.x) do vtk
-                        vtk["vonmises"] = @. vonmises(particles.σ)
-                        vtk["deviatoric strain"] = @. deviatoric_strain(particles.ϵ)
+                        vtk["von Mises stress (kPa)"] = @. 1e-3 * vonmises(particles.σ)
+                        vtk["Deviatoric strain"] = @. deviatoric_strain(particles.ϵ)
                     end
                     openvtk(vtm, disk_points) do vtk
                     end
