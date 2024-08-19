@@ -1,4 +1,4 @@
-# # Stabilized mixed MPM for incompressible fluid
+# # Stabilized mixed MPM for incompressible fluid flow
 #
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/76fd800e-fda7-4d89-afcd-9a8a2178ab41" width="600"/>
