@@ -71,6 +71,12 @@ function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim
 end
 CartesianMesh(h::Real, minmax::Tuple{Real, Real}...) = CartesianMesh(Float64, h, minmax...)
 
+"""
+    extract(mesh, (xmin, xmax), (ymin, ymax)...)
+
+Extract a portion of the `mesh`.
+```
+"""
 function extract(mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim}) where {dim}
     @assert all(x->x[1]<x[2], minmax)
     indices = CartesianIndices(ntuple(Val(dim)) do d
