@@ -18,16 +18,16 @@ makedocs(;
     sitename = "Tesserae.jl",
     pages=[
         "Home" => "index.md",
-        "getting_started.md",
-        "Examples" => [
-            "examples/collision.md",
+        "Tutorials" => [
+            "tutorials/getting_started.md",
+            "tutorials/collision.md",
             "Implicit methods" => [
-                "examples/implicit_jacobian_free.md",
-                "examples/implicit_jacobian_based.md",
+                "tutorials/implicit_jacobian_free.md",
+                "tutorials/implicit_jacobian_based.md",
             ],
-            "examples/dam_break.md",
-            "examples/tlmpm_vortex.md",
-            "examples/rigid_body_contact.md",
+            "tutorials/dam_break.md",
+            "tutorials/tlmpm_vortex.md",
+            "tutorials/rigid_body_contact.md",
         ],
     ],
     doctest = true, # :fix

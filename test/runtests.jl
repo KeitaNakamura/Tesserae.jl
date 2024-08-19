@@ -11,4 +11,4 @@ include("grid.jl")
 
 include("interpolations.jl")
 
-include("examples.jl")
+include("tutorials.jl")
