@@ -192,13 +192,17 @@ end
 end
 
 function Base.show(io::IO, mime::MIME"text/plain", mpvalues::MPValueVector)
+    mp = first(mpvalues)
     print(io, length(mpvalues), "-element MPValueVector: \n")
-    print(io, "  Interpolation: ", interpolation(mpvalues))
+    print(io, "  Interpolation: ", interpolation(mpvalues), "\n")
+    print(io, "  Property names: ", join(propertynames(mp), ", "))
 end
 
 function Base.show(io::IO, mpvalues::MPValueVector)
+    mp = first(mpvalues)
     print(io, length(mpvalues), "-element MPValueVector: \n")
-    print(io, "  Interpolation: ", interpolation(mpvalues))
+    print(io, "  Interpolation: ", interpolation(mpvalues), "\n")
+    print(io, "  Property names: ", join(propertynames(mp), ", "))
 end
 
 ###########
