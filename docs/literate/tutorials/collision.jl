@@ -1,10 +1,10 @@
-# # Transfer schemes
+# # Velocity transfer schemes
 #
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/a069b594-389f-4082-8755-3d8b90908c67" width="600"/>
 # ```
 #
-# In this example, the following transfer schemes are demonstrated:
+# In this example, the following velocity transfer schemes are demonstrated:
 # * PIC--FLIP mixed velocity[^1]
 # * Affine PIC (APIC)[^2]
 # * Taylor PIC (TPIC)[^3]
