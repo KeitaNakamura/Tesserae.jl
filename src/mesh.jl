@@ -18,6 +18,10 @@ end
     @_propagate_inbounds_meta
     AxisArray(map(getindex, A.axes, ranges))
 end
+@inline function Base.getindex(A::AxisArray, indices::CartesianIndices)
+    @_propagate_inbounds_meta
+    A[indices.indices...]
+end
 
 Base.copy(A::AxisArray) = AxisArray(map(copy, A.axes))
 
@@ -74,6 +78,10 @@ end
 @inline function Base.getindex(mesh::CartesianMesh{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
     @boundscheck checkbounds(mesh, ranges...)
     @inbounds CartesianMesh(get_axisarray(mesh)[ranges...], spacing(mesh), spacing_inv(mesh))
+end
+@inline function Base.getindex(mesh::CartesianMesh, indices::CartesianIndices)
+    @_propagate_inbounds_meta
+    mesh[indices.indices...]
 end
 
 Base.copy(mesh::CartesianMesh) = CartesianMesh(copy(get_axisarray(mesh)), spacing(mesh), spacing_inv(mesh))
