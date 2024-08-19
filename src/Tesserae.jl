@@ -74,7 +74,6 @@ export
     DofMap,
     ndofs,
     create_sparse_matrix,
-    submatrix,
     @P2G_Matrix,
 # VTK
     openvtk,

@@ -204,7 +204,7 @@ function jacobian(U::AbstractVector, state)
         A[i,j] = @∑ (dotdot(∇w[ip] ⋅ ΔF⁻¹[p], c[p], ∇w[jp])) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
     end
 
-    submatrix(A, dofmap)
+    extract(A, dofmap)
 end
 
 using Test                            #src

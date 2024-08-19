@@ -387,7 +387,7 @@ function jacobian(state)
     end
 
     ## Extract the activated degrees of freedom
-    submatrix(A, dofmap)
+    extract(A, dofmap)
 end
 
 using Test                                            #src
