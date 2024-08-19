@@ -62,8 +62,8 @@ function main()
     grid = generate_grid(GridProp, CartesianMesh(h, (0,1.5), (-0.6,0.6), (-0.6,0.6)))
 
     ## Particles
-    beam = Tesserae.Box((0,1.5), (-0.3,0.3), (-0.3,0.3))
-    particles = generate_particles(ParticleProp, grid.X; domain=beam, spacing=1/6, alg=GridSampling())
+    beam = extract(grid.X, (0,1.5), (-0.3,0.3), (-0.3,0.3))
+    particles = generate_particles(ParticleProp, beam; spacing=1/6, alg=GridSampling())
     particles.V⁰ .= volume(beam) / length(particles)
     filter!(particles) do pt
         x, y, z = pt.x

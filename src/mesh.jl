@@ -65,11 +65,23 @@ function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
 end
 
 function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
-    @assert all(map(issorted, minmax))
+    @assert all(x->x[1]<x[2], minmax)
     axisarray = AxisArray(map(lims->Vector{T}(range(lims...; step=h)), minmax))
     CartesianMesh(axisarray, T(h), T(inv(h)))
 end
 CartesianMesh(h::Real, minmax::Tuple{Real, Real}...) = CartesianMesh(Float64, h, minmax...)
+
+function extract(mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim}) where {dim}
+    @assert all(x->x[1]<x[2], minmax)
+    indices = CartesianIndices(ntuple(Val(dim)) do d
+        ax = get_axes(mesh, d)
+        xmin, xmax = minmax[d]
+        imin =  findlast(x -> (x < xmin) || (x ≈ xmin), ax)
+        imax = findfirst(x -> (x > xmax) || (x ≈ xmax), ax)
+        imin:imax
+    end)
+    mesh[indices]
+end
 
 @inline function Base.getindex(mesh::CartesianMesh{dim}, i::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(mesh, i...)

@@ -38,6 +38,7 @@ export
     volume,
     isinside,
     whichcell,
+    extract,
 # Grid
     Grid,
     SpGrid,
