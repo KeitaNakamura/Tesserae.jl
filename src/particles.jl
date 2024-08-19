@@ -37,47 +37,27 @@ function _generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec
 end
 
 """
-    generate_particles([ParticleProp], mesh; spacing=0.5, alg=PoissonDiskSampling())
+    generate_particles([ParticleProp], mesh; spacing=1/2, alg=PoissonDiskSampling())
 
-Generate particles with particle `spacing` by sampling `alg`orithm.
+Generate particles with a particle `spacing` (`0 < spacing ≤ 1`) sampling the `alg`orithm.
+When using `GridSampling()`, setting `spacing=1/η` will generate `η^dim` particles per cell,
+where `dim` is the problem dimension.
 """
 function generate_particles(
         ::Type{ParticleProp}, mesh::CartesianMesh{dim, T};
-        spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling(), domain=nothing) where {ParticleProp, dim, T}
-    points = _generate_points(ParticleProp, mesh, spacing, alg, domain)
+        spacing::Real=1/2, alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp, dim, T}
+    points = _generate_points(ParticleProp, mesh, spacing, alg)
     particles = _generate_particles(ParticleProp, points)
     _reorder_particles!(particles, mesh)
 end
 
-function generate_particles(mesh::CartesianMesh{dim, T}; spacing::Real=0.5, alg::SamplingAlgorithm=PoissonDiskSampling(), domain=nothing) where {dim, T}
-    generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; spacing, alg, domain).x
+function generate_particles(mesh::CartesianMesh{dim, T}; spacing::Real=1/2, alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
+    generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; spacing, alg).x
 end
 
-struct Box{dim, T}
-    domain::NTuple{dim, Tuple{T, T}}
-end
-function Box(domain::Vararg{Tuple{Real, Real}, dim}) where {dim}
-    T = mapreduce(x -> promote_type(map(eltype, x)...), promote_type, domain)
-    Box{dim, T}(domain)
-end
-isinside(x::Vec{dim}, box::Box{dim}) where {dim} = all(ntuple(i -> box.domain[i][1] ≤ x[i] < box.domain[i][2], Val(dim)))
-function volume(box::Box)
-    prod(box.domain) do (xmin, xmax)
-        xmax - xmin
-    end
-end
-
-function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::SamplingAlgorithm, ::Nothing) where {ParticleProp, dim, T}
+function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::SamplingAlgorithm) where {ParticleProp, dim, T}
     domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
     point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), domain...)
-end
-function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::GridSampling, box::Box) where {ParticleProp, dim, T}
-    domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
-    points = point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), domain...)
-    filter(x -> isinside(x, box), points)
-end
-function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::PoissonDiskSampling, box::Box) where {ParticleProp, dim, T}
-    points = point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), box.domain...)
 end
 
 function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)
