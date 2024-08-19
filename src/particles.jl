@@ -27,6 +27,9 @@ function generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec}
     _generate_particles(ParticleProp, points)
 end
 function _generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec}) where {ParticleProp}
+    if !(isbitstype(ParticleProp))
+        error("generate_particles: the property type of grid must be `isbitstype` type")
+    end
     particles = StructVector{ParticleProp}(undef, length(points))
     fillzero!(particles)
     getx(particles) .= points
