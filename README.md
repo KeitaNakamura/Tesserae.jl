@@ -33,3 +33,14 @@ The following examples are taken from the tutorials.
 ### Stabilized mixed MPM for incompressible fluid flow
 
 <img src="https://github.com/user-attachments/assets/76fd800e-fda7-4d89-afcd-9a8a2178ab41" width="500"/>
+
+## Other MPM packages in Julia
+
+* [MaterialPointSolver.jl](https://github.com/LandslideSIM/MaterialPointSolver.jl)
+
+## Inspiration
+
+Some functionalities are inspired from the following packages:
+
+* [Ferrite.jl](https://github.com/Ferrite-FEM/Ferrite.jl)
+* [taichi_mpm](https://github.com/yuanming-hu/taichi_mpm)
