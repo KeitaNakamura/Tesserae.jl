@@ -1,6 +1,7 @@
 using Literate
 
 const TUTORIALS = ["collision.jl",
+                   "cpdi.jl",
                    "tlmpm_vortex.jl",
                    "implicit_jacobian_free.jl",
                    "implicit_jacobian_based.jl",

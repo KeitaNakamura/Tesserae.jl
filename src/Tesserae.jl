@@ -60,6 +60,7 @@ export
     BSpline,
     SteffenBSpline,
     uGIMP,
+    CPDI,
     Interpolation,
     WLS,
     KernelCorrection,
@@ -94,6 +95,7 @@ include("particles.jl")
 include("Interpolations/mpvalue.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
+include("Interpolations/cpdi.jl")
 include("Interpolations/polynomials.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")

@@ -26,6 +26,7 @@ makedocs(;
                 "tutorials/implicit_jacobian_based.md",
             ],
             "tutorials/dam_break.md",
+            "tutorials/cpdi.md",
             "tutorials/tlmpm_vortex.md",
             "tutorials/rigid_body_contact.md",
         ],

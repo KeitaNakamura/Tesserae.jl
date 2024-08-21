@@ -5,6 +5,13 @@ module TestCollision
     end
 end
 
+module TestCPDI
+    const RUN_TESTS = true
+    cd(tempdir()) do
+        include(joinpath(@__DIR__, "../docs/literate/tutorials/cpdi.jl"))
+    end
+end
+
 module TestTLMPMVortex
     const RUN_TESTS = true
     cd(tempdir()) do

@@ -126,6 +126,28 @@ end
         end
     end
 
+    @testset "CPDI" begin
+        it = CPDI()
+        for dim in (1,2,3)
+            Random.seed!(1234)
+            mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
+            mp = MPValue(it, mesh)
+            l = 0.5*spacing(mesh)
+            F = one(Mat{dim,dim})
+            @test all(1:100) do _
+                x = Vec{dim}(i -> l/2 + rand()*(1-l))
+                update!(mp, (;x,l,F), mesh)
+                # isnearbounds = any(.!(l/2 .< x .< 1-l/2))
+                PU = check_partition_of_unity(mp, x)
+                LFR = check_linear_field_reproduction(mp, x, mesh)
+                # uGIMP doesn't have pertition of unity when very closed to boundaries
+                # if we follow eq.40 in Bardenhagen (2004)
+                # isnearbounds ? (!PU && !LFR) : (PU && LFR)
+                PU && LFR
+            end
+        end
+    end
+
     @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
         it = Wrapper(kernel)
         for dim in (1,2,3)
