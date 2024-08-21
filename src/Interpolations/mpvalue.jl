@@ -17,10 +17,11 @@ const Cubic     = Degree{3}
 #=
 To create a new interpolation, following methods need to be implemented.
 * Tesserae.create_property(::Type{T}, it::Interpolation, mesh; kwargs...) -> NamedTuple
-* Tesserae.update_property!(mp::MPValue, it::Interpolation, pt, mesh)
-* Tesserae.neighboringnodes(it::Interpolation, pt, mesh)
-* Tesserae.NeighboringNodesType(it::Interpolation, mesh)
+* Tesserae.initial_neighboringnodes(it::Interpolation, mesh)
+* Tesserae.update!(mp::MPValue, it::Interpolation, pt, mesh)
 =#
+
+initial_neighboringnodes(::Interpolation, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 
 function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; derivative::Order=Order(1)) where {dim, T}
     dims = nfill(gridspan(it), Val(dim))
@@ -30,8 +31,6 @@ function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim};
     derivative isa Order{3} && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims), ∇∇∇w=fill(zero(Tensor{Tuple{@Symmetry{dim,dim,dim}}, T}), dims))
     error("wrong derivative type, got $derivative")
 end
-
-NeighboringNodesType(::Interpolation, ::CartesianMesh{dim}) where {dim} = CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
 
 """
     MPValue([T,] interpolation, mesh)
@@ -64,14 +63,10 @@ struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
     indices::Indices
 end
 
-function MPValue(it::Interpolation, prop::NamedTuple, ::Type{Tinds}) where {Tinds}
-    MPValue(it, prop, Array{Tinds}(undef))
-end
-
 function MPValue(::Type{T}, it::Interpolation, mesh::AbstractMesh; kwargs...) where {T}
     prop = create_property(T, it, mesh; kwargs...)
-    Tinds = NeighboringNodesType(it, mesh)
-    MPValue(it, prop, Tinds)
+    indices = initial_neighboringnodes(it, mesh)
+    MPValue(it, prop, fill(indices))
 end
 MPValue(it::Interpolation, mesh::AbstractMesh; kwargs...) = MPValue(Float64, it, mesh; kwargs...)
 
@@ -101,10 +96,7 @@ end
     neighbors
 end
 
-@inline function set_neighboringnodes!(mp::MPValue, indices)
-    getfield(mp, :indices)[] = indices
-    mp
-end
+@inline neighboringnodes_storage(mp::MPValue) = getfield(mp, :indices)
 
 @inline function derivative_order(mp::MPValue)
     hasproperty(mp, :∇∇∇w) && return Order(3)
@@ -153,7 +145,7 @@ function generate_mpvalues(::Type{T}, it::Interpolation, mesh::AbstractMesh, n::
     prop = map(create_property(T, it, mesh; kwargs...)) do prop
         fill(zero(eltype(prop)), size(prop)..., n)
     end
-    indices = Array{NeighboringNodesType(it, mesh)}(undef, n)
+    indices = map(p->initial_neighboringnodes(it, mesh), 1:n)
     It = typeof(it)
     Prop = typeof(prop)
     Indices = typeof(indices)
@@ -223,14 +215,14 @@ end
 
 function update!(mp::MPValue, pt, mesh::AbstractMesh)
     it = interpolation(mp)
-    set_neighboringnodes!(mp, neighboringnodes(it, pt, mesh))
+    neighboringnodes_storage(mp)[] = neighboringnodes(it, pt, mesh)
     update_property!(mp, it, pt, mesh)
     mp
 end
 function update!(mp::MPValue, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @debug @assert size(mesh) == size(filter)
     it = interpolation(mp)
-    set_neighboringnodes!(mp, neighboringnodes(it, pt, mesh))
+    neighboringnodes_storage(mp)[] = neighboringnodes(it, pt, mesh)
     update_property!(mp, it, pt, mesh, filter)
     mp
 end
