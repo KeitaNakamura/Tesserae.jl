@@ -159,7 +159,7 @@ function main()
                                 z' 1]
                         kirchhoff_stress(F3x3) * inv(det(F3x3))
                     end
-                    vtk["Velocity"] = particles.v
+                    vtk["Velocity (m/s)"] = particles.v
                     vtk["von Mises stress (kPa)"] = @. 1e-3 * vonmises(stress3x3(particles.F))
                     pvd[t] = vtk
                 end
