@@ -4,6 +4,10 @@
 # <img src="https://github.com/user-attachments/assets/94d84128-aee3-4de7-a142-b000569ae1ff" width="300"/>
 # ```
 #
+# | # Particles | # Iterations | Execution time |
+# | ----------- | ------------ | -------------- |
+# | 8k          | 27k          | 1 min          |
+#
 # This example demonstrates the total lagrangian material point method[^1].
 # The implementation solves generalized vortex problem[^1] using a linear kernel.
 #

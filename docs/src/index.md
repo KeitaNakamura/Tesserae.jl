@@ -1,4 +1,4 @@
-# Tesserae
+# Tesserae.jl
 
 *A Julia-powered toolkit for material point method*
 

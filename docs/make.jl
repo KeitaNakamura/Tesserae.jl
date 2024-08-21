@@ -20,13 +20,13 @@ makedocs(;
         "Home" => "index.md",
         "Tutorials" => [
             "tutorials/getting_started.md",
-            "tutorials/collision.md",
+            "Various velocity transfers" => "tutorials/collision.md",
             "Implicit methods" => [
-                "tutorials/implicit_jacobian_free.md",
-                "tutorials/implicit_jacobian_based.md",
+                "Jacobian-free" => "tutorials/implicit_jacobian_free.md",
+                "Jacobian-based" => "tutorials/implicit_jacobian_based.md",
             ],
-            "tutorials/dam_break.md",
-            "tutorials/cpdi.md",
+            "Incompressible fluid flow" => "tutorials/dam_break.md",
+            "CPDI" => "tutorials/cpdi.md",
             "tutorials/tlmpm_vortex.md",
             "tutorials/rigid_body_contact.md",
         ],

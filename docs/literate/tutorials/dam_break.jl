@@ -4,7 +4,11 @@
 # <img src="https://github.com/user-attachments/assets/76fd800e-fda7-4d89-afcd-9a8a2178ab41" width="600"/>
 # ```
 #
-# This example employs stabilized mixed MPM with the variational multiscale method (VMS)[^1].
+# | # Particles | # Iterations | Execution time |
+# | ----------- | ------------ | -------------- |
+# | 16k         | 3.5k         | 10 min         |
+#
+# This example employs stabilized mixed MPM with the variational multiscale method[^1].
 #
 # [^1]: [Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.](https://doi.org/10.1016/j.cma.2023.116644)
 

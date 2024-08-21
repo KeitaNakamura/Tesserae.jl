@@ -3,6 +3,10 @@
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/f1d80c46-a8ff-44d4-ae82-768b480f25ea" width="800"/>
 # ```
+#
+# | # Particles | # Iterations | Execution time |
+# | ----------- | ------------ | -------------- |
+# | 26k         | 300          | 2 min          |
 
 using Tesserae
 

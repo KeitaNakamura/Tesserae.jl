@@ -1,4 +1,4 @@
-# Getting Started
+# Getting started
 
 ```@example
 using Tesserae
@@ -106,7 +106,9 @@ end
 main()
 ```
 
-## Grid and particle properties
+## Grid and particle generation
+
+### 1. Grid and particle properties
 
 ```@example stepbystep
 E  = 500                    #hide
@@ -163,7 +165,7 @@ isbitstype(ParticleProp)
     end
     ```
 
-## Mesh and grid generation
+### 2. Mesh and grid generation
 
 In Tesserae, a mesh and a grid differ in that a mesh only contains information about the positions of the nodes, whereas a grid includes the mesh (i.e., nodal positions) and additional user-defined variables (as defined in `GridProp` above).
 
@@ -191,7 +193,7 @@ grid.v
     grid.x === mesh
     ```
 
-## Particle generation
+### 3. Particle generation
 
 The particles can be generated using `generate_particles` function:
 
@@ -260,7 +262,9 @@ nothing #hide
     ```
     This SOA layout for `MPValue`s is generally preferred for performance, although it cannot be resized.
 
-## Particle-to-grid transfer
+## Transfer between grid and particles
+
+### Particle-to-grid transfer
 
 ```@example stepbystep
 Δt = 0.001                                     #hide
@@ -297,7 +301,7 @@ for p in eachindex(particles)
 end
 ```
 
-## Grid-to-particle transfer
+### Grid-to-particle transfer
 
 Similar to the particle-to-grid transfer, the `@G2P` macro exists for grid-to-particle transfer:
 

@@ -3,6 +3,11 @@
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/ad776d53-3c39-44a5-8357-7b3bbc2ee051" width="300"/>
 # ```
+#
+# | # Particles | # Iterations | Execution time |
+# | ----------- | ------------ | -------------- |
+# | 14k         | 220k         | 7 min          |
+#
 
 using Tesserae
 
@@ -44,7 +49,7 @@ function main()
         d = x - x_disk
         k * max(D/2 - (norm(d)-r), 0) * normalize(d)
     end
-    @inline function contact_force_tangential(fₙ, v, m, Δt)
+    @inline function contact_force_tangent(fₙ, v, m, Δt)
         iszero(fₙ) && return zero(fₙ)
         n = normalize(fₙ)
         fₜ = -m * (v-(v⋅n)*n) / Δt # Sticking force
@@ -132,7 +137,7 @@ function main()
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
         @. grid.vⁿ  = grid.mv * grid.m⁻¹
         @. grid.v   = grid.vⁿ + Δt * grid.fint * grid.m⁻¹
-        @. grid.fext += contact_force_tangential(grid.fext, grid.v-disk.v, grid.m, Δt)
+        @. grid.fext += contact_force_tangent(grid.fext, grid.v-disk.v, grid.m, Δt)
         @. grid.v    += Δt * grid.fext * grid.m⁻¹
 
         for i in eachindex(grid)[[begin,end],:]

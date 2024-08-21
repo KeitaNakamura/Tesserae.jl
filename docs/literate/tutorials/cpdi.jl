@@ -1,8 +1,12 @@
 # # A convected particle domain interpolation technique
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/0052df2b-f532-45d8-97bf-a2967c6b3f0d" width="300"/>
+# <img src="https://github.com/user-attachments/assets/0052df2b-f532-45d8-97bf-a2967c6b3f0d" width="210"/>
 # ```
+#
+# | # Particles | # Iterations | Execution time |
+# | ----------- | ------------ | -------------- |
+# | 27k         | 500          | 30 sec         |
 #
 # This example employs a convected particle domain interpolation[^1].
 #
