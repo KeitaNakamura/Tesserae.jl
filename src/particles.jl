@@ -48,7 +48,7 @@ function generate_particles(
         spacing::Real=1/2, alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp, dim, T}
     points = _generate_points(ParticleProp, mesh, spacing, alg)
     particles = _generate_particles(ParticleProp, points)
-    _reorder_particles!(particles, mesh)
+    # _reorder_particles!(particles, mesh)
 end
 
 function generate_particles(mesh::CartesianMesh{dim, T}; spacing::Real=1/2, alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
