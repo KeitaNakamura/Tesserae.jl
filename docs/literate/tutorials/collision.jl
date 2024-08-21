@@ -173,7 +173,6 @@ function main(transfer = FLIP(1.0))
                 v[p]  = @∑ w[ip] * ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i])))
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 x[p] += @∑ Δt * (w[ip] * v[i])
-
             end
         elseif transfer isa APIC
             @G2P grid=>i particles=>p mpvalues=>ip begin
