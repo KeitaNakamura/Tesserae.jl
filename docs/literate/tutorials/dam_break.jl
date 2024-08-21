@@ -110,9 +110,6 @@ function main(transfer = FLIP(1.0))
         update!(mp, xc, grid.X)
     end
 
-    ## BlockSpace for multithreading
-    blockspace = BlockSpace(grid.X)
-
     ## Sparse matrix
     A = create_sparse_matrix(it, grid.X; ndofs=3)
 
@@ -142,8 +139,6 @@ function main(transfer = FLIP(1.0))
             xc = cellcenter(cell, grid.X)
             update!(mpvalues_cell[cell], xc, grid.X, activenodes)
         end
-
-        update!(blockspace, particles.x)
 
         if transfer isa FLIP
             @P2G grid=>i particles=>p mpvalues=>ip begin
@@ -184,18 +179,18 @@ function main(transfer = FLIP(1.0))
         dofmap = DofMap(dofmask)
 
         ## Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, mpvalues, mpvalues_cell, blockspace, ρ, μ, β, γ, A, dofmap, Δt)
+        state = (; grid, particles, mpvalues, mpvalues_cell, ρ, μ, β, γ, A, dofmap, Δt)
         Δt′ = variational_multiscale_method(state)
 
         if transfer isa FLIP
             local α = transfer.α
-            @threaded @G2P grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * w[ip]
                 a[p] = @∑ a[i] * w[ip]
                 x[p] = @∑ x[i] * w[ip]
             end
         elseif transfer isa TPIC
-            @threaded @G2P grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p] = @∑ v[i] * w[ip]
                 a[p] = @∑ a[i] * w[ip]
                 x[p] = @∑ x[i] * w[ip]
@@ -372,12 +367,12 @@ end
 # ## Jacobian matrix
 
 function jacobian(state)
-    (; grid, particles, mpvalues, blockspace, ρ, μ, β, γ, A, dofmap, Δt) = state
+    (; grid, particles, mpvalues, ρ, μ, β, γ, A, dofmap, Δt) = state
 
     ## Construct the Jacobian matrix
     cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
-    @threaded @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) blockspace begin
+    @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
         A[i,j] = @∑ begin
             Kᵤᵤ = (γ/(β*Δt) * ∇w[ip] ⋅ cₚ ⋅ ∇w[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
             Kᵤₚ = -∇w[ip] * w[jp] * V[p]
