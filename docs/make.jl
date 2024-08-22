@@ -30,6 +30,9 @@ makedocs(;
             "tutorials/tlmpm_vortex.md",
             "tutorials/rigid_body_contact.md",
         ],
+        "Manual" => [
+            "Interpolation" => "interpolation.md"
+        ]
     ],
     doctest = true, # :fix
     warnonly = [:missing_docs],
