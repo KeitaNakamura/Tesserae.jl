@@ -92,9 +92,6 @@ function main(transfer = FLIP(1.0))
         update!(mp, xc, grid.X)
     end
 
-    # BlockSpace for multithreading
-    blockspace = BlockSpace(grid.X)
-
     # Sparse matrix
     A = create_sparse_matrix(it, grid.X; ndofs=3)
 
@@ -124,8 +121,6 @@ function main(transfer = FLIP(1.0))
             xc = cellcenter(cell, grid.X)
             update!(mpvalues_cell[cell], xc, grid.X, activenodes)
         end
-
-        update!(blockspace, particles.x)
 
         if transfer isa FLIP
             @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
@@ -166,18 +161,18 @@ function main(transfer = FLIP(1.0))
         dofmap = DofMap(dofmask)
 
         # Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, mpvalues, mpvalues_cell, blockspace, ρ, μ, β, γ, A, dofmap, Δt)
+        state = (; grid, particles, mpvalues, mpvalues_cell, ρ, μ, β, γ, A, dofmap, Δt)
         Δt′ = variational_multiscale_method(state)
 
         if transfer isa FLIP
             local α = transfer.α
-            @threaded @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+            @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
                 v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * w[ip]
                 a[p] = @∑ a[i] * w[ip]
                 x[p] = @∑ x[i] * w[ip]
             end
         elseif transfer isa TPIC
-            @threaded @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+            @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
                 v[p] = @∑ v[i] * w[ip]
                 a[p] = @∑ a[i] * w[ip]
                 x[p] = @∑ x[i] * w[ip]
@@ -332,12 +327,12 @@ end</code></pre><h2 id="Residual-vector"><a class="docs-heading-anchor" href="#R
     # Map grid values to vector `R`
     dofmap(map(vcat, grid.R_mom, grid.R_mas))
 end</code></pre><h2 id="Jacobian-matrix"><a class="docs-heading-anchor" href="#Jacobian-matrix">Jacobian matrix</a><a id="Jacobian-matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Jacobian-matrix" title="Permalink"></a></h2><pre><code class="language-julia hljs">function jacobian(state)
-    (; grid, particles, mpvalues, blockspace, ρ, μ, β, γ, A, dofmap, Δt) = state
+    (; grid, particles, mpvalues, ρ, μ, β, γ, A, dofmap, Δt) = state
 
     # Construct the Jacobian matrix
     cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
-    @threaded @P2G_Matrix grid=&gt;(i,j) particles=&gt;p mpvalues=&gt;(ip,jp) blockspace begin
+    @P2G_Matrix grid=&gt;(i,j) particles=&gt;p mpvalues=&gt;(ip,jp) begin
         A[i,j] = @∑ begin
             Kᵤᵤ = (γ/(β*Δt) * ∇w[ip] ⋅ cₚ ⋅ ∇w[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
             Kᵤₚ = -∇w[ip] * w[jp] * V[p]
@@ -352,4 +347,4 @@ end</code></pre><h2 id="Jacobian-matrix"><a class="docs-heading-anchor" href="#J
 
     # Extract the activated degrees of freedom
     extract(A, dofmap)
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_based/">« Jacobian-based</a><a class="docs-footer-nextpage" href="../cpdi/">CPDI »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Wednesday 21 August 2024 08:09">Wednesday 21 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_based/">« Jacobian-based</a><a class="docs-footer-nextpage" href="../cpdi/">CPDI »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Thursday 22 August 2024 12:07">Thursday 22 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
