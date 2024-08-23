@@ -213,7 +213,7 @@ pts = generate_particles(ParticleProp, mesh; alg=GridSampling())
 This `pts` is also a [`StructArray`](https://github.com/JuliaArrays/StructArrays.jl), similar to `grid`.
 
 !!! info
-    In the `generate_particles` function, particles are generated throughout the entire domain of the mesh. Consequently, any unnecessary particles need to be removed.
+    In the `generate_particles` function, particles are generated across the entire `mesh` domain. Consequently, any unnecessary particles need to be removed.
 
 ```@example stepbystep
 particles = let                                                      #hide

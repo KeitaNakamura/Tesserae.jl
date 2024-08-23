@@ -25,12 +25,11 @@ function check_gridproperty(::Type{GridProp}, ::Type{Vec{dim, T}}) where {GridPr
 end
 
 """
-    generate_grid([ArrayType], GridProp, mesh)
+    generate_grid(GridProp, mesh)
 
-Generate background grid with type `GridProp`.
-This returns `StructArray` ([StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl)).
-The first field of `GridProp` is used to store `mesh` which requires type `Vec{dim, T}`.
-`ArrayType` can be chosen from `Array` and `SpArray`.
+Generate a background grid where each element is of type `GridProp`.
+The first field of `GridProp` is designated for `mesh`, and thus its type must match `eltype(mesh)`.
+The resulting grid is a [`StructArray`](https://github.com/JuliaArrays/StructArrays.jl).
 
 # Examples
 ```jldoctest
