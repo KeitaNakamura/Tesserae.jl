@@ -20,7 +20,7 @@ makedocs(;
         "Home" => "index.md",
         "Tutorials" => [
             "tutorials/getting_started.md",
-            "Various velocity transfers" => "tutorials/collision.md",
+            "tutorials/collision.md",
             "Implicit methods" => [
                 "Jacobian-free" => "tutorials/implicit_jacobian_free.md",
                 "Jacobian-based" => "tutorials/implicit_jacobian_based.md",
@@ -31,7 +31,8 @@ makedocs(;
             "tutorials/rigid_body_contact.md",
         ],
         "Manual" => [
-            "Interpolation" => "interpolation.md"
+            "interpolation.md"
+            "transfer.md"
         ]
     ],
     doctest = true, # :fix

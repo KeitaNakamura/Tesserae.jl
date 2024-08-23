@@ -273,7 +273,7 @@ for p in eachindex(particles)                  #hide
 end                                            #hide
 ```
 
-For the particle-to-grid transfer, the `@P2G` macro is useful:
+For the particle-to-grid transfer, the [`@P2G`](@ref) macro is useful:
 
 ```@example stepbystep
 @P2G grid=>i particles=>p mpvalues=>ip begin
@@ -303,7 +303,7 @@ end
 
 ### Grid-to-particle transfer
 
-Similar to the particle-to-grid transfer, the `@G2P` macro exists for grid-to-particle transfer:
+Similar to the particle-to-grid transfer, the [`@G2P`](@ref) macro exists for grid-to-particle transfer:
 
 ```@example stepbystep
 @G2P grid=>i particles=>p mpvalues=>ip begin

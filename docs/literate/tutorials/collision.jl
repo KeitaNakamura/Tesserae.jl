@@ -1,4 +1,4 @@
-# # Velocity transfer schemes
+# # Transfer schemes
 #
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/a069b594-389f-4082-8755-3d8b90908c67" width="600"/>
@@ -9,10 +9,14 @@
 # | 17k         | 2.9k         | 10 sec         |
 #
 # In this example, the following velocity transfer schemes are demonstrated:
-# * PIC--FLIP mixed velocity[^1]
+#
+# * PIC--FLIP mixed transfer[^1]
 # * Affine PIC (APIC)[^2]
 # * Taylor PIC (TPIC)[^3]
 # * eXtended PIC (XPIC)[^4]
+#
+# !!! info
+#     It is also recommended to refer to the manual [Transfer between grid and particles](@ref manual).
 #
 # The problem involves the collision between two elastic rings, which is consistent with previous study[^5].
 #
@@ -182,7 +186,7 @@ function main(transfer = FLIP(1.0))
             @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p]  = @∑ w[ip] * v[i]
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-                B[p]  = @∑ w[ip] * v[i] ⊗ (x[i]-x[p])
+                B[p]  = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
                 x[p] += Δt * v[p]
             end
         elseif transfer isa TPIC

@@ -4,22 +4,52 @@
     end
 
 Particle-to-grid transfer macro.
+`=> index` represents the associated `index` in the macro.
 
 # Examples
-```jl
+```julia
 @P2G grid=>i particles=>p mpvalues=>ip begin
 
-    # particle-to-grid transfer
-    m[i] = @∑ w[ip] * m[p]
-    mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
-    f[i] = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+    # Particle-to-grid transfer
+    m[i]  = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+    f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
 
-    # calculation on grid
+    # Calculation on grid
     vⁿ[i] = mv[i] / m[i]
-    v[i] = vⁿ[i] + Δt * (f[i] / m[i])
+    v[i]  = vⁿ[i] + Δt * (f[i] / m[i])
 
 end
 ```
+
+This expands to roughly the following code:
+
+```julia
+# Reset grid properties
+@. grid.m  = zero(grid.m)
+@. grid.mv = zero(grid.mv)
+@. grid.f  = zero(grid.f)
+
+# Particle-to-grid transfer
+for p in eachindex(particles)
+    mp = mpvalues[p]
+    nodeindices = neighboringnodes(mp)
+    for ip in eachindex(nodeindices)
+        i = nodeindices[ip]
+        grid.m [i] += mp.w[ip] * particles.m[p]
+        grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
+        grid.mv[i] += -particles.V[p] * particles.σ[p] ⋅ mp.∇w[ip]
+    end
+end
+
+# Calculation on grid
+@. grid.vⁿ = grid.mv / grid.m
+@. grid.v  = grid.vⁿ + Δt * (grid.f / grid.m)
+```
+
+!!! warning
+    In `@P2G`, `Calculation on grid` part must be placed after
+    `Particle-to-grid transfer` part.
 """
 macro P2G(grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, nothing, equations)
@@ -208,20 +238,59 @@ end
     end
 
 Grid-to-particle transfer macro.
+`=> index` represents the associated `index` in the macro.
 
 # Examples
-```jl
+```julia
 @G2P grid=>i particles=>p mpvalues=>ip begin
 
-    # grid-to-particle transfer
-    v[p] = @∑ v[i] * w[ip]
+    # Grid-to-particle transfer
+    v[p] += @∑ Δt * (vⁿ[i] - v[i]) * w[ip]
     ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+    x[p] += @∑ Δt * v[i] * w[ip]
 
-    # calculation on particle
-    x[p] = x[p] + Δt * v[p]
+    # Calculation on particle
+    Δϵₚ = Δt * symmetric(∇v[p])
+    F[p]  = (I + Δt*∇v[p]) ⋅ F[p]
+    V[p]  = V⁰[p] * det(F[p])
+    σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
 
 end
 ```
+
+This expands to roughly the following code:
+
+```julia
+# Grid-to-particle transfer
+for p in eachindex(particles)
+    mp = mpvalues[p]
+    nodeindices = neighboringnodes(mp)
+    Δvₚ = zero(eltype(particles.v))
+    ∇vₚ = zero(eltype(particles.∇v))
+    Δxₚ = zero(eltype(particles.x))
+    for ip in eachindex(nodeindices)
+        i = nodeindices[ip]
+        Δvₚ += Δt * (grid.vⁿ[i] - grid.v[i]) * mp.w[ip]
+        ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
+        Δxₚ += Δt * grid.v[i] * mp.w[ip]
+    end
+    particles.v[p] += Δvₚ
+    particles.∇v[p] = ∇vₚ
+    particles.x[p] += Δxₚ
+end
+
+# Calculation on particle
+for p in eachindex(particles)
+    Δϵₚ = Δt * symmetric(particles.∇v[p])
+    particles.F[p]  = (I + Δt*particles.∇v[p]) ⋅ particles.F[p]
+    particles.V[p]  = particles.V⁰[p] * det(particles.F[p])
+    particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
+end
+```
+
+!!! warning
+    In `@G2P`, `Calculation on particles` part must be placed after
+    `Grid-to-particle transfer` part.
 """
 macro G2P(grid_pair, particles_pair, mpvalues_pair, equations)
     G2P_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, equations)
