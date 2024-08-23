@@ -3,29 +3,26 @@ name: Documentation
 on:
   push:
     branches:
-      - main # update to match your development branch (master, main, dev, trunk, ...)
+      - main
     tags: '*'
   pull_request:
 
 jobs:
   build:
     permissions:
+      actions: write
       contents: write
+      pull-requests: read
       statuses: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
+      - uses: julia-actions/cache@v1
       - name: Install dependencies
-        shell: julia --projec=docs --color=yes {0}
-        run: |
-          using Pkg
-          Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/General"))
-          Pkg.Registry.add(RegistrySpec(url = "https://github.com/KeitaNakamura/KeitaNakamuraRegistry.git"))
-          Pkg.develop(PackageSpec(path=pwd()))
-          Pkg.instantiate()
+        run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
