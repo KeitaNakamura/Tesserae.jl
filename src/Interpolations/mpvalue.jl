@@ -50,7 +50,7 @@ MPValue:
   Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
   Neighboring nodes: CartesianIndices((2:4, 3:5))
 
-julia> sum(mp.w) ≈ 1# partition of unity
+julia> sum(mp.w) ≈ 1 # partition of unity
 true
 
 julia> nodeindices = neighboringnodes(mp) # grid indices within a particles' local domain

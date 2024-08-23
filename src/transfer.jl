@@ -245,7 +245,7 @@ Grid-to-particle transfer macro.
 @G2P grid=>i particles=>p mpvalues=>ip begin
 
     # Grid-to-particle transfer
-    v[p] += @∑ Δt * (vⁿ[i] - v[i]) * w[ip]
+    v[p] += @∑ (vⁿ[i] - v[i]) * w[ip]
     ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
     x[p] += @∑ Δt * v[i] * w[ip]
 
@@ -270,7 +270,7 @@ for p in eachindex(particles)
     Δxₚ = zero(eltype(particles.x))
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        Δvₚ += Δt * (grid.vⁿ[i] - grid.v[i]) * mp.w[ip]
+        Δvₚ += (grid.vⁿ[i] - grid.v[i]) * mp.w[ip]
         ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
         Δxₚ += Δt * grid.v[i] * mp.w[ip]
     end

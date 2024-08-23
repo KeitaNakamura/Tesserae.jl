@@ -16,6 +16,6 @@ Tesserae is a toolkit for implementing the material point method in Julia. It is
 
 You can add Tesserae using Julia's package manager, by typing `]add Tesserae` in the Julia REPL:
 
-```jl
+```julia
 pkg> add Tesserae
 ```

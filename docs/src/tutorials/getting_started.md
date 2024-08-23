@@ -1,5 +1,8 @@
 # Getting started
 
+!!! info
+    Step-by-step instructions are provided after the code.
+
 ```@example
 using Tesserae
 import Plots
@@ -7,29 +10,31 @@ import Plots
 function main()
 
     # Material constants
-    E  = 500                    # Young's modulus
+    E  = 1000.0                 # Young's modulus
     ν  = 0.3                    # Poisson's ratio
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
     μ  = E / 2(1 + ν)           # Shear modulus
-    ρ⁰ = 1000                   # Initial density
+    ρ⁰ = 1000.0                 # Initial density
     r  = 0.2                    # Radius of disk
 
     # Grid and particle properties
     GridProp = @NamedTuple begin
-        x  :: Vec{2, Float64}
-        m  :: Float64
-        mv :: Vec{2, Float64}
-        f  :: Vec{2, Float64}
-        v  :: Vec{2, Float64}
-        vⁿ :: Vec{2, Float64}
+        x  :: Vec{2, Float64} # Position
+        m  :: Float64         # Mass
+        mv :: Vec{2, Float64} # Momentum
+        f  :: Vec{2, Float64} # Force
+        v  :: Vec{2, Float64} # Velocity
+        vⁿ :: Vec{2, Float64} # Velocity at t = tⁿ
     end
     ParticleProp = @NamedTuple begin
-        x  :: Vec{2, Float64}
-        m  :: Float64
-        V  :: Float64
-        v  :: Vec{2, Float64}
-        ∇v :: SecondOrderTensor{2, Float64, 4}
-        σ  :: SymmetricSecondOrderTensor{2, Float64, 3}
+        x  :: Vec{2, Float64}                           # Position
+        m  :: Float64                                   # Mass
+        V⁰ :: Float64                                   # Initial volume
+        V  :: Float64                                   # Volume
+        v  :: Vec{2, Float64}                           # Velocity
+        ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
+        F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
+        σ  :: SymmetricSecondOrderTensor{2, Float64, 3} # Cauchy stress
     end
 
     # Mesh
@@ -41,7 +46,7 @@ function main()
     # Particles
     particles = let
         pts = generate_particles(ParticleProp, mesh; alg=GridSampling())
-        pts.V .= volume(mesh) / length(pts) # Set initial volume
+        pts.V⁰ .= volume(mesh) / length(pts) # Set initial volume
 
         # Left and right disks
         lhs = findall(x -> norm(@. x-r    ) < r, pts.x)
@@ -53,16 +58,18 @@ function main()
 
         pts[[lhs; rhs]]
     end
-    @. particles.m = ρ⁰ * particles.V
+    @. particles.m = ρ⁰ * particles.V⁰
+    @. particles.V = particles.V⁰
+    @. particles.F = one(particles.F)
 
     # Interpolation
     mpvalues = map(p -> MPValue(BSpline(Linear()), mesh), eachindex(particles))
 
-    # Plot results by `Plots.@gif`
+    # Create animation by `Plots.@gif`
     Δt = 0.001
     Plots.@gif for t in range(0, 4, step=Δt)
 
-        # Update interpolation values
+        # Update basis function values
         for p in eachindex(particles)
             update!(mpvalues[p], particles.x[p], mesh)
         end
@@ -79,17 +86,17 @@ function main()
         @G2P grid=>i particles=>p mpvalues=>ip begin
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-            x[p] += @∑ Δt * (w[ip] * v[i])
+            x[p] += @∑ Δt * v[i] * w[ip]
         end
 
         for p in eachindex(particles)
             Δϵₚ = Δt * symmetric(particles.∇v[p])
-            Δσₚ = λ*tr(Δϵₚ)*I + 2μ*Δϵₚ
-            particles.V[p] *= 1 + tr(Δϵₚ)
-            particles.σ[p] += Δσₚ
+            particles.F[p]  = (I + Δt*particles.∇v[p]) ⋅ particles.F[p]
+            particles.V[p]  = particles.V⁰[p] * det(particles.F[p])
+            particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
         end
 
-        # plot results
+        # Plot results
         Plots.scatter(
             reinterpret(Tuple{Float64,Float64}, particles.x),
             lims = (0,1),
@@ -135,9 +142,11 @@ end
 ParticleProp = @NamedTuple begin
     x  :: Vec{2, Float64}                           # Position
     m  :: Float64                                   # Mass
+    V⁰ :: Float64                                   # Initial volume
     V  :: Float64                                   # Volume
     v  :: Vec{2, Float64}                           # Velocity
     ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
+    F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
     σ  :: SymmetricSecondOrderTensor{2, Float64, 3} # Cauchy stress
 end
 nothing #hide
@@ -209,7 +218,7 @@ This `pts` is also a [`StructArray`](https://github.com/JuliaArrays/StructArrays
 ```@example stepbystep
 particles = let                                                      #hide
     pts = generate_particles(ParticleProp, mesh; alg=GridSampling()) #hide
-    pts.V .= volume(mesh) / length(pts)                              #hide
+    pts.V⁰ .= volume(mesh) / length(pts)                             #hide
     lhs = findall(x -> norm(@. x-r    ) < r, pts.x)                  #hide
     rhs = findall(x -> norm(@. x-(1-r)) < r, pts.x)                  #hide
     pts.v[lhs] .= Vec( 0.1, 0.1)                                     #hide
@@ -219,9 +228,9 @@ end                                                                  #hide
 nothing                                                              #hide
 ```
 
-## Interpolation values
+## Basis function values
 
-In Tesserae, the interpolation values are stored in `MPValue`.
+In Tesserae, the basis function values are stored in `MPValue`.
 For example, `MPValue` with the linear basis function can be constructed as
 
 ```@repl stepbystep
@@ -248,7 +257,7 @@ update!(mp, particles.x[1], mesh)
     end
     ```
 
-For the sake of performance, it's best to prepare the same number of `MPValue`s as there are particles. This means that each particle has its own storage for the interpolation values.
+For the sake of performance, it's best to prepare the same number of `MPValue`s as there are particles. This means that each particle has its own storage for the basis function values.
 
 ```@example stepbystep
 mpvalues = map(p -> MPValue(BSpline(Linear()), mesh), eachindex(particles))
@@ -309,7 +318,7 @@ Similar to the particle-to-grid transfer, the [`@G2P`](@ref) macro exists for gr
 @G2P grid=>i particles=>p mpvalues=>ip begin
     v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
     ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-    x[p] += @∑ Δt * (w[ip] * v[i])
+    x[p] += @∑ Δt * v[i] * w[ip]
 end
 ```
 
@@ -328,8 +337,8 @@ for p in eachindex(particles)
         ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
         Δxₚ += Δt * (mp.w[ip] * grid.v[i])
     end
-    particles.v[p]  += Δvₚ
-    particles.∇v[p]  = ∇vₚ
-    particles.x[p]  += Δxₚ
+    particles.v[p] += Δvₚ
+    particles.∇v[p] = ∇vₚ
+    particles.x[p] += Δxₚ
 end
 ```
