@@ -3,3 +3,13 @@
 /test/Manifest.toml
 /docs/build
 /docs/Manifest.toml
+/docs/src/tutorials
+!/docs/src/tutorials/getting_started.md
+# paraview
+*.vtu
+*.vtr
+*.vtk
+*.vtm
+*.pvd
+# others
+*.DS_Store
