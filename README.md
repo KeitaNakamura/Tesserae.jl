@@ -15,8 +15,7 @@ Tesserae is a toolkit for implementing the material point method in Julia. It is
 
 ## Documentation
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://KeitaNakamura.github.io/Tesserae.jl/stable)
-[![Develop](https://img.shields.io/badge/docs-dev-blue.svg)](https://KeitaNakamura.github.io/Tesserae.jl/dev)
+[![Stable](https://img.shields.io/badge/docs-latest%20release-blue.svg)](https://KeitaNakamura.github.io/Tesserae.jl/stable)
 
 ## Examples
 
