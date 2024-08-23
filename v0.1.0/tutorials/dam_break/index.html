@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stabilized mixed MPM for incompressible fluid flow · Tesserae.jl</title><meta name="title" content="Stabilized mixed MPM for incompressible fluid flow · Tesserae.jl"/><meta property="og:title" content="Stabilized mixed MPM for incompressible fluid flow · Tesserae.jl"/><meta property="twitter:title" content="Stabilized mixed MPM for incompressible fluid flow · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started/">Getting Started</a></li><li><a class="tocitem" href="../collision/">Velocity transfer schemes</a></li><li><input class="collapse-toggle" id="menuitem-2-3" type="checkbox"/><label class="tocitem" for="menuitem-2-3"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../implicit_jacobian_free/">Jacobian-free Newton–Krylov method</a></li><li><a class="tocitem" href="../implicit_jacobian_based/">Jacobian-based implicit method</a></li></ul></li><li class="is-active"><a class="tocitem" href>Stabilized mixed MPM for incompressible fluid flow</a><ul class="internal"><li><a class="tocitem" href="#Main-function"><span>Main function</span></a></li><li><a class="tocitem" href="#Variational-multiscale-method"><span>Variational multiscale method</span></a></li><li><a class="tocitem" href="#VMS-stabilization-coefficients"><span>VMS stabilization coefficients</span></a></li><li><a class="tocitem" href="#δ-correction"><span>δ-correction</span></a></li><li><a class="tocitem" href="#Residual-vector"><span>Residual vector</span></a></li><li><a class="tocitem" href="#Jacobian-matrix"><span>Jacobian matrix</span></a></li></ul></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><a class="tocitem" href="../rigid_body_contact/">Frictional contact with rigid body</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Stabilized mixed MPM for incompressible fluid flow</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Stabilized mixed MPM for incompressible fluid flow</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/literate/tutorials/dam_break.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Stabilized-mixed-MPM-for-incompressible-fluid-flow"><a class="docs-heading-anchor" href="#Stabilized-mixed-MPM-for-incompressible-fluid-flow">Stabilized mixed MPM for incompressible fluid flow</a><a id="Stabilized-mixed-MPM-for-incompressible-fluid-flow-1"></a><a class="docs-heading-anchor-permalink" href="#Stabilized-mixed-MPM-for-incompressible-fluid-flow" title="Permalink"></a></h1><img src="https://github.com/user-attachments/assets/76fd800e-fda7-4d89-afcd-9a8a2178ab41" width="600"/><p>This example employs stabilized mixed MPM with the variational multiscale method (VMS)<sup class="footnote-reference"><a id="citeref-1" href="#footnote-1">[1]</a></sup>.</p><h2 id="Main-function"><a class="docs-heading-anchor" href="#Main-function">Main function</a><a id="Main-function-1"></a><a class="docs-heading-anchor-permalink" href="#Main-function" title="Permalink"></a></h2><pre><code class="language-julia hljs">using Tesserae
+using LinearAlgebra
+
+struct FLIP α::Float64 end
+struct TPIC end
+
+function main(transfer = FLIP(1.0))
+
+    # Simulation parameters
+    h  = 0.02   # Grid spacing
+    T  = 7.0    # Time span
+    g  = 9.81   # Gravity acceleration
+    Δt = 2.0e-3 # Timestep
+
+    # Material constants
+    ρ = 1.0e3   # Initial density
+    μ = 1.01e-3 # Dynamic viscosity (Pa⋅s)
+
+    # Newmark-beta method
+    β = 0.5
+    γ = 1.0
+
+    # Utils
+    cellnodes(cell) = cell:(cell+oneunit(cell))
+    cellcenter(cell, mesh) = mean(mesh[cellnodes(cell)])
+
+    # Properties for grid and particles
+    GridProp = @NamedTuple begin
+        X   :: Vec{2, Float64}
+        x   :: Vec{2, Float64}
+        m   :: Float64
+        m⁻¹ :: Float64
+        v   :: Vec{2, Float64}
+        vⁿ  :: Vec{2, Float64}
+        mv  :: Vec{2, Float64}
+        a   :: Vec{2, Float64}
+        aⁿ  :: Vec{2, Float64}
+        ma  :: Vec{2, Float64}
+        u   :: Vec{2, Float64}
+        p   :: Float64
+        # δ-correction
+        V   :: Float64
+        Ṽ   :: Float64
+        E   :: Float64
+        # Residuals
+        u_p   :: Vec{3, Float64}
+        R_mom :: Vec{2, Float64}
+        R_mas :: Float64
+    end
+    ParticleProp = @NamedTuple begin
+        x   :: Vec{2, Float64}
+        m   :: Float64
+        V   :: Float64
+        v   :: Vec{2, Float64}
+        ∇v  :: SecondOrderTensor{2, Float64, 4}
+        a   :: Vec{2, Float64}
+        ∇a  :: SecondOrderTensor{2, Float64, 4}
+        p   :: Float64
+        ∇p  :: Vec{2, Float64}
+        s   :: SymmetricSecondOrderTensor{2, Float64, 3}
+        b   :: Vec{2, Float64}
+        # δ-correction
+        ∇E² :: Vec{2, Float64}
+        # Stabilization
+        τ₁  :: Float64
+        τ₂  :: Float64
+    end
+
+    # Background grid
+    grid = generate_grid(GridProp, CartesianMesh(h, (0,3.22), (0,2.5)))
+    for cell in CartesianIndices(size(grid).-1)
+        for i in cellnodes(cell)
+            grid.V[i] += (spacing(grid)/2)^2
+        end
+    end
+
+    # Particles
+    particles = generate_particles(ParticleProp, grid.X; spacing=1/3)
+    particles.V .= volume(grid.X) / length(particles)
+    filter!(pt -&gt; pt.x[1]&lt;1.2 &amp;&amp; pt.x[2]&lt;0.6, particles)
+    @. particles.m = ρ * particles.V
+    @. particles.b = Vec(0,-g)
+    @show length(particles)
+
+    # Interpolation
+    it = KernelCorrection(BSpline(Quadratic()))
+    mpvalues = map(p -&gt; MPValue(it, grid.X), eachindex(particles))
+    mpvalues_cell = map(CartesianIndices(size(grid).-1)) do cell
+        mp = MPValue(it, grid.X)
+        xc = cellcenter(cell, grid.X)
+        update!(mp, xc, grid.X)
+    end
+
+    # BlockSpace for multithreading
+    blockspace = BlockSpace(grid.X)
+
+    # Sparse matrix
+    A = create_sparse_matrix(it, grid.X; ndofs=3)
+
+    # Output
+    outdir = mkpath(joinpath(&quot;output&quot;, &quot;dam_break&quot;))
+    pvdfile = joinpath(outdir, &quot;paraview&quot;)
+    closepvd(openpvd(pvdfile)) # Create file
+
+    t = 0.0
+    step = 0
+    fps = 30
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+
+    Tesserae.@showprogress while t &lt; T
+
+        # Update interpolation values based on the nodes of active cells
+        # where the particles are located
+        activenodes = falses(size(grid))
+        for p in eachindex(particles)
+            cell = whichcell(particles.x[p], grid.X)
+            activenodes[cellnodes(cell)] .= true
+        end
+        for p in eachindex(mpvalues, particles)
+            update!(mpvalues[p], particles.x[p], grid.X, activenodes)
+        end
+        for cell in CartesianIndices(size(grid) .- 1)
+            xc = cellcenter(cell, grid.X)
+            update!(mpvalues_cell[cell], xc, grid.X, activenodes)
+        end
+
+        update!(blockspace, particles.x)
+
+        if transfer isa FLIP
+            @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                ma[i] = @∑ w[ip] * m[p] * a[p]
+            end
+        elseif transfer isa TPIC
+            @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (X[i] - x[p]))
+                ma[i] = @∑ w[ip] * m[p] * (a[p] + ∇a[p] ⋅ (X[i] - x[p]))
+            end
+        end
+
+        # Truncate the negative mass caused by the kernel correction to zero.
+        @. grid.m = max(grid.m, 0)
+
+        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
+        @. grid.vⁿ = grid.mv * grid.m⁻¹
+        @. grid.aⁿ = grid.ma * grid.m⁻¹
+
+        # Update a dof map
+        dofmask = trues(3, size(grid)...)
+        for i in eachindex(grid)
+            dofmask[:,i] .= !iszero(grid.m[i])
+        end
+        for i in @view eachindex(grid)[[begin,end],:] # Walls
+            grid.vⁿ[i] = grid.vⁿ[i] .* (false,true)
+            grid.aⁿ[i] = grid.aⁿ[i] .* (false,true)
+            dofmask[1,i] = false
+        end
+        for i in @view eachindex(grid)[:,begin] # Floor
+            grid.vⁿ[i] = grid.vⁿ[i] .* (true,false)
+            grid.aⁿ[i] = grid.aⁿ[i] .* (true,false)
+            dofmask[2,i] = false
+        end
+        dofmap = DofMap(dofmask)
+
+        # Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
+        state = (; grid, particles, mpvalues, mpvalues_cell, blockspace, ρ, μ, β, γ, A, dofmap, Δt)
+        Δt′ = variational_multiscale_method(state)
+
+        if transfer isa FLIP
+            local α = transfer.α
+            @threaded @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * w[ip]
+                a[p] = @∑ a[i] * w[ip]
+                x[p] = @∑ x[i] * w[ip]
+            end
+        elseif transfer isa TPIC
+            @threaded @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                v[p] = @∑ v[i] * w[ip]
+                a[p] = @∑ a[i] * w[ip]
+                x[p] = @∑ x[i] * w[ip]
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                ∇a[p] = @∑ a[i] ⊗ ∇w[ip]
+            end
+        end
+
+        # Particle shifting based on the δ-correction
+        particle_shifting(state)
+
+        # Remove particles that accidentally move outside of the mesh
+        outside = findall(x-&gt;!isinside(x, grid.X), particles.x)
+        deleteat!(particles, outside)
+        deleteat!(mpvalues, outside)
+
+        t += Δt′
+        step += 1
+
+        # Write results
+        if t &gt; first(savepoints)
+            popfirst!(savepoints)
+            openpvd(pvdfile; append=true) do pvd
+                openvtm(string(pvdfile, step)) do vtm
+                    vorticity(∇v) = ∇v[2,1] - ∇v[1,2]
+                    openvtk(vtm, particles.x) do vtk
+                        vtk[&quot;Pressure (Pa)&quot;] = particles.p
+                        vtk[&quot;Velocity (m/s)&quot;] = particles.v
+                        vtk[&quot;Vorticity (1/s)&quot;] = vorticity.(particles.∇v)
+                    end
+                    openvtk(vtm, grid.X) do vtk
+                    end
+                    pvd[t] = vtm
+                end
+            end
+        end
+    end
+end</code></pre><h2 id="Variational-multiscale-method"><a class="docs-heading-anchor" href="#Variational-multiscale-method">Variational multiscale method</a><a id="Variational-multiscale-method-1"></a><a class="docs-heading-anchor-permalink" href="#Variational-multiscale-method" title="Permalink"></a></h2><pre><code class="language-julia hljs">function variational_multiscale_method(state)
+
+    # The simulation might fail occasionally due to regions with very small masses,
+    # such as splashes[^1]. Therefore, in this script, if Newton&#39;s method doesn&#39;t converge,
+    # a half time step is applied.
+
+    (; grid, dofmap, Δt) = state
+    @. grid.u_p = zero(grid.u_p)
+
+    solved = false
+    while !solved
+        # Reconstruct state using the current time step
+        state = merge(state, (; Δt))
+
+        # Compute VMS stabilization coefficients using current grid velocity,
+        # which is used for Jacobian matrix
+        grid.v .= grid.vⁿ
+        compute_VMS_stabilization_coefficients(state)
+
+        # Try computing the Jacobian matrix and performing its LU decomposition.
+        # In this formulation[^1], the initial Jacobian matrix is used in all Newton&#39;s iterations.
+        # If the computation fails, use a smaller time step.
+        J = lu(jacobian(state); check=false)
+        issuccess(J) || (Δt /= 2; continue)
+
+        # Solve nonlinear system
+        U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
+        solved = Tesserae.newton!(U, U-&gt;residual(U,state), U-&gt;J;
+                                  linsolve=(x,A,b)-&gt;ldiv!(x,A,b), atol=1e-10, rtol=1e-10)
+
+        # If the simulation fails to solve, retry with a smaller time step
+        solved || (Δt /= 2)
+    end
+
+    # Update the positions of grid nodes
+    @. grid.x = grid.X + grid.u
+
+    # Return the acutally applied time step
+    Δt
+end</code></pre><h2 id="VMS-stabilization-coefficients"><a class="docs-heading-anchor" href="#VMS-stabilization-coefficients">VMS stabilization coefficients</a><a id="VMS-stabilization-coefficients-1"></a><a class="docs-heading-anchor-permalink" href="#VMS-stabilization-coefficients" title="Permalink"></a></h2><pre><code class="language-julia hljs">function compute_VMS_stabilization_coefficients(state)
+    (; grid, particles, mpvalues_cell, ρ, μ, Δt) = state
+
+    c₁ = 4.0
+    c₂ = 2.0
+    τdyn = 1.0
+    h = sqrt(4*spacing(grid)^2/π)
+
+    # In the following computation, `@G2P` is unavailable
+    # due to the use of `mpvalues_cell`
+    for p in eachindex(particles)
+        v̄ₚ = zero(eltype(particles.v))
+        mp = mpvalues_cell[whichcell(particles.x[p], grid.X)]
+        gridindices = neighboringnodes(mp, grid)
+        for ip in eachindex(gridindices)
+            i = gridindices[ip]
+            v̄ₚ += mp.w[ip] * grid.v[i]
+        end
+        τ₁ = inv(ρ*τdyn/Δt + c₂*ρ*norm(v̄ₚ)/h + c₁*μ/h^2)
+        τ₂ = h^2 / (c₁*τ₁)
+        particles.τ₁[p] = τ₁
+        particles.τ₂[p] = τ₂
+    end
+end</code></pre><h2 id="δ-correction"><a class="docs-heading-anchor" href="#δ-correction">δ-correction</a><a id="δ-correction-1"></a><a class="docs-heading-anchor-permalink" href="#δ-correction" title="Permalink"></a></h2><pre><code class="language-julia hljs">function particle_shifting(state)
+    (; grid, particles, mpvalues) = state
+
+    @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        Ṽ[i] = @∑ V[p] * w[ip]
+        E[i] = max(0, -V[i] + Ṽ[i])
+    end
+
+    E² = sum(E-&gt;E^2, grid.E)
+    @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        ∇E²[p] = @∑ 2V[p] * E[i] * ∇w[ip]
+    end
+
+    b₀ = E² / sum(∇E²-&gt;∇E²⋅∇E², particles.∇E²)
+
+    for p in eachindex(particles)
+        xₚ = particles.x[p] - b₀ * particles.∇E²[p]
+        if isinside(xₚ, grid.X)
+            particles.x[p] = xₚ
+        end
+    end
+end</code></pre><h2 id="Residual-vector"><a class="docs-heading-anchor" href="#Residual-vector">Residual vector</a><a id="Residual-vector-1"></a><a class="docs-heading-anchor-permalink" href="#Residual-vector" title="Permalink"></a></h2><pre><code class="language-julia hljs">function residual(U, state)
+    (; grid, particles, mpvalues, μ, β, γ, dofmap, Δt) = state
+
+    # Map `U` to grid dispacement and pressure
+    dofmap(grid.u_p) .= U
+    grid.u .= map(x-&gt;@Tensor(x[1:2]), grid.u_p)
+    grid.p .= map(x-&gt;x[3], grid.u_p)
+
+    # Recompute nodal velocity and acceleration based on the Newmark-beta method
+    @. grid.v = γ/(β*Δt)*grid.u - (γ/β-1)*grid.vⁿ - Δt/2*(γ/β-2)*grid.aⁿ
+    @. grid.a = 1/(β*Δt^2)*grid.u - 1/(β*Δt)*grid.vⁿ - (1/2β-1)*grid.aⁿ
+
+    # Recompute particle properties for residual vector
+    @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        a[p]  = @∑ a[i] * w[ip]
+        p[p]  = @∑ p[i] * w[ip]
+        ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+        ∇p[p] = @∑ p[i] * ∇w[ip]
+        s[p]  = 2μ * symmetric(∇v[p])
+    end
+
+    # Compute VMS stabilization coefficients based on the current nodal velocity
+    compute_VMS_stabilization_coefficients(state)
+
+    # Compute residual values
+    @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        R_mom[i]  = @∑ V[p]*s[p]⋅∇w[ip] - m[p]*b[p]*w[ip] - V[p]*p[p]*∇w[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇w[ip]
+        R_mas[i]  = @∑ V[p]*tr(∇v[p])*w[ip] + τ₁[p]*m[p]*(a[p]-b[p])⋅∇w[ip] + τ₁[p]*V[p]*∇p[p]⋅∇w[ip]
+        R_mom[i] += m[i]*a[i]
+    end
+
+    # Map grid values to vector `R`
+    dofmap(map(vcat, grid.R_mom, grid.R_mas))
+end</code></pre><h2 id="Jacobian-matrix"><a class="docs-heading-anchor" href="#Jacobian-matrix">Jacobian matrix</a><a id="Jacobian-matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Jacobian-matrix" title="Permalink"></a></h2><pre><code class="language-julia hljs">function jacobian(state)
+    (; grid, particles, mpvalues, blockspace, ρ, μ, β, γ, A, dofmap, Δt) = state
+
+    # Construct the Jacobian matrix
+    cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
+    I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
+    @threaded @P2G_Matrix grid=&gt;(i,j) particles=&gt;p mpvalues=&gt;(ip,jp) blockspace begin
+        A[i,j] = @∑ begin
+            Kᵤᵤ = (γ/(β*Δt) * ∇w[ip] ⋅ cₚ ⋅ ∇w[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
+            Kᵤₚ = -∇w[ip] * w[jp] * V[p]
+            Kₚᵤ = (γ/(β*Δt)) * w[ip] * ∇w[jp] * V[p]
+            K̂ᵤᵤ = γ/(β*Δt) * τ₂[p] * ∇w[ip] ⊗ ∇w[jp] * V[p]
+            K̂ₚᵤ = 1/(β*Δt^2) * τ₁[p] * ρ * ∇w[ip] * w[jp] * V[p]
+            K̂ₚₚ = τ₁[p] * ∇w[ip] ⋅ ∇w[jp] * V[p]
+            [Kᵤᵤ+K̂ᵤᵤ           Kᵤₚ
+             Mat{1,2}(Kₚᵤ+K̂ₚᵤ) K̂ₚₚ]
+        end
+    end
+
+    # Extract the activated degrees of freedom
+    extract(A, dofmap)
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_based/">« Jacobian-based implicit method</a><a class="docs-footer-nextpage" href="../tlmpm_vortex/">Total Lagrangian MPM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Friday 23 August 2024 00:55">Friday 23 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
