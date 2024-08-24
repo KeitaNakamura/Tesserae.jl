@@ -31,6 +31,7 @@ makedocs(;
             "tutorials/rigid_body_contact.md",
         ],
         "Manual" => [
+            "mesh.md"
             "generation.md"
             "interpolation.md"
             "transfer.md"

@@ -49,13 +49,25 @@ end
 get_axisarray(x::CartesianMesh) = x.axisarray
 Base.size(x::CartesianMesh) = size(get_axisarray(x))
 Base.IndexStyle(::Type{<: CartesianMesh}) = IndexCartesian()
-# helpers
+
+"""
+    spacing(::CartesianMesh)
+
+Return the spacing of the mesh.
+"""
 spacing(x::CartesianMesh) = x.h
 spacing_inv(x::CartesianMesh) = x.h_inv
+
 get_axes(x::CartesianMesh) = get_axes(x.axisarray)
 get_axes(x::CartesianMesh, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
 @inline get_xmin(x::CartesianMesh{dim}) where {dim} = @inbounds x[oneunit(CartesianIndex{dim})]
 @inline get_xmax(x::CartesianMesh{dim}) where {dim} = @inbounds x[size(x)...]
+
+"""
+    volume(::CartesianMesh)
+
+Return the volume of the mesh.
+"""
 volume(x::CartesianMesh) = prod(get_xmax(x) - get_xmin(x))
 
 function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
@@ -72,10 +84,10 @@ end
 CartesianMesh(h::Real, minmax::Tuple{Real, Real}...) = CartesianMesh(Float64, h, minmax...)
 
 """
-    extract(mesh, (xmin, xmax), (ymin, ymax)...)
+    extract(mesh::CartesianMesh, (xmin, xmax), (ymin, ymax)...)
 
 Extract a portion of the `mesh`.
-```
+The extracted mesh retains the original origin and spacing.
 """
 function extract(mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim}) where {dim}
     @assert all(x->x[1]<x[2], minmax)
@@ -115,7 +127,6 @@ end
     isinside(x::Vec, mesh::CartesianMesh)
 
 Check if `x` is inside the `mesh`.
-This returns `true` if `all(mesh[1] .≤ x .< mesh[end])`.
 """
 @inline function isinside(x::Vec{dim}, mesh::CartesianMesh{dim}) where {dim}
     ξ = Tuple(normalize(x, mesh))
@@ -165,7 +176,7 @@ end
 """
     whichcell(x::Vec, mesh::CartesianMesh)
 
-Return cell index where `x` locates.
+Return the cell index where `x` is located.
 
 # Examples
 ```jldoctest
