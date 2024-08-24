@@ -111,7 +111,7 @@ function main()
 
         ## Calculate timestep based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/(particles.V⁰ * det(particles.F)))) + norm(particles.v))
-        Δt = CFL * spacing(grid) / vmax
+        Δt = CFL * h / vmax
 
         ## Compute grid body forces
         for i in eachindex(grid)

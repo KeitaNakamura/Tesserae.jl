@@ -5,8 +5,6 @@
 const Grid{N, T, NT <: NamedTuple{<: Any, <: Tuple{AbstractMesh, Vararg{AbstractArray}}}, I} = StructArray{T, N, NT, I}
 
 get_mesh(grid::Grid) = getx(grid)
-spacing(grid::Grid) = spacing(get_mesh(grid))
-spacing_inv(grid::Grid) = spacing_inv(get_mesh(grid))
 
 ##########
 # SpGrid #

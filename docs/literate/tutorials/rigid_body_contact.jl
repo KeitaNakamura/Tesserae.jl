@@ -121,7 +121,7 @@ function main()
     Tesserae.@showprogress while t < T
 
         vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
-        Δt = CFL * spacing(grid) / vmax
+        Δt = CFL * h / vmax
 
         for p in eachindex(particles, mpvalues)
             update!(mpvalues[p], particles.x[p], grid.x)

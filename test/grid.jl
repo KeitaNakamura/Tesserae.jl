@@ -9,8 +9,6 @@
     for grid in ((@inferred generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)),
                  (@inferred generate_grid(Array, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)),)
         @test grid isa Grid
-        @test (@inferred spacing(grid)) === spacing(mesh)
-        @test (@inferred Tesserae.spacing_inv(grid)) === Tesserae.spacing_inv(mesh)
         @test (grid.x)::CartesianMesh{2, Float64} == mesh
         @test all(iszero, (grid.m)::Array{Float64, 2})
         @test all(iszero, (grid.v)::Array{Vec{2,Float64}, 2})

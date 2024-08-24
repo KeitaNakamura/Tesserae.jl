@@ -89,7 +89,7 @@ function main(transfer = FLIP(1.0))
     grid = generate_grid(GridProp, CartesianMesh(h, (0,3.22), (0,2.5)))
     for cell in CartesianIndices(size(grid).-1)
         for i in cellnodes(cell)
-            grid.V[i] += (spacing(grid)/2)^2
+            grid.V[i] += (h/2)^2
         end
     end
 
@@ -283,7 +283,7 @@ function compute_VMS_stabilization_coefficients(state)
     c₁ = 4.0
     c₂ = 2.0
     τdyn = 1.0
-    h = sqrt(4*spacing(grid)^2/π)
+    h = sqrt(4*spacing(grid.X)^2/π)
 
     ## In the following computation, `@G2P` is unavailable
     ## due to the use of `mpvalues_cell`

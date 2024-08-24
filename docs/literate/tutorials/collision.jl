@@ -140,7 +140,7 @@ function main(transfer = FLIP(1.0))
 
         ## Calculate timestep based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v))
-        Δt = CFL * spacing(grid) / vmax
+        Δt = CFL * h / vmax
 
         ## Update interpolation values
         for p in eachindex(particles, mpvalues)

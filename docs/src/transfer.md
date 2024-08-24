@@ -64,7 +64,7 @@ for p in eachindex(particles)                                                 #h
     update!(mpvalues[p], particles.x[p], grid.x)                              #hide
 end                                                                           #hide
 α = 0.5                                                                       #hide
-Dₚ⁻¹ = Dₚ⁻¹ = inv(1/4 * spacing(grid)^2 * I)                                  #hide
+Dₚ⁻¹ = inv(1/4 * spacing(grid.x)^2 * I)                                       #hide
 m = 5                                                                         #hide
 Δt = 1.0                                                                      #hide
 nothing                                                                       #hide
