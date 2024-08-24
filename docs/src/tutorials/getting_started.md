@@ -335,7 +335,7 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         Δvₚ += mp.w[ip] * (grid.v[i] - grid.vⁿ[i])
         ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
-        Δxₚ += Δt * (mp.w[ip] * grid.v[i])
+        Δxₚ += Δt * grid.v[i] * mp.w[ip]
     end
     particles.v[p] += Δvₚ
     particles.∇v[p] = ∇vₚ

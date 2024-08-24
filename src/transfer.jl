@@ -4,7 +4,9 @@
     end
 
 Particle-to-grid transfer macro.
-`=> index` represents the associated `index` in the macro.
+Based on the `parent => index` expressions, `a[index]` in `equations`
+translates to `parent.a[index]`. This `index` can be replaced with
+any other name.
 
 # Examples
 ```julia
@@ -238,7 +240,9 @@ end
     end
 
 Grid-to-particle transfer macro.
-`=> index` represents the associated `index` in the macro.
+Based on the `parent => index` expressions, `a[index]` in `equations`
+translates to `parent.a[index]`. This `index` can be replaced with
+any other name.
 
 # Examples
 ```julia
