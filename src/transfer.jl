@@ -222,6 +222,8 @@ end
 @inline Base.setindex!(A::SpArray, v, i::UnsafeSpIndex) = (@_propagate_inbounds_meta; get_data(A)[i.i]=v; A)
 
 function check_arguments_for_P2G(grid, particles, mpvalues, space)
+    get_mesh(grid) isa AbstractMesh || error("@P2G: grid must have a mesh")
+    eltype(mpvalues) <: MPValue || error("@P2G: invalid `MPValue`s, got type $(typeof(mpvalues))")
     if grid isa SpGrid
         if length(propertynames(grid)) > 1
             isempty(get_data(getproperty(grid, 2))) && error("@P2G: SpGrid indices not activated")
@@ -507,6 +509,8 @@ end
 replace_dollar_by_identity!(x) = x
 
 function check_arguments_for_G2P(grid, particles, mpvalues)
+    get_mesh(grid) isa AbstractMesh || error("@G2P: grid must have a mesh")
+    eltype(mpvalues) <: MPValue || error("@G2P: invalid `MPValue`s, got type $(typeof(mpvalues))")
     if grid isa SpGrid
         if length(propertynames(grid)) > 1
             isempty(get_data(getproperty(grid, 2))) && error("@G2P: SpGrid indices not activated")
