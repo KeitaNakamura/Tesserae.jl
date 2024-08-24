@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Transfer schemes · Tesserae.jl</title><meta name="title" content="Transfer schemes · Tesserae.jl"/><meta property="og:title" content="Transfer schemes · Tesserae.jl"/><meta property="twitter:title" content="Transfer schemes · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started/">Getting started</a></li><li class="is-active"><a class="tocitem" href>Transfer schemes</a></li><li><input class="collapse-toggle" id="menuitem-2-3" type="checkbox"/><label class="tocitem" for="menuitem-2-3"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../dam_break/">Incompressible fluid flow</a></li><li><a class="tocitem" href="../cpdi/">CPDI</a></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><a class="tocitem" href="../rigid_body_contact/">Frictional contact with rigid body</a></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../mesh/">Mesh</a></li><li><a class="tocitem" href="../../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../../interpolation/">Interpolation</a></li><li><a class="tocitem" href="../../transfer/">Transfer between grid and particles</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Transfer schemes</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Transfer schemes</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/literate/tutorials/collision.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Transfer-schemes"><a class="docs-heading-anchor" href="#Transfer-schemes">Transfer schemes</a><a id="Transfer-schemes-1"></a><a class="docs-heading-anchor-permalink" href="#Transfer-schemes" title="Permalink"></a></h1><img src="https://github.com/user-attachments/assets/a069b594-389f-4082-8755-3d8b90908c67" width="600"/><table><tr><th style="text-align: right"># Particles</th><th style="text-align: right"># Iterations</th><th style="text-align: right">Execution time</th></tr><tr><td style="text-align: right">17k</td><td style="text-align: right">2.9k</td><td style="text-align: right">10 sec</td></tr></table><p>In this example, the following velocity transfer schemes are demonstrated:</p><ul><li>PIC–FLIP mixed transfer<sup class="footnote-reference"><a id="citeref-1" href="#footnote-1">[1]</a></sup></li><li>Affine PIC (APIC)<sup class="footnote-reference"><a id="citeref-2" href="#footnote-2">[2]</a></sup></li><li>Taylor PIC (TPIC)<sup class="footnote-reference"><a id="citeref-3" href="#footnote-3">[3]</a></sup></li><li>eXtended PIC (XPIC)<sup class="footnote-reference"><a id="citeref-4" href="#footnote-4">[4]</a></sup></li></ul><div class="admonition is-info"><header class="admonition-header">Info</header><div class="admonition-body"><p>It is also recommended to refer to the manual <a href="../../transfer/#manual">Transfer between grid and particles</a>.</p></div></div><p>The problem involves the collision between two elastic rings, which is consistent with previous study<sup class="footnote-reference"><a id="citeref-5" href="#footnote-5">[5]</a></sup>.</p><pre><code class="language-julia hljs">using Tesserae
+
+struct FLIP α::Float64 end
+struct APIC end
+struct TPIC end
+struct XPIC m::Int end
+
+function main(transfer = FLIP(1.0))
+
+    # Simulation parameters
+    h   = 0.1 # Grid spacing
+    T   = 0.6 # Time span
+    CFL = 0.8 # Courant number
+
+    # Material constants
+    E  = 100e6                  # Young&#39;s modulus
+    ν  = 0.2                    # Poisson&#39;s ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame&#39;s first parameter
+    μ  = E / 2(1 + ν)           # Shear modulus
+    ρ⁰ = 1e3                    # Initial density
+
+    # Geometry
+    L  = 20.0 # Length of domain
+    W  = 15.0 # Width of domain
+    rᵢ = 3.0  # Inner radius of rings
+    rₒ = 4.0  # Outer radius of rings
+
+    GridProp = @NamedTuple begin
+        x   :: Vec{2, Float64}
+        m   :: Float64
+        m⁻¹ :: Float64
+        mv  :: Vec{2, Float64}
+        f   :: Vec{2, Float64}
+        v   :: Vec{2, Float64}
+        vⁿ  :: Vec{2, Float64}
+        # XPIC
+        vᵣ★ :: Vec{2, Float64}
+        v★  :: Vec{2, Float64}
+    end
+    ParticleProp = @NamedTuple begin
+        x  :: Vec{2, Float64}
+        m  :: Float64
+        V⁰ :: Float64
+        V  :: Float64
+        v  :: Vec{2, Float64}
+        ∇v :: SecondOrderTensor{2, Float64, 4}
+        σ  :: SymmetricSecondOrderTensor{2, Float64, 3}
+        F  :: SecondOrderTensor{2, Float64, 4}
+        # APIC
+        B  :: SecondOrderTensor{2, Float64, 4}
+        # XPIC
+        vᵣ★ :: Vec{2, Float64}
+        a★  :: Vec{2, Float64}
+    end
+
+    # Background grid
+    grid = generate_grid(GridProp, CartesianMesh(h, (-L,L), (-W/2,W/2)))
+
+    # Particles
+    particles = let
+        pts = generate_particles(ParticleProp, grid.x)
+        pts.V .= pts.V⁰ .= volume(grid.x) / length(pts)
+
+        lhs = findall(pts.x) do (x, y)
+            rᵢ^2 &lt; (x+L/4)^2+y^2 &lt; rₒ^2
+        end
+        rhs = findall(pts.x) do (x, y)
+            rᵢ^2 &lt; (x-L/4)^2+y^2 &lt; rₒ^2
+        end
+
+        # Set initial velocities
+        @. pts.v[lhs] =  Vec(30, 0)
+        @. pts.v[rhs] = -Vec(30, 0)
+
+        pts[[lhs; rhs]]
+    end
+    @. particles.m = ρ⁰ * particles.V⁰
+    @. particles.F = one(particles.F)
+    @show length(particles)
+
+    # Interpolation
+    mpvalues = generate_mpvalues(BSpline(Quadratic()), grid.x, length(particles))
+
+    # Material model (neo-Hookean)
+    function stored_energy(C)
+        dim = size(C, 1)
+        J = √det(C)
+        μ/2*(tr(C)-dim) - μ*log(J) + λ/2*(log(J))^2
+    end
+    function caucy_stress(F)
+        J = det(F)
+        S = 2 * gradient(stored_energy, F&#39; ⋅ F)
+        symmetric(inv(J) * F ⋅ S ⋅ F&#39;)
+    end
+
+    # Outputs
+    outdir = mkpath(joinpath(&quot;output&quot;, &quot;collision&quot;))
+    pvdfile = joinpath(outdir, &quot;paraview&quot;)
+    closepvd(openpvd(pvdfile)) # create file
+
+    t = 0.0
+    step = 0
+    fps = 120
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+
+    Tesserae.@showprogress while t &lt; T
+
+        # Calculate timestep based on the wave speed
+        vmax = maximum(@. sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v))
+        Δt = CFL * h / vmax
+
+        # Update interpolation values
+        for p in eachindex(particles, mpvalues)
+            update!(mpvalues[p], particles.x[p], grid.x)
+        end
+
+        # Particle-to-grid transfer
+        if transfer isa Union{FLIP, XPIC}
+            @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+            end
+        elseif transfer isa APIC
+            local Dₚ⁻¹ = inv(1/4 * h^2 * I)
+            @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] ⋅ Dₚ⁻¹ ⋅ (x[i] - x[p]))
+                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+            end
+        elseif transfer isa TPIC
+            @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
+                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+            end
+        end
+
+        # Update grid velocity
+        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
+        @. grid.vⁿ = grid.mv * grid.m⁻¹
+        @. grid.v  = grid.vⁿ + Δt * grid.f * grid.m⁻¹
+
+        # Grid-to-particle transfer
+        if transfer isa FLIP
+            local α = transfer.α
+            @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                v[p]  = @∑ w[ip] * ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i])))
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                x[p] += @∑ Δt * (w[ip] * v[i])
+            end
+        elseif transfer isa APIC
+            @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                v[p]  = @∑ w[ip] * v[i]
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                B[p]  = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
+                x[p] += Δt * v[p]
+            end
+        elseif transfer isa TPIC
+            @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                v[p]  = @∑ w[ip] * v[i]
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                x[p] += Δt * v[p]
+            end
+        elseif transfer isa XPIC
+            local m = transfer.m
+            @. grid.vᵣ★ = grid.vⁿ
+            @. grid.v★ = zero(grid.v★)
+            for r in 2:m
+                @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                    vᵣ★[p] = @∑ w[ip] * vᵣ★[i]
+                end
+                @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                    vᵣ★[i] = @∑ (m-r+1)/r * w[ip] * m[p] * vᵣ★[p] * m⁻¹[i]
+                    v★[i] += (-1)^r * vᵣ★[i]
+                end
+            end
+            @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                a★[p] = @∑ w[ip] * (v[p] + m*(v★[i] - vⁿ[i])) / Δt
+                v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+                x[p] += @∑ w[ip] * (v[i] + vⁿ[i]) * Δt / 2
+                v[p] -= a★[p] * Δt
+                x[p] -= a★[p] * Δt^2 / 2
+            end
+        end
+
+        # Update other particle properties
+        for p in eachindex(particles)
+            ∇uₚ = Δt * particles.∇v[p]
+            Fₚ = (I + ∇uₚ) ⋅ particles.F[p]
+            σₚ = caucy_stress(Fₚ)
+            particles.σ[p] = σₚ
+            particles.F[p] = Fₚ
+            particles.V[p] = det(Fₚ) * particles.V⁰[p]
+        end
+
+        t += Δt
+        step += 1
+
+        if t &gt; first(savepoints)
+            popfirst!(savepoints)
+            openpvd(pvdfile; append=true) do pvd
+                openvtm(string(pvdfile, step)) do vtm
+                    function stress3x3(F)
+                        z = zero(Mat{2,1})
+                        F3x3 = [F  z
+                                z&#39; 1]
+                        caucy_stress(F3x3)
+                    end
+                    openvtk(vtm, particles.x) do vtk
+                        vtk[&quot;Velocity (m/s)&quot;] = particles.v
+                        vtk[&quot;von Mises stress (MPa)&quot;] = @. 1e-6 * vonmises(stress3x3(particles.F))
+                    end
+                    openvtk(vtm, grid.x) do vtk
+                        vtk[&quot;Velocity (m/s)&quot;] = grid.v
+                    end
+                    pvd[t] = vtm
+                end
+            end
+        end
+    end
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1145/2461912.2461948">Stomakhin, A., Schroeder, C., Chai, L., Teran, J. and Selle, A., 2013. A material point method for snow simulation. ACM Transactions on Graphics (TOG), 32(4), pp.1-10.</a></li><li class="footnote" id="footnote-2"><a class="tag is-link" href="#citeref-2">2</a><a href="https://doi.org/10.1145/2766996">Jiang, C., Schroeder, C., Selle, A., Teran, J. and Stomakhin, A., 2015. The affine particle-in-cell method. ACM Transactions on Graphics (TOG), 34(4), pp.1-10.</a></li><li class="footnote" id="footnote-3"><a class="tag is-link" href="#citeref-3">3</a><a href="https://doi.org/10.1016/j.cma.2022.115720">Nakamura, K., Matsumura, S. and Mizutani, T., 2023. Taylor particle-in-cell transfer and kernel correction for material point method. Computer Methods in Applied Mechanics and Engineering, 403, p.115720.</a></li><li class="footnote" id="footnote-4"><a class="tag is-link" href="#citeref-4">4</a><a href="https://doi.org/10.1016/j.cma.2017.01.035">Hammerquist, C.C. and Nairn, J.A., 2017. A new method for material point method particle updates that reduces noise and enhances stability. Computer methods in applied mechanics and engineering, 318, pp.724-738.</a></li><li class="footnote" id="footnote-5"><a class="tag is-link" href="#citeref-5">5</a><a href="https://doi.org/10.1016/j.cma.2021.114350">Li, X., Fang, Y., Li, M. and Jiang, C., 2022. BFEMP: Interpenetration-free MPM–FEM coupling with barrier contact. Computer Methods in Applied Mechanics and Engineering, 390, p.114350.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../getting_started/">« Getting started</a><a class="docs-footer-nextpage" href="../implicit_jacobian_free/">Jacobian-free »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Saturday 24 August 2024 02:04">Saturday 24 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
