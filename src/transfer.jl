@@ -489,7 +489,7 @@ function findarrays_from_index!(set::Set{Expr}, index::Symbol, expr::Expr)
 end
 findarrays_from_index!(set::Set{Expr}, index::Symbol, expr) = nothing
 
-function eachparticleindex(particles::AbstractVector, mpvalues::AbstractVector{<: MPValue})
+function eachparticleindex(particles::AbstractArray, mpvalues::AbstractArray{<: MPValue})
     @assert length(particles) ≤ length(mpvalues)
     eachindex(particles)
 end
