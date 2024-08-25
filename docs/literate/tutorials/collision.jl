@@ -138,7 +138,7 @@ function main(transfer = FLIP(1.0))
 
     Tesserae.@showprogress while t < T
 
-        ## Calculate timestep based on the wave speed
+        ## Calculate time step based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * h / vmax
 
@@ -172,7 +172,7 @@ function main(transfer = FLIP(1.0))
         ## Update grid velocity
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
         @. grid.vⁿ = grid.mv * grid.m⁻¹
-        @. grid.v  = grid.vⁿ + Δt * grid.f * grid.m⁻¹
+        @. grid.v  = grid.vⁿ + (grid.f * grid.m⁻¹) * Δt
 
         ## Grid-to-particle transfer
         if transfer isa FLIP
@@ -180,20 +180,20 @@ function main(transfer = FLIP(1.0))
             @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p]  = @∑ w[ip] * ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i])))
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-                x[p] += @∑ Δt * (w[ip] * v[i])
+                x[p] += @∑ w[ip] * v[i] * Δt
             end
         elseif transfer isa APIC
             @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p]  = @∑ w[ip] * v[i]
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 B[p]  = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
-                x[p] += Δt * v[p]
+                x[p] += v[p] * Δt
             end
         elseif transfer isa TPIC
             @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p]  = @∑ w[ip] * v[i]
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-                x[p] += Δt * v[p]
+                x[p] += v[p] * Δt
             end
         elseif transfer isa XPIC
             local m = transfer.m
@@ -220,7 +220,7 @@ function main(transfer = FLIP(1.0))
 
         ## Update other particle properties
         for p in eachindex(particles)
-            ∇uₚ = Δt * particles.∇v[p]
+            ∇uₚ = particles.∇v[p] * Δt
             Fₚ = (I + ∇uₚ) ⋅ particles.F[p]
             σₚ = caucy_stress(Fₚ)
             particles.σ[p] = σₚ

@@ -136,9 +136,9 @@ function main()
 
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
         @. grid.vⁿ  = grid.mv * grid.m⁻¹
-        @. grid.v   = grid.vⁿ + Δt * grid.fint * grid.m⁻¹
+        @. grid.v   = grid.vⁿ + (grid.fint * grid.m⁻¹) * Δt
         @. grid.fext += contact_force_tangent(grid.fext, grid.v-disk.v, grid.m, Δt)
-        @. grid.v    += Δt * grid.fext * grid.m⁻¹
+        @. grid.v    += (grid.fext * grid.m⁻¹) * Δt
 
         for i in eachindex(grid)[[begin,end],:]
             grid.v[i] = grid.v[i] .* (false,true)
@@ -150,11 +150,11 @@ function main()
         @G2P grid=>i particles=>p mpvalues=>ip begin
             v[p]  = @∑ w[ip] * v[i] # PIC transfer
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-            x[p] += Δt * v[p]
+            x[p] += v[p] * Δt
         end
 
         for p in 1:length(particles)
-            Δϵ = resizedim(Δt * symmetric(particles.∇v[p]), Val(3))
+            Δϵ = resizedim(symmetric(particles.∇v[p]), Val(3)) * Δt
             particles.σ[p]  = vonmises_model(particles.σ[p], Δϵ; λ, G, σy)
             particles.V[p] *= 1 + tr(Δϵ)
             particles.ϵ[p] += Δϵ

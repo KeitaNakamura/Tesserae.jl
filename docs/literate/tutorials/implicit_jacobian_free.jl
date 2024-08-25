@@ -18,7 +18,7 @@ function main()
     ## Simulation parameters
     h  = 0.05 # Grid spacing
     T  = 3.0  # Time span
-    Δt = 0.01 # Timestep
+    Δt = 0.01 # Time step
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
         h = 0.1                           #src
     end                                   #src
@@ -141,7 +141,7 @@ function main()
 
         ## Grid dispacement, velocity and acceleration have been updated during Newton's iterations
         @G2P grid=>i particles=>p mpvalues=>ip begin
-            v[p] += @∑ Δt * w[ip] * ((1-γ)*a[p] + γ*a[i])
+            v[p] += @∑ w[ip] * ((1-γ)*a[p] + γ*a[i]) * Δt
             a[p]  = @∑ w[ip] * a[i]
             x[p]  = @∑ w[ip] * (X[i] + u[i])
             ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
@@ -170,7 +170,7 @@ function residual(U::AbstractVector, state)
 
     dofmap(grid.u) .= U
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
-    @. grid.v = grid.vⁿ + Δt*((1-γ)*grid.aⁿ + γ*grid.a)
+    @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
     transposing_tensor(σ) = @einsum (i,j,k,l) -> σ[i,l] * one(σ)[j,k]
     @G2P grid=>i particles=>p mpvalues=>ip begin

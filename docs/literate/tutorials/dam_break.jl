@@ -26,7 +26,7 @@ function main(transfer = FLIP(1.0))
     h  = 0.02   # Grid spacing
     T  = 7.0    # Time span
     g  = 9.81   # Gravity acceleration
-    Δt = 2.0e-3 # Timestep
+    Δt = 2.0e-3 # Time step
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
         T = 0.2                           #src
     end                                   #src
@@ -185,7 +185,7 @@ function main(transfer = FLIP(1.0))
         if transfer isa FLIP
             local α = transfer.α
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + Δt*((1-γ)*a[p] + γ*a[i]))) * w[ip]
+                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + ((1-γ)*a[p] + γ*a[i])*Δt)) * w[ip]
                 a[p] = @∑ a[i] * w[ip]
                 x[p] = @∑ x[i] * w[ip]
             end

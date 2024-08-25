@@ -102,7 +102,7 @@ function main()
         ## Update grid velocity
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
         @. grid.vⁿ = grid.mv * grid.m⁻¹
-        @. grid.v  = grid.vⁿ + Δt * grid.f * grid.m⁻¹
+        @. grid.v  = grid.vⁿ + (grid.f * grid.m⁻¹) * Δt
 
         ## Boundary conditions
         for i in eachindex(grid)
@@ -116,12 +116,12 @@ function main()
         @G2P grid=>i particles=>p mpvalues=>ip begin
             v[p]  += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p]  = @∑ v[i] ⊗ ∇w[ip]
-            x[p]  += @∑ Δt * (w[ip] * v[i])
+            x[p]  += @∑ w[ip] * v[i] * Δt
         end
 
         ## Update other particle properties
         for p in eachindex(particles)
-            ∇uₚ = Δt * particles.∇v[p]
+            ∇uₚ = particles.∇v[p] * Δt
             Fₚ = (I + ∇uₚ) ⋅ particles.F[p]
             σₚ = caucy_stress(Fₚ)
             particles.σ[p] = σₚ

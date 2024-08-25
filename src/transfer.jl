@@ -19,7 +19,7 @@ any other name.
 
     # Calculation on grid
     vⁿ[i] = mv[i] / m[i]
-    v[i]  = vⁿ[i] + Δt * (f[i] / m[i])
+    v[i]  = vⁿ[i] + (f[i] / m[i]) * Δt
 
 end
 ```
@@ -46,7 +46,7 @@ end
 
 # Calculation on grid
 @. grid.vⁿ = grid.mv / grid.m
-@. grid.v  = grid.vⁿ + Δt * (grid.f / grid.m)
+@. grid.v  = grid.vⁿ + (grid.f / grid.m) * Δt
 ```
 
 !!! warning
@@ -251,13 +251,13 @@ any other name.
 @G2P grid=>i particles=>p mpvalues=>ip begin
 
     # Grid-to-particle transfer
-    v[p] += @∑ (vⁿ[i] - v[i]) * w[ip]
+    v[p] += @∑ w[ip] * (vⁿ[i] - v[i])
     ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-    x[p] += @∑ Δt * v[i] * w[ip]
+    x[p] += @∑ w[ip] * v[i] * Δt
 
     # Calculation on particle
-    Δϵₚ = Δt * symmetric(∇v[p])
-    F[p]  = (I + Δt*∇v[p]) ⋅ F[p]
+    Δϵₚ = symmetric(∇v[p]) * Δt
+    F[p]  = (I + ∇v[p]*Δt) ⋅ F[p]
     V[p]  = V⁰[p] * det(F[p])
     σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
 
@@ -276,9 +276,9 @@ for p in eachindex(particles)
     Δxₚ = zero(eltype(particles.x))
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        Δvₚ += (grid.vⁿ[i] - grid.v[i]) * mp.w[ip]
+        Δvₚ += mp.w[ip] * (grid.vⁿ[i] - grid.v[i])
         ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
-        Δxₚ += Δt * grid.v[i] * mp.w[ip]
+        Δxₚ += mp.w[ip] * grid.v[i] * Δt
     end
     particles.v[p] += Δvₚ
     particles.∇v[p] = ∇vₚ
@@ -287,8 +287,8 @@ end
 
 # Calculation on particle
 for p in eachindex(particles)
-    Δϵₚ = Δt * symmetric(particles.∇v[p])
-    particles.F[p]  = (I + Δt*particles.∇v[p]) ⋅ particles.F[p]
+    Δϵₚ = symmetric(particles.∇v[p]) * Δt
+    particles.F[p]  = (I + particles.∇v[p]*Δt) ⋅ particles.F[p]
     particles.V[p]  = particles.V⁰[p] * det(particles.F[p])
     particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
 end

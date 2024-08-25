@@ -15,7 +15,6 @@ function main()
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
     μ  = E / 2(1 + ν)           # Shear modulus
     ρ⁰ = 1000.0                 # Initial density
-    r  = 0.2                    # Radius of disk
 
     # Grid and particle properties
     GridProp = @NamedTuple begin
@@ -30,7 +29,6 @@ function main()
         x  :: Vec{2, Float64}                           # Position
         m  :: Float64                                   # Mass
         V⁰ :: Float64                                   # Initial volume
-        V  :: Float64                                   # Volume
         v  :: Vec{2, Float64}                           # Velocity
         ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
         F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
@@ -49,6 +47,7 @@ function main()
         pts.V⁰ .= volume(mesh) / length(pts) # Set initial volume
 
         # Left and right disks
+        r = 0.2 # Radius
         lhs = findall(x -> norm(@. x-r    ) < r, pts.x)
         rhs = findall(x -> norm(@. x-(1-r)) < r, pts.x)
 
@@ -59,7 +58,6 @@ function main()
         pts[[lhs; rhs]]
     end
     @. particles.m = ρ⁰ * particles.V⁰
-    @. particles.V = particles.V⁰
     @. particles.F = one(particles.F)
 
     # Interpolation
@@ -77,22 +75,21 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
-            f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⋅ ∇w[ip]
         end
 
         @. grid.vⁿ = grid.mv / grid.m
-        @. grid.v  = grid.vⁿ + Δt * (grid.f / grid.m)
+        @. grid.v  = grid.vⁿ + (grid.f / grid.m) * Δt
 
         @G2P grid=>i particles=>p mpvalues=>ip begin
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-            x[p] += @∑ Δt * v[i] * w[ip]
+            x[p] += @∑ w[ip] * v[i] * Δt
         end
 
         for p in eachindex(particles)
-            Δϵₚ = Δt * symmetric(particles.∇v[p])
-            particles.F[p]  = (I + Δt*particles.∇v[p]) ⋅ particles.F[p]
-            particles.V[p]  = particles.V⁰[p] * det(particles.F[p])
+            Δϵₚ = symmetric(particles.∇v[p]) * Δt
+            particles.F[p]  = (I + particles.∇v[p]*Δt) ⋅ particles.F[p]
             particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
         end
 
@@ -123,7 +120,6 @@ E  = 500                    #hide
 λ  = (E*ν) / ((1+ν)*(1-2ν)) #hide
 μ  = E / 2(1 + ν)           #hide
 ρ⁰ = 1000                   #hide
-r  = 0.2                    #hide
 nothing                     #hide
 ```
 
@@ -143,7 +139,6 @@ ParticleProp = @NamedTuple begin
     x  :: Vec{2, Float64}                           # Position
     m  :: Float64                                   # Mass
     V⁰ :: Float64                                   # Initial volume
-    V  :: Float64                                   # Volume
     v  :: Vec{2, Float64}                           # Velocity
     ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
     F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
@@ -219,6 +214,7 @@ This `pts` is also a [`StructArray`](https://github.com/JuliaArrays/StructArrays
 particles = let                                                      #hide
     pts = generate_particles(ParticleProp, mesh; alg=GridSampling()) #hide
     pts.V⁰ .= volume(mesh) / length(pts)                             #hide
+    r = 0.2                                                          #hide
     lhs = findall(x -> norm(@. x-r    ) < r, pts.x)                  #hide
     rhs = findall(x -> norm(@. x-(1-r)) < r, pts.x)                  #hide
     pts.v[lhs] .= Vec( 0.1, 0.1)                                     #hide
@@ -269,7 +265,7 @@ nothing #hide
     ```@repl stepbystep
     mpvalues = generate_mpvalues(BSpline(Linear()), mesh, length(particles))
     ```
-    This SOA layout for `MPValue`s is generally preferred for performance, although it cannot be resized.
+    This SoA layout for `MPValue`s is generally preferred for performance, although it cannot be resized.
 
 ## Transfer between grid and particles
 
@@ -288,7 +284,7 @@ For the particle-to-grid transfer, the [`@P2G`](@ref) macro is useful:
 @P2G grid=>i particles=>p mpvalues=>ip begin
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
-    f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⋅ ∇w[ip]
 end
 ```
 
@@ -305,20 +301,20 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         grid.m[i]  += mp.w[ip] * particles.m[p]
         grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
-        grid.f[i]  += -particles.V[p] * particles.σ[p] ⋅ mp.∇w[ip]
+        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] ⋅ mp.∇w[ip]
     end
 end
 ```
 
 ### Grid-to-particle transfer
 
-Similar to the particle-to-grid transfer, the [`@G2P`](@ref) macro exists for grid-to-particle transfer:
+Similar to the particle-to-grid transfer, the [`@G2P`](@ref) macro is provided for grid-to-particle transfer:
 
 ```@example stepbystep
 @G2P grid=>i particles=>p mpvalues=>ip begin
     v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
     ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-    x[p] += @∑ Δt * v[i] * w[ip]
+    x[p] += @∑ w[ip] * v[i] * Δt
 end
 ```
 
@@ -335,7 +331,7 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         Δvₚ += mp.w[ip] * (grid.v[i] - grid.vⁿ[i])
         ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
-        Δxₚ += Δt * grid.v[i] * mp.w[ip]
+        Δxₚ += mp.w[ip] * grid.v[i] * Δt
     end
     particles.v[p] += Δvₚ
     particles.∇v[p] = ∇vₚ

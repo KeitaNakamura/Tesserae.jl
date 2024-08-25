@@ -16,7 +16,7 @@ function main()
     h  = 0.25 # Grid spacing
     T  = 3.0  # Time span
     g  = 10.0 # Gravity acceleration
-    Δt = 0.01 # Timestep
+    Δt = 0.01 # Time step
 
     ## Material constants
     E  = 1e6                    # Young's modulus
@@ -145,7 +145,7 @@ function main()
         @G2P grid=>i particles=>p mpvalues=>ip begin
             ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
             a[p]  = @∑ w[ip] * a[i]
-            v[p] += @∑ Δt * w[ip] * ((1-γ)*a[p] + γ*a[i])
+            v[p] += @∑ w[ip] * ((1-γ)*a[p] + γ*a[i]) * Δt
             x[p]  = @∑ w[ip] * (X[i] + u[i])
             F[p]  = (I + ∇u[p]) ⋅ F[p]
         end
@@ -181,7 +181,7 @@ function residual(U::AbstractVector, state)
 
     dofmap(grid.u) .= U
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
-    @. grid.v = grid.vⁿ + Δt*((1-γ)*grid.aⁿ + γ*grid.a)
+    @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
     transposing_tensor(σ) = @einsum (i,j,k,l) -> σ[i,l] * one(σ)[j,k]
     @G2P grid=>i particles=>p mpvalues=>ip begin

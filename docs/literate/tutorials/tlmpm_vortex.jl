@@ -109,7 +109,7 @@ function main()
 
     Tesserae.@showprogress while t < T
 
-        ## Calculate timestep based on the wave speed
+        ## Calculate time step based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/(particles.V⁰ * det(particles.F)))) + norm(particles.v))
         Δt = CFL * h / vmax
 
@@ -134,15 +134,15 @@ function main()
         @. grid.m⁻¹  = inv(grid.m) * !iszero(grid.m)
         @. grid.fext = grid.m * grid.b
         @. grid.vⁿ   = grid.mv * grid.m⁻¹
-        @. grid.v    = grid.vⁿ + Δt * (grid.fint + grid.fext) * grid.m⁻¹
+        @. grid.v    = grid.vⁿ + ((grid.fint + grid.fext) * grid.m⁻¹) * Δt
         grid.v[outside_gridinds] .= zero(eltype(grid.v))
 
         ## Update particle velocity and position
         @G2P grid=>i particles=>p mpvalues=>ip begin
             ṽ[p]  = @∑ w[ip] * v[i]
             ã[p]  = @∑ w[ip] * (v[i] - vⁿ[i]) / Δt
-            v[p]  = (1-α)*ṽ[p] + α*(v[p] + Δt*ã[p])
-            x[p] += Δt * ṽ[p]
+            v[p]  = (1-α)*ṽ[p] + α*(v[p] + ã[p]*Δt)
+            x[p] += ṽ[p] * Δt
         end
 
         ## Remap updated velocity to grid (MUSL)
