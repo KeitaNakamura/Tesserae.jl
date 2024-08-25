@@ -35,6 +35,7 @@ makedocs(;
             "generation.md"
             "interpolation.md"
             "transfer.md"
+            "export.md"
         ]
     ],
     doctest = true, # :fix
