@@ -122,9 +122,9 @@ function main()
 
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
         @. grid.vⁿ  = grid.mv * grid.m⁻¹
-        @. grid.v   = grid.vⁿ + Δt * grid.fint * grid.m⁻¹
+        @. grid.v   = grid.vⁿ + (grid.fint * grid.m⁻¹) * Δt
         @. grid.fext += contact_force_tangent(grid.fext, grid.v-disk.v, grid.m, Δt)
-        @. grid.v    += Δt * grid.fext * grid.m⁻¹
+        @. grid.v    += (grid.fext * grid.m⁻¹) * Δt
 
         for i in eachindex(grid)[[begin,end],:]
             grid.v[i] = grid.v[i] .* (false,true)
@@ -136,11 +136,11 @@ function main()
         @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
             v[p]  = @∑ w[ip] * v[i] # PIC transfer
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-            x[p] += Δt * v[p]
+            x[p] += v[p] * Δt
         end
 
         for p in 1:length(particles)
-            Δϵ = resizedim(Δt * symmetric(particles.∇v[p]), Val(3))
+            Δϵ = resizedim(symmetric(particles.∇v[p]), Val(3)) * Δt
             particles.σ[p]  = vonmises_model(particles.σ[p], Δϵ; λ, G, σy)
             particles.V[p] *= 1 + tr(Δϵ)
             particles.ϵ[p] += Δϵ
@@ -186,4 +186,4 @@ function vonmises_model(σⁿ, Δϵ; λ, G, σy)
         σ = dev(σ)
     end
     σ
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tlmpm_vortex/">« Total Lagrangian MPM</a><a class="docs-footer-nextpage" href="../../mesh/">Mesh »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Saturday 24 August 2024 12:36">Saturday 24 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tlmpm_vortex/">« Total Lagrangian MPM</a><a class="docs-footer-nextpage" href="../../mesh/">Mesh »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Sunday 25 August 2024 11:57">Sunday 25 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
