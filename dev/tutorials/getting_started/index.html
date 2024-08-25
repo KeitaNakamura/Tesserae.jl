@@ -10,6 +10,7 @@ function main()
     λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame&#39;s first parameter
     μ  = E / 2(1 + ν)           # Shear modulus
     ρ⁰ = 1000.0                 # Initial density
+    r  = 0.2                    # Radius of disk
 
     # Grid and particle properties
     GridProp = @NamedTuple begin
@@ -24,6 +25,7 @@ function main()
         x  :: Vec{2, Float64}                           # Position
         m  :: Float64                                   # Mass
         V⁰ :: Float64                                   # Initial volume
+        V  :: Float64                                   # Volume
         v  :: Vec{2, Float64}                           # Velocity
         ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
         F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
@@ -42,7 +44,6 @@ function main()
         pts.V⁰ .= volume(mesh) / length(pts) # Set initial volume
 
         # Left and right disks
-        r = 0.2 # Radius
         lhs = findall(x -&gt; norm(@. x-r    ) &lt; r, pts.x)
         rhs = findall(x -&gt; norm(@. x-(1-r)) &lt; r, pts.x)
 
@@ -53,6 +54,7 @@ function main()
         pts[[lhs; rhs]]
     end
     @. particles.m = ρ⁰ * particles.V⁰
+    @. particles.V = particles.V⁰
     @. particles.F = one(particles.F)
 
     # Interpolation
@@ -70,21 +72,22 @@ function main()
         @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
-            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⋅ ∇w[ip]
+            f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
         end
 
         @. grid.vⁿ = grid.mv / grid.m
-        @. grid.v  = grid.vⁿ + (grid.f / grid.m) * Δt
+        @. grid.v  = grid.vⁿ + Δt * (grid.f / grid.m)
 
         @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-            x[p] += @∑ w[ip] * v[i] * Δt
+            x[p] += @∑ Δt * v[i] * w[ip]
         end
 
         for p in eachindex(particles)
-            Δϵₚ = symmetric(particles.∇v[p]) * Δt
-            particles.F[p]  = (I + particles.∇v[p]*Δt) ⋅ particles.F[p]
+            Δϵₚ = Δt * symmetric(particles.∇v[p])
+            particles.F[p]  = (I + Δt*particles.∇v[p]) ⋅ particles.F[p]
+            particles.V[p]  = particles.V⁰[p] * det(particles.F[p])
             particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
         end
 
@@ -102,7 +105,7 @@ function main()
 
 end
 
-main()</code></pre><img src="247e91ec.gif" alt="Example block output"/><h2 id="Grid-and-particle-generation"><a class="docs-heading-anchor" href="#Grid-and-particle-generation">Grid and particle generation</a><a id="Grid-and-particle-generation-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-and-particle-generation" title="Permalink"></a></h2><h3 id="1.-Grid-and-particle-properties"><a class="docs-heading-anchor" href="#1.-Grid-and-particle-properties">1. Grid and particle properties</a><a id="1.-Grid-and-particle-properties-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Grid-and-particle-properties" title="Permalink"></a></h3><p>Before generating grid and particles, we must define their properties. This can be done by simply defining a <code>NamedTuple</code> for the grid and particles, respectively, as follows:</p><pre><code class="language-julia hljs">GridProp = @NamedTuple begin
+main()</code></pre><img src="4d1d4686.gif" alt="Example block output"/><h2 id="Grid-and-particle-generation"><a class="docs-heading-anchor" href="#Grid-and-particle-generation">Grid and particle generation</a><a id="Grid-and-particle-generation-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-and-particle-generation" title="Permalink"></a></h2><h3 id="1.-Grid-and-particle-properties"><a class="docs-heading-anchor" href="#1.-Grid-and-particle-properties">1. Grid and particle properties</a><a id="1.-Grid-and-particle-properties-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Grid-and-particle-properties" title="Permalink"></a></h3><p>Before generating grid and particles, we must define their properties. This can be done by simply defining a <code>NamedTuple</code> for the grid and particles, respectively, as follows:</p><pre><code class="language-julia hljs">GridProp = @NamedTuple begin
     x  :: Vec{2, Float64} # Position
     m  :: Float64         # Mass
     mv :: Vec{2, Float64} # Momentum
@@ -114,6 +117,7 @@ ParticleProp = @NamedTuple begin
     x  :: Vec{2, Float64}                           # Position
     m  :: Float64                                   # Mass
     V⁰ :: Float64                                   # Initial volume
+    V  :: Float64                                   # Volume
     v  :: Vec{2, Float64}                           # Velocity
     ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
     F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
@@ -185,27 +189,27 @@ end</code></pre></div></div><h3 id="2.-Mesh-and-grid-generation"><a class="docs-
  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
- [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  …  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]</code></pre><div class="admonition is-info"><header class="admonition-header">Info</header><div class="admonition-body"><p>Note that <code>grid.x</code> simply returns the mesh.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; grid.x === mesh</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre></div></div><h3 id="3.-Particle-generation"><a class="docs-heading-anchor" href="#3.-Particle-generation">3. Particle generation</a><a id="3.-Particle-generation-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Particle-generation" title="Permalink"></a></h3><p>The particles can be generated using <code>generate_particles</code> function:</p><pre><code class="language-julia hljs">pts = generate_particles(ParticleProp, mesh; alg=GridSampling())</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1600-element StructArray(::Vector{Vec{2, Float64}}, ::Vector{Float64}, ::Vector{Float64}, ::Vector{Vec{2, Float64}}, ::Vector{Tensor{Tuple{2, 2}, Float64, 2, 4}}, ::Vector{Tensor{Tuple{2, 2}, Float64, 2, 4}}, ::Vector{SymmetricSecondOrderTensor{2, Float64, 3}}) with eltype @NamedTuple{x::Vec{2, Float64}, m::Float64, V⁰::Float64, v::Vec{2, Float64}, ∇v::Tensor{Tuple{2, 2}, Float64, 2, 4}, F::Tensor{Tuple{2, 2}, Float64, 2, 4}, σ::SymmetricSecondOrderTensor{2, Float64, 3}}:
- (x = [0.0125, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.0375, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.0625, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.0875, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.1125, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.1375, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.1625, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.1875, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.2125, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.2375, 0.0125], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  …  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]</code></pre><div class="admonition is-info"><header class="admonition-header">Info</header><div class="admonition-body"><p>Note that <code>grid.x</code> simply returns the mesh.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; grid.x === mesh</code><code class="nohighlight hljs ansi" style="display:block;">true</code></pre></div></div><h3 id="3.-Particle-generation"><a class="docs-heading-anchor" href="#3.-Particle-generation">3. Particle generation</a><a id="3.-Particle-generation-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Particle-generation" title="Permalink"></a></h3><p>The particles can be generated using <code>generate_particles</code> function:</p><pre><code class="language-julia hljs">pts = generate_particles(ParticleProp, mesh; alg=GridSampling())</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1600-element StructArray(::Vector{Vec{2, Float64}}, ::Vector{Float64}, ::Vector{Float64}, ::Vector{Float64}, ::Vector{Vec{2, Float64}}, ::Vector{Tensor{Tuple{2, 2}, Float64, 2, 4}}, ::Vector{Tensor{Tuple{2, 2}, Float64, 2, 4}}, ::Vector{SymmetricSecondOrderTensor{2, Float64, 3}}) with eltype @NamedTuple{x::Vec{2, Float64}, m::Float64, V⁰::Float64, V::Float64, v::Vec{2, Float64}, ∇v::Tensor{Tuple{2, 2}, Float64, 2, 4}, F::Tensor{Tuple{2, 2}, Float64, 2, 4}, σ::SymmetricSecondOrderTensor{2, Float64, 3}}:
+ (x = [0.0125, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.0375, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.0625, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.0875, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.1125, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.1375, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.1625, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.1875, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.2125, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.2375, 0.0125], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
  ⋮
- (x = [0.7875, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.8125, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.8375, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.8625, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.8875, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.9125, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.9375, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.9625, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.9875, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])</code></pre><p>This <code>pts</code> is also a <a href="https://github.com/JuliaArrays/StructArrays.jl"><code>StructArray</code></a>, similar to <code>grid</code>.</p><div class="admonition is-info"><header class="admonition-header">Info</header><div class="admonition-body"><p>In the <code>generate_particles</code> function, particles are generated across the entire <code>mesh</code> domain. Consequently, any unnecessary particles need to be removed.</p></div></div><h2 id="Basis-function-values"><a class="docs-heading-anchor" href="#Basis-function-values">Basis function values</a><a id="Basis-function-values-1"></a><a class="docs-heading-anchor-permalink" href="#Basis-function-values" title="Permalink"></a></h2><p>In Tesserae, the basis function values are stored in <code>MPValue</code>. For example, <code>MPValue</code> with the linear basis function can be constructed as</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; mp = MPValue(BSpline(Linear()), mesh)</code><code class="nohighlight hljs ansi" style="display:block;">MPValue:
+ (x = [0.7875, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.8125, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.8375, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.8625, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.8875, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.9125, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.9375, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.9625, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
+ (x = [0.9875, 0.9875], m = 0.0, V⁰ = 0.0, V = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])</code></pre><p>This <code>pts</code> is also a <a href="https://github.com/JuliaArrays/StructArrays.jl"><code>StructArray</code></a>, similar to <code>grid</code>.</p><div class="admonition is-info"><header class="admonition-header">Info</header><div class="admonition-body"><p>In the <code>generate_particles</code> function, particles are generated across the entire <code>mesh</code> domain. Consequently, any unnecessary particles need to be removed.</p></div></div><h2 id="Basis-function-values"><a class="docs-heading-anchor" href="#Basis-function-values">Basis function values</a><a id="Basis-function-values-1"></a><a class="docs-heading-anchor-permalink" href="#Basis-function-values" title="Permalink"></a></h2><p>In Tesserae, the basis function values are stored in <code>MPValue</code>. For example, <code>MPValue</code> with the linear basis function can be constructed as</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; mp = MPValue(BSpline(Linear()), mesh)</code><code class="nohighlight hljs ansi" style="display:block;">MPValue:
   Interpolation: BSpline(Linear())
   Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
   Neighboring nodes: CartesianIndices((1:0, 1:0))</code></pre><p>This <code>mp</code> can be updated by passing the particle position to the <code>update!</code> function:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; update!(mp, particles.x[1], mesh)</code><code class="nohighlight hljs ansi" style="display:block;">MPValue:
@@ -221,7 +225,7 @@ end</code></pre></div></div><h3 id="2.-Mesh-and-grid-generation"><a class="docs-
   Property names: w, ∇w</code></pre><p>This SOA layout for <code>MPValue</code>s is generally preferred for performance, although it cannot be resized.</p></div></div><h2 id="Transfer-between-grid-and-particles"><a class="docs-heading-anchor" href="#Transfer-between-grid-and-particles">Transfer between grid and particles</a><a id="Transfer-between-grid-and-particles-1"></a><a class="docs-heading-anchor-permalink" href="#Transfer-between-grid-and-particles" title="Permalink"></a></h2><h3 id="Particle-to-grid-transfer"><a class="docs-heading-anchor" href="#Particle-to-grid-transfer">Particle-to-grid transfer</a><a id="Particle-to-grid-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Particle-to-grid-transfer" title="Permalink"></a></h3><p>For the particle-to-grid transfer, the <a href="../../transfer/#Tesserae.@P2G"><code>@P2G</code></a> macro is useful:</p><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
-    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⋅ ∇w[ip]
+    f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
 end</code></pre><p>This macro expands to roughly the following code:</p><pre><code class="language-julia hljs">@. grid.m  = zero(grid.m)
 @. grid.mv = zero(grid.mv)
 @. grid.f  = zero(grid.f)
@@ -232,12 +236,12 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         grid.m[i]  += mp.w[ip] * particles.m[p]
         grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
-        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] ⋅ mp.∇w[ip]
+        grid.f[i]  += -particles.V[p] * particles.σ[p] ⋅ mp.∇w[ip]
     end
-end</code></pre><h3 id="Grid-to-particle-transfer"><a class="docs-heading-anchor" href="#Grid-to-particle-transfer">Grid-to-particle transfer</a><a id="Grid-to-particle-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-to-particle-transfer" title="Permalink"></a></h3><p>Similar to the particle-to-grid transfer, the <a href="../../transfer/#Tesserae.@G2P"><code>@G2P</code></a> macro is provided for grid-to-particle transfer:</p><pre><code class="language-julia hljs">@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+end</code></pre><h3 id="Grid-to-particle-transfer"><a class="docs-heading-anchor" href="#Grid-to-particle-transfer">Grid-to-particle transfer</a><a id="Grid-to-particle-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-to-particle-transfer" title="Permalink"></a></h3><p>Similar to the particle-to-grid transfer, the <a href="../../transfer/#Tesserae.@G2P"><code>@G2P</code></a> macro exists for grid-to-particle transfer:</p><pre><code class="language-julia hljs">@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
     v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
     ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-    x[p] += @∑ w[ip] * v[i] * Δt
+    x[p] += @∑ Δt * v[i] * w[ip]
 end</code></pre><p>This macro expands to roughly the following code:</p><pre><code class="language-julia hljs">for p in eachindex(particles)
     mp = mpvalues[p]
     nodeindices = neighboringnodes(mp)
@@ -248,9 +252,9 @@ end</code></pre><p>This macro expands to roughly the following code:</p><pre><co
         i = nodeindices[ip]
         Δvₚ += mp.w[ip] * (grid.v[i] - grid.vⁿ[i])
         ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
-        Δxₚ += mp.w[ip] * grid.v[i] * Δt
+        Δxₚ += Δt * grid.v[i] * mp.w[ip]
     end
     particles.v[p] += Δvₚ
     particles.∇v[p] = ∇vₚ
     particles.x[p] += Δxₚ
-end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../collision/">Transfer schemes »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Sunday 25 August 2024 11:57">Sunday 25 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../collision/">Transfer schemes »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Sunday 25 August 2024 12:00">Sunday 25 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

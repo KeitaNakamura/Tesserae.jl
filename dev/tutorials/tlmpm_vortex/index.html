@@ -89,7 +89,7 @@ function main()
 
     Tesserae.@showprogress while t &lt; T
 
-        # Calculate time step based on the wave speed
+        # Calculate timestep based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/(particles.V⁰ * det(particles.F)))) + norm(particles.v))
         Δt = CFL * h / vmax
 
@@ -114,15 +114,15 @@ function main()
         @. grid.m⁻¹  = inv(grid.m) * !iszero(grid.m)
         @. grid.fext = grid.m * grid.b
         @. grid.vⁿ   = grid.mv * grid.m⁻¹
-        @. grid.v    = grid.vⁿ + ((grid.fint + grid.fext) * grid.m⁻¹) * Δt
+        @. grid.v    = grid.vⁿ + Δt * (grid.fint + grid.fext) * grid.m⁻¹
         grid.v[outside_gridinds] .= zero(eltype(grid.v))
 
         # Update particle velocity and position
         @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
             ṽ[p]  = @∑ w[ip] * v[i]
             ã[p]  = @∑ w[ip] * (v[i] - vⁿ[i]) / Δt
-            v[p]  = (1-α)*ṽ[p] + α*(v[p] + ã[p]*Δt)
-            x[p] += ṽ[p] * Δt
+            v[p]  = (1-α)*ṽ[p] + α*(v[p] + Δt*ã[p])
+            x[p] += Δt * ṽ[p]
         end
 
         # Remap updated velocity to grid (MUSL)
@@ -158,4 +158,4 @@ function main()
             end
         end
     end
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2019.112783">de Vaucorbeil, A., Nguyen, V.P. and Hutchinson, C.R., 2020. A Total-Lagrangian Material Point Method for solid mechanics problems involving large deformations. Computer Methods in Applied Mechanics and Engineering, 360, p.112783.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../cpdi/">« CPDI</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Sunday 25 August 2024 11:57">Sunday 25 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2019.112783">de Vaucorbeil, A., Nguyen, V.P. and Hutchinson, C.R., 2020. A Total-Lagrangian Material Point Method for solid mechanics problems involving large deformations. Computer Methods in Applied Mechanics and Engineering, 360, p.112783.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../cpdi/">« CPDI</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Sunday 25 August 2024 12:00">Sunday 25 August 2024</span>. Using Julia version 1.10.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
