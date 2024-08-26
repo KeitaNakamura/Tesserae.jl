@@ -6,7 +6,7 @@
 #
 # | # Particles | # Iterations | Execution time |
 # | ----------- | ------------ | -------------- |
-# | 600         | 300          | 5 sec          |
+# | 600         | 300          | 3 sec          |
 
 using Tesserae
 
@@ -205,7 +205,7 @@ function jacobian(U::AbstractVector, state)
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
     dotdot(a,C,b) = @einsum (i,j) -> a[k] * C[i,k,j,l] * b[l]
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
-        A[i,j] = @∑ (dotdot(∇w[ip] ⋅ ΔF⁻¹[p], c[p], ∇w[jp])) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
+        A[i,j] = @∑ dotdot(∇w[ip] ⋅ ΔF⁻¹[p], c[p], ∇w[jp]) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
     end
 
     extract(A, dofmap)

@@ -33,7 +33,7 @@ function create_sparse_matrix(::Type{T}, it::Interpolation, mesh::CartesianMesh{
     LI = LinearIndices(dims)
     mesh = CartesianMesh(float(T), 1, map(d->(0,d-1), dims)...)
     for i in eachindex(mesh)
-        unit = gridspan(it) * oneunit(i)
+        unit = (gridspan(it) - 1) * oneunit(i)
         indices = intersect((i-unit):(i+unit), eachindex(mesh))
         for j in indices
             spy[1:ndofs, LI[i], 1:ndofs, LI[j]] .= true
