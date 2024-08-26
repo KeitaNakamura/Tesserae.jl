@@ -35,6 +35,7 @@ makedocs(;
             "generation.md"
             "interpolation.md"
             "transfer.md"
+            "implicit.md"
             "export.md"
         ]
     ],

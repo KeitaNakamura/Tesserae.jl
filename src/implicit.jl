@@ -1,3 +1,44 @@
+"""
+    DofMap(mask::AbstractArray{Bool})
+
+Create a degree of freedom (DoF) map from a `mask` of size `(ndofs, size(grid)...)`.
+`ndofs` represents the number of DoFs for a field.
+
+```jldoctest
+julia> mesh = CartesianMesh(1, (0,2), (0,1));
+
+julia> grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, v::Vec{2,Float64}}, mesh);
+
+julia> grid.v .= reshape(reinterpret(Vec{2,Float64}, 1.0:12.0), 3, 2)
+3×2 Matrix{Vec{2, Float64}}:
+ [1.0, 2.0]  [7.0, 8.0]
+ [3.0, 4.0]  [9.0, 10.0]
+ [5.0, 6.0]  [11.0, 12.0]
+
+julia> dofmask = falses(2, size(grid)...);
+
+julia> dofmask[1,1:2,:] .= true; # activate nodes
+
+julia> dofmask[:,3,2] .= true; # activate nodes
+
+julia> reinterpret(reshape, Vec{2,Bool}, dofmask)
+3×2 reinterpret(reshape, Vec{2, Bool}, ::BitArray{3}) with eltype Vec{2, Bool}:
+ [1, 0]  [1, 0]
+ [1, 0]  [1, 0]
+ [0, 0]  [1, 1]
+
+julia> dofmap = DofMap(dofmask);
+
+julia> dofmap(grid.v)
+6-element view(reinterpret(reshape, Float64, ::Matrix{Vec{2, Float64}}), CartesianIndex{3}[CartesianIndex(1, 1, 1), CartesianIndex(1, 2, 1), CartesianIndex(1, 1, 2), CartesianIndex(1, 2, 2), CartesianIndex(1, 3, 2), CartesianIndex(2, 3, 2)]) with eltype Float64:
+  1.0
+  3.0
+  7.0
+  9.0
+ 11.0
+ 12.0
+```
+"""
 struct DofMap{dim, N, I <: AbstractVector{CartesianIndex{N}}}
     dimension::Int
     gridsize::Dims{dim}
@@ -24,7 +65,60 @@ function (dofmap::DofMap{dim, N})(A::AbstractArray{T, dim}) where {dim, N, T <: 
     @inbounds view(A′, indices′)
 end
 
-function create_sparse_matrix(it::Interpolation, mesh::AbstractMesh{dim}; ndofs::Int = dim) where {dim}
+"""
+    create_sparse_matrix(interpolation, mesh; ndofs = ndims(mesh))
+
+Create a sparse matrix.
+Since the created matrix accounts for all nodes in the mesh,
+it needs to be extracted for active nodes using the `DofMap`.
+`ndofs` represents the number of DoFs for a field.
+
+```jldoctest
+julia> mesh = CartesianMesh(1, (0,10), (0,10));
+
+julia> A = create_sparse_matrix(BSpline(Linear()), mesh; ndofs = 1)
+121×121 SparseArrays.SparseMatrixCSC{Float64, Int64} with 961 stored entries:
+⎡⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⣀⠈⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠙⢶⣀⠈⠻⣦⡀⠙⢷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠙⢶⣄⠈⠻⣦⡀⠙⠷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠙⢷⣄⠈⠻⣦⡀⠉⠷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠛⣤⡀⠉⠣⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠻⣦⡀⠉⠷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⢦⡄⠈⠱⣦⡀⠉⠷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠻⣦⡀⠙⢷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⣄⠈⠻⣦⡀⠙⢷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢷⣄⠈⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢷⣀⠈⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢶⣀⠈⠻⢆⡀⠘⠳⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢶⣀⠈⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢢⣀⠈⠛⣤⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢶⣀⠈⠻⣦⡀⠙⢷⣄⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢶⣄⠈⠻⣦⡀⠙⠷⣄⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢷⣄⠈⠻⣦⡀⠉⠷⣄⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠻⣦⡀⠉⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠻⣦⎦
+
+julia> dofmask = falses(1, size(mesh)...);
+
+julia> dofmask[:,1:3,1:3] .= true;
+
+julia> dofmap = DofMap(dofmask);
+
+julia> extract(A, dofmap)
+9×9 SparseArrays.SparseMatrixCSC{Float64, Int64} with 49 stored entries:
+ 0.0  0.0   ⋅   0.0  0.0   ⋅    ⋅    ⋅    ⋅
+ 0.0  0.0  0.0  0.0  0.0  0.0   ⋅    ⋅    ⋅
+  ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅    ⋅    ⋅
+ 0.0  0.0   ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
+  ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅   0.0  0.0
+  ⋅    ⋅    ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅
+  ⋅    ⋅    ⋅   0.0  0.0  0.0  0.0  0.0  0.0
+  ⋅    ⋅    ⋅    ⋅   0.0  0.0   ⋅   0.0  0.0
+```
+"""
+function create_sparse_matrix(it::Interpolation, mesh::AbstractMesh; ndofs::Int = ndims(mesh))
     create_sparse_matrix(Float64, it, mesh; ndofs)
 end
 function create_sparse_matrix(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; ndofs::Int = dim) where {T, dim}
@@ -44,12 +138,12 @@ end
 
 function create_sparse_matrix(::Type{T}, spy::AbstractMatrix{Bool}) where {T}
     I = findall(vec(spy))
-    V = Vector{T}(undef, length(I))
+    V = zeros(T, length(I))
     SparseArrays.sparse_sortedlinearindices!(I, V, size(spy)...)
 end
 
 """
-    extract(matrix, dofmap)
+    extract(matrix::AbstractMatrix, dofmap::DofMap)
 
 Extract the active degrees of freedom.
 """
@@ -93,6 +187,23 @@ function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int},
     @inbounds @views A[I,J] .+= K
 end
 
+"""
+    @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) [space] begin
+        equations...
+    end
+
+Particle-to-grid transfer macro for assembling a global matrix.
+A typical global stiffness matrix can be assembled as follows:
+
+```julia
+@P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
+    K[i,j] = @∑ ∇w[ip] ⋅ c[p] ⋅ ∇w[jp] * V[p]
+end
+```
+
+where `c` and `V` denote the stiffness (symmetric fourth-order) tensor and the volume, respectively.
+It is recommended to create global stiffness `K` using [`create_sparse_matrix`](@ref).
+"""
 macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_Matrix_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, nothing, equations)
 end
