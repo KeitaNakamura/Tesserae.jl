@@ -324,14 +324,41 @@ end
 @inline trySArray(x::Tensor) = SArray(x)
 @inline trySArray(x::AbstractArray) = x
 
-##########################
-# Simple Newton's method #
-##########################
+"""
+    Tesserae.newton!(x::AbstractVector, f, ∇f,
+                     maxiter = 100, atol = zero(eltype(x)), rtol = sqrt(eps(eltype(x))),
+                     linsolve = (x,A,b) -> copyto!(x, A\\b), verbose = false)
 
+A simple implementation of Newton's method.
+The functions `f(x)` and `∇f(x)` should return the residual vector and its Jacobian, respectively.
+
+```jldoctest
+julia> function f(x)
+           [(x[1]+3)*(x[2]^3-7)+18,
+            sin(x[2]*exp(x[1])-1)]
+       end
+f (generic function with 1 method)
+
+julia> function ∇f(x)
+           u = exp(x[1])*cos(x[2]*exp(x[1])-1)
+           [x[2]^3-7 3*x[2]^2*(x[1]+3)
+            x[2]*u   u]
+       end
+∇f (generic function with 1 method)
+
+julia> x = [0.1, 1.2];
+
+julia> issuccess = Tesserae.newton!(x, f, ∇f)
+true
+
+julia> x ≈ [0,1]
+true
+```
+"""
 function newton!(
-        x::AbstractVector{T}, f, ∇f;
-        maxiter::Int=100, atol::Real=zero(T), rtol::Real=sqrt(eps(T)),
-        linsolve=(x,A,b)->copyto!(x,A\b), verbose::Bool=false) where {T}
+        x::AbstractVector, f, ∇f;
+        maxiter::Int=100, atol::Real=zero(eltype(x)), rtol::Real=sqrt(eps(eltype(x))),
+        linsolve=(x,A,b)->copyto!(x,A\b), verbose::Bool=false)
 
     compact(val) = rpad(sprint(show, val; context = :compact=>true), 11)
 

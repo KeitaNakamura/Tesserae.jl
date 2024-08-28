@@ -18,3 +18,9 @@ extract(::AbstractMatrix, ::DofMap)
 ```@docs
 @P2G_Matrix
 ```
+
+## Solvers
+
+```@docs
+Tesserae.newton!
+```
