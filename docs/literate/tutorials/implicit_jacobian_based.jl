@@ -9,6 +9,7 @@
 # | 600         | 300          | 3 sec          |
 
 using Tesserae
+using LinearAlgebra
 
 function main()
 
@@ -53,7 +54,7 @@ function main()
         F    :: SecondOrderTensor{2, Float64, 4}
         ΔF⁻¹ :: SecondOrderTensor{2, Float64, 4}
         τ    :: SecondOrderTensor{2, Float64, 4}
-        c    :: FourthOrderTensor{2, Float64, 16}
+        ℂ    :: FourthOrderTensor{2, Float64, 16}
     end
 
     ## Background grid
@@ -183,32 +184,33 @@ function residual(U::AbstractVector, state)
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
-    transposing_tensor(σ) = @einsum (i,j,k,l) -> σ[i,l] * one(σ)[j,k]
+    geometric(τ) = @einsum (i,j,k,l) -> τ[i,l] * one(τ)[j,k]
     @G2P grid=>i particles=>p mpvalues=>ip begin
         ## In addition to updating the stress tensor, the stiffness tensor,
         ## which is utilized in the Jacobian-vector product, is also updated.
         ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
         ΔF⁻¹[p] = inv(I + ∇u[p])
-        c[p], τ[p] = gradient(∇u -> kirchhoff_stress((I + ∇u) ⋅ F[p]), ∇u[p], :all)
-        c[p] = c[p] - transposing_tensor(τ[p] ⋅ ΔF⁻¹[p]')
+        F = (I + ∇u[p]) ⋅ F[p]
+        ∂τ∂F, τ = gradient(kirchhoff_stress, F, :all)
+        τ[p] = τ
+        ℂ[p] = ∂τ∂F ⋅ F' - geometric(τ)
     end
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ -V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p]) + w[ip] * m[p] * b[p]
+        f[i] = @∑ V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p]) - w[ip] * m[p] * b[p]
     end
 
-    @. $dofmap(grid.m) * $dofmap(grid.a) - $dofmap(grid.f)
+    @. $dofmap(grid.m) * $dofmap(grid.a) + $dofmap(grid.f)
 end
 
 function jacobian(U::AbstractVector, state)
     (; grid, particles, mpvalues, β, A, dofmap, Δt) = state
 
-    I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
-    dotdot(a,C,b) = @einsum (i,j) -> a[k] * C[i,k,j,l] * b[l]
+    dotdot(a,ℂ,b) = @einsum (i,j) -> a[k] * ℂ[i,k,j,l] * b[l]
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
-        A[i,j] = @∑ dotdot(∇w[ip] ⋅ ΔF⁻¹[p], c[p], ∇w[jp]) * V⁰[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
+        A[i,j] = @∑ dotdot(∇w[ip] ⋅ ΔF⁻¹[p], ℂ[p], ∇w[jp] ⋅ ΔF⁻¹[p]) * V⁰[p]
     end
 
-    extract(A, dofmap)
+    extract(A, dofmap) + Diagonal(inv(β*Δt^2) * dofmap(grid.m))
 end
 
 using Test                            #src

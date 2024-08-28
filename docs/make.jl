@@ -22,6 +22,7 @@ makedocs(;
             "tutorials/getting_started.md",
             "tutorials/collision.md",
             "Implicit methods" => [
+                "implicit.md",
                 "Jacobian-free" => "tutorials/implicit_jacobian_free.md",
                 "Jacobian-based" => "tutorials/implicit_jacobian_based.md",
             ],
@@ -35,7 +36,7 @@ makedocs(;
             "generation.md"
             "interpolation.md"
             "transfer.md"
-            "implicit.md"
+            "implicit_utils.md"
             "export.md"
         ]
     ],

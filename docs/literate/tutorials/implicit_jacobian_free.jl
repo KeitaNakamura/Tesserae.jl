@@ -59,7 +59,7 @@ function main()
         F    :: SecondOrderTensor{3, Float64, 9}
         ΔF⁻¹ :: SecondOrderTensor{3, Float64, 9}
         τ    :: SecondOrderTensor{3, Float64, 9}
-        c    :: FourthOrderTensor{3, Float64, 81}
+        ℂ    :: FourthOrderTensor{3, Float64, 81}
     end
 
     ## Background grid
@@ -172,20 +172,22 @@ function residual(U::AbstractVector, state)
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
-    transposing_tensor(σ) = @einsum (i,j,k,l) -> σ[i,l] * one(σ)[j,k]
+    geometric(τ) = @einsum (i,j,k,l) -> τ[i,l] * one(τ)[j,k]
     @G2P grid=>i particles=>p mpvalues=>ip begin
         ## In addition to updating the stress tensor, the stiffness tensor,
         ## which is utilized in the Jacobian-vector product, is also updated.
         ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
         ΔF⁻¹[p] = inv(I + ∇u[p])
-        c[p], τ[p] = gradient(∇u -> kirchhoff_stress((I + ∇u) ⋅ F[p]), ∇u[p], :all)
-        c[p] = c[p] - transposing_tensor(τ[p] ⋅ ΔF⁻¹[p]')
+        F = (I + ∇u[p]) ⋅ F[p]
+        ∂τ∂F, τ = gradient(kirchhoff_stress, F, :all)
+        τ[p] = τ
+        ℂ[p] = ∂τ∂F ⋅ F' - geometric(τ)
     end
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ -V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p])
+        f[i] = @∑ V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p])
     end
 
-    @. β*Δt^2 * ($dofmap(grid.a) - $dofmap(grid.f) * $dofmap(grid.m⁻¹))
+    @. β*Δt^2 * ($dofmap(grid.a) + $dofmap(grid.f) * $dofmap(grid.m⁻¹))
 end
 
 function jacobian(U::AbstractVector, state)
@@ -199,14 +201,14 @@ function jacobian(U::AbstractVector, state)
         dofmap(grid.δu) .= δU
 
         @G2P grid=>i particles=>p mpvalues=>ip begin
-            ∇u[p] = @∑ δu[i] ⊗ ∇w[ip]
-            τ[p] = c[p] ⊡ ∇u[p]
+            ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⋅ ΔF⁻¹[p])
+            τ[p] = ℂ[p] ⊡ ∇u[p]
         end
         @P2G grid=>i particles=>p mpvalues=>ip begin
-            f[i] = @∑ -V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p])
+            f[i] = @∑ V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p])
         end
 
-        @. JδU = δU - β*Δt^2 * $dofmap(grid.f) * $dofmap(grid.m⁻¹)
+        @. JδU = δU + β*Δt^2 * $dofmap(grid.f) * $dofmap(grid.m⁻¹)
     end
 end
 
