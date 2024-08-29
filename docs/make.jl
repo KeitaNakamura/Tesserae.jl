@@ -28,6 +28,7 @@ makedocs(;
                 "Jacobian-free" => "tutorials/implicit_jacobian_free.md",
                 "Jacobian-based" => "tutorials/implicit_jacobian_based.md",
             ],
+            "tutorials/collapse.md",
             "Incompressible fluid flow" => "tutorials/dam_break.md",
             "tutorials/rigid_body_contact.md",
         ],

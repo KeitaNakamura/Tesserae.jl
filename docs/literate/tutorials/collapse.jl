@@ -1,0 +1,259 @@
+# # Elasto-plastic large deformation
+#
+# ```@raw html
+# <img src="https://github.com/user-attachments/assets/2fede002-eccb-45c7-af69-ae194384ef9b" width="800"/>
+# ```
+#
+# | # Particles | # Iterations | Execution time |
+# | ----------- | ------------ | -------------- |
+# | 19k         | 8k           | 30 sec         |
+#
+# ## Drucker--Prager model
+
+using Tesserae
+
+struct DruckerPrager{T}
+    λ   :: T # Lame's first parameter
+    G   :: T # Shear modulus
+    A   :: T
+    B   :: T
+    b   :: T
+    p_t :: T # Mean stress for tension limit
+end
+
+function DruckerPrager(; λ::T, G::T, ϕ::T, c::T = zero(λ), ψ::T = ϕ, p_t::T = c/tan(ϕ)) where {T}
+    ## Plane strain condition
+    A = 3√2c      / sqrt(9+12tan(ϕ)^2)
+    B = 3√2tan(ϕ) / sqrt(9+12tan(ϕ)^2)
+    b = 3√2tan(ψ) / sqrt(9+12tan(ψ)^2)
+    DruckerPrager{T}(λ, G, A, B, b, p_t)
+end
+
+function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
+    (; A, B) = model
+    norm(dev(σ)) - (A - B*mean(σ))
+end
+
+function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
+    b = model.b
+    s = dev(σ)
+    s_norm = norm(s)
+    if s_norm < sqrt(eps(eltype(σ)))
+        b/3*one(σ)
+    else
+        s/s_norm + b/3*one(σ)
+    end
+end
+
+function compute_stress(model::DruckerPrager{T}, σⁿ::SymmetricSecondOrderTensor{3, T}, Δε::SymmetricSecondOrderTensor{3, T}) where {T}
+    δ = one(SymmetricSecondOrderTensor{3, T})
+    I = one(SymmetricFourthOrderTensor{3, T})
+
+    ## Elastic predictor
+    (; λ, G, p_t) = model
+    cᵉ = λ*δ⊗δ + 2G*I
+    σᵗʳ = σⁿ + cᵉ ⊡ Δε
+    dfdσ, fᵗʳ = gradient(σ -> yield_function(model, σ), σᵗʳ, :all)
+    if fᵗʳ ≤ 0 && mean(σᵗʳ) ≤ p_t
+        σ = σᵗʳ
+        return σ
+    end
+
+    ## Plastic corrector
+    dgdσ = plastic_flow(model, σᵗʳ)
+    Δλ = fᵗʳ / (dfdσ ⊡ cᵉ ⊡ dgdσ)
+    Δϵᵖ = Δλ * dgdσ
+    σ = σᵗʳ - cᵉ ⊡ Δϵᵖ
+
+    ## Simple tension cutoff
+    if !(mean(σ) ≤ p_t) # σᵗʳ is not in zone1
+        ##
+        ## \<- yield surface
+        ##  \         /
+        ##   \ zone1 /
+        ##    \     /   zone2
+        ##     \   /
+        ##      \ /______________
+        ##       |
+        ##       |      zone3
+        ##       |
+        ## ------------------------> p
+        ##      p_t
+        ##
+        s = dev(σᵗʳ)
+        σ = p_t*δ + s
+        if yield_function(model, σ) > 0 # σ is in zone2
+            ## Map to corner
+            (; A, B) = model
+            p = mean(σ)
+            σ = p_t*δ + (A-B*p)*normalize(s)
+        end
+    end
+
+    σ
+end
+
+# ## Sand column collapse
+
+function main()
+
+    ## Simulation parameters
+    h   = 0.01 # Grid spacing
+    T   = 1.5  # Time span
+    g   = 9.81 # Gravity acceleration
+    CFL = 1.0  # Courant number
+    if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        h = 0.015                         #src
+    end                                   #src
+
+    ## Material constants
+    E  = 1e6                    # Young's modulus
+    ν  = 0.3                    # Poisson's ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
+    G  = E / 2(1 + ν)           # Shear modulus
+    ϕ  = deg2rad(32)            # Internal friction angle
+    ψ  = deg2rad(0)             # Dilatancy angle
+    ρ⁰ = 1.5e3                  # Initial density
+
+    ## Geometry
+    H = 0.8 # Height of sand column
+    W = 0.6 # Width of sand column
+
+    GridProp = @NamedTuple begin
+        x  :: Vec{2, Float64}
+        m  :: Float64
+        m⁻¹ :: Float64
+        v  :: Vec{2, Float64}
+        vⁿ :: Vec{2, Float64}
+        mv :: Vec{2, Float64}
+        f  :: Vec{2, Float64}
+    end
+    ParticleProp = @NamedTuple begin
+        x  :: Vec{2, Float64}
+        m  :: Float64
+        V  :: Float64
+        v  :: Vec{2, Float64}
+        ∇v :: SecondOrderTensor{2, Float64, 4}
+        F  :: SecondOrderTensor{2, Float64, 4}
+        σ  :: SymmetricSecondOrderTensor{3, Float64, 6}
+    end
+
+    ## Background grid
+    grid = generate_grid(GridProp, CartesianMesh(h, (-3,3), (0,1)))
+
+    ## Particles
+    particles = generate_particles(ParticleProp, grid.x)
+    particles.V .= volume(grid.x) / length(particles)
+    filter!(particles) do pt
+        x, y = pt.x
+        -W/2 < x < W/2 && y < H
+    end
+    for p in eachindex(particles)
+        y = particles.x[p][2]
+        σ_y = -ρ⁰ * g * (H-y)
+        σ_x = σ_y * ν / (1-ν)
+        particles.σ[p] = diagm(Vec(σ_x, σ_y, σ_x))
+    end
+    @. particles.m = ρ⁰ * particles.V
+    @. particles.F = one(particles.F)
+    @show length(particles)
+
+    ## Interpolation
+    mpvalues = generate_mpvalues(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+
+    ## Material model
+    model = DruckerPrager(; λ, G, ϕ, ψ)
+
+    ## Outputs
+    outdir = mkpath(joinpath("output", "collapse"))
+    pvdfile = joinpath(outdir, "paraview")
+    closepvd(openpvd(pvdfile)) # Create file
+
+    t = 0.0
+    step = 0
+    fps = 60
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+
+    Tesserae.@showprogress while t < T
+
+        ## Calculate time step based on the wave speed
+        vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
+        Δt = CFL * h / vmax
+
+        ## Update interpolation values
+        for p in eachindex(particles, mpvalues)
+            update!(mpvalues[p], particles.x[p], grid.x)
+        end
+
+        ## Particle-to-grid transfer
+        @P2G grid=>i particles=>p mpvalues=>ip begin
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            f[i]  = @∑ -V[p] * resizedim(σ[p],Val(2)) ⋅ ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
+        end
+
+        ## Update grid velocity
+        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
+        @. grid.vⁿ = grid.mv * grid.m⁻¹
+        @. grid.v  = grid.vⁿ + (grid.f * grid.m⁻¹) * Δt
+
+        ## Boundary conditions
+        for i in eachindex(grid)[:,begin]
+            μ = 0.4 # Friction coefficient on the floor
+            n = Vec(0,-1)
+            vᵢ = grid.v[i]
+            if !iszero(vᵢ)
+                v̄ₙ = vᵢ ⋅ n
+                vₜ = vᵢ - v̄ₙ*n
+                v̄ₜ = norm(vₜ)
+                grid.v[i] = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * vₜ/v̄ₜ)
+            end
+        end
+
+        ## Grid-to-particle transfer
+        @G2P grid=>i particles=>p mpvalues=>ip begin
+            v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+            x[p] += @∑ w[ip] * v[i] * Δt
+        end
+
+        ## Update other particle properties
+        for p in eachindex(particles)
+            ## Update Cauchy stress using Jaumann stress rate
+            ∇uₚ = resizedim(particles.∇v[p], Val(3)) * Δt
+            σₚⁿ = particles.σ[p]
+            Δdₚ = symmetric(∇uₚ)
+            Δwₚ = skew(∇uₚ)
+            particles.σ[p] = compute_stress(model, σₚⁿ, Δdₚ) + (Δwₚ⋅σₚⁿ - σₚⁿ⋅Δwₚ)
+            ## Update deformation gradient and volume
+            ΔFₚ = I + particles.∇v[p] * Δt
+            particles.F[p] = ΔFₚ ⋅ particles.F[p]
+            particles.V[p] = det(ΔFₚ) * particles.V[p]
+        end
+
+        t += Δt
+        step += 1
+
+        if t > first(savepoints)
+            popfirst!(savepoints)
+            openpvd(pvdfile; append=true) do pvd
+                openvtm(string(pvdfile, step)) do vtm
+                    openvtk(vtm, particles.x) do vtk
+                        vtk["Velocity (m/s)"] = particles.v
+                        vtk["ID"] = eachindex(particles.v)
+                    end
+                    openvtk(vtm, grid.x) do vtk
+                        vtk["Velocity (m/s)"] = grid.v
+                    end
+                    pvd[t] = vtm
+                end
+            end
+        end
+    end
+    mean(particles.x)
+end
+
+using Test                             #src
+if @isdefined(RUN_TESTS) && RUN_TESTS  #src
+    @test main()[2] ≈ 0.1085 rtol=0.01 #src
+end                                    #src

@@ -5,6 +5,7 @@ const TUTORIALS = ["collision.jl",
                    "tlmpm_vortex.jl",
                    "implicit_jacobian_free.jl",
                    "implicit_jacobian_based.jl",
+                   "collapse.jl",
                    "dam_break.jl",
                    "rigid_body_contact.jl"]
 

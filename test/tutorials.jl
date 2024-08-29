@@ -33,6 +33,13 @@ module TestImplicitJacobianBased
     end
 end
 
+module TestCollapse
+    const RUN_TESTS = true
+    cd(tempdir()) do
+        include(joinpath(@__DIR__, "../docs/literate/tutorials/collapse.jl"))
+    end
+end
+
 module TestDamBreak
     const RUN_TESTS = true
     cd(tempdir()) do
