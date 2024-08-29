@@ -120,7 +120,7 @@ function main(transfer = FLIP(1.0))
         J = √det(C)
         μ/2*(tr(C)-dim) - μ*log(J) + λ/2*(log(J))^2
     end
-    function caucy_stress(F)
+    function cauchy_stress(F)
         J = det(F)
         S = 2 * gradient(stored_energy, F' ⋅ F)
         symmetric(inv(J) * F ⋅ S ⋅ F')
@@ -129,7 +129,7 @@ function main(transfer = FLIP(1.0))
     ## Outputs
     outdir = mkpath(joinpath("output", "collision"))
     pvdfile = joinpath(outdir, "paraview")
-    closepvd(openpvd(pvdfile)) # create file
+    closepvd(openpvd(pvdfile)) # Create file
 
     t = 0.0
     step = 0
@@ -222,7 +222,7 @@ function main(transfer = FLIP(1.0))
         for p in eachindex(particles)
             ∇uₚ = particles.∇v[p] * Δt
             Fₚ = (I + ∇uₚ) ⋅ particles.F[p]
-            σₚ = caucy_stress(Fₚ)
+            σₚ = cauchy_stress(Fₚ)
             particles.σ[p] = σₚ
             particles.F[p] = Fₚ
             particles.V[p] = det(Fₚ) * particles.V⁰[p]
@@ -239,7 +239,7 @@ function main(transfer = FLIP(1.0))
                         z = zero(Mat{2,1})
                         F3x3 = [F  z
                                 z' 1]
-                        caucy_stress(F3x3)
+                        cauchy_stress(F3x3)
                     end
                     openvtk(vtm, particles.x) do vtk
                         vtk["Velocity (m/s)"] = particles.v

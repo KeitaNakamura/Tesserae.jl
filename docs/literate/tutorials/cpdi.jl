@@ -69,7 +69,7 @@ function main()
     mpvalues = generate_mpvalues(CPDI(), grid.x, length(particles))
 
     ## Material model (neo-Hookean)
-    function caucy_stress(F)
+    function cauchy_stress(F)
         J = det(F)
         b = symmetric(F ⋅ F')
         (μ*(b-I) + λ*log(J)*I) / J
@@ -78,7 +78,7 @@ function main()
     ## Outputs
     outdir = mkpath(joinpath("output", "cpdi"))
     pvdfile = joinpath(outdir, "paraview")
-    closepvd(openpvd(pvdfile)) # create file
+    closepvd(openpvd(pvdfile)) # Create file
 
     t = 0.0
     step = 0
@@ -123,7 +123,7 @@ function main()
         for p in eachindex(particles)
             ∇uₚ = particles.∇v[p] * Δt
             Fₚ = (I + ∇uₚ) ⋅ particles.F[p]
-            σₚ = caucy_stress(Fₚ)
+            σₚ = cauchy_stress(Fₚ)
             particles.σ[p] = σₚ
             particles.F[p] = Fₚ
         end
