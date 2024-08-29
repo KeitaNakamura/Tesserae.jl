@@ -21,14 +21,14 @@ makedocs(;
         "Tutorials" => [
             "tutorials/getting_started.md",
             "tutorials/collision.md",
+            "CPDI" => "tutorials/cpdi.md",
+            "tutorials/tlmpm_vortex.md",
             "Implicit methods" => [
                 "implicit.md",
                 "Jacobian-free" => "tutorials/implicit_jacobian_free.md",
                 "Jacobian-based" => "tutorials/implicit_jacobian_based.md",
             ],
             "Incompressible fluid flow" => "tutorials/dam_break.md",
-            "CPDI" => "tutorials/cpdi.md",
-            "tutorials/tlmpm_vortex.md",
             "tutorials/rigid_body_contact.md",
         ],
         "Manual" => [
