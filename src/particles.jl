@@ -1,24 +1,39 @@
 abstract type SamplingAlgorithm end
 
-struct GridSampling <: SamplingAlgorithm end
+"""
+    GridSampling(spacing = 1/2)
 
-function point_sampling(::GridSampling, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
+The generated particles are aligned with the grid using uniform spacing.
+Setting `spacing = 1/η` will produce `η^dim` particles per cell, where `dim` is the problem dimension.
+"""
+@kwdef struct GridSampling{T} <: SamplingAlgorithm
+    spacing :: T = 1/2
+end
+
+function point_sampling(gs::GridSampling, h::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
+    l = T(gs.spacing) * h
     axis((xmin,xmax)) = (xmin+l/2):l:(xmax)
     vec(CartesianMesh(axis.(domain)...))
 end
 
-struct PoissonDiskSampling{RNG} <: SamplingAlgorithm
-    rng::RNG
-    multithreading::Bool
+"""
+    PoissonDiskSampling(spacing = 1/2, rng = Random.default_rng())
+
+The particles are generated based on the Poisson disk sampling.
+The `spacing` parameter is used to produce a similar number of particles as are generated with [`GridSampling`](@ref).
+"""
+@kwdef struct PoissonDiskSampling{T, RNG} <: SamplingAlgorithm
+    spacing        :: T    = 1/2
+    rng            :: RNG  = Random.default_rng()
+    multithreading :: Bool = rng isa Random.TaskLocalRNG ? true : false
 end
-PoissonDiskSampling() = PoissonDiskSampling(Random.default_rng(), true)
-PoissonDiskSampling(rng; multithreading=false) = PoissonDiskSampling(rng, multithreading)
 
 # Determine minimum distance between particles for Poisson disk sampling
 # so that the number of generated particles is almost the same as the grid sampling.
 # This empirical equation is slightly different from a previous work (https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
 poisson_disk_sampling_minimum_distance(l::Real, dim::Int) = l/(1.37)^(1/√dim)
-function point_sampling(pds::PoissonDiskSampling, l::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
+function point_sampling(pds::PoissonDiskSampling, h::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
+    l = T(pds.spacing) * h
     d = poisson_disk_sampling_minimum_distance(l, dim)
     reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, domain...; pds.multithreading))
 end
@@ -37,12 +52,10 @@ function _generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec
 end
 
 """
-    generate_particles([ParticleProp], mesh; spacing=1/2, alg=PoissonDiskSampling())
+    generate_particles([ParticleProp], mesh; alg=PoissonDiskSampling())
 
-Generate particles across the entire `mesh` domain with a particle `spacing` (`0 < spacing ≤ 1`).
-When using `GridSampling()`, setting `spacing = 1/η` will produce `η^dim` particles per cell,
-where `dim` is the problem dimension. With `PoissonDiskSampling()`, a similar number of particles
-will be generated as with `GridSampling()`.
+Generate particles across the entire `mesh` domain based on the selected `alg` algorithm.
+See also [`GridSampling`](@ref) and [`PoissonDiskSampling`](@ref).
 
 The generated `particles` is a [`StructArray`](https://github.com/JuliaArrays/StructArrays.jl)
 where each element is of type `ParticleProp`. The first field of `ParticleProp` is designated for
@@ -94,19 +107,19 @@ julia> particles.F
 """
 function generate_particles(
         ::Type{ParticleProp}, mesh::CartesianMesh{dim, T};
-        spacing::Real=1/2, alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp, dim, T}
-    points = _generate_points(ParticleProp, mesh, spacing, alg)
+        alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp, dim, T}
+    points = _generate_points(ParticleProp, mesh, alg)
     particles = _generate_particles(ParticleProp, points)
     # _reorder_particles!(particles, mesh)
 end
 
-function generate_particles(mesh::CartesianMesh{dim, T}; spacing::Real=1/2, alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
-    generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; spacing, alg).x
+function generate_particles(mesh::CartesianMesh{dim, T}; alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
+    generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; alg).x
 end
 
-function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, spacing::Real, alg::SamplingAlgorithm) where {ParticleProp, dim, T}
+function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, alg::SamplingAlgorithm) where {ParticleProp, dim, T}
     domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
-    point_sampling(alg, Tesserae.spacing(mesh) * T(spacing), domain...)
+    point_sampling(alg, spacing(mesh), domain...)
 end
 
 function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)

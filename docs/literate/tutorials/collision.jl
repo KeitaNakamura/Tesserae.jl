@@ -89,9 +89,9 @@ function main(transfer = FLIP(1.0))
     ## Particles
     particles = let
         pts = generate_particles(ParticleProp, grid.x)
-        if @isdefined(RUN_TESTS) && RUN_TESTS                                                        #src
-            pts = generate_particles(ParticleProp, grid.x; alg=PoissonDiskSampling(StableRNG(1234))) #src
-        end                                                                                          #src
+        if @isdefined(RUN_TESTS) && RUN_TESTS                                                            #src
+            pts = generate_particles(ParticleProp, grid.x; alg=PoissonDiskSampling(rng=StableRNG(1234))) #src
+        end                                                                                              #src
         pts.V .= pts.V⁰ .= volume(grid.x) / length(pts)
 
         lhs = findall(pts.x) do (x, y)

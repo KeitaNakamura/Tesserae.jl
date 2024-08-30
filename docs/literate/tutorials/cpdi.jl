@@ -58,7 +58,7 @@ function main()
 
     ## Particles
     bar = extract(grid.x, (-0.5,0.5), (-1,0), (-0.5,0.5))
-    particles = generate_particles(ParticleProp, bar; spacing=1/3, alg=GridSampling())
+    particles = generate_particles(ParticleProp, bar; alg=GridSampling(spacing=1/3))
     particles.V⁰ .= volume(bar) / length(particles)
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.l = (particles.V⁰)^(1/3)

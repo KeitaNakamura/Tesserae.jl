@@ -94,7 +94,7 @@ function main(transfer = FLIP(1.0))
     end
 
     ## Particles
-    particles = generate_particles(ParticleProp, grid.X; spacing=1/3)
+    particles = generate_particles(ParticleProp, grid.X; alg=PoissonDiskSampling(spacing=1/3))
     particles.V .= volume(grid.X) / length(particles)
     filter!(pt -> pt.x[1]<1.2 && pt.x[2]<0.6, particles)
     @. particles.m = ρ * particles.V

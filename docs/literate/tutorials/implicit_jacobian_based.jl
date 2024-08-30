@@ -62,7 +62,7 @@ function main()
 
     ## Particles
     beam = extract(grid.X, (0,4), (0,1))
-    particles = generate_particles(ParticleProp, beam; spacing=1/3, alg=GridSampling())
+    particles = generate_particles(ParticleProp, beam; alg=GridSampling(spacing=1/3))
     particles.V⁰ .= volume(beam) / length(particles)
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
