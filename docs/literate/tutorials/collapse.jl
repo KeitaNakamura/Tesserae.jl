@@ -6,67 +6,48 @@
 #
 # | # Particles | # Iterations | Execution time |
 # | ----------- | ------------ | -------------- |
-# | 19k         | 8k           | 30 sec         |
+# | 19k         | 8k           | 40 sec         |
 #
 # ## Drucker--Prager model
 
 using Tesserae
 
-struct DruckerPrager{T}
-    λ   :: T # Lame's first parameter
-    G   :: T # Shear modulus
-    A   :: T
-    B   :: T
-    b   :: T
-    p_t :: T # Mean stress for tension limit
+@kwdef struct DruckerPrager
+    λ  :: Float64            # Lame's first parameter
+    G  :: Float64            # Shear modulus
+    ϕ  :: Float64            # Internal friction angle
+    ψ  :: Float64 = ϕ        # Dilatancy angle
+    c  :: Float64 = 0.0      # Cohesion
+    pₜ :: Float64 = c/tan(ϕ) # Mean stress for tension limit
+    ## Assume plane strain condition
+    A  :: Float64 = 3√2c      / sqrt(9+12tan(ϕ)^2)
+    B  :: Float64 = 3√2tan(ϕ) / sqrt(9+12tan(ϕ)^2)
+    b  :: Float64 = 3√2tan(ψ) / sqrt(9+12tan(ψ)^2)
 end
 
-function DruckerPrager(; λ::T, G::T, ϕ::T, c::T = zero(λ), ψ::T = ϕ, p_t::T = c/tan(ϕ)) where {T}
-    ## Plane strain condition
-    A = 3√2c      / sqrt(9+12tan(ϕ)^2)
-    B = 3√2tan(ϕ) / sqrt(9+12tan(ϕ)^2)
-    b = 3√2tan(ψ) / sqrt(9+12tan(ψ)^2)
-    DruckerPrager{T}(λ, G, A, B, b, p_t)
-end
+function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, ∇u::SecondOrderTensor{3})
+    δ = one(SymmetricSecondOrderTensor{3})
+    I = one(SymmetricFourthOrderTensor{3})
 
-function yield_function(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
-    (; A, B) = model
-    norm(dev(σ)) - (A - B*mean(σ))
-end
+    (; λ, G, A, B, b, pₜ) = model
 
-function plastic_flow(model::DruckerPrager, σ::SymmetricSecondOrderTensor{3})
-    b = model.b
-    s = dev(σ)
-    s_norm = norm(s)
-    if s_norm < sqrt(eps(eltype(σ)))
-        b/3*one(σ)
-    else
-        s/s_norm + b/3*one(σ)
-    end
-end
-
-function compute_stress(model::DruckerPrager{T}, σⁿ::SymmetricSecondOrderTensor{3, T}, Δε::SymmetricSecondOrderTensor{3, T}) where {T}
-    δ = one(SymmetricSecondOrderTensor{3, T})
-    I = one(SymmetricFourthOrderTensor{3, T})
+    f(σ) = norm(dev(σ)) - (A - B*mean(σ)) # Yield function
+    g(σ) = norm(dev(σ)) + b*mean(σ)       # Plastic potential function
 
     ## Elastic predictor
-    (; λ, G, p_t) = model
     cᵉ = λ*δ⊗δ + 2G*I
-    σᵗʳ = σⁿ + cᵉ ⊡ Δε
-    dfdσ, fᵗʳ = gradient(σ -> yield_function(model, σ), σᵗʳ, :all)
-    if fᵗʳ ≤ 0 && mean(σᵗʳ) ≤ p_t
-        σ = σᵗʳ
-        return σ
-    end
+    σᵗʳ = σⁿ + cᵉ ⊡ symmetric(∇u) + 2*symmetric(σⁿ ⋅ skew(∇u)) # Consider Jaumann stress-rate
+    dfdσ, fᵗʳ = gradient(f, σᵗʳ, :all)
+    fᵗʳ ≤ 0 && mean(σᵗʳ) ≤ pₜ && return σᵗʳ
 
     ## Plastic corrector
-    dgdσ = plastic_flow(model, σᵗʳ)
+    dgdσ = gradient(g, σᵗʳ)
     Δλ = fᵗʳ / (dfdσ ⊡ cᵉ ⊡ dgdσ)
     Δϵᵖ = Δλ * dgdσ
     σ = σᵗʳ - cᵉ ⊡ Δϵᵖ
 
     ## Simple tension cutoff
-    if !(mean(σ) ≤ p_t) # σᵗʳ is not in zone1
+    if !(mean(σ) ≤ pₜ) # σᵗʳ is not in zone1
         ##
         ## \<- yield surface
         ##  \         /
@@ -78,15 +59,14 @@ function compute_stress(model::DruckerPrager{T}, σⁿ::SymmetricSecondOrderTens
         ##       |      zone3
         ##       |
         ## ------------------------> p
-        ##      p_t
+        ##       pₜ
         ##
         s = dev(σᵗʳ)
-        σ = p_t*δ + s
-        if yield_function(model, σ) > 0 # σ is in zone2
+        σ = pₜ*δ + s
+        if f(σ) > 0 # σ is in zone2
             ## Map to corner
-            (; A, B) = model
             p = mean(σ)
-            σ = p_t*δ + (A-B*p)*normalize(s)
+            σ = pₜ*δ + (A-B*p)*normalize(s)
         end
     end
 
@@ -221,10 +201,7 @@ function main()
         for p in eachindex(particles)
             ## Update Cauchy stress using Jaumann stress rate
             ∇uₚ = resizedim(particles.∇v[p], Val(3)) * Δt
-            σₚⁿ = particles.σ[p]
-            Δdₚ = symmetric(∇uₚ)
-            Δwₚ = skew(∇uₚ)
-            particles.σ[p] = compute_stress(model, σₚⁿ, Δdₚ) + (Δwₚ⋅σₚⁿ - σₚⁿ⋅Δwₚ)
+            particles.σ[p] = cauchy_stress(model, particles.σ[p], ∇uₚ)
             ## Update deformation gradient and volume
             ΔFₚ = I + particles.∇v[p] * Δt
             particles.F[p] = ΔFₚ ⋅ particles.F[p]
