@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Export · Tesserae.jl</title><meta name="title" content="Export · Tesserae.jl"/><meta property="og:title" content="Export · Tesserae.jl"/><meta property="twitter:title" content="Export · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../tutorials/getting_started/">Getting started</a></li><li><a class="tocitem" href="../tutorials/collision/">Transfer schemes</a></li><li><a class="tocitem" href="../tutorials/cpdi/">CPDI</a></li><li><a class="tocitem" href="../tutorials/tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox"/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../implicit/">Implicit formulation</a></li><li><a class="tocitem" href="../tutorials/implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../tutorials/implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../tutorials/collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../tutorials/dam_break/">Incompressible fluid flow</a></li><li><a class="tocitem" href="../tutorials/rigid_body_contact/">Frictional contact with rigid body</a></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../mesh/">Mesh</a></li><li><a class="tocitem" href="../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../interpolation/">Interpolation</a></li><li><a class="tocitem" href="../transfer/">Transfer between grid and particles</a></li><li><a class="tocitem" href="../implicit_utils/">Functionalities for implicit methods</a></li><li class="is-active"><a class="tocitem" href>Export</a><ul class="internal"><li><a class="tocitem" href="#VTK-file"><span>VTK file</span></a></li><li><a class="tocitem" href="#Multiblock-data-set"><span>Multiblock data set</span></a></li><li><a class="tocitem" href="#ParaView-collection-file"><span>ParaView collection file</span></a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li class="is-active"><a href>Export</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Export</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/src/export.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Export"><a class="docs-heading-anchor" href="#Export">Export</a><a id="Export-1"></a><a class="docs-heading-anchor-permalink" href="#Export" title="Permalink"></a></h1><p>In Tesserae, exporting VTK files for visualization is supported. These functionalities are built on the <a href="https://github.com/JuliaVTK/WriteVTK.jl">WriteVTK.jl</a> package.</p><h2 id="VTK-file"><a class="docs-heading-anchor" href="#VTK-file">VTK file</a><a id="VTK-file-1"></a><a class="docs-heading-anchor-permalink" href="#VTK-file" title="Permalink"></a></h2><p>To export the mesh or particles, use <code>openvtk</code> and <code>closevtk</code> functions. First, we prepare following <code>grid</code> and <code>particles</code>:</p><pre><code class="language-julia hljs">GridProp = @NamedTuple begin
+    x  :: Vec{2, Float64}
+    m  :: Float64
+    mv :: Vec{2, Float64}
+    f  :: Vec{2, Float64}
+end
+ParticleProp = @NamedTuple begin
+    x :: Vec{2, Float64}
+    m :: Float64
+    v :: Vec{2, Float64}
+end
+
+grid = generate_grid(GridProp, CartesianMesh(1, (0, 3), (0, 4)))
+particles = generate_particles(ParticleProp, grid.x)</code></pre><p>The grid properties can be exported as</p><pre><code class="language-julia hljs">vtk_grid = openvtk(&quot;grid&quot;, grid.x)
+vtk_grid[&quot;Momentum&quot;] = grid.mv
+vtk_grid[&quot;Force&quot;] = grid.f
+closevtk(vtk_grid)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1-element Vector{String}:
+ &quot;grid.vtr&quot;</code></pre><p>This can also be written using a <code>do</code> block, which automatically closes the file:</p><pre><code class="language-julia hljs">openvtk(&quot;grid&quot;, grid.x) do vtk
+    vtk[&quot;Momentum&quot;] = grid.mv
+    vtk[&quot;Force&quot;] = grid.f
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1-element Vector{String}:
+ &quot;grid.vtr&quot;</code></pre><p>For <code>particles</code>, the same instruction is available:</p><pre><code class="language-julia hljs"># without do block
+vtk_particles = openvtk(&quot;particles&quot;, particles.x)
+vtk_particles[&quot;Velocity&quot;] = particles.v
+closevtk(vtk_particles)
+
+# with do block
+openvtk(&quot;particles&quot;, particles.x) do vtk
+    vtk[&quot;Velocity&quot;] = particles.v
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1-element Vector{String}:
+ &quot;particles.vtu&quot;</code></pre><h2 id="Multiblock-data-set"><a class="docs-heading-anchor" href="#Multiblock-data-set">Multiblock data set</a><a id="Multiblock-data-set-1"></a><a class="docs-heading-anchor-permalink" href="#Multiblock-data-set" title="Permalink"></a></h2><p>Sometimes, we want to export both the grid and particles into a single dataset. This can be done using a <code>vtm</code> file with the <code>openvtm</code> and <code>closevtm</code> functions.</p><pre><code class="language-julia hljs">openvtm(&quot;grid_and_particles&quot;) do vtm
+    openvtk(vtm, grid.x) do vtk
+        vtk[&quot;Momentum&quot;] = grid.mv
+        vtk[&quot;Force&quot;] = grid.f
+    end
+    openvtk(vtm, particles.x) do vtk
+        vtk[&quot;Velocity&quot;] = particles.x
+    end
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element Vector{String}:
+ &quot;grid_and_particles.vtm&quot;
+ &quot;grid_and_particles_1.vtr&quot;
+ &quot;grid_and_particles_2.vtu&quot;</code></pre><h2 id="ParaView-collection-file"><a class="docs-heading-anchor" href="#ParaView-collection-file">ParaView collection file</a><a id="ParaView-collection-file-1"></a><a class="docs-heading-anchor-permalink" href="#ParaView-collection-file" title="Permalink"></a></h2><p>A ParaView collection file (<code>pvd</code>) represents a time series of VTK files.</p><pre><code class="language-julia hljs">filename = &quot;Simulation&quot;
+closepvd(openpvd(filename)) # Just create a file by `closepvd`
+
+for (step, t) in enumerate(range(0, 10, step=0.5))
+
+    # Simulation...
+
+    # Reopening and closing the file at each time step allows us
+    # to visualize intermediate results # without having to wait
+    # for the simulation to finish.
+    openpvd(filename; append=true) do pvd
+        openvtm(string(filename, step)) do vtm
+            openvtk(vtm, grid.x) do vtk
+                vtk[&quot;Momentum&quot;] = grid.mv
+                vtk[&quot;Force&quot;] = grid.f
+            end
+            openvtk(vtm, particles.x) do vtk
+                vtk[&quot;Velocity&quot;] = particles.v
+            end
+            pvd[t] = vtm # save to pvd!
+        end
+    end
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_utils/">« Functionalities for implicit methods</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.6.0 on <span class="colophon-date" title="Sunday 1 September 2024 11:49">Sunday 1 September 2024</span>. Using Julia version 1.10.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
