@@ -1,7 +1,7 @@
 name = "Tesserae"
 uuid = "fd374396-9d9c-4d88-9aa5-37a7f6105aca"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
-version = "0.1.10"
+version = "0.1.11"
 
 [deps]
 PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
@@ -22,6 +22,6 @@ Random = "1"
 Reexport = "1"
 SparseArrays = "1"
 StructArrays = "0.6"
-Tensorial = "0.14,0.15"
+Tensorial = "0.14,0.15,0.16"
 WriteVTK = "1.18"
 julia = "1.9"
