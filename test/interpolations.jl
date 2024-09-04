@@ -98,7 +98,7 @@ end # MPValue
         isapprox(mapreduce((j,i) -> X[i]⊗mp.∇w[j], +, CI, indices), I)
     end
 
-    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()))
+    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quadratic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
@@ -172,7 +172,7 @@ end # MPValue
         end
     end
 
-    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
+    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
         it = Wrapper(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)
@@ -192,7 +192,7 @@ end
 
 @testset "B-spline fast computation" begin
     # check by autodiff
-    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()))
+    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             xp = rand(Vec{dim})

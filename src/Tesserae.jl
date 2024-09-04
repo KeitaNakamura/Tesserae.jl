@@ -54,6 +54,7 @@ export
     Linear,
     Quadratic,
     Cubic,
+    Quartic,
     MultiLinear,
     MultiQuadratic,
     Polynomial,

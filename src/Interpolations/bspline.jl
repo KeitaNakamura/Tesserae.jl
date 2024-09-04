@@ -3,6 +3,7 @@ abstract type AbstractBSpline{D <: Degree} <: Kernel end
 gridspan(::AbstractBSpline{Degree{1}}) = 2
 gridspan(::AbstractBSpline{Degree{2}}) = 3
 gridspan(::AbstractBSpline{Degree{3}}) = 4
+gridspan(::AbstractBSpline{Degree{4}}) = 5
 
 @inline function neighboringnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
@@ -20,6 +21,7 @@ end
 @inline _neighboringnodes_offset(::AbstractBSpline{Degree{1}}) = 0.0
 @inline _neighboringnodes_offset(::AbstractBSpline{Degree{2}}) = 0.5
 @inline _neighboringnodes_offset(::AbstractBSpline{Degree{3}}) = 1.0
+@inline _neighboringnodes_offset(::AbstractBSpline{Degree{4}}) = 1.5
 
 # simple B-spline calculations
 function value(::AbstractBSpline{Linear}, ξ::Real)
@@ -35,6 +37,12 @@ function value(::AbstractBSpline{Cubic}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
     ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
+end
+function value(::AbstractBSpline{Quartic}, ξ::Real)
+    ξ = abs(ξ)
+    ξ < 0.5 ? (48ξ^4 - 120ξ^2 + 115) / 192              :
+    ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
+    ξ < 2.5 ? (5 - 2ξ)^4 / 384                          : zero(ξ)
 end
 
 @inline fract(x) = x - floor(x)
@@ -87,6 +95,25 @@ end
     end
     if order isa Order{3}
         vals = (vals..., @. T((-1.0,3.0,-3.0,1.0)))
+    end
+    vals
+end
+@inline function Base.values(order::Order, ::AbstractBSpline{Quartic}, x::Real)
+    T = typeof(x)
+    x′ = fract(x - T(0.5))
+    ξ = @. x′ - T((-1.5,-0.5,0.5,1.5,2.5))
+    ξ² = @. ξ * ξ
+    ξ³ = @. ξ² * ξ
+    ξ⁴ = @. ξ² * ξ²
+    vals = tuple(@. muladd(T((1/24,-1/6,1/4,-1/6,1/24)), ξ⁴, muladd(T((-5/12,5/6,0,-5/6,5/12)), ξ³, muladd(T((25/16,-5/4,-5/8,-5/4,25/16)), ξ², muladd(T((-125/48,5/24,0,-5/24,125/48)), ξ, T((625/384,55/96,115/192,55/96,625/384)))))))
+    if order isa Union{Order{1}, Order{2}, Order{3}}
+        vals = (vals..., @. muladd(T((1/6,-2/3,1,-2/3,1/6)), ξ³, muladd(T((-5/4,5/2,0,-5/2,5/4)), ξ², muladd(T((25/8,-5/2,-5/4,-5/2,25/8)), ξ, T((-125/48,5/24,0,-5/24,125/48))))))
+    end
+    if order isa Union{Order{2}, Order{3}}
+        vals = (vals..., @. muladd(T((1/2,-2,3,-2,1/2)), ξ², muladd(T((-5/2,5,0,-5,5/2)), ξ, T((25/8,-5/2,-5/4,-5/2,25/8)))))
+    end
+    if order isa Order{3}
+        vals = (vals..., @. muladd(T((1,-4,6,-4,1)), ξ, T((-5/2,5,0,-5,5/2))))
     end
     vals
 end
@@ -180,7 +207,7 @@ B-spline kernel.
 `degree` is one of `Linear()`, `Quadratic()` or `Cubic()`.
 
 !!! warning
-    `BSpline(Quadratic())` and `BSpline(Cubic())`cannot handle boundaries correctly
+    `BSpline(Quadratic())` and `BSpline(Cubic())` cannot handle boundaries correctly
     because the kernel values are merely truncated, which leads to unstable behavior.
     Therefore, it is recommended to use either `SteffenBSpline` or `KernelCorrection`
     in cases where proper handling of boundaries is necessary.

@@ -13,6 +13,7 @@ Degree(n::Int) = Degree{n}()
 const Linear    = Degree{1}
 const Quadratic = Degree{2}
 const Cubic     = Degree{3}
+const Quartic   = Degree{4}
 
 #=
 To create a new interpolation, following methods need to be implemented.
