@@ -164,27 +164,14 @@ end
 end
 @inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
 
-@inline function Base.values(::Order{0}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
-    h⁻¹ = spacing_inv(mesh)
-    (values(spline, (x - get_xmin(mesh)) * h⁻¹),)
-end
-@inline function Base.values(order::Order{1}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
-    xmin = get_xmin(mesh)
-    h⁻¹ = spacing_inv(mesh)
-    w, ∇w = values(order, spline, (x-xmin)*h⁻¹)
-    (w, ∇w*h⁻¹)
-end
-@inline function Base.values(order::Order{2}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
-    xmin = get_xmin(mesh)
-    h⁻¹ = spacing_inv(mesh)
-    w, ∇w, ∇∇w = values(order, spline, (x-xmin)*h⁻¹)
-    (w, ∇w*h⁻¹, ∇∇w*h⁻¹^2)
-end
-@inline function Base.values(order::Order{3}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh)
-    xmin = get_xmin(mesh)
-    h⁻¹ = spacing_inv(mesh)
-    w, ∇w, ∇∇w, ∇∇∇w = values(order, spline, (x-xmin)*h⁻¹)
-    (w, ∇w*h⁻¹, ∇∇w*h⁻¹^2, ∇∇∇w*h⁻¹^3)
+@generated function Base.values(order::Order{k}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh) where {k}
+    quote
+        @_inline_meta
+        xmin = get_xmin(mesh)
+        h⁻¹ = spacing_inv(mesh)
+        vals = values(order, spline, (x-xmin)*h⁻¹)
+        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
+    end
 end
 
 function update_property!(mp::MPValue, it::AbstractBSpline, pt, mesh::CartesianMesh)
