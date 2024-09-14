@@ -64,24 +64,14 @@ end
     poly = get_polynomial(it)
     xₚ = getx(pt)
 
-    P₀, ∇P₀, ∇∇P₀, ∇∇∇P₀ = value(Order(3), poly, zero(xₚ))
+    P₀__ = value(derivative_order(mp), poly, zero(xₚ))
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]
         w = mp.w[ip]
         P = value(poly, xᵢ - xₚ)
         wq = w * (M⁻¹ ⋅ P)
-        if hasproperty(mp, :∇∇∇w)
-            set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀, wq⋅∇∇∇P₀))
-        elseif hasproperty(mp, :∇∇w)
-            set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀, wq⋅∇∇P₀))
-        elseif hasproperty(mp, :∇w)
-            set_kernel_values!(mp, ip, (wq⋅P₀, wq⋅∇P₀))
-        elseif hasproperty(mp, :w)
-            set_kernel_values!(mp, ip, (wq⋅P₀,))
-        else
-            error("unreachable")
-        end
+        set_kernel_values!(mp, ip, map(P₀->wq⋅P₀, P₀__))
     end
 end
 

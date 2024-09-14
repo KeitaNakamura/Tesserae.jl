@@ -24,14 +24,28 @@ To create a new interpolation, following methods need to be implemented.
 
 initial_neighboringnodes(::Interpolation, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 
-function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; derivative::Order=Order(1)) where {dim, T}
-    dims = nfill(gridspan(it), Val(dim))
-    derivative isa Order{0} && return (; w=zeros(T, dims))
-    derivative isa Order{1} && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims))
-    derivative isa Order{2} && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims))
-    derivative isa Order{3} && return (; w=fill(zero(T), dims), ∇w=fill(zero(Vec{dim, T}), dims), ∇∇w=fill(zero(SymmetricSecondOrderTensor{dim, T}), dims), ∇∇∇w=fill(zero(Tensor{Tuple{@Symmetry{dim,dim,dim}}, T}), dims))
-    error("wrong derivative type, got $derivative")
+@generated function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; derivative::Order{k}=Order(1)) where {dim, T, k}
+    quote
+        dims = nfill(gridspan(it), Val(dim))
+        names = @ntuple $(k+1) i -> create_name(Order(i-1))
+        vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), dims)
+        NamedTuple{names}(vals)
+    end
 end
+
+create_elval(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
+create_elval(::Type{Vec{dim, T}}, ::Order{1}) where {dim, T} = zero(Vec{dim, T})
+create_elval(::Type{Vec{dim, T}}, ::Order{k}) where {dim, T, k} = zero(Tensor{Tuple{@Symmetry{ntuple(i->dim, k)...}}, T})
+create_name(::Order{0}) = :w
+create_name(::Order{1}) = :∇w
+create_name(::Order{2}) = :∇²w
+create_name(::Order{3}) = :∇³w
+create_name(::Order{4}) = :∇⁴w
+create_name(::Order{5}) = :∇⁵w
+create_name(::Order{6}) = :∇⁶w
+create_name(::Order{7}) = :∇⁷w
+create_name(::Order{8}) = :∇⁸w
+create_name(::Order{9}) = :∇⁹w
 
 """
     MPValue([T,] interpolation, mesh)
@@ -81,6 +95,21 @@ Base.propertynames(mp::MPValue) = propertynames(getfield(mp, :prop))
 @inline function Base.getproperty(mp::MPValue, name::Symbol)
     getproperty(getfield(mp, :prop), name)
 end
+@inline function Base.values(mp::MPValue, k::Int)
+    check_mpvalue_prop(mp)
+    getfield(mp, :prop)[k+1]
+end
+
+@inline function check_mpvalue_prop(mp::MPValue)
+    k = length(propertynames(mp)) - 1
+    _check_mpvalue_prop(mp, Val(k))
+end
+@generated function _check_mpvalue_prop(mp::MPValue, ::Val{k}) where {k}
+    quote
+        @_inline_meta
+        @assert @nall $(k+1) i -> create_name(Order(i-1)) === propertynames(mp)[i]
+    end
+end
 
 @inline interpolation(mp::MPValue) = getfield(mp, :it)
 
@@ -106,11 +135,9 @@ end
 @inline neighboringnodes_storage(mp::MPValue) = getfield(mp, :indices)
 
 @inline function derivative_order(mp::MPValue)
-    hasproperty(mp, :∇∇∇w) && return Order(3)
-    hasproperty(mp, :∇∇w)  && return Order(2)
-    hasproperty(mp, :∇w)   && return Order(1)
-    hasproperty(mp, :w)    && return Order(0)
-    error("unreachable")
+    check_mpvalue_prop(mp)
+    k = length(propertynames(mp)) - 1
+    Order(k)
 end
 @inline @propagate_inbounds value(f, x, args...) = f(x, args...)
 @inline @propagate_inbounds value(::Order{0}, f, x, args...) = (value(f, x, args...),)
@@ -124,14 +151,19 @@ end
     (value(Order(2), f, x, args...)..., gradient(∇∇f, x))
 end
 
-@inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,)::Tuple{Any}) = (mp.w[ip]=w;)
-@inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,∇w)::Tuple{Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w;)
-@inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w;)
-@inline @propagate_inbounds set_kernel_values!(mp::MPValue, ip, (w,∇w,∇∇w,∇∇∇w)::Tuple{Any,Any,Any,Any}) = (mp.w[ip]=w; mp.∇w[ip]=∇w; mp.∇∇w[ip]=∇∇w; mp.∇∇∇w[ip]=∇∇∇w;)
-@inline set_kernel_values!(mp::MPValue, (w,)::Tuple{Any}) = copyto!(mp.w, w)
-@inline set_kernel_values!(mp::MPValue, (w,∇w)::Tuple{Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w);)
-@inline set_kernel_values!(mp::MPValue, (w,∇w,∇∇w)::Tuple{Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w);)
-@inline set_kernel_values!(mp::MPValue, (w,∇w,∇∇w,∇∇∇w)::Tuple{Any,Any,Any,Any}) = (copyto!(mp.w,w); copyto!(mp.∇w,∇w); copyto!(mp.∇∇w,∇∇w); copyto!(mp.∇∇∇w,∇∇∇w);)
+@generated function set_kernel_values!(mp::MPValue, ip, vals::Tuple{Vararg{Any, N}}) where {N}
+    quote
+        @_inline_meta
+        @_propagate_inbounds_meta
+        @nexprs $N i -> values(mp, i-1)[ip] = vals[i]
+    end
+end
+@generated function set_kernel_values!(mp::MPValue, vals::Tuple{Vararg{Any, N}}) where {N}
+    quote
+        @_inline_meta
+        @nexprs $N i -> copyto!(values(mp, i-1), vals[i])
+    end
+end
 
 function Base.show(io::IO, mp::MPValue)
     print(io, "MPValue: \n")

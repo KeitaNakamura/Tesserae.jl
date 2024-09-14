@@ -23,16 +23,16 @@
                         elseif derivative isa Order{2}
                             @test hasproperty(mp, :w)   && mp.w   isa AbstractArray{T}
                             @test hasproperty(mp, :∇w)  && mp.∇w  isa AbstractArray{Vec{dim,T}}
-                            @test hasproperty(mp, :∇∇w) && mp.∇∇w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
-                            @test size(mp.w) == size(mp.∇w) == size(mp.∇∇w)
-                            @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇∇w) == ifelse(mp isa MPValue, dim, dim+1)
+                            @test hasproperty(mp, :∇²w) && mp.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
+                            @test size(mp.w) == size(mp.∇w) == size(mp.∇²w)
+                            @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇²w) == ifelse(mp isa MPValue, dim, dim+1)
                         elseif derivative isa Order{3}
-                            @test hasproperty(mp, :w)    && mp.w    isa AbstractArray{T}
-                            @test hasproperty(mp, :∇w)   && mp.∇w   isa AbstractArray{Vec{dim,T}}
-                            @test hasproperty(mp, :∇∇w)  && mp.∇∇w  isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
-                            @test hasproperty(mp, :∇∇∇w) && mp.∇∇∇w isa AbstractArray{<: Tensor{Tuple{@Symmetry{dim,dim,dim}},T}}
-                            @test size(mp.w) == size(mp.∇w) == size(mp.∇∇w) == size(mp.∇∇∇w)
-                            @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇∇w) == ndims(mp.∇∇∇w) == ifelse(mp isa MPValue, dim, dim+1)
+                            @test hasproperty(mp, :w)   && mp.w   isa AbstractArray{T}
+                            @test hasproperty(mp, :∇w)  && mp.∇w  isa AbstractArray{Vec{dim,T}}
+                            @test hasproperty(mp, :∇²w) && mp.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
+                            @test hasproperty(mp, :∇³w) && mp.∇³w isa AbstractArray{<: Tensor{Tuple{@Symmetry{dim,dim,dim}},T}}
+                            @test size(mp.w) == size(mp.∇w) == size(mp.∇²w) == size(mp.∇³w)
+                            @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇²w) == ndims(mp.∇³w) == ifelse(mp isa MPValue, dim, dim+1)
                         else
                             error()
                         end
