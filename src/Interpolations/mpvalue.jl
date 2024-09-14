@@ -112,6 +112,7 @@ end
     hasproperty(mp, :w)    && return Order(0)
     error("unreachable")
 end
+@inline @propagate_inbounds value(f, x, args...) = f(x, args...)
 @inline @propagate_inbounds value(::Order{0}, f, x, args...) = (value(f, x, args...),)
 @inline @propagate_inbounds value(::Order{1}, f, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
 @inline @propagate_inbounds value(::Order{2}, f, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
