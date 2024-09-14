@@ -49,117 +49,107 @@ end
 # Fast calculations for value, gradient and hessian
 # `x` must be normalized by `h`
 @inline Base.values(spline::AbstractBSpline, x, args...) = only(values(Order(0), spline, x, args...))
-@inline function Base.values(order::Order, ::AbstractBSpline{Linear}, x::Real)
-    T = typeof(x)
-    ξ = fract(x)
-    vals = tuple(@. T((1-ξ, ξ)))
-    if order isa Union{Order{1}, Order{2}, Order{3}}
-        vals = (vals..., @. T((-1, 1)))
-    end
-    if order isa Union{Order{2}, Order{3}}
-        vals = (vals..., @. T((0, 0)))
-    end
-    if order isa Order{3}
-        vals = (vals..., @. T((0, 0)))
-    end
-    vals
-end
-@inline function Base.values(order::Order, ::AbstractBSpline{Quadratic}, x::Real)
-    T = typeof(x)
-    x′ = fract(x - T(0.5))
-    ξ = @. x′ - T((-0.5,0.5,1.5))
-    vals = tuple(@. muladd(T((0.5,-1.0,0.5)), ξ^2, muladd(T((-1.5,0.0,1.5)), ξ, T((1.125,0.75,1.125)))))
-    if order isa Union{Order{1}, Order{2}, Order{3}}
-        vals = (vals..., @. muladd(T((1.0,-2.0,1.0)), ξ, T((-1.5,0.0,1.5))))
-    end
-    if order isa Union{Order{2}, Order{3}}
-        vals = (vals..., @. T((1.0,-2.0,1.0)))
-    end
-    if order isa Order{3}
-        vals = (vals..., @. T((0.0,0.0,0.0)))
-    end
-    vals
-end
-@inline function Base.values(order::Order, ::AbstractBSpline{Cubic}, x::Real)
-    T = typeof(x)
-    x′ = fract(x)
-    ξ = @. x′ - T((-1,0,1,2))
-    ξ² = @. ξ * ξ
-    ξ³ = @. ξ² * ξ
-    vals = tuple(@. muladd(T((-1/6,0.5,-0.5,1/6)), ξ³, muladd(T((1,-1,-1,1)), ξ², muladd(T((-2,0,0,2)), ξ, T((4/3,2/3,2/3,4/3))))))
-    if order isa Union{Order{1}, Order{2}, Order{3}}
-        vals = (vals..., @. muladd(T((-0.5,1.5,-1.5,0.5)), ξ², muladd(T((2,-2,-2,2)), ξ, T((-2,0,0,2)))))
-    end
-    if order isa Union{Order{2}, Order{3}}
-        vals = (vals..., @. muladd(T((-1.0,3.0,-3.0,1.0)), ξ, T((2,-2,-2,2))))
-    end
-    if order isa Order{3}
-        vals = (vals..., @. T((-1.0,3.0,-3.0,1.0)))
-    end
-    vals
-end
-@inline function Base.values(order::Order, ::AbstractBSpline{Quartic}, x::Real)
-    T = typeof(x)
-    x′ = fract(x - T(0.5))
-    ξ = @. x′ - T((-1.5,-0.5,0.5,1.5,2.5))
-    ξ² = @. ξ * ξ
-    ξ³ = @. ξ² * ξ
-    ξ⁴ = @. ξ² * ξ²
-    vals = tuple(@. muladd(T((1/24,-1/6,1/4,-1/6,1/24)), ξ⁴, muladd(T((-5/12,5/6,0,-5/6,5/12)), ξ³, muladd(T((25/16,-5/4,-5/8,-5/4,25/16)), ξ², muladd(T((-125/48,5/24,0,-5/24,125/48)), ξ, T((625/384,55/96,115/192,55/96,625/384)))))))
-    if order isa Union{Order{1}, Order{2}, Order{3}}
-        vals = (vals..., @. muladd(T((1/6,-2/3,1,-2/3,1/6)), ξ³, muladd(T((-5/4,5/2,0,-5/2,5/4)), ξ², muladd(T((25/8,-5/2,-5/4,-5/2,25/8)), ξ, T((-125/48,5/24,0,-5/24,125/48))))))
-    end
-    if order isa Union{Order{2}, Order{3}}
-        vals = (vals..., @. muladd(T((1/2,-2,3,-2,1/2)), ξ², muladd(T((-5/2,5,0,-5,5/2)), ξ, T((25/8,-5/2,-5/4,-5/2,25/8)))))
-    end
-    if order isa Order{3}
-        vals = (vals..., @. muladd(T((1,-4,6,-4,1)), ξ, T((-5/2,5,0,-5,5/2))))
-    end
-    vals
-end
 
-@generated function Base.values(order::Order, spline::AbstractBSpline, x::Vec{dim}) where {dim}
-    T_∇∇ws = SymmetricSecondOrderTensor{dim}
-    ∇∇ws = Array{Expr}(undef,dim,dim)
-    for j in 1:dim, i in 1:dim
-        ∇∇ws[i,j] = :(@ntuple $dim α -> α==$j ? (α==$i ? ∇∇x_α : ∇x_α) : ∇ws[$i][α])
-    end
-    T_∇∇∇ws = Tensor{Tuple{@Symmetry{dim,dim,dim}}}
-    ∇∇∇ws = Array{Expr}(undef,dim,dim,dim)
-    for k in 1:dim, j in 1:dim, i in 1:dim
-        ∇∇∇ws[i,j,k] = :(@ntuple $dim α -> α==$k ? (α==$j ? (α==$i ? ∇∇∇x_α : ∇∇x_α) : ∇x_α) : $∇∇ws[$i,$j][α])
-    end
-    ∇∇ws = ∇∇ws[Tensorial.indices_unique(T_∇∇ws)]
-    ∇∇∇ws = ∇∇∇ws[Tensorial.indices_unique(T_∇∇∇ws)]
+# linear
+@inline _values(::Order{0}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = @. muladd($V((-1,1)), ξ, $V((1,1)))
+@inline _values(::Order{1}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((-1,1))
+@inline _values(::Order, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((0,0))
+@generated function Base.values(::Order{k}, spline::AbstractBSpline{Linear}, x::Real) where {k}
     quote
         @_inline_meta
-        if order isa Order{0}
-            @nexprs $dim d -> (x_d,) = values(order, spline, x[d])
-        elseif order isa Order{1}
-            @nexprs $dim d -> (x_d, ∇x_d) = values(order, spline, x[d])
-        elseif order isa Order{2}
-            @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d) = values(order, spline, x[d])
-        elseif order isa Order{3}
-            @nexprs $dim d -> (x_d, ∇x_d, ∇∇x_d, ∇∇∇x_d) = values(order, spline, x[d])
-        else
-            error("wrong order, got $order")
+        T = typeof(x)
+        x′ = fract(x)
+        ξ = @. x′ - T((0,1))
+        @ntuple $(k+1) a -> _values(Order(a-1), spline, (ξ,))
+    end
+end
+
+# quadratic
+@inline _values(::Order{0}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = @. muladd($V((0.5,-1.0,0.5)), ξ², muladd($V((-1.5,0.0,1.5)), ξ, $V((1.125,0.75,1.125))))
+@inline _values(::Order{1}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = @. muladd($V((1.0,-2.0,1.0)), ξ, $V((-1.5,0.0,1.5)))
+@inline _values(::Order{2}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((1.0,-2.0,1.0))
+@inline _values(::Order, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((0,0,0))
+@generated function Base.values(::Order{k}, spline::AbstractBSpline{Quadratic}, x::Real) where {k}
+    quote
+        T = typeof(x)
+        x′ = fract(x - T(0.5))
+        ξ = @. x′ - T((-0.5,0.5,1.5))
+        ξ² = @. ξ * ξ
+        @ntuple $(k+1) a -> _values(Order(a-1), spline, (ξ,ξ²))
+    end
+end
+
+# cubic
+@inline _values(::Order{0}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-1/6,0.5,-0.5,1/6)), ξ³, muladd($V((1,-1,-1,1)), ξ², muladd($V((-2,0,0,2)), ξ, $V((4/3,2/3,2/3,4/3)))))
+@inline _values(::Order{1}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-0.5,1.5,-1.5,0.5)), ξ², muladd($V((2,-2,-2,2)), ξ, $V((-2,0,0,2))))
+@inline _values(::Order{2}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-1,3,-3,1)), ξ, $V((2,-2,-2,2)))
+@inline _values(::Order{3}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((-1,3,-3,1))
+@inline _values(::Order, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((0,0,0,0))
+@generated function Base.values(::Order{k}, spline::AbstractBSpline{Cubic}, x::Real) where {k}
+    quote
+        @_inline_meta
+        T = typeof(x)
+        x′ = fract(x)
+        ξ = @. x′ - T((-1,0,1,2))
+        ξ² = @. ξ * ξ
+        ξ³ = @. ξ² * ξ
+        @ntuple $(k+1) a -> _values(Order(a-1), spline, (ξ,ξ²,ξ³))
+    end
+end
+
+# quartic
+@inline _values(::Order{0}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/24,-1/6,1/4,-1/6,1/24)), ξ⁴, muladd($V((-5/12,5/6,0,-5/6,5/12)), ξ³, muladd($V((25/16,-5/4,-5/8,-5/4,25/16)), ξ², muladd($V((-125/48,5/24,0,-5/24,125/48)), ξ, $V((625/384,55/96,115/192,55/96,625/384))))))
+@inline _values(::Order{1}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/6,-2/3,1,-2/3,1/6)), ξ³, muladd($V((-5/4,5/2,0,-5/2,5/4)), ξ², muladd($V((25/8,-5/2,-5/4,-5/2,25/8)), ξ, $V((-125/48,5/24,0,-5/24,125/48)))))
+@inline _values(::Order{2}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/2,-2,3,-2,1/2)), ξ², muladd($V((-5/2,5,0,-5,5/2)), ξ, $V((25/8,-5/2,-5/4,-5/2,25/8))))
+@inline _values(::Order{3}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1,-4,6,-4,1)), ξ, $V((-5/2,5,0,-5,5/2)))
+@inline _values(::Order{4}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((1,-4,6,-4,1))
+@inline _values(::Order, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((0,0,0,0,0))
+@generated function Base.values(::Order{k}, spline::AbstractBSpline{Quartic}, x::Real) where {k}
+    quote
+        @_inline_meta
+        T = typeof(x)
+        x′ = fract(x - T(0.5))
+        ξ = @. x′ - T((-1.5,-0.5,0.5,1.5,2.5))
+        ξ² = @. ξ * ξ
+        ξ³ = @. ξ² * ξ
+        ξ⁴ = @. ξ² * ξ²
+        @ntuple $(k+1) a -> _values(Order(a-1), spline, (ξ,ξ²,ξ³,ξ⁴))
+    end
+end
+
+@generated function _values(::Order{0}, vals::Vararg{Tuple, dim}) where {dim}
+    quote
+        @_inline_meta
+        tuple_otimes(@ntuple $dim d -> vals[d][1])
+    end
+end
+@generated function _values(::Order{k}, vals::Vararg{Tuple, dim}) where {k, dim}
+    if k == 1
+        TT = Vec{dim}
+    else
+        TT = Tensor{Tuple{@Symmetry{fill(dim,k)...}}}
+    end
+    v = Array{Expr}(undef, size(TT))
+    for I in CartesianIndices(v)
+        ex = Expr(:tuple)
+        for i in 1:dim
+            j = count(==(i), Tuple(I)) + 1
+            push!(ex.args, :(vals[$i][$j]))
         end
+        v[I] = ex
+    end
+    quote
+        @_inline_meta
+        v = $(Expr(:tuple, v[Tensorial.indices_unique(TT)]...))
+        map($TT, map(tuple_otimes, v)...)
+    end
+end
 
-        ws = @ntuple $dim d -> x_d
-        wᵢ = tuple_otimes(ws)
-        order isa Order{0} && return (wᵢ,)
-
-        ∇ws = @ntuple $dim i -> (@ntuple $dim α -> α==i ? ∇x_α : x_α)
-        ∇wᵢ = map(Vec, map(tuple_otimes, ∇ws)...)
-        order isa Order{1} && return (wᵢ,∇wᵢ)
-
-        ∇∇ws = tuple($(∇∇ws...))
-        ∇∇wᵢ = map($T_∇∇ws, map(tuple_otimes, ∇∇ws)...)
-        order isa Order{2} && return (wᵢ,∇wᵢ,∇∇wᵢ)
-
-        ∇∇∇ws = tuple($(∇∇∇ws...))
-        ∇∇∇wᵢ = map($T_∇∇∇ws, map(tuple_otimes, ∇∇∇ws)...)
-        order isa Order{3} && return (wᵢ,∇wᵢ,∇∇wᵢ,∇∇∇wᵢ)
+@generated function Base.values(order::Order{k}, spline::AbstractBSpline, x::Vec{dim}) where {k, dim}
+    quote
+        @_inline_meta
+        vals = @ntuple $dim d -> values(order, spline, x[d])
+        @ntuple $(k+1) a -> _values(Order(a-1), vals...)
     end
 end
 @inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
