@@ -47,6 +47,35 @@ create_name(::Order{7}) = :∇⁷w
 create_name(::Order{8}) = :∇⁸w
 create_name(::Order{9}) = :∇⁹w
 
+@generated function prod_each_dimension(::Order{0}, vals::Vararg{Tuple, dim}) where {dim}
+    quote
+        @_inline_meta
+        tuple_otimes(@ntuple $dim d -> vals[d][1])
+    end
+end
+@generated function prod_each_dimension(::Order{k}, vals::Vararg{Tuple, dim}) where {k, dim}
+    if k == 1
+        TT = Vec{dim}
+    else
+        TT = Tensor{Tuple{@Symmetry{fill(dim,k)...}}}
+    end
+    v = Array{Expr}(undef, size(TT))
+    for I in CartesianIndices(v)
+        ex = Expr(:tuple)
+        for i in 1:dim
+            j = count(==(i), Tuple(I)) + 1
+            push!(ex.args, :(vals[$i][$j]))
+        end
+        v[I] = ex
+    end
+    quote
+        @_inline_meta
+        v = $(Expr(:tuple, v[Tensorial.indices_unique(TT)]...))
+        map($TT, map(tuple_otimes, v)...)
+    end
+end
+@inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
+
 """
     MPValue([T,] interpolation, mesh)
 
@@ -139,26 +168,15 @@ end
     k = length(propertynames(mp)) - 1
     Order(k)
 end
-@inline @propagate_inbounds value(f, x, args...) = f(x, args...)
-@inline @propagate_inbounds value(::Order{0}, f, x, args...) = (value(f, x, args...),)
-@inline @propagate_inbounds value(::Order{1}, f, x, args...) = reverse(gradient(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
-@inline @propagate_inbounds value(::Order{2}, f, x, args...) = reverse(hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x, :all))
-@inline @propagate_inbounds function value(::Order{3}, f, x, args...)
-    @inline function ∇∇f(x)
-        @_propagate_inbounds_meta
-        hessian(x -> (@_inline_meta; @_propagate_inbounds_meta; value(f, x, args...)), x)
-    end
-    (value(Order(2), f, x, args...)..., gradient(∇∇f, x))
-end
 
-@generated function set_kernel_values!(mp::MPValue, ip, vals::Tuple{Vararg{Any, N}}) where {N}
+@generated function set_values!(mp::MPValue, ip, vals::Tuple{Vararg{Any, N}}) where {N}
     quote
         @_inline_meta
         @_propagate_inbounds_meta
         @nexprs $N i -> values(mp, i-1)[ip] = vals[i]
     end
 end
-@generated function set_kernel_values!(mp::MPValue, vals::Tuple{Vararg{Any, N}}) where {N}
+@generated function set_values!(mp::MPValue, vals::Tuple{Vararg{Any, N}}) where {N}
     quote
         @_inline_meta
         @nexprs $N i -> copyto!(values(mp, i-1), vals[i])

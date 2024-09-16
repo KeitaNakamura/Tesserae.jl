@@ -192,32 +192,20 @@ end
 
 @testset "B-spline fast computation" begin
     # check by autodiff
+    k = 5
     @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()))
         for dim in (1,2,3)
             Random.seed!(1234)
+            mesh = CartesianMesh(0.1, ntuple(i->(-1,2), Val(dim))...)
             xp = rand(Vec{dim})
-            # gradient
-            grad = values(Order(1), it, xp)[end]
-            grad_autodiff = gradient(xp -> Tensor(values(it, xp)), xp)
-            for i in CartesianIndices(grad)
-                for j in CartesianIndices(grad[i])
-                    @test grad[i][j] ≈ grad_autodiff[i,j]
-                end
-            end
-            # hessian
-            hess = values(Order(2), it, xp)[end]
-            hess_autodiff = hessian(xp -> Tensor(values(it, xp)), xp)
-            for i in CartesianIndices(hess)
-                for j in CartesianIndices(hess[i])
-                    @test hess[i][j] ≈ hess_autodiff[i,j]
-                end
-            end
-            # all
-            al = values(Order(3), it, xp)[end]
-            al_autodiff = gradient(xp -> hessian(xp -> Tensor(values(it, xp)), xp), xp)
-            for i in CartesianIndices(al)
-                for j in CartesianIndices(al[i])
-                    @test al[i][j] ≈ al_autodiff[i,j]
+            mp = MPValue(it, mesh; derivative=Order(k))
+            update!(mp, xp, mesh)
+            nodeindices = neighboringnodes(mp)
+            for ip in eachindex(nodeindices)
+                i = nodeindices[ip]
+                vals = values(Order(k), it, xp, mesh, i)
+                for a in 0:k
+                    @test values(mp, a)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end
             end
         end

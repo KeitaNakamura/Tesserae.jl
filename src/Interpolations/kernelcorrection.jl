@@ -31,7 +31,7 @@ gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
     else
         @inbounds @simd for ip in eachindex(indices)
             i = indices[ip]
-            set_kernel_values!(mp, ip, value(derivative_order(mp), get_kernel(it), pt, mesh, i))
+            set_values!(mp, ip, values(derivative_order(mp), get_kernel(it), pt, mesh, i))
         end
     end
 end
@@ -43,7 +43,7 @@ end
     if isnearbounds
         update_property_general!(mp, WLS(get_kernel(it), get_polynomial(it)), pt, mesh, filter)
     else
-        set_kernel_values!(mp, values(derivative_order(mp), get_kernel(it), getx(pt), mesh))
+        set_values!(mp, values(derivative_order(mp), get_kernel(it), getx(pt), mesh))
     end
 end
 
