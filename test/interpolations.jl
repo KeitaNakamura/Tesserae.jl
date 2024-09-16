@@ -344,4 +344,20 @@ end
     end
 end
 
+@testset "Polynomial" begin
+    for T in (Float32, Float64)
+        for dim in (1,2,3)
+            for poly in (Polynomial(Linear()), Polynomial(MultiLinear()))
+                xp = rand(Vec{dim, T})
+                vals = values(Order(4), poly, xp)
+                @test all(v -> eltype(v) == T, vals)
+                @test vals[2] ≈ gradient(x -> only(values(Order(0), poly, x)), xp)
+                @test vals[3] ≈ gradient(x -> gradient(x -> only(values(Order(0), poly, x)), x), xp)
+                @test vals[4] ≈ gradient(x -> gradient(x -> gradient(x -> only(values(Order(0), poly, x)), x), x), xp)
+                @test vals[5] ≈ gradient(x -> gradient(x -> gradient(x -> gradient(x -> only(values(Order(0), poly, x)), x), x), x), xp)
+            end
+        end
+    end
+end
+
 end # "Interpolations"

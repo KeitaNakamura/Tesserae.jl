@@ -56,7 +56,6 @@ export
     Cubic,
     Quartic,
     MultiLinear,
-    MultiQuadratic,
     Polynomial,
     BSpline,
     SteffenBSpline,
