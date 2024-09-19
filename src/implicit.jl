@@ -43,6 +43,13 @@ struct DofMap{dim, N, I <: AbstractVector{CartesianIndex{N}}}
     dimension::Int
     gridsize::Dims{dim}
     indices::I # (direction, x, y, z)
+    function DofMap{dim, N, I}(dimension::Int, gridsize::Dims{dim}, indices::I) where {dim, N, I <: AbstractVector{CartesianIndex{N}}}
+        @assert dim+1 == N
+        new{dim, N, I}(dimension, gridsize, indices)
+    end
+end
+function DofMap(dimension::Int, gridsize::Dims{dim}, indices::I) where {dim, N, I <: AbstractVector{CartesianIndex{N}}}
+    DofMap{dim, N, I}(dimension, gridsize, indices)
 end
 
 DofMap(mask::AbstractArray{Bool}) = DofMap(size(mask, 1), Base.tail(size(mask)), findall(mask))
@@ -50,15 +57,18 @@ DofMap(dims::Dims) = DofMap(dims[1], Base.tail(dims), vec(CartesianIndices(dims)
 
 ndofs(dofmap::DofMap) = length(dofmap.indices)
 
+function (dofmap::DofMap{1, 2})(A::AbstractArray{T, 1}) where {T <: Vec}
+    A′ = reshape(reinterpret(eltype(T), A), 1, length(A))
+    @boundscheck checkbounds(A′, dofmap.indices)
+    @inbounds view(A′, dofmap.indices)
+end
 function (dofmap::DofMap{dim, N})(A::AbstractArray{T, dim}) where {dim, N, T <: Vec}
-    @assert dim+1 == N
     A′ = reinterpret(reshape, eltype(T), A)
     @boundscheck checkbounds(A′, dofmap.indices)
     @inbounds view(A′, dofmap.indices)
 end
 
 function (dofmap::DofMap{dim, N})(A::AbstractArray{T, dim}) where {dim, N, T <: Real}
-    @assert dim+1 == N
     A′ = reshape(A, 1, size(A)...)
     indices′ = maparray(I->CartesianIndex(1,Base.tail(Tuple(I))...), dofmap.indices)
     @boundscheck checkbounds(A′, indices′)
