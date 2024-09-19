@@ -205,7 +205,7 @@ end
                 i = nodeindices[ip]
                 vals = values(Order(k), it, xp, mesh, i)
                 for a in 0:k
-                    @test values(mp, a)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
+                    @test values(mp, a+1)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end
             end
         end

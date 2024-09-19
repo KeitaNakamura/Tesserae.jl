@@ -124,9 +124,8 @@ Base.propertynames(mp::MPValue) = propertynames(getfield(mp, :prop))
 @inline function Base.getproperty(mp::MPValue, name::Symbol)
     getproperty(getfield(mp, :prop), name)
 end
-@inline function Base.values(mp::MPValue, k::Int)
-    check_mpvalue_prop(mp)
-    getfield(mp, :prop)[k+1]
+@inline function Base.values(mp::MPValue, i::Int)
+    getfield(mp, :prop)[i]
 end
 
 @inline function check_mpvalue_prop(mp::MPValue)
@@ -173,13 +172,13 @@ end
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        @nexprs $N i -> values(mp, i-1)[ip] = vals[i]
+        @nexprs $N i -> values(mp, i)[ip] = vals[i]
     end
 end
 @generated function set_values!(mp::MPValue, vals::Tuple{Vararg{Any, N}}) where {N}
     quote
         @_inline_meta
-        @nexprs $N i -> copyto!(values(mp, i-1), vals[i])
+        @nexprs $N i -> copyto!(values(mp, i), vals[i])
     end
 end
 
