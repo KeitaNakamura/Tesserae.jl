@@ -138,36 +138,29 @@ struct BSpline{D} <: AbstractBSpline{D}
 end
 Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
 
-@inline value(spline::BSpline, ξ::Real) = _value(Order(0), spline, ξ)
-@inline function _value(::Order{0}, ::BSpline{Linear}, ξ::Real)
+@inline function value(::BSpline{Linear}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
 end
-@inline function _value(::Order{0}, ::BSpline{Quadratic}, ξ::Real)
+@inline function value(::BSpline{Quadratic}, ξ::Real)
     ξ = abs(ξ)
     ξ < 0.5 ? (3 - 4ξ^2) / 4 :
     ξ < 1.5 ? (3 - 2ξ)^2 / 8 : zero(ξ)
 end
-@inline function _value(::Order{0}, ::BSpline{Cubic}, ξ::Real)
+@inline function value(::BSpline{Cubic}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
     ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
 end
-@inline function _value(::Order{0}, ::BSpline{Quartic}, ξ::Real)
+@inline function value(::BSpline{Quartic}, ξ::Real)
     ξ = abs(ξ)
     ξ < 0.5 ? (48ξ^4 - 120ξ^2 + 115) / 192              :
     ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
     ξ < 2.5 ? (5 - 2ξ)^4 / 384                          : zero(ξ)
 end
 
-@inline function _value(::Order{k}, spline::BSpline, ξ::Real)::typeof(ξ) where {k}
-    gradient(x -> (@_inline_meta; _value(Order(k-1), spline, x)), ξ)
-end
-@generated function Base.values(::Order{k}, spline::BSpline, ξ::Real) where {k}
-    quote
-        @_inline_meta
-        @ntuple $(k+1) i -> _value(Order(i-1), spline, ξ)
-    end
+@inline function Base.values(::Order{k}, spline::BSpline, ξ::Real) where {k}
+    ∂ⁿ{k,:all}(ξ -> value(spline, ξ), ξ)
 end
 
 @generated function Base.values(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
@@ -199,10 +192,10 @@ Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", splin
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
 # International journal for numerical methods in engineering, 76(6), 922-948.
-function _value(::Order{0}, ::SteffenBSpline{Linear}, ξ::Real, pos::Int)::typeof(ξ)
+function value(::SteffenBSpline{Linear}, ξ::Real, pos::Int)
     value(BSpline(Linear()), ξ)
 end
-function _value(::Order{0}, ::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)::typeof(ξ)
+function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)::typeof(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 0.5 ? (3 - 4ξ^2) / 3 :
@@ -217,7 +210,7 @@ function _value(::Order{0}, ::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)::ty
         value(BSpline(Quadratic()), ξ)
     end
 end
-function _value(::Order{0}, ::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
+function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 4 :
@@ -233,14 +226,8 @@ function _value(::Order{0}, ::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof
     end
 end
 
-@inline function _value(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int)::typeof(ξ) where {k}
-    gradient(x -> (@_inline_meta; _value(Order(k-1), spline, x, pos)), ξ)
-end
-@generated function Base.values(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
-    quote
-        @_inline_meta
-        @ntuple $(k+1) i -> _value(Order(i-1), spline, ξ, pos)
-    end
+@inline function Base.values(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
+    ∂ⁿ{k,:all}(ξ -> value(spline, ξ, pos), ξ)
 end
 
 @generated function Base.values(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}

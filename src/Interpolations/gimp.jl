@@ -28,22 +28,15 @@ end
 # The generalized interpolation material point method.
 # Computer Modeling in Engineering and Sciences, 5(6), 477-496.
 # boundary treatment is ignored
-@inline value(gimp::uGIMP, ξ::Real, l::Real) = _value(Order(0), gimp, ξ, l)
-@inline function _value(::Order{0}, ::uGIMP, ξ::Real, l::Real) # `l` is the particle size normalized by h
+@inline function value(::uGIMP, ξ::Real, l::Real) # `l` is the particle size normalized by h
     ξ = abs(ξ)
     ξ < l/2   ? 1 - (4ξ^2+l^2)/4l :
     ξ < 1-l/2 ? 1 - ξ             :
     ξ < 1+l/2 ? (1+l/2-ξ)^2 / 2l  : zero(ξ)
 end
 
-@inline function _value(::Order{k}, gimp::uGIMP, ξ::Real, l::Real)::typeof(ξ) where {k}
-    gradient(x -> (@_inline_meta; _value(Order(k-1), gimp, x, l)), ξ)
-end
-@generated function Base.values(::Order{k}, gimp::uGIMP, ξ::Real, l::Real) where {k}
-    quote
-        @_inline_meta
-        @ntuple $(k+1) i -> _value(Order(i-1), gimp, ξ, l)
-    end
+@inline function Base.values(::Order{k}, gimp::uGIMP, ξ::Real, l::Real) where {k}
+    ∂ⁿ{k,:all}(ξ -> value(gimp, ξ, l), ξ)
 end
 
 @generated function Base.values(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}

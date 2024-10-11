@@ -8,7 +8,7 @@ using SparseArrays
 
 using Reexport
 @reexport using Tensorial
-using Tensorial: resizedim
+using Tensorial: resizedim, ∂ⁿ
 export resizedim
 
 using StructArrays
