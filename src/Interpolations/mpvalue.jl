@@ -70,7 +70,7 @@ end
     end
     quote
         @_inline_meta
-        v = $(Expr(:tuple, v[Tensorial.indices_unique(TT)]...))
+        v = $(Expr(:tuple, v[Tensorial.tensorindices_tuple(TT)]...))
         map($TT, map(tuple_otimes, v)...)
     end
 end

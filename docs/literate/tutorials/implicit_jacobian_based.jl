@@ -159,7 +159,7 @@ function main()
             openpvd(pvdfile; append=true) do pvd
                 openvtk(string(pvdfile, step), particles.x) do vtk
                     function stress3x3(F)
-                        z = zero(Mat{2,1})
+                        z = zero(Vec{2})
                         F3x3 = [F  z
                                 z' 1]
                         kirchhoff_stress(F3x3) * inv(det(F3x3))

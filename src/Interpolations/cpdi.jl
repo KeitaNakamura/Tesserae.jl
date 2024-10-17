@@ -75,7 +75,7 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{2})
     x₂ = xₚ + r₁ - r₂
     x₃ = xₚ + r₁ + r₂
     x₄ = xₚ - r₁ + r₂
-    Vₚ = 4 * abs((r₁ × r₂)[3])
+    Vₚ = 4 * abs(r₁ × r₂)
 
     indices = neighboringnodes_storage(mp)[]
     find_neighboringnodes_cpdi!(indices, (x₁, x₂, x₃, x₄), mesh)

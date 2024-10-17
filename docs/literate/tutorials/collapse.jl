@@ -169,7 +169,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
-            f[i]  = @∑ -V[p] * resizedim(σ[p],Val(2)) ⋅ ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
+            f[i]  = @∑ -V[p] * resize(σ[p],(2,2)) ⋅ ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
         end
 
         ## Update grid velocity
@@ -200,7 +200,7 @@ function main()
         ## Update other particle properties
         for p in eachindex(particles)
             ## Update Cauchy stress using Jaumann stress rate
-            ∇uₚ = resizedim(particles.∇v[p], Val(3)) * Δt
+            ∇uₚ = resize(particles.∇v[p], (3,3)) * Δt
             particles.σ[p] = cauchy_stress(model, particles.σ[p], ∇uₚ)
             ## Update deformation gradient and volume
             ΔFₚ = I + particles.∇v[p] * Δt

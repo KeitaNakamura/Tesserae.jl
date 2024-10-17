@@ -130,7 +130,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p])) # Taylor transfer
-            fint[i] = @∑ -V[p] * resizedim(σ[p], Val(2)) ⋅ ∇w[ip] + w[ip] * m[p] * b[p]
+            fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) ⋅ ∇w[ip] + w[ip] * m[p] * b[p]
             fext[i] = @∑ w[ip] * contact_force_normal(x[p], r[p], disk.x)
         end
 
@@ -154,7 +154,7 @@ function main()
         end
 
         for p in 1:length(particles)
-            Δϵ = resizedim(symmetric(particles.∇v[p]), Val(3)) * Δt
+            Δϵ = resize(symmetric(particles.∇v[p]), (3,3)) * Δt
             particles.σ[p]  = vonmises_model(particles.σ[p], Δϵ; λ, G, σy)
             particles.V[p] *= 1 + tr(Δϵ)
             particles.ϵ[p] += Δϵ

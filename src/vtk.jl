@@ -38,5 +38,5 @@ closepvd(file::WriteVTK.CollectionFile) = vtk_save(file)
 # f32
 f32(A::AbstractArray{Float64}) = maparray(Float32, A)
 f32(A::AbstractArray{Float32}) = A
-f32(A::AbstractArray{<: Tensor{<: Any, Float64}}) = maparray(Tensorial.tensortype(Space(eltype(A))){Float32}, A)
+f32(A::AbstractArray{<: Tensor{<: Any, Float64}}) = maparray(Tensorial.tensortype(Tensorial.Space(eltype(A))){Float32}, A)
 f32(A::AbstractArray{<: Tensor{<: Any, Float32}}) = A

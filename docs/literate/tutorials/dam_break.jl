@@ -380,8 +380,8 @@ function jacobian(state)
             K̂ᵤᵤ = γ/(β*Δt) * τ₂[p] * ∇w[ip] ⊗ ∇w[jp] * V[p]
             K̂ₚᵤ = 1/(β*Δt^2) * τ₁[p] * ρ * ∇w[ip] * w[jp] * V[p]
             K̂ₚₚ = τ₁[p] * ∇w[ip] ⋅ ∇w[jp] * V[p]
-            [Kᵤᵤ+K̂ᵤᵤ           Kᵤₚ
-             Mat{1,2}(Kₚᵤ+K̂ₚᵤ) K̂ₚₚ]
+            [Kᵤᵤ+K̂ᵤᵤ    Kᵤₚ
+             (Kₚᵤ+K̂ₚᵤ)' K̂ₚₚ]
         end
     end
 

@@ -236,7 +236,7 @@ function main(transfer = FLIP(1.0))
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, step)) do vtm
                     function stress3x3(F)
-                        z = zero(Mat{2,1})
+                        z = zero(Vec{2})
                         F3x3 = [F  z
                                 z' 1]
                         cauchy_stress(F3x3)
