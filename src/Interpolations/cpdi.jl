@@ -50,7 +50,7 @@ end
 
 function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{1})
     xₚ = getx(pt)
-    r₁ = pt.F ⋅ Vec(pt.l/2)
+    r₁ = pt.F * Vec(pt.l/2)
     x₁ = xₚ - r₁
     x₂ = xₚ + r₁
     Vₚ = 2r₁[1]
@@ -69,8 +69,8 @@ end
 
 function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{2})
     xₚ = getx(pt)
-    r₁ = pt.F ⋅ Vec(pt.l/2,0)
-    r₂ = pt.F ⋅ Vec(0,pt.l/2)
+    r₁ = pt.F * Vec(pt.l/2,0)
+    r₂ = pt.F * Vec(0,pt.l/2)
     x₁ = xₚ - r₁ - r₂
     x₂ = xₚ + r₁ - r₂
     x₃ = xₚ + r₁ + r₂
@@ -95,9 +95,9 @@ end
 
 function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{3})
     xₚ = getx(pt)
-    r₁ = pt.F ⋅ Vec(pt.l/2,0,0)
-    r₂ = pt.F ⋅ Vec(0,pt.l/2,0)
-    r₃ = pt.F ⋅ Vec(0,0,pt.l/2)
+    r₁ = pt.F * Vec(pt.l/2,0,0)
+    r₂ = pt.F * Vec(0,pt.l/2,0)
+    r₃ = pt.F * Vec(0,0,pt.l/2)
     x₁ = xₚ - r₁ - r₂ - r₃
     x₂ = xₚ + r₁ - r₂ - r₃
     x₃ = xₚ + r₁ + r₂ - r₃
@@ -125,7 +125,7 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{3})
         w₇ = value(BSpline(Linear()), x₇, mesh, i)
         w₈ = value(BSpline(Linear()), x₈, mesh, i)
         mp.w[ip] = (w₁ + w₂ + w₃ + w₄ + w₅ + w₆ + w₇ + w₈) / 8
-        mp.∇w[ip] = A ⋅ (w₁*Vec(-1,-1,-1) + w₂*Vec(1,-1,-1) + w₃*Vec(1,1,-1) + w₄*Vec(-1,1,-1) + w₅*Vec(-1,-1,1) + w₆*Vec(1,-1,1) + w₇*Vec(1,1,1) + w₈*Vec(-1,1,1)) / Vₚ
+        mp.∇w[ip] = A * (w₁*Vec(-1,-1,-1) + w₂*Vec(1,-1,-1) + w₃*Vec(1,1,-1) + w₄*Vec(-1,1,-1) + w₅*Vec(-1,-1,1) + w₆*Vec(1,-1,1) + w₇*Vec(1,1,1) + w₈*Vec(-1,1,1)) / Vₚ
     end
 end
 

@@ -74,7 +74,7 @@ end
         map($TT, map(tuple_otimes, v)...)
     end
 end
-@inline tuple_otimes(x::Tuple) = SArray(otimes(map(Vec, x)...))
+@inline tuple_otimes(x::Tuple) = SArray(⊗(map(Vec, x)...))
 
 """
     MPValue([T,] interpolation, mesh)

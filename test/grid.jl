@@ -13,7 +13,7 @@
         @test all(iszero, (grid.m)::Array{Float64, 2})
         @test all(iszero, (grid.v)::Array{Vec{2,Float64}, 2})
         grid.m .= rand()
-        grid.v .= rand(Vec{2})
+        grid.v .= Ref(rand(Vec{2}))
         Tesserae.fillzero!(grid)
         @test grid.x == mesh
         @test all(iszero, grid.m)

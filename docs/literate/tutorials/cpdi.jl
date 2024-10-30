@@ -71,7 +71,7 @@ function main()
     ## Material model (neo-Hookean)
     function cauchy_stress(F)
         J = det(F)
-        b = symmetric(F ⋅ F')
+        b = symmetric(F * F')
         (μ*(b-I) + λ*log(J)*I) / J
     end
 
@@ -96,7 +96,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
-            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⋅ ∇w[ip] + w[ip] * m[p] * Vec(0,-g,0)
+            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⊡ ∇w[ip] + w[ip] * m[p] * Vec(0,-g,0)
         end
 
         ## Update grid velocity
@@ -122,7 +122,7 @@ function main()
         ## Update other particle properties
         for p in eachindex(particles)
             ∇uₚ = particles.∇v[p] * Δt
-            Fₚ = (I + ∇uₚ) ⋅ particles.F[p]
+            Fₚ = (I + ∇uₚ) * particles.F[p]
             σₚ = cauchy_stress(Fₚ)
             particles.σ[p] = σₚ
             particles.F[p] = Fₚ
@@ -145,7 +145,7 @@ function main()
             end
         end
     end
-    mean(particles.x) #src
+    sum(particles.x) / length(particles) #src
 end
 
 using Test                                 #src

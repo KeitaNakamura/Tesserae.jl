@@ -80,7 +80,7 @@ function main()
     ## Neo-Hookean model
     function kirchhoff_stress(F)
         J = det(F)
-        b = symmetric(F ⋅ F')
+        b = symmetric(F * F')
         μ*(b-I) + λ*log(J)*I
     end
 
@@ -148,7 +148,7 @@ function main()
             a[p]  = @∑ w[ip] * a[i]
             v[p] += @∑ w[ip] * ((1-γ)*a[p] + γ*a[i]) * Δt
             x[p]  = @∑ w[ip] * (X[i] + u[i])
-            F[p]  = (I + ∇u[p]) ⋅ F[p]
+            F[p]  = (I + ∇u[p]) * F[p]
         end
 
         t += Δt
@@ -171,8 +171,8 @@ function main()
             end
         end
     end
-    lx = particles.F[corner_p] ⋅ Vec(η*h,0)                 #src
-    ly = particles.F[corner_p] ⋅ Vec(0,η*h)                 #src
+    lx = particles.F[corner_p] * Vec(η*h,0)                 #src
+    ly = particles.F[corner_p] * Vec(0,η*h)                 #src
     disp = particles.x[corner_p] + (lx/2 - ly/2) - corner_0 #src
     disp[2]                                                 #src
 end
@@ -184,19 +184,19 @@ function residual(U::AbstractVector, state)
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
-    geometric(τ) = @einsum (i,j,k,l) -> τ[i,l] * one(τ)[j,k]
+    geometric(τ) = @einsum G[i,j,k,l] := τ[i,l] * one(τ)[j,k]
     @G2P grid=>i particles=>p mpvalues=>ip begin
         ## In addition to updating the stress tensor, the stiffness tensor,
         ## which is utilized in the Jacobian-vector product, is also updated.
         ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
         ΔF⁻¹[p] = inv(I + ∇u[p])
-        F = (I + ∇u[p]) ⋅ F[p]
+        F = (I + ∇u[p]) * F[p]
         ∂τ∂F, τ = gradient(kirchhoff_stress, F, :all)
         τ[p] = τ
-        ℂ[p] = ∂τ∂F ⋅ F' - geometric(τ)
+        ℂ[p] = ∂τ∂F ⊡ F' - geometric(τ)
     end
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p]) - w[ip] * m[p] * b[p]
+        f[i] = @∑ V⁰[p] * τ[p] ⊡ (∇w[ip] ⊡ ΔF⁻¹[p]) - w[ip] * m[p] * b[p]
     end
 
     @. $dofmap(grid.m) * $dofmap(grid.a) + $dofmap(grid.f)
@@ -205,9 +205,9 @@ end
 function jacobian(U::AbstractVector, state)
     (; grid, particles, mpvalues, β, A, dofmap, Δt) = state
 
-    dotdot(a,ℂ,b) = @einsum (i,j) -> a[k] * ℂ[i,k,j,l] * b[l]
+    dotdot(a,ℂ,b) = @einsum C[i,j] := a[k] * ℂ[i,k,j,l] * b[l]
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
-        A[i,j] = @∑ dotdot(∇w[ip] ⋅ ΔF⁻¹[p], ℂ[p], ∇w[jp] ⋅ ΔF⁻¹[p]) * V⁰[p]
+        A[i,j] = @∑ dotdot(∇w[ip] ⊡ ΔF⁻¹[p], ℂ[p], ∇w[jp] ⊡ ΔF⁻¹[p]) * V⁰[p]
     end
 
     extract(A, dofmap) + Diagonal(inv(β*Δt^2) * dofmap(grid.m))

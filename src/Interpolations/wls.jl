@@ -70,8 +70,8 @@ end
         xᵢ = mesh[i]
         w = mp.w[ip]
         P = value(poly, xᵢ - xₚ)
-        wq = w * (M⁻¹ ⋅ P)
-        set_values!(mp, ip, map(P₀->wq⋅P₀, P₀__))
+        wq = w * (M⁻¹ * P)
+        set_values!(mp, ip, map(P₀->wq'*P₀, P₀__))
     end
 end
 

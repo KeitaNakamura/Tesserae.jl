@@ -31,23 +31,23 @@ function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3
 
     (; λ, G, A, B, b, pₜ) = model
 
-    f(σ) = norm(dev(σ)) - (A - B*mean(σ)) # Yield function
-    g(σ) = norm(dev(σ)) + b*mean(σ)       # Plastic potential function
+    f(σ) = norm(dev(σ)) - (A - B*tr(σ)/3) # Yield function
+    g(σ) = norm(dev(σ)) + b*tr(σ)/3       # Plastic potential function
 
     ## Elastic predictor
     cᵉ = λ*δ⊗δ + 2G*I
-    σᵗʳ = σⁿ + cᵉ ⊡ symmetric(∇u) + 2*symmetric(σⁿ ⋅ skew(∇u)) # Consider Jaumann stress-rate
+    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(σⁿ * skew(∇u)) # Consider Jaumann stress-rate
     dfdσ, fᵗʳ = gradient(f, σᵗʳ, :all)
-    fᵗʳ ≤ 0 && mean(σᵗʳ) ≤ pₜ && return σᵗʳ
+    fᵗʳ ≤ 0 && tr(σᵗʳ)/3 ≤ pₜ && return σᵗʳ
 
     ## Plastic corrector
     dgdσ = gradient(g, σᵗʳ)
-    Δλ = fᵗʳ / (dfdσ ⊡ cᵉ ⊡ dgdσ)
+    Δλ = fᵗʳ / (dfdσ ⊡₂ cᵉ ⊡₂ dgdσ)
     Δϵᵖ = Δλ * dgdσ
-    σ = σᵗʳ - cᵉ ⊡ Δϵᵖ
+    σ = σᵗʳ - cᵉ ⊡₂ Δϵᵖ
 
     ## Simple tension cutoff
-    if !(mean(σ) ≤ pₜ) # σᵗʳ is not in zone1
+    if !(tr(σ)/3 ≤ pₜ) # σᵗʳ is not in zone1
         ##
         ## \<- yield surface
         ##  \         /
@@ -65,7 +65,7 @@ function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3
         σ = pₜ*δ + s
         if f(σ) > 0 # σ is in zone2
             ## Map to corner
-            p = mean(σ)
+            p = tr(σ) / 3
             σ = pₜ*δ + (A-B*p)*normalize(s)
         end
     end
@@ -169,7 +169,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
-            f[i]  = @∑ -V[p] * resize(σ[p],(2,2)) ⋅ ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
+            f[i]  = @∑ -V[p] * resize(σ[p],(2,2)) ⊡ ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
         end
 
         ## Update grid velocity
@@ -204,7 +204,7 @@ function main()
             particles.σ[p] = cauchy_stress(model, particles.σ[p], ∇uₚ)
             ## Update deformation gradient and volume
             ΔFₚ = I + particles.∇v[p] * Δt
-            particles.F[p] = ΔFₚ ⋅ particles.F[p]
+            particles.F[p] = ΔFₚ * particles.F[p]
             particles.V[p] = det(ΔFₚ) * particles.V[p]
         end
 
@@ -227,7 +227,7 @@ function main()
             end
         end
     end
-    mean(particles.x)
+    sum(particles.x) / length(particles)
 end
 
 using Test                             #src

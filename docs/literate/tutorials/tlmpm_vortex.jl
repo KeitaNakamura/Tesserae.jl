@@ -119,7 +119,7 @@ function main()
                 (x, y) = grid.X[i]
                 R = sqrt(x^2 + y^2)
                 θ = atan(y, x)
-                grid.b[i] = rotmat(θ) ⋅ calc_b_Rθ(R, t)
+                grid.b[i] = rotmat(θ) * calc_b_Rθ(R, t)
             end
         end
 
@@ -127,7 +127,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]    = @∑ w[ip] * m[p]
             mv[i]   = @∑ w[ip] * m[p] * v[p]
-            fint[i] = @∑ -V⁰[p] * P[p] ⋅ ∇w[ip]
+            fint[i] = @∑ -V⁰[p] * P[p] ⊡ ∇w[ip]
         end
 
         ## Update grid velocity
@@ -135,7 +135,7 @@ function main()
         @. grid.fext = grid.m * grid.b
         @. grid.vⁿ   = grid.mv * grid.m⁻¹
         @. grid.v    = grid.vⁿ + ((grid.fint + grid.fext) * grid.m⁻¹) * Δt
-        grid.v[outside_gridinds] .= zero(eltype(grid.v))
+        grid.v[outside_gridinds] .= Ref(zero(eltype(grid.v)))
 
         ## Update particle velocity and position
         @G2P grid=>i particles=>p mpvalues=>ip begin
@@ -150,7 +150,7 @@ function main()
             mv[i] = @∑ w[ip] * m[p] * v[p]
             v[i]  = mv[i] * m⁻¹[i]
         end
-        grid.v[outside_gridinds] .= zero(eltype(grid.v))
+        grid.v[outside_gridinds] .= Ref(zero(eltype(grid.v)))
 
         ## Update stress
         @G2P grid=>i particles=>p mpvalues=>ip begin

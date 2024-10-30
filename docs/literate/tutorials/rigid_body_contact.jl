@@ -129,15 +129,15 @@ function main()
 
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
-            mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p])) # Taylor transfer
-            fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) ⋅ ∇w[ip] + w[ip] * m[p] * b[p]
+            mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p])) # Taylor transfer
+            fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) ⊡ ∇w[ip] + w[ip] * m[p] * b[p]
             fext[i] = @∑ w[ip] * contact_force_normal(x[p], r[p], disk.x)
         end
 
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
         @. grid.vⁿ  = grid.mv * grid.m⁻¹
         @. grid.v   = grid.vⁿ + (grid.fint * grid.m⁻¹) * Δt
-        @. grid.fext += contact_force_tangent(grid.fext, grid.v-disk.v, grid.m, Δt)
+        @. grid.fext += contact_force_tangent(grid.fext, grid.v-$Ref(disk.v), grid.m, Δt)
         @. grid.v    += (grid.fext * grid.m⁻¹) * Δt
 
         for i in eachindex(grid)[[begin,end],:]
@@ -161,7 +161,7 @@ function main()
         end
 
         disk.x += disk.v * Δt
-        @. disk_points += disk.v * Δt
+        disk_points .+= Ref(disk.v * Δt)
 
         t += Δt
         step += 1
@@ -170,7 +170,7 @@ function main()
             popfirst!(savepoints)
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, step)) do vtm
-                    deviatoric_strain(ϵ) = sqrt(2/3 * dev(ϵ) ⊡ dev(ϵ))
+                    deviatoric_strain(ϵ) = sqrt(2/3 * dev(ϵ) ⊡₂ dev(ϵ))
                     openvtk(vtm, particles.x) do vtk
                         vtk["von Mises stress (kPa)"] = @. 1e-3 * vonmises(particles.σ)
                         vtk["Deviatoric strain"] = @. deviatoric_strain(particles.ϵ)
@@ -189,15 +189,15 @@ function vonmises_model(σⁿ, Δϵ; λ, G, σy)
     δ = one(SymmetricSecondOrderTensor{3})
     I = one(SymmetricFourthOrderTensor{3})
     cᵉ = λ*δ⊗δ + 2G*I
-    σ_trial = σⁿ + cᵉ ⊡ Δϵ
+    σ_trial = σⁿ + cᵉ ⊡₂ Δϵ
     dfdσ, f_trial = gradient(σ -> vonmises(σ) - σy, σ_trial, :all)
     if f_trial > 0
-        dλ = f_trial / (dfdσ ⊡ cᵉ ⊡ dfdσ)
-        σ = σ_trial - cᵉ ⊡ (dλ * dfdσ)
+        dλ = f_trial / (dfdσ ⊡₂ cᵉ ⊡₂ dfdσ)
+        σ = σ_trial - cᵉ ⊡₂ (dλ * dfdσ)
     else
         σ = σ_trial
     end
-    if mean(σ) > 0 # simple tension cut-off
+    if tr(σ)/3 > 0 # simple tension cut-off
         σ = dev(σ)
     end
     σ

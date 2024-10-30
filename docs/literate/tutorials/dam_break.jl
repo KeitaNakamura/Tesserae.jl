@@ -41,7 +41,7 @@ function main(transfer = FLIP(1.0))
 
     ## Utils
     cellnodes(cell) = cell:(cell+oneunit(cell))
-    cellcenter(cell, mesh) = mean(mesh[cellnodes(cell)])
+    cellcenter(cell, mesh) = sum(mesh[cellnodes(cell)]) / 4
 
     ## Properties for grid and particles
     GridProp = @NamedTuple begin
@@ -149,8 +149,8 @@ function main(transfer = FLIP(1.0))
         elseif transfer isa TPIC
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
-                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (X[i] - x[p]))
-                ma[i] = @∑ w[ip] * m[p] * (a[p] + ∇a[p] ⋅ (X[i] - x[p]))
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (X[i] - x[p]))
+                ma[i] = @∑ w[ip] * m[p] * (a[p] + ∇a[p] * (X[i] - x[p]))
             end
         end
 
@@ -228,8 +228,8 @@ function main(transfer = FLIP(1.0))
             end
         end
     end
-    # mean(particles.p) #src
-    mean(particles.x) #src
+    # sum(particles.p) / length(particles) #src
+    sum(particles.x) / length(particles) #src
 end
 
 # ## Variational multiscale method
@@ -355,7 +355,7 @@ function residual(U, state)
 
     ## Compute residual values
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        R_mom[i]  = @∑ V[p]*s[p]⋅∇w[ip] - m[p]*b[p]*w[ip] - V[p]*p[p]*∇w[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇w[ip]
+        R_mom[i]  = @∑ V[p]*s[p]⊡∇w[ip] - m[p]*b[p]*w[ip] - V[p]*p[p]*∇w[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇w[ip]
         R_mas[i]  = @∑ V[p]*tr(∇v[p])*w[ip] + τ₁[p]*m[p]*(a[p]-b[p])⋅∇w[ip] + τ₁[p]*V[p]*∇p[p]⋅∇w[ip]
         R_mom[i] += m[i]*a[i]
     end
@@ -374,7 +374,7 @@ function jacobian(state)
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
         A[i,j] = @∑ begin
-            Kᵤᵤ = (γ/(β*Δt) * ∇w[ip] ⋅ cₚ ⋅ ∇w[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
+            Kᵤᵤ = (γ/(β*Δt) * ∇w[ip] ⊡ cₚ ⊡ ∇w[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
             Kᵤₚ = -∇w[ip] * w[jp] * V[p]
             Kₚᵤ = (γ/(β*Δt)) * w[ip] * ∇w[jp] * V[p]
             K̂ᵤᵤ = γ/(β*Δt) * τ₂[p] * ∇w[ip] ⊗ ∇w[jp] * V[p]

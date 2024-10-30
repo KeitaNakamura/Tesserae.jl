@@ -122,8 +122,8 @@ function main(transfer = FLIP(1.0))
     end
     function cauchy_stress(F)
         J = det(F)
-        S = 2 * gradient(stored_energy, F' ⋅ F)
-        symmetric(inv(J) * F ⋅ S ⋅ F')
+        S = 2 * gradient(stored_energy, F' * F)
+        symmetric(inv(J) * F * S * F')
     end
 
     ## Outputs
@@ -152,20 +152,20 @@ function main(transfer = FLIP(1.0))
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * v[p]
-                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+                f[i]  = @∑ -V[p] * σ[p] ⊡ ∇w[ip]
             end
         elseif transfer isa APIC
             local Dₚ⁻¹ = inv(1/4 * h^2 * I)
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
-                mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] ⋅ Dₚ⁻¹ ⋅ (x[i] - x[p]))
-                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] * Dₚ⁻¹ * (x[i] - x[p]))
+                f[i]  = @∑ -V[p] * σ[p] ⊡ ∇w[ip]
             end
         elseif transfer isa TPIC
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
-                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
-                f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p]))
+                f[i]  = @∑ -V[p] * σ[p] ⊡ ∇w[ip]
             end
         end
 
@@ -221,7 +221,7 @@ function main(transfer = FLIP(1.0))
         ## Update other particle properties
         for p in eachindex(particles)
             ∇uₚ = particles.∇v[p] * Δt
-            Fₚ = (I + ∇uₚ) ⋅ particles.F[p]
+            Fₚ = (I + ∇uₚ) * particles.F[p]
             σₚ = cauchy_stress(Fₚ)
             particles.σ[p] = σₚ
             particles.F[p] = Fₚ
@@ -254,7 +254,7 @@ function main(transfer = FLIP(1.0))
         end
     end
     Wₖ = sum(pt -> pt.m * (pt.v ⋅ pt.v) / 2, particles)           #src
-    Wₑ = sum(pt -> pt.V * stored_energy(pt.F' ⋅ pt.F), particles) #src
+    Wₑ = sum(pt -> pt.V * stored_energy(pt.F' * pt.F), particles) #src
     Wₖ + Wₑ                                                       #src
 end
 
