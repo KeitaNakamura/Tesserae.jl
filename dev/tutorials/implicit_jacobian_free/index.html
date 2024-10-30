@@ -72,7 +72,7 @@ function main()
     # Neo-Hookean model
     function kirchhoff_stress(F)
         J = det(F)
-        b = symmetric(F ⋅ F&#39;)
+        b = symmetric(F * F&#39;)
         μ*(b-I) + λ*log(J)*I
     end
 
@@ -116,7 +116,7 @@ function main()
         end
         for i in eachindex(grid)[end,:,:]
             dofmask[:,i] .= false
-            grid.u[i] = (rotmat(2π*Δt, Vec(1,0,0)) - I) ⋅ grid.X[i]
+            grid.u[i] = (rotmat(2π*Δt, Vec(1,0,0)) - I) * grid.X[i]
         end
         dofmap = DofMap(dofmask)
 
@@ -133,7 +133,7 @@ function main()
             a[p]  = @∑ w[ip] * a[i]
             x[p]  = @∑ w[ip] * (X[i] + u[i])
             ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
-            F[p]  = (I + ∇u[p]) ⋅ F[p]
+            F[p]  = (I + ∇u[p]) * F[p]
         end
 
         t += Δt
@@ -150,7 +150,7 @@ function main()
             end
         end
     end
-    mean(particles.x)
+    sum(particles.x) / length(particles)
 end
 
 function residual(U::AbstractVector, state)
@@ -160,19 +160,19 @@ function residual(U::AbstractVector, state)
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
-    geometric(τ) = @einsum (i,j,k,l) -&gt; τ[i,l] * one(τ)[j,k]
+    geometric(τ) = @einsum G[i,j,k,l] := τ[i,l] * one(τ)[j,k]
     @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
         # In addition to updating the stress tensor, the stiffness tensor,
         # which is utilized in the Jacobian-vector product, is also updated.
         ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
         ΔF⁻¹[p] = inv(I + ∇u[p])
-        F = (I + ∇u[p]) ⋅ F[p]
+        F = (I + ∇u[p]) * F[p]
         ∂τ∂F, τ = gradient(kirchhoff_stress, F, :all)
         τ[p] = τ
-        ℂ[p] = ∂τ∂F ⋅ F&#39; - geometric(τ)
+        ℂ[p] = ∂τ∂F ⊡ F&#39; - geometric(τ)
     end
     @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
-        f[i] = @∑ V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p])
+        f[i] = @∑ V⁰[p] * τ[p] ⊡ (∇w[ip] ⊡ ΔF⁻¹[p])
     end
 
     @. β*Δt^2 * ($dofmap(grid.a) + $dofmap(grid.f) * $dofmap(grid.m⁻¹))
@@ -189,13 +189,13 @@ function jacobian(U::AbstractVector, state)
         dofmap(grid.δu) .= δU
 
         @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
-            ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⋅ ΔF⁻¹[p])
-            τ[p] = ℂ[p] ⊡ ∇u[p]
+            ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⊡ ΔF⁻¹[p])
+            τ[p] = ℂ[p] ⊡₂ ∇u[p]
         end
         @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
-            f[i] = @∑ V⁰[p] * τ[p] ⋅ (∇w[ip] ⋅ ΔF⁻¹[p])
+            f[i] = @∑ V⁰[p] * τ[p] ⊡ (∇w[ip] ⊡ ΔF⁻¹[p])
         end
 
         @. JδU = δU + β*Δt^2 * $dofmap(grid.f) * $dofmap(grid.m⁻¹)
     end
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../implicit/">« Implicit formulation</a><a class="docs-footer-nextpage" href="../implicit_jacobian_based/">Jacobian-based »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Sunday 20 October 2024 06:31">Sunday 20 October 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../implicit/">« Implicit formulation</a><a class="docs-footer-nextpage" href="../implicit_jacobian_based/">Jacobian-based »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Wednesday 30 October 2024 12:07">Wednesday 30 October 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
