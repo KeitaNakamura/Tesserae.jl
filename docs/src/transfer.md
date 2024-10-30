@@ -92,7 +92,7 @@ end
 
 ```math
 \begin{aligned}
-m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \bm{B}_p^n \cdot (\bm{D}_p^n)^{-1} \cdot (\bm{x}_i^n - \bm{x}_p^n) \right) \\
+m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \bm{B}_p^n (\bm{D}_p^n)^{-1} (\bm{x}_i^n - \bm{x}_p^n) \right) \\
 \bm{v}_p^{n+1} &= \sum_i w_{ip}^n \bm{v}_i^{n+1} \\
 \bm{B}_p^{n+1} &= \sum_i w_{ip}^n \bm{v}_i^{n+1} \otimes (\bm{x}_i^n - \bm{x}_p^n)
 \end{aligned}
@@ -100,7 +100,7 @@ m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \bm{B}_p^n \cdot (\bm{D}
 
 ```@example transfer
 @P2G grid=>i particles=>p mpvalues=>ip begin
-    mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] ⋅ Dₚ⁻¹ ⋅ (x[i] - x[p]))
+    mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] * Dₚ⁻¹ * (x[i] - x[p]))
 end
 @G2P grid=>i particles=>p mpvalues=>ip begin
     v[p] = @∑ w[ip] * v[i]
@@ -114,7 +114,7 @@ where `Dₚ` should be defined as `Dₚ⁻¹ = inv(1/4 * h^2 * I)` for `BSpline(
 
 ```math
 \begin{aligned}
-m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \nabla\bm{v}_p^n \cdot (\bm{x}_i^n - \bm{x}_p^n) \right) \\
+m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \nabla\bm{v}_p^n (\bm{x}_i^n - \bm{x}_p^n) \right) \\
 \bm{v}_p^{n+1} &= \sum_i w_{ip}^n \bm{v}_i^{n+1} \\
 \nabla\bm{v}_p^{n+1} &= \sum_i \bm{v}_i^{n+1} \otimes \nabla w_{ip}^n \\
 \end{aligned}
@@ -122,7 +122,7 @@ m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \nabla\bm{v}_p^n \cdot (
 
 ```@example transfer
 @P2G grid=>i particles=>p mpvalues=>ip begin
-    mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] ⋅ (x[i] - x[p]))
+    mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p]))
 end
 @G2P grid=>i particles=>p mpvalues=>ip begin
     v[p]  = @∑ w[ip] * v[i]

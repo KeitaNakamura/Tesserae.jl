@@ -52,8 +52,8 @@ function main()
         rhs = findall(x -> norm(@. x-(1-r)) < r, pts.x)
 
         # Set initial velocities
-        pts.v[lhs] .= Vec( 0.1, 0.1)
-        pts.v[rhs] .= Vec(-0.1,-0.1)
+        pts.v[lhs] .= Ref(Vec( 0.1, 0.1))
+        pts.v[rhs] .= Ref(Vec(-0.1,-0.1))
 
         pts[[lhs; rhs]]
     end
@@ -75,7 +75,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
-            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⋅ ∇w[ip]
+            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⊡ ∇w[ip]
         end
 
         @. grid.vⁿ = grid.mv / grid.m
@@ -89,7 +89,7 @@ function main()
 
         for p in eachindex(particles)
             Δϵₚ = symmetric(particles.∇v[p]) * Δt
-            particles.F[p]  = (I + particles.∇v[p]*Δt) ⋅ particles.F[p]
+            particles.F[p]  = (I + particles.∇v[p]*Δt) * particles.F[p]
             particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
         end
 
@@ -217,8 +217,8 @@ particles = let                                                      #hide
     r = 0.2                                                          #hide
     lhs = findall(x -> norm(@. x-r    ) < r, pts.x)                  #hide
     rhs = findall(x -> norm(@. x-(1-r)) < r, pts.x)                  #hide
-    pts.v[lhs] .= Vec( 0.1, 0.1)                                     #hide
-    pts.v[rhs] .= Vec(-0.1,-0.1)                                     #hide
+    pts.v[lhs] .= Ref(Vec( 0.1, 0.1))                                #hide
+    pts.v[rhs] .= Ref(Vec(-0.1,-0.1))                                #hide
     pts[[lhs; rhs]]                                                  #hide
 end                                                                  #hide
 nothing                                                              #hide
@@ -284,7 +284,7 @@ For the particle-to-grid transfer, the [`@P2G`](@ref) macro is useful:
 @P2G grid=>i particles=>p mpvalues=>ip begin
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
-    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⋅ ∇w[ip]
+    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⊡ ∇w[ip]
 end
 ```
 
@@ -301,7 +301,7 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         grid.m[i]  += mp.w[ip] * particles.m[p]
         grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
-        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] ⋅ mp.∇w[ip]
+        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] ⊡ mp.∇w[ip]
     end
 end
 ```

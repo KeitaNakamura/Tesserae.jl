@@ -28,7 +28,7 @@ Using the Newmark-$\beta$ method, the grid velocity and acceleration can be writ
 The linearization of the residual vector is given by:
 
 ```math
-\delta\bm{R}_I = m_I \frac{\partial\bm{a}_I^{n+1}}{\partial\bm{u}_J^{n+1}} \cdot \delta\bm{u}_J + \frac{\partial\bm{f}_I^{n+1}}{\partial\bm{u}_J^{n+1}} \cdot \delta\bm{u}_J,
+\delta\bm{R}_I = m_I \frac{\partial\bm{a}_I^{n+1}}{\partial\bm{u}_J^{n+1}} \delta\bm{u}_J + \frac{\partial\bm{f}_I^{n+1}}{\partial\bm{u}_J^{n+1}} \delta\bm{u}_J,
 ```
 
 where
@@ -54,8 +54,8 @@ Thus the derivative of the basis function with respect to the current coordinate
 
 ```math
 \frac{\partial w}{\partial \bm{x}}
-= \frac{\partial w}{\partial \bm{X}} \cdot \frac{\partial \bm{X}}{\partial \bm{x}}
-= \frac{\partial w}{\partial \bm{X}} \cdot \Delta\bm{F}^{-1}
+= \frac{\partial w}{\partial \bm{X}} \frac{\partial \bm{X}}{\partial \bm{x}}
+= \frac{\partial w}{\partial \bm{X}} \Delta\bm{F}^{-1}
 ```
 
 where
@@ -69,5 +69,5 @@ where
 This relative deformation gradient $\Delta\bm{F}$ is typically used to update the deformation gradient in MPM:
 
 ```math
-\bm{F} = \Delta\bm{F} \cdot \bm{F}^n.
+\bm{F} = \Delta\bm{F} \bm{F}^n.
 ```
