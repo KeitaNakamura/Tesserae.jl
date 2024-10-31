@@ -75,7 +75,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
-            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⊡ ∇w[ip]
+            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
         end
 
         @. grid.vⁿ = grid.mv / grid.m
@@ -284,7 +284,7 @@ For the particle-to-grid transfer, the [`@P2G`](@ref) macro is useful:
 @P2G grid=>i particles=>p mpvalues=>ip begin
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
-    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] ⊡ ∇w[ip]
+    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
 end
 ```
 
@@ -301,7 +301,7 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         grid.m[i]  += mp.w[ip] * particles.m[p]
         grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
-        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] ⊡ mp.∇w[ip]
+        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * mp.∇w[ip]
     end
 end
 ```

@@ -169,7 +169,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
-            f[i]  = @∑ -V[p] * resize(σ[p],(2,2)) ⊡ ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
+            f[i]  = @∑ -V[p] * resize(σ[p],(2,2)) * ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
         end
 
         ## Update grid velocity

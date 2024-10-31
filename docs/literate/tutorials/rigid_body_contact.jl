@@ -130,7 +130,7 @@ function main()
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p])) # Taylor transfer
-            fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) ⊡ ∇w[ip] + w[ip] * m[p] * b[p]
+            fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) * ∇w[ip] + w[ip] * m[p] * b[p]
             fext[i] = @∑ w[ip] * contact_force_normal(x[p], r[p], disk.x)
         end
 

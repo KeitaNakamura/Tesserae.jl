@@ -152,20 +152,20 @@ function main(transfer = FLIP(1.0))
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * v[p]
-                f[i]  = @∑ -V[p] * σ[p] ⊡ ∇w[ip]
+                f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
             end
         elseif transfer isa APIC
             local Dₚ⁻¹ = inv(1/4 * h^2 * I)
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] * Dₚ⁻¹ * (x[i] - x[p]))
-                f[i]  = @∑ -V[p] * σ[p] ⊡ ∇w[ip]
+                f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
             end
         elseif transfer isa TPIC
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p]))
-                f[i]  = @∑ -V[p] * σ[p] ⊡ ∇w[ip]
+                f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
             end
         end
 

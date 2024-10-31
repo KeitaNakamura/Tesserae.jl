@@ -196,7 +196,7 @@ function residual(U::AbstractVector, state)
         ℂ[p] = ∂τ∂F ⊡ F' - geometric(τ)
     end
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ V⁰[p] * τ[p] ⊡ (∇w[ip] ⊡ ΔF⁻¹[p]) - w[ip] * m[p] * b[p]
+        f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p]) - w[ip] * m[p] * b[p]
     end
 
     @. $dofmap(grid.m) * $dofmap(grid.a) + $dofmap(grid.f)

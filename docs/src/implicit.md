@@ -12,8 +12,8 @@ where
 
 ```math
 \bm{f}_I
-= \sum_p V_p \bm{\sigma}_p \cdot \frac{\partial w_{Ip}}{\partial \bm{x}}
-= \sum_p V_p^0 \bm{\tau}_p \cdot \frac{\partial w_{Ip}}{\partial \bm{x}}.
+= \sum_p V_p \bm{\sigma}_p \frac{\partial w_{Ip}}{\partial \bm{x}}
+= \sum_p V_p^0 \bm{\tau}_p \frac{\partial w_{Ip}}{\partial \bm{x}}.
 ```
 
 Using the Newmark-$\beta$ method, the grid velocity and acceleration can be written as:
@@ -53,21 +53,21 @@ However, in MPM, this is not feasible because the basis function and its derivat
 Thus the derivative of the basis function with respect to the current coordinates $\bm{x}$ should be computed using
 
 ```math
-\frac{\partial w}{\partial \bm{x}}
-= \frac{\partial w}{\partial \bm{X}} \frac{\partial \bm{X}}{\partial \bm{x}}
-= \frac{\partial w}{\partial \bm{X}} \Delta\bm{F}^{-1}
+\frac{\partial w}{\partial x_j}
+= \frac{\partial w}{\partial X_i} \frac{\partial X_i}{\partial x_j}
+= \frac{\partial w}{\partial X_i} \Delta{F}_{ij}^{-1}
 ```
 
 where
 
 ```math
-\Delta\bm{F}
-= \frac{\partial \bm{x}}{\partial \bm{X}}
-= \bm{I} + \frac{\partial \bm{u}}{\partial \bm{X}}.
+\Delta{F}_{ij}
+= \frac{\partial x_i}{\partial X_j}
+= \delta_{ij} + \frac{\partial u_i}{\partial X_j}.
 ```
 
 This relative deformation gradient $\Delta\bm{F}$ is typically used to update the deformation gradient in MPM:
 
 ```math
-\bm{F} = \Delta\bm{F} \bm{F}^n.
+F_{ij} = \Delta{F}_{ik} F_{kj}^n.
 ```

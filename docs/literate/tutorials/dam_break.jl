@@ -355,7 +355,7 @@ function residual(U, state)
 
     ## Compute residual values
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        R_mom[i]  = @∑ V[p]*s[p]⊡∇w[ip] - m[p]*b[p]*w[ip] - V[p]*p[p]*∇w[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇w[ip]
+        R_mom[i]  = @∑ V[p]*s[p]*∇w[ip] - m[p]*b[p]*w[ip] - V[p]*p[p]*∇w[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇w[ip]
         R_mas[i]  = @∑ V[p]*tr(∇v[p])*w[ip] + τ₁[p]*m[p]*(a[p]-b[p])⋅∇w[ip] + τ₁[p]*V[p]*∇p[p]⋅∇w[ip]
         R_mom[i] += m[i]*a[i]
     end

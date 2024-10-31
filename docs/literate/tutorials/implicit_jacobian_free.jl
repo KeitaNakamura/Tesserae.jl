@@ -184,7 +184,7 @@ function residual(U::AbstractVector, state)
         ℂ[p] = ∂τ∂F ⊡ F' - geometric(τ)
     end
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ V⁰[p] * τ[p] ⊡ (∇w[ip] ⊡ ΔF⁻¹[p])
+        f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
     end
 
     @. β*Δt^2 * ($dofmap(grid.a) + $dofmap(grid.f) * $dofmap(grid.m⁻¹))
@@ -205,7 +205,7 @@ function jacobian(U::AbstractVector, state)
             τ[p] = ℂ[p] ⊡₂ ∇u[p]
         end
         @P2G grid=>i particles=>p mpvalues=>ip begin
-            f[i] = @∑ V⁰[p] * τ[p] ⊡ (∇w[ip] ⊡ ΔF⁻¹[p])
+            f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
         end
 
         @. JδU = δU + β*Δt^2 * $dofmap(grid.f) * $dofmap(grid.m⁻¹)
