@@ -117,13 +117,13 @@ function main(transfer = FLIP(1.0))
     ## Material model (neo-Hookean)
     function stored_energy(C)
         dim = size(C, 1)
-        J = √det(C)
-        μ/2*(tr(C)-dim) - μ*log(J) + λ/2*(log(J))^2
+        lnJ = log(√det(C))
+        μ/2*(tr(C)-dim) - μ*lnJ + λ/2*lnJ^2
     end
     function cauchy_stress(F)
         J = det(F)
-        S = 2 * gradient(stored_energy, F' * F)
-        symmetric(inv(J) * F * S * F')
+        S = 2 * gradient(stored_energy, symmetric(F'F))
+        @einsum typeof(S) σ[i,j] := inv(J) * F[i,k] * S[k,l] * F[j,l]
     end
 
     ## Outputs
