@@ -4,6 +4,7 @@ gridspan(::AbstractBSpline{Degree{1}}) = 2
 gridspan(::AbstractBSpline{Degree{2}}) = 3
 gridspan(::AbstractBSpline{Degree{3}}) = 4
 gridspan(::AbstractBSpline{Degree{4}}) = 5
+gridspan(::AbstractBSpline{Degree{5}}) = 6
 
 @inline function neighboringnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
@@ -22,6 +23,7 @@ end
 @inline _neighboringnodes_offset(::AbstractBSpline{Degree{2}}) = 0.5
 @inline _neighboringnodes_offset(::AbstractBSpline{Degree{3}}) = 1.0
 @inline _neighboringnodes_offset(::AbstractBSpline{Degree{4}}) = 1.5
+@inline _neighboringnodes_offset(::AbstractBSpline{Degree{5}}) = 2.0
 
 @inline value(spline::AbstractBSpline, pt, mesh::CartesianMesh, i) = only(values(Order(0), spline, pt, mesh, i))
 
@@ -96,6 +98,28 @@ end
     end
 end
 
+# quintic
+@inline _value(::Order{0}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/120,1/24,-1/12,1/12,-1/24,1/120)), ξ⁵, muladd($V((1/8,-3/8,1/4,1/4,-3/8,1/8)), ξ⁴, muladd($V((-3/4,5/4,0,0,-5/4,3/4)), ξ³, muladd($V((9/4,-7/4,-1/2,-1/2,-7/4,9/4)), ξ², muladd($V((-27/8,5/8,0,0,-5/8,27/8)), ξ, $V((81/40,17/40,11/20,11/20,17/40,81/40)))))))
+@inline _value(::Order{1}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/24,5/24,-5/12,5/12,-5/24,1/24)), ξ⁴, muladd($V((1/2,-3/2,1,1,-3/2,1/2)), ξ³, muladd($V((-9/4,15/4,0,0,-15/4,9/4)), ξ², muladd($V((9/2,-7/2,-1,-1,-7/2,9/2)), ξ, $V((-27/8,5/8,0,0,-5/8,27/8))))))
+@inline _value(::Order{2}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/6,5/6,-5/3,5/3,-5/6,1/6)), ξ³, muladd($V((3/2,-9/2,3,3,-9/2,3/2)), ξ², muladd($V((-9/2,15/2,0,0,-15/2,9/2)), ξ, $V((9/2,-7/2,-1,-1,-7/2,9/2)))))
+@inline _value(::Order{3}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/2,5/2,-5,5,-5/2,1/2)), ξ², muladd($V((3,-9,6,6,-9,3)), ξ, $V((-9/2,15/2,0,0,-15/2,9/2))))
+@inline _value(::Order{4}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1,5,-10,10,-5,1)), ξ, $V((3,-9,6,6,-9,3)))
+@inline _value(::Order{5}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((-1,5,-10,10,-5,1))
+@inline _value(::Order, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((0,0,0,0,0,0))
+@generated function values′(::Order{k}, spline::AbstractBSpline{Quintic}, x::Real) where {k}
+    quote
+        @_inline_meta
+        T = typeof(x)
+        x′ = fract(x)
+        ξ = @. x′ - T((-2,-1,0,1,2,3))
+        ξ² = @. ξ * ξ
+        ξ³ = @. ξ² * ξ
+        ξ⁴ = @. ξ² * ξ²
+        ξ⁵ = @. ξ² * ξ³
+        @ntuple $(k+1) a -> _value(Order(a-1), spline, (ξ,ξ²,ξ³,ξ⁴,ξ⁵))
+    end
+end
+
 @generated function Base.values(order::Order{k}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh{dim}) where {k, dim}
     quote
         @_inline_meta
@@ -157,6 +181,12 @@ end
     ξ < 0.5 ? (48ξ^4 - 120ξ^2 + 115) / 192              :
     ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
     ξ < 2.5 ? (5 - 2ξ)^4 / 384                          : zero(ξ)
+end
+@inline function value(::BSpline{Quintic}, ξ::Real)
+    ξ = abs(ξ)
+    ξ < 1 ? ((3-ξ)^5 - 6*(2-ξ)^5 + 15*(1-ξ)^5) / 120 :
+    ξ < 2 ? ((3-ξ)^5 - 6*(2-ξ)^5) / 120              :
+    ξ < 3 ? ((3-ξ)^5) / 120                          : zero(ξ)
 end
 
 @inline function Base.values(::Order{k}, spline::BSpline, ξ::Real) where {k}

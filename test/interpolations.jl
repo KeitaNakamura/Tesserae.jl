@@ -172,7 +172,7 @@ end # MPValue
         end
     end
 
-    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
+    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), BSpline(Quintic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
         it = Wrapper(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)
@@ -193,7 +193,7 @@ end
 @testset "B-spline fast computation" begin
     # check by autodiff
     k = 5
-    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()))
+    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), BSpline(Quintic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(-1,2), Val(dim))...)
