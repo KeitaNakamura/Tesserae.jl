@@ -43,3 +43,18 @@ Some functionalities are inspired from the following packages:
 
 * [Ferrite.jl](https://github.com/Ferrite-FEM/Ferrite.jl)
 * [taichi_mpm](https://github.com/yuanming-hu/taichi_mpm)
+
+## Citation
+
+If you find Tesserae.jl useful in your work, I kindly request that you cite it as below:
+
+```bibtex
+@software{NakamuraTesserae2024,
+    title = {Tesserae.jl: a {J}ulia-powered toolkit for material point method},
+   author = {Nakamura, Keita},
+      doi = {10.5281/zenodo.13956709},
+     year = {2024},
+      url = {https://github.com/KeitaNakamura/Tesserae.jl}
+  licence = {MIT},
+}
+```
