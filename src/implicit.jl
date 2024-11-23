@@ -395,7 +395,7 @@ function newton!(
 
         if backtracking
             α = one(T)
-            while fx > fx′
+            while fx ≥ fx′
                 α = α^2 * fx′ / 2(fx + α*fx′ - fx′)
                 @. x = x′ - α * δx
                 Fx = F(x)
