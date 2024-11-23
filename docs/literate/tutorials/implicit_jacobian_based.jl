@@ -1,7 +1,7 @@
 # # Jacobian-based implicit method
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/44eaa91f-ff22-4768-abe5-9fd76079612a" width="300"/>
+# <img src="https://github.com/user-attachments/assets/81697408-0975-49aa-959e-f885ccea98b2" width="300"/>
 # ```
 #
 # | # Particles | # Iterations | Execution time |

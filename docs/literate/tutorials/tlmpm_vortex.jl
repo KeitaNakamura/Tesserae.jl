@@ -1,7 +1,7 @@
 # # Total Lagrangian MPM
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/94d84128-aee3-4de7-a142-b000569ae1ff" width="300"/>
+# <img src="https://github.com/user-attachments/assets/84746086-8456-4bfa-b16f-a0a936fe5472" width="300"/>
 # ```
 #
 # | # Particles | # Iterations | Execution time |

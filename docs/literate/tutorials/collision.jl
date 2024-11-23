@@ -1,7 +1,7 @@
 # # Transfer schemes
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/a069b594-389f-4082-8755-3d8b90908c67" width="600"/>
+# <img src="https://github.com/user-attachments/assets/24cbd50c-7d21-4917-a7e1-12816b561dee" width="600"/>
 # ```
 #
 # | # Particles | # Iterations | Execution time |

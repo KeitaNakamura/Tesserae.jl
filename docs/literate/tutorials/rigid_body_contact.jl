@@ -1,7 +1,7 @@
 # # Frictional contact with rigid body
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/ad776d53-3c39-44a5-8357-7b3bbc2ee051" width="300"/>
+# <img src="https://github.com/user-attachments/assets/35e4744f-90ee-475d-bdb7-73f94fb28369" width="300"/>
 # ```
 #
 # | # Particles | # Iterations | Execution time |

@@ -1,7 +1,7 @@
 # # Elasto-plastic large deformation
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/2fede002-eccb-45c7-af69-ae194384ef9b" width="800"/>
+# <img src="https://github.com/user-attachments/assets/16a48085-6977-4c6f-b9fa-a9634e73eeef" width="800"/>
 # ```
 #
 # | # Particles | # Iterations | Execution time |

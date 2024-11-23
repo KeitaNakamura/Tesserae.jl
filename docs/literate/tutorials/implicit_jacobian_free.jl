@@ -1,7 +1,7 @@
 # # Jacobian-free Newton--Krylov method
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/f1d80c46-a8ff-44d4-ae82-768b480f25ea" width="800"/>
+# <img src="https://github.com/user-attachments/assets/9d9dbb86-87d5-4818-bbbf-ae0983cd3f04" width="800"/>
 # ```
 #
 # | # Particles | # Iterations | Execution time |

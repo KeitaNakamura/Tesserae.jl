@@ -1,7 +1,7 @@
 # # A convected particle domain interpolation technique
 #
 # ```@raw html
-# <img src="https://github.com/user-attachments/assets/0052df2b-f532-45d8-97bf-a2967c6b3f0d" width="210"/>
+# <img src="https://github.com/user-attachments/assets/86e62b20-e65d-4c23-801c-70795b774b8d" width="210"/>
 # ```
 #
 # | # Particles | # Iterations | Execution time |
