@@ -386,9 +386,11 @@ function newton!(
     solved = f0 ≤ atol
     giveup = !isfinite(fx)
 
-    println(" # ≤ ", compact(maxiter,6), "   ‖f‖ ≤ ", compact(atol,11), "   ‖f‖/‖f₀‖ ≤ ", compact(rtol,11))
-    println("-----------  ------------------  -----------------------")
-    println(" ", compact(iter,9), "    ", compact(fx,16), "    ", compact(fx/f0,16))
+    if verbose
+        println(" # ≤ ", compact(maxiter,6), "   ‖f‖ ≤ ", compact(atol,11), "   ‖f‖/‖f₀‖ ≤ ", compact(rtol,11))
+        println("-----------  ------------------  -----------------------")
+        println(" ", compact(iter,9), "    ", compact(fx,16), "    ", compact(fx/f0,16))
+    end
 
     while !(solved || giveup)
         linsolve(fillzero!(δx), ∇F(x), Fx)
