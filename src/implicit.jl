@@ -420,6 +420,6 @@ function newton!(
         end
     end
 
-    println()
+    verbose && println()
     solved
 end
