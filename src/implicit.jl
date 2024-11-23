@@ -366,30 +366,51 @@ true
 ```
 """
 function newton!(
-        x::AbstractVector, f, ∇f;
+        x::AbstractVector, F, ∇F;
         maxiter::Int=100, atol::Real=zero(eltype(x)), rtol::Real=sqrt(eps(eltype(x))),
-        linsolve=(x,A,b)->copyto!(x,A\b), verbose::Bool=false)
+        linsolve=(x,A,b)->copyto!(x,A\b), backtracking::Bool=false, verbose::Bool=false)
 
     compact(val) = rpad(sprint(show, val; context = :compact=>true), 11)
+    T = eltype(x)
 
-    fx = f(x)
-    f0 = norm(fx)
+    Fx = F(x)
+    fx = f0 = norm(Fx)
     δx = similar(x)
+
+    if backtracking
+        # previous step values
+        x′, Fx′, fx′ = copy(x), copy(Fx), fx
+    end
 
     iter = 0
     solved = f0 ≤ atol
-    giveup = any(!isfinite, fx)
+    giveup = !isfinite(fx)
 
     while !(solved || giveup)
-        linsolve(fillzero!(δx), ∇f(x), fx)
+        linsolve(fillzero!(δx), ∇F(x), Fx)
+
         @. x -= δx
-        fx = f(x)
-        fx_norm = norm(fx)
-        if verbose
-            println("‖f‖ = ", compact(fx_norm), "  ", "‖f‖/‖f₀‖ = ", compact(fx_norm/f0))
+        Fx = F(x)
+        fx = norm(Fx)
+
+        if backtracking
+            α = one(T)
+            while fx > fx′
+                α = α^2 * fx′ / 2(fx + α*fx′ - fx′)
+                @. x = x′ - α * δx
+                Fx = F(x)
+                fx = norm(Fx)
+            end
+            @. x′ = x
+            @. Fx′ = Fx
+            fx′ = fx
         end
-        solved = fx_norm ≤ max(atol, rtol*f0)
-        giveup = ((iter += 1) ≥ maxiter || any(!isfinite, fx))
+
+        if verbose
+            println("‖f‖ = ", compact(fx), "  ", "‖f‖/‖f₀‖ = ", compact(fx/f0))
+        end
+        solved = fx ≤ max(atol, rtol*f0)
+        giveup = ((iter += 1) ≥ maxiter || !isfinite(fx))
     end
 
     solved
