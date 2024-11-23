@@ -370,7 +370,7 @@ function newton!(
         maxiter::Int=100, atol::Real=zero(eltype(x)), rtol::Real=sqrt(eps(eltype(x))),
         linsolve=(x,A,b)->copyto!(x,A\b), backtracking::Bool=false, verbose::Bool=false)
 
-    compact(val) = rpad(sprint(show, val; context = :compact=>true), 11)
+    compact(val, pad) = rpad(sprint(show, val; context = :compact=>true), pad)
     T = eltype(x)
 
     Fx = F(x)
@@ -385,6 +385,10 @@ function newton!(
     iter = 0
     solved = f0 ≤ atol
     giveup = !isfinite(fx)
+
+    println(" # ≤ ", compact(maxiter,6), "   ‖f‖ ≤ ", compact(atol,11), "   ‖f‖/‖f₀‖ ≤ ", compact(rtol,11))
+    println("-----------  ------------------  -----------------------")
+    println(" ", compact(iter,9), "    ", compact(fx,16), "    ", compact(fx/f0,16))
 
     while !(solved || giveup)
         linsolve(fillzero!(δx), ∇F(x), Fx)
@@ -406,12 +410,14 @@ function newton!(
             fx′ = fx
         end
 
-        if verbose
-            println("‖f‖ = ", compact(fx), "  ", "‖f‖/‖f₀‖ = ", compact(fx/f0))
-        end
         solved = fx ≤ max(atol, rtol*f0)
         giveup = ((iter += 1) ≥ maxiter || !isfinite(fx))
+
+        if verbose
+            println(" ", compact(iter,9), "    ", compact(fx,16), "    ", compact(fx/f0,16))
+        end
     end
 
+    println()
     solved
 end
