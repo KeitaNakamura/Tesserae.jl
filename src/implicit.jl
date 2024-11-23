@@ -387,9 +387,9 @@ function newton!(
     giveup = !isfinite(fx)
 
     if verbose
-        println(" # ≤ ", compact(maxiter,6), "   ‖f‖ ≤ ", compact(atol,11), "   ‖f‖/‖f₀‖ ≤ ", compact(rtol,11))
-        println("-----------  ------------------  -----------------------")
-        println(" ", compact(iter,9), "    ", compact(fx,16), "    ", compact(fx/f0,16))
+        println(" # ≤ ", compact(maxiter,4), "   ‖f‖ ≤ ", compact(atol,11), "   ‖f‖/‖f₀‖ ≤ ", compact(rtol,11))
+        println("---------  ------------------  -----------------------")
+        println(" ", compact(iter,7), "    ", compact(fx,16), "    ", compact(fx/f0,16))
     end
 
     while !(solved || giveup)
@@ -416,7 +416,7 @@ function newton!(
         giveup = ((iter += 1) ≥ maxiter || !isfinite(fx))
 
         if verbose
-            println(" ", compact(iter,9), "    ", compact(fx,16), "    ", compact(fx/f0,16))
+            println(" ", compact(iter,7), "    ", compact(fx,16), "    ", compact(fx/f0,16))
         end
     end
 
