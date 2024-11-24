@@ -238,13 +238,13 @@ function variational_multiscale_method(state)
 
     ## The simulation might fail occasionally due to regions with very small masses,
     ## such as splashes[^1]. Therefore, in this script, if Newton's method doesn't converge,
-    ## a half time step is applied.
+    ## a smaller time step is applied.
 
     (; grid, dofmap, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
-    solved = false
-    while !solved
+    k = 1
+    while true
         ## Reconstruct state using the current time step
         state = merge(state, (; Δt))
 
@@ -257,15 +257,16 @@ function variational_multiscale_method(state)
         ## In this formulation[^1], the initial Jacobian matrix is used in all Newton's iterations.
         ## If the computation fails, use a smaller time step.
         J = lu(jacobian(state); check=false)
-        issuccess(J) || (Δt /= 2; continue)
-        
-        ## Solve nonlinear system
-        U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-        solved = Tesserae.newton!(U, U->residual(U,state), U->J;
-                                  linsolve=(x,A,b)->ldiv!(x,A,b), atol=1e-10, rtol=1e-10)
+        if issuccess(J)
+            ## Solve nonlinear system
+            U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
+            solved = Tesserae.newton!(U, U->residual(U,state), U->J;
+                                      linsolve=(x,A,b)->ldiv!(x,A,b), backtracking=true)
+            solved && break
+        end
 
-        ## If the simulation fails to solve, retry with a smaller time step
-        solved || (Δt /= 2)
+        Δt *= k / (k+1) # Δt, Δt/2, Δt/3, ...
+        k += 1
     end
 
     ## Update the positions of grid nodes
