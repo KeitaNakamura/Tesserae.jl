@@ -214,13 +214,13 @@ end</code></pre><h2 id="Variational-multiscale-method"><a class="docs-heading-an
 
     # The simulation might fail occasionally due to regions with very small masses,
     # such as splashes[^1]. Therefore, in this script, if Newton&#39;s method doesn&#39;t converge,
-    # a half time step is applied.
+    # a smaller time step is applied.
 
     (; grid, dofmap, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
-    solved = false
-    while !solved
+    k = 1
+    while true
         # Reconstruct state using the current time step
         state = merge(state, (; Δt))
 
@@ -233,15 +233,16 @@ end</code></pre><h2 id="Variational-multiscale-method"><a class="docs-heading-an
         # In this formulation[^1], the initial Jacobian matrix is used in all Newton&#39;s iterations.
         # If the computation fails, use a smaller time step.
         J = lu(jacobian(state); check=false)
-        issuccess(J) || (Δt /= 2; continue)
+        if issuccess(J)
+            # Solve nonlinear system
+            U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
+            solved = Tesserae.newton!(U, U-&gt;residual(U,state), U-&gt;J;
+                                      linsolve=(x,A,b)-&gt;ldiv!(x,A,b), backtracking=true)
+            solved &amp;&amp; break
+        end
 
-        # Solve nonlinear system
-        U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-        solved = Tesserae.newton!(U, U-&gt;residual(U,state), U-&gt;J;
-                                  linsolve=(x,A,b)-&gt;ldiv!(x,A,b), atol=1e-10, rtol=1e-10)
-
-        # If the simulation fails to solve, retry with a smaller time step
-        solved || (Δt /= 2)
+        Δt *= k / (k+1) # Δt, Δt/2, Δt/3, ...
+        k += 1
     end
 
     # Update the positions of grid nodes
@@ -347,4 +348,4 @@ end</code></pre><h2 id="Jacobian-matrix"><a class="docs-heading-anchor" href="#J
 
     # Extract the activated degrees of freedom
     extract(A, dofmap)
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../collapse/">« Elasto-plastic large deformation</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Saturday 23 November 2024 12:28">Saturday 23 November 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../collapse/">« Elasto-plastic large deformation</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Sunday 24 November 2024 08:45">Sunday 24 November 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
