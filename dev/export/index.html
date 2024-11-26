@@ -16,11 +16,11 @@ particles = generate_particles(ParticleProp, grid.x)</code></pre><p>The grid pro
 vtk_grid[&quot;Momentum&quot;] = grid.mv
 vtk_grid[&quot;Force&quot;] = grid.f
 closevtk(vtk_grid)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1-element Vector{String}:
- &quot;grid.vtr&quot;</code></pre><p>This can also be written using a <code>do</code> block, which automatically closes the file:</p><pre><code class="language-julia hljs">openvtk(&quot;grid&quot;, grid.x) do vtk
+ &quot;grid.vts&quot;</code></pre><p>This can also be written using a <code>do</code> block, which automatically closes the file:</p><pre><code class="language-julia hljs">openvtk(&quot;grid&quot;, grid.x) do vtk
     vtk[&quot;Momentum&quot;] = grid.mv
     vtk[&quot;Force&quot;] = grid.f
 end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1-element Vector{String}:
- &quot;grid.vtr&quot;</code></pre><p>For <code>particles</code>, the same instruction is available:</p><pre><code class="language-julia hljs"># without do block
+ &quot;grid.vts&quot;</code></pre><p>For <code>particles</code>, the same instruction is available:</p><pre><code class="language-julia hljs"># without do block
 vtk_particles = openvtk(&quot;particles&quot;, particles.x)
 vtk_particles[&quot;Velocity&quot;] = particles.v
 closevtk(vtk_particles)
@@ -39,7 +39,7 @@ end</code></pre><pre class="documenter-example-output"><code class="nohighlight 
     end
 end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element Vector{String}:
  &quot;grid_and_particles.vtm&quot;
- &quot;grid_and_particles_1.vtr&quot;
+ &quot;grid_and_particles_1.vts&quot;
  &quot;grid_and_particles_2.vtu&quot;</code></pre><h2 id="ParaView-collection-file"><a class="docs-heading-anchor" href="#ParaView-collection-file">ParaView collection file</a><a id="ParaView-collection-file-1"></a><a class="docs-heading-anchor-permalink" href="#ParaView-collection-file" title="Permalink"></a></h2><p>A ParaView collection file (<code>pvd</code>) represents a time series of VTK files.</p><pre><code class="language-julia hljs">filename = &quot;Simulation&quot;
 closepvd(openpvd(filename)) # Just create a file by `closepvd`
 
@@ -62,4 +62,4 @@ for (step, t) in enumerate(range(0, 10, step=0.5))
             pvd[t] = vtm # save to pvd!
         end
     end
-end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_utils/">« Functionalities for implicit methods</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Sunday 24 November 2024 10:35">Sunday 24 November 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_utils/">« Functionalities for implicit methods</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Tuesday 26 November 2024 05:41">Tuesday 26 November 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

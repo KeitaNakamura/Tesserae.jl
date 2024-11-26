@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VTKFile type="vtkMultiBlockDataSet" version="1.0" byte_order="LittleEndian">
   <vtkMultiBlockDataSet>
-    <DataSet index="0" file="Simulation16_1.vtr"/>
+    <DataSet index="0" file="Simulation16_1.vts"/>
     <DataSet index="1" file="Simulation16_2.vtu"/>
   </vtkMultiBlockDataSet>
 </VTKFile>
