@@ -1,12 +1,14 @@
+import WriteVTK
+
 # vtk_grid
-function WriteVTK.vtk_grid(vtk::AbstractString, x::AbstractVector{<: Vec}; kwargs...)
+function vtk_particles(vtk, x::AbstractVector{<: Vec}; kwargs...)
     coords = vtk_format(f32(x))
     npts = length(x)
-    cells = [MeshCell(VTKCellTypes.VTK_VERTEX, [i]) for i in 1:npts]
-    vtk_grid(vtk, coords, cells; kwargs...)
+    cells = [WriteVTK.MeshCell(WriteVTK.VTKCellTypes.VTK_VERTEX, [i]) for i in 1:npts]
+    WriteVTK.vtk_grid(vtk, coords, cells; kwargs...)
 end
-function WriteVTK.vtk_grid(vtk::AbstractString, mesh::CartesianMesh; kwargs...)
-    vtk_grid(vtk, map(f32, get_axes(mesh))...; kwargs...)
+function vtk_mesh(vtk, mesh::CartesianMesh; kwargs...)
+    WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh); kwargs...)
 end
 
 # add_field_data
@@ -28,12 +30,23 @@ function _vtk_format(A::AbstractArray{<: SymmetricSecondOrderTensor{3, T}}) wher
 end
 
 # open/close
-openvtk(args...; kwargs...) = vtk_grid(args...; kwargs...)
-openvtm(args...; kwargs...) = vtk_multiblock(args...; kwargs...)
-openpvd(args...; kwargs...) = paraview_collection(args...; kwargs...)
-closevtk(file::WriteVTK.DatasetFile) = vtk_save(file)
-closevtm(file::WriteVTK.MultiblockFile) = vtk_save(file)
-closepvd(file::WriteVTK.CollectionFile) = vtk_save(file)
+openvtk(vtk, mesh::AbstractMesh; kwargs...) = vtk_mesh(vtk, mesh; kwargs...)
+openvtk(vtk, particles::AbstractVector{<:Vec}; kwargs...) = vtk_particles(vtk, particles; kwargs...)
+function openvtk(f::Function, args...; kwargs...)
+    vtk = openvtk(args...; kwargs...)
+    local outfiles
+    try
+        f(vtk)
+    finally
+        outfiles = close(vtk)
+    end
+    outfiles::Vector{String}
+end
+openvtm(args...; kwargs...) = WriteVTK.vtk_multiblock(args...; kwargs...)
+openpvd(args...; kwargs...) = WriteVTK.paraview_collection(args...; kwargs...)
+closevtk(file::WriteVTK.DatasetFile) = WriteVTK.vtk_save(file)
+closevtm(file::WriteVTK.MultiblockFile) = WriteVTK.vtk_save(file)
+closepvd(file::WriteVTK.CollectionFile) = WriteVTK.vtk_save(file)
 
 # f32
 f32(A::AbstractArray{Float64}) = maparray(Float32, A)

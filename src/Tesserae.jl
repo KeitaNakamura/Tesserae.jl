@@ -16,9 +16,6 @@ using StructArrays
 import PoissonDiskSampling: generate as poisson_disk_sampling
 import Random
 
-# stream
-using WriteVTK
-
 # others
 import Preferences
 import ProgressMeter
