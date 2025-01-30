@@ -437,9 +437,9 @@ isrefexpr(x, inds...) = false
 
 function complete_sumeq_expr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector)
     # must check `iseqexpr` in advance
-    expr.args[2] = remove_∑(expr.args[2])
     complete_parent_from_index!(expr.args[1], pairs)
-    complete_sumeq_rhs_expr!(Meta.quot(expr.args[2]), pairs, vars) # rhs
+    complete_sumeq_rhs_expr!(expr.args[2], pairs, vars) # rhs
+    expr.args[2] = remove_∑(expr.args[2])
 end
 
 function remove_∑(rhs::Expr)
