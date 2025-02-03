@@ -202,15 +202,15 @@ function update_block_sparsity!(A::SpArray, blkspy)
     Perhaps you should use `update_block_sparsity!(grid, blkspy)` instead of applying it to each `SpArray`.
     """)
     n = update_block_sparsity!(get_spinds(A), blkspy)
-    resize_data!(A, n)
+    resize_fillzero_data!(A, n)
     n
 end
 
-function resize_data!(A::SpArray, n::Integer)
-    resize!(get_data(A), n)
+function resize_fillzero_data!(A::SpArray, n::Integer)
+    fillzero!(resize!(get_data(A), n))
     A
 end
-resize_data!(A, n) = A
+resize_fillzero_data!(A::AbstractMesh, n) = A
 
 #############
 # Broadcast #

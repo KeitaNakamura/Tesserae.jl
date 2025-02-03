@@ -88,7 +88,7 @@ get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
 function update_block_sparsity!(A::SpGrid, blkspy)
     n = update_block_sparsity!(get_spinds(A), blkspy)
-    StructArrays.foreachfield(a->resize_data!(a,n), A)
+    StructArrays.foreachfield(a->resize_fillzero_data!(a,n), A)
     A
 end
 
