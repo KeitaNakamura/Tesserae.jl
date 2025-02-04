@@ -46,11 +46,13 @@ The spatial tangent modulus $\mathbb{C}$ is defined as:
 \mathbb{C}_{ijkl} = \frac{\partial \tau_{ij}}{\partial F_{km}} F_{lm} - \tau_{il}\delta_{jk}
 ```
 
-## The derivative of the basis function
+## The derivative of the basis function[^1]
 
 In the implicit formulation, the derivative of the basis function $\nabla_{\bm{x}}w$ must be evaluated based on the current configuration.
 However, in MPM, this is not feasible because the basis function and its derivative are defined on the coordinates at the beginning of each time step, $\bm{X}$.
 Thus the derivative of the basis function with respect to the current coordinates $\bm{x}$ should be computed using
+
+[^1]: [Charlton, T.J., Coombs, W.M. and Augarde, C.E., 2017. iGIMP: An implicit generalised interpolation material point method for large deformations. Computers & Structures, 190, pp.108-125.](https://doi.org/10.1016/j.compstruc.2017.05.004)
 
 ```math
 \frac{\partial w}{\partial x_j}
