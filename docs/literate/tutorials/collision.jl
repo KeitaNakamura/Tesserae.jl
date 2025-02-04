@@ -155,7 +155,7 @@ function main(transfer = FLIP(1.0))
                 f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
             end
         elseif transfer isa APIC
-            local Dₚ⁻¹ = inv(1/4 * h^2 * I)
+            Dₚ⁻¹ = inv(1/4 * h^2 * I)
             @P2G grid=>i particles=>p mpvalues=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] * Dₚ⁻¹ * (x[i] - x[p]))
@@ -176,7 +176,7 @@ function main(transfer = FLIP(1.0))
 
         ## Grid-to-particle transfer
         if transfer isa FLIP
-            local α = transfer.α
+            α = transfer.α
             @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p]  = @∑ w[ip] * ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i])))
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
@@ -196,7 +196,7 @@ function main(transfer = FLIP(1.0))
                 x[p] += v[p] * Δt
             end
         elseif transfer isa XPIC
-            local m = transfer.m
+            m = transfer.m
             @. grid.vᵣ★ = grid.vⁿ
             @. grid.v★ = zero(grid.v★)
             for r in 2:m

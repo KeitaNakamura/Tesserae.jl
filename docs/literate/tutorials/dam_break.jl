@@ -183,7 +183,7 @@ function main(transfer = FLIP(1.0))
         Δt′ = variational_multiscale_method(state)
 
         if transfer isa FLIP
-            local α = transfer.α
+            α = transfer.α
             @G2P grid=>i particles=>p mpvalues=>ip begin
                 v[p] = @∑ ((1-α)*v[i] + α*(v[p] + ((1-γ)*a[p] + γ*a[i])*Δt)) * w[ip]
                 a[p] = @∑ a[i] * w[ip]
