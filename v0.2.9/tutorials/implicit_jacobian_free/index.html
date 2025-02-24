@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Jacobian-free · Tesserae.jl</title><meta name="title" content="Jacobian-free · Tesserae.jl"/><meta property="og:title" content="Jacobian-free · Tesserae.jl"/><meta property="twitter:title" content="Jacobian-free · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started/">Getting started</a></li><li><a class="tocitem" href="../collision/">Transfer schemes</a></li><li><a class="tocitem" href="../cpdi/">CPDI</a></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox" checked/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../implicit/">Implicit formulation</a></li><li class="is-active"><a class="tocitem" href>Jacobian-free</a></li><li><a class="tocitem" href="../implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../dam_break/">Incompressible fluid flow</a></li><li><a class="tocitem" href="../rigid_body_contact/">Frictional contact with rigid body</a></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../mesh/">Mesh</a></li><li><a class="tocitem" href="../../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../../interpolation/">Interpolation</a></li><li><a class="tocitem" href="../../transfer/">Transfer between grid and particles</a></li><li><a class="tocitem" href="../../implicit_utils/">Functionalities for implicit methods</a></li><li><a class="tocitem" href="../../export/">Export</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li><a class="is-disabled">Implicit methods</a></li><li class="is-active"><a href>Jacobian-free</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Jacobian-free</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/literate/tutorials/implicit_jacobian_free.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Jacobian-free-Newton–Krylov-method"><a class="docs-heading-anchor" href="#Jacobian-free-Newton–Krylov-method">Jacobian-free Newton–Krylov method</a><a id="Jacobian-free-Newton–Krylov-method-1"></a><a class="docs-heading-anchor-permalink" href="#Jacobian-free-Newton–Krylov-method" title="Permalink"></a></h1><img src="https://github.com/user-attachments/assets/9d9dbb86-87d5-4818-bbbf-ae0983cd3f04" width="800"/><table><tr><th style="text-align: right"># Particles</th><th style="text-align: right"># Iterations</th><th style="text-align: right">Execution time</th></tr><tr><td style="text-align: right">26k</td><td style="text-align: right">300</td><td style="text-align: right">2 min</td></tr></table><pre><code class="language-julia hljs">using Tesserae
+
+using IterativeSolvers: gmres!
+using LinearMaps: LinearMap
+
+function main()
+
+    # Simulation parameters
+    h  = 0.05 # Grid spacing
+    T  = 3.0  # Time span
+    Δt = 0.01 # Time step
+
+    # Material constants
+    E  = 100e3                  # Young&#39;s modulus
+    ν  = 0.3                    # Poisson&#39;s ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame&#39;s first parameter
+    μ  = E / 2(1 + ν)           # Shear modulus
+    ρ⁰ = 1000.0                 # Initial density
+
+    # Newmark-beta integration
+    β = 1/4
+    γ = 1/2
+
+    GridProp = @NamedTuple begin
+        X   :: Vec{3, Float64}
+        m   :: Float64
+        m⁻¹ :: Float64
+        v   :: Vec{3, Float64}
+        vⁿ  :: Vec{3, Float64}
+        mv  :: Vec{3, Float64}
+        a   :: Vec{3, Float64}
+        aⁿ  :: Vec{3, Float64}
+        ma  :: Vec{3, Float64}
+        u   :: Vec{3, Float64}
+        f   :: Vec{3, Float64}
+        δu  :: Vec{3, Float64}
+    end
+    ParticleProp = @NamedTuple begin
+        x    :: Vec{3, Float64}
+        m    :: Float64
+        V⁰   :: Float64
+        v    :: Vec{3, Float64}
+        a    :: Vec{3, Float64}
+        ∇a   :: SecondOrderTensor{3, Float64, 9}
+        ∇u   :: SecondOrderTensor{3, Float64, 9}
+        F    :: SecondOrderTensor{3, Float64, 9}
+        ΔF⁻¹ :: SecondOrderTensor{3, Float64, 9}
+        τ    :: SecondOrderTensor{3, Float64, 9}
+        ℂ    :: FourthOrderTensor{3, Float64, 81}
+    end
+
+    # Background grid
+    grid = generate_grid(GridProp, CartesianMesh(h, (0,1.5), (-0.6,0.6), (-0.6,0.6)))
+
+    # Particles
+    beam = extract(grid.X, (0,1.5), (-0.3,0.3), (-0.3,0.3))
+    particles = generate_particles(ParticleProp, beam; alg=GridSampling(spacing=1/6))
+    particles.V⁰ .= volume(beam) / length(particles)
+    filter!(particles) do pt
+        x, y, z = pt.x
+        (-0.3&lt;y&lt;-0.25 || 0.25&lt;y&lt;0.3) &amp;&amp; (-0.3&lt;z&lt;-0.25 || 0.25&lt;z&lt;0.3)
+    end
+    @. particles.m = ρ⁰ * particles.V⁰
+    @. particles.F = one(particles.F)
+    @show length(particles)
+
+    # Interpolation
+    # Use the kernel correction to properly handle the boundary conditions
+    mpvalues = generate_mpvalues(KernelCorrection(BSpline(Quadratic())), grid.X, length(particles))
+
+    # Neo-Hookean model
+    function kirchhoff_stress(F)
+        J = det(F)
+        b = symmetric(F * F&#39;)
+        μ*(b-I) + λ*log(J)*I
+    end
+
+    # Outputs
+    outdir = mkpath(joinpath(&quot;output&quot;, &quot;implicit_jacobian_free&quot;))
+    pvdfile = joinpath(outdir, &quot;paraview&quot;)
+    closepvd(openpvd(pvdfile)) # Create file
+
+    t = 0.0
+    step = 0
+    fps = 60
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+
+    Tesserae.@showprogress while t &lt; T
+
+        for p in eachindex(particles, mpvalues)
+            update!(mpvalues[p], particles.x[p], grid.X)
+        end
+
+        @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            ma[i] = @∑ w[ip] * m[p] * a[p]
+        end
+
+        # Compute the grid velocity and acceleration at t = tⁿ
+        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
+        @. grid.vⁿ = grid.mv * grid.m⁻¹
+        @. grid.aⁿ = grid.ma * grid.m⁻¹
+
+        # Create dofmask
+        dofmask = trues(3, size(grid)...)
+        for i in eachindex(grid)
+            iszero(grid.m[i]) &amp;&amp; (dofmask[:,i] .= false)
+        end
+
+        # Update boundary conditions
+        @. grid.u = zero(grid.u)
+        for i in eachindex(grid)[1,:,:]
+            dofmask[:,i] .= false
+        end
+        for i in eachindex(grid)[end,:,:]
+            dofmask[:,i] .= false
+            grid.u[i] = (rotmat(2π*Δt, Vec(1,0,0)) - I) * grid.X[i]
+        end
+        dofmap = DofMap(dofmask)
+
+        # Solve the nonlinear equation
+        state = (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt)
+        U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
+        compute_residual(U) = residual(U, state)
+        compute_jacobian(U) = jacobian(U, state)
+        Tesserae.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)-&gt;gmres!(x,A,b))
+
+        # Grid dispacement, velocity and acceleration have been updated during Newton&#39;s iterations
+        @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+            v[p] += @∑ w[ip] * ((1-γ)*a[p] + γ*a[i]) * Δt
+            a[p]  = @∑ w[ip] * a[i]
+            x[p]  = @∑ w[ip] * (X[i] + u[i])
+            ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
+            F[p]  = (I + ∇u[p]) * F[p]
+        end
+
+        t += Δt
+        step += 1
+
+        if t &gt; first(savepoints)
+            popfirst!(savepoints)
+            openpvd(pvdfile; append=true) do pvd
+                openvtk(string(pvdfile, step), particles.x) do vtk
+                    vtk[&quot;Velocity (m/s)&quot;] = particles.v
+                    vtk[&quot;von Mises stress (kPa)&quot;] = @. 1e-3 * vonmises(particles.τ / det(particles.F))
+                    pvd[t] = vtk
+                end
+            end
+        end
+    end
+    sum(particles.x) / length(particles)
+end
+
+function residual(U::AbstractVector, state)
+    (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt) = state
+
+    dofmap(grid.u) .= U
+    @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
+    @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
+
+    geometric(τ) = @einsum G[i,j,k,l] := τ[i,l] * one(τ)[j,k]
+    @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        # In addition to updating the stress tensor, the stiffness tensor,
+        # which is utilized in the Jacobian-vector product, is also updated.
+        ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
+        ΔF⁻¹[p] = inv(I + ∇u[p])
+        F = (I + ∇u[p]) * F[p]
+        ∂τ∂F, τ = gradient(kirchhoff_stress, F, :all)
+        τ[p] = τ
+        ℂ[p] = ∂τ∂F ⊡ F&#39; - geometric(τ)
+    end
+    @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
+    end
+
+    @. β*Δt^2 * ($dofmap(grid.a) + $dofmap(grid.f) * $dofmap(grid.m⁻¹))
+end
+
+function jacobian(U::AbstractVector, state)
+    (; grid, particles, mpvalues, β, dofmap, Δt) = state
+
+    # Create a linear map to represent Jacobian-vector product J*δU.
+    # `U` is acutally not used because the stiffness tensor is already calculated
+    # when computing the residual vector.
+    fillzero!(grid.δu)
+    LinearMap(ndofs(dofmap)) do JδU, δU
+        dofmap(grid.δu) .= δU
+
+        @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+            ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⊡ ΔF⁻¹[p])
+            τ[p] = ℂ[p] ⊡₂ ∇u[p]
+        end
+        @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+            f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
+        end
+
+        @. JδU = δU + β*Δt^2 * $dofmap(grid.f) * $dofmap(grid.m⁻¹)
+    end
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../implicit/">« Implicit formulation</a><a class="docs-footer-nextpage" href="../implicit_jacobian_based/">Jacobian-based »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Monday 24 February 2025 05:46">Monday 24 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
