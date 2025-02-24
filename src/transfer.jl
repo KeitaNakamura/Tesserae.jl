@@ -209,7 +209,7 @@ for schedule in QuoteNode.((:nothing, :static, :dynamic))
                   end), schedule)
     @eval foreach_gridindex(f, ::Val{$schedule}, style::IndexCartesian, grid::SpGrid) = $body
 
-    body = wrap(:(for i in eachindex(style, grid)
+    body = wrap(:(for i in eachindex(get_data(getproperty(grid, 2)))
                       @inbounds f(UnsafeSpIndex(i))
                   end), schedule)
     @eval foreach_gridindex(f, ::Val{$schedule}, style::IndexSpArray, grid::SpGrid) = $body
