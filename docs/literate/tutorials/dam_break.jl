@@ -103,9 +103,9 @@ function main(transfer = FLIP(1.0))
 
     ## Interpolation
     it = KernelCorrection(BSpline(Quadratic()))
-    mpvalues = map(p -> MPValue(it, grid.X), eachindex(particles))
+    mpvalues = map(p -> MPValue(it, grid.X; name=Val(:S)), eachindex(particles))
     mpvalues_cell = map(CartesianIndices(size(grid).-1)) do cell
-        mp = MPValue(it, grid.X)
+        mp = MPValue(it, grid.X; name=Val(:S))
         xc = cellcenter(cell, grid.X)
         update!(mp, xc, grid.X)
     end
@@ -142,15 +142,15 @@ function main(transfer = FLIP(1.0))
 
         if transfer isa FLIP
             @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ w[ip] * m[p]
-                mv[i] = @∑ w[ip] * m[p] * v[p]
-                ma[i] = @∑ w[ip] * m[p] * a[p]
+                m[i]  = @∑ S[ip] * m[p]
+                mv[i] = @∑ S[ip] * m[p] * v[p]
+                ma[i] = @∑ S[ip] * m[p] * a[p]
             end
         elseif transfer isa TPIC
             @P2G grid=>i particles=>p mpvalues=>ip begin
-                m[i]  = @∑ w[ip] * m[p]
-                mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (X[i] - x[p]))
-                ma[i] = @∑ w[ip] * m[p] * (a[p] + ∇a[p] * (X[i] - x[p]))
+                m[i]  = @∑ S[ip] * m[p]
+                mv[i] = @∑ S[ip] * m[p] * (v[p] + ∇v[p] * (X[i] - x[p]))
+                ma[i] = @∑ S[ip] * m[p] * (a[p] + ∇a[p] * (X[i] - x[p]))
             end
         end
 
@@ -185,17 +185,17 @@ function main(transfer = FLIP(1.0))
         if transfer isa FLIP
             α = transfer.α
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + ((1-γ)*a[p] + γ*a[i])*Δt)) * w[ip]
-                a[p] = @∑ a[i] * w[ip]
-                x[p] = @∑ x[i] * w[ip]
+                v[p] = @∑ ((1-α)*v[i] + α*(v[p] + ((1-γ)*a[p] + γ*a[i])*Δt)) * S[ip]
+                a[p] = @∑ a[i] * S[ip]
+                x[p] = @∑ x[i] * S[ip]
             end
         elseif transfer isa TPIC
             @G2P grid=>i particles=>p mpvalues=>ip begin
-                v[p] = @∑ v[i] * w[ip]
-                a[p] = @∑ a[i] * w[ip]
-                x[p] = @∑ x[i] * w[ip]
-                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-                ∇a[p] = @∑ a[i] ⊗ ∇w[ip]
+                v[p] = @∑ v[i] * S[ip]
+                a[p] = @∑ a[i] * S[ip]
+                x[p] = @∑ x[i] * S[ip]
+                ∇v[p] = @∑ v[i] ⊗ ∇S[ip]
+                ∇a[p] = @∑ a[i] ⊗ ∇S[ip]
             end
         end
 
@@ -294,7 +294,7 @@ function compute_VMS_stabilization_coefficients(state)
         gridindices = neighboringnodes(mp, grid)
         for ip in eachindex(gridindices)
             i = gridindices[ip]
-            v̄ₚ += mp.w[ip] * grid.v[i]
+            v̄ₚ += mp.S[ip] * grid.v[i]
         end
         τ₁ = inv(ρ*τdyn/Δt + c₂*ρ*norm(v̄ₚ)/h + c₁*μ/h^2)
         τ₂ = h^2 / (c₁*τ₁)
@@ -309,13 +309,13 @@ function particle_shifting(state)
     (; grid, particles, mpvalues) = state
 
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        Ṽ[i] = @∑ V[p] * w[ip]
+        Ṽ[i] = @∑ V[p] * S[ip]
         E[i] = max(0, -V[i] + Ṽ[i])
     end
 
     E² = sum(E->E^2, grid.E)
     @G2P grid=>i particles=>p mpvalues=>ip begin
-        ∇E²[p] = @∑ 2V[p] * E[i] * ∇w[ip]
+        ∇E²[p] = @∑ 2V[p] * E[i] * ∇S[ip]
     end
 
     b₀ = E² / sum(∇E²->∇E²⋅∇E², particles.∇E²)
@@ -344,10 +344,10 @@ function residual(U, state)
 
     ## Recompute particle properties for residual vector
     @G2P grid=>i particles=>p mpvalues=>ip begin
-        a[p]  = @∑ a[i] * w[ip]
-        p[p]  = @∑ p[i] * w[ip]
-        ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-        ∇p[p] = @∑ p[i] * ∇w[ip]
+        a[p]  = @∑ a[i] * S[ip]
+        p[p]  = @∑ p[i] * S[ip]
+        ∇v[p] = @∑ v[i] ⊗ ∇S[ip]
+        ∇p[p] = @∑ p[i] * ∇S[ip]
         s[p]  = 2μ * symmetric(∇v[p])
     end
 
@@ -356,8 +356,8 @@ function residual(U, state)
 
     ## Compute residual values
     @P2G grid=>i particles=>p mpvalues=>ip begin
-        R_mom[i]  = @∑ V[p]*s[p]*∇w[ip] - m[p]*b[p]*w[ip] - V[p]*p[p]*∇w[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇w[ip]
-        R_mas[i]  = @∑ V[p]*tr(∇v[p])*w[ip] + τ₁[p]*m[p]*(a[p]-b[p])⋅∇w[ip] + τ₁[p]*V[p]*∇p[p]⋅∇w[ip]
+        R_mom[i]  = @∑ V[p]*s[p]*∇S[ip] - m[p]*b[p]*S[ip] - V[p]*p[p]*∇S[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇S[ip]
+        R_mas[i]  = @∑ V[p]*tr(∇v[p])*S[ip] + τ₁[p]*m[p]*(a[p]-b[p])⋅∇S[ip] + τ₁[p]*V[p]*∇p[p]⋅∇S[ip]
         R_mom[i] += m[i]*a[i]
     end
 
@@ -375,12 +375,12 @@ function jacobian(state)
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
         A[i,j] = @∑ begin
-            Kᵤᵤ = (γ/(β*Δt) * ∇w[ip] ⊡ cₚ ⊡ ∇w[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * w[jp]
-            Kᵤₚ = -∇w[ip] * w[jp] * V[p]
-            Kₚᵤ = (γ/(β*Δt)) * w[ip] * ∇w[jp] * V[p]
-            K̂ᵤᵤ = γ/(β*Δt) * τ₂[p] * ∇w[ip] ⊗ ∇w[jp] * V[p]
-            K̂ₚᵤ = 1/(β*Δt^2) * τ₁[p] * ρ * ∇w[ip] * w[jp] * V[p]
-            K̂ₚₚ = τ₁[p] * ∇w[ip] ⋅ ∇w[jp] * V[p]
+            Kᵤᵤ = (γ/(β*Δt) * ∇S[ip] ⊡ cₚ ⊡ ∇S[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * S[jp]
+            Kᵤₚ = -∇S[ip] * S[jp] * V[p]
+            Kₚᵤ = (γ/(β*Δt)) * S[ip] * ∇S[jp] * V[p]
+            K̂ᵤᵤ = γ/(β*Δt) * τ₂[p] * ∇S[ip] ⊗ ∇S[jp] * V[p]
+            K̂ₚᵤ = 1/(β*Δt^2) * τ₁[p] * ρ * ∇S[ip] * S[jp] * V[p]
+            K̂ₚₚ = τ₁[p] * ∇S[ip] ⋅ ∇S[jp] * V[p]
             [Kᵤᵤ+K̂ᵤᵤ    Kᵤₚ
              (Kₚᵤ+K̂ₚᵤ)' K̂ₚₚ]
         end

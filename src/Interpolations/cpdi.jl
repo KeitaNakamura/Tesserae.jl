@@ -62,8 +62,9 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{1})
         i = indices[ip]
         w₁ = value(BSpline(Linear()), x₁, mesh, i)
         w₂ = value(BSpline(Linear()), x₂, mesh, i)
-        mp.w[ip] = (w₁ + w₂) / 2
-        mp.∇w[ip] = Vec(w₂ - w₁) / Vₚ
+        w = (w₁ + w₂) / 2
+        ∇w = Vec(w₂ - w₁) / Vₚ
+        set_values!(mp, ip, (w,∇w))
     end
 end
 
@@ -88,8 +89,9 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{2})
         w₂ = value(BSpline(Linear()), x₂, mesh, i)
         w₃ = value(BSpline(Linear()), x₃, mesh, i)
         w₄ = value(BSpline(Linear()), x₄, mesh, i)
-        mp.w[ip] = (w₁ + w₂ + w₃ + w₄) / 4
-        mp.∇w[ip] = ((w₁-w₃)*a + (w₂-w₄)*b) / Vₚ
+        w = (w₁ + w₂ + w₃ + w₄) / 4
+        ∇w = ((w₁-w₃)*a + (w₂-w₄)*b) / Vₚ
+        set_values!(mp, ip, (w,∇w))
     end
 end
 
@@ -124,8 +126,9 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{3})
         w₆ = value(BSpline(Linear()), x₆, mesh, i)
         w₇ = value(BSpline(Linear()), x₇, mesh, i)
         w₈ = value(BSpline(Linear()), x₈, mesh, i)
-        mp.w[ip] = (w₁ + w₂ + w₃ + w₄ + w₅ + w₆ + w₇ + w₈) / 8
-        mp.∇w[ip] = A * (w₁*Vec(-1,-1,-1) + w₂*Vec(1,-1,-1) + w₃*Vec(1,1,-1) + w₄*Vec(-1,1,-1) + w₅*Vec(-1,-1,1) + w₆*Vec(1,-1,1) + w₇*Vec(1,1,1) + w₈*Vec(-1,1,1)) / Vₚ
+        w = (w₁ + w₂ + w₃ + w₄ + w₅ + w₆ + w₇ + w₈) / 8
+        ∇w = A * (w₁*Vec(-1,-1,-1) + w₂*Vec(1,-1,-1) + w₃*Vec(1,1,-1) + w₄*Vec(-1,1,-1) + w₅*Vec(-1,-1,1) + w₆*Vec(1,-1,1) + w₇*Vec(1,1,1) + w₈*Vec(-1,1,1)) / Vₚ
+        set_values!(mp, ip, (w,∇w))
     end
 end
 

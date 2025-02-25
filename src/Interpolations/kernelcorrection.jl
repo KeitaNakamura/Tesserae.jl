@@ -25,7 +25,7 @@ gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
 # general version
 @inline function update_property!(mp::MPValue, it::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
-    isnearbounds = size(mp.w) != size(indices) || !alltrue(filter, indices)
+    isnearbounds = size(values(mp,1)) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
         update_property!(mp, WLS(get_kernel(it), get_polynomial(it)), pt, mesh, filter)
     else
@@ -39,7 +39,7 @@ end
 # fast version for B-spline kernels
 @inline function update_property!(mp::MPValue, it::KernelCorrection{<: AbstractBSpline}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
-    isnearbounds = size(mp.w) != size(indices) || !alltrue(filter, indices)
+    isnearbounds = size(values(mp,1)) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
         update_property_general!(mp, WLS(get_kernel(it), get_polynomial(it)), pt, mesh, filter)
     else
