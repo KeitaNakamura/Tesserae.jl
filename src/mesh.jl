@@ -133,7 +133,7 @@ Check if `x` is inside the `mesh`.
     isinside(ξ, size(mesh))
 end
 @inline function isinside(ξ::NTuple{dim}, dims::Dims{dim}) where {dim}
-    !isnothing(whichcell(ξ, dims))
+    !isnothing(_whichcell(ξ, dims))
 end
 
 """
@@ -195,10 +195,10 @@ CartesianIndex(2, 2)
 """
 @inline function whichcell(x::Vec, mesh::CartesianMesh{dim, T}) where {dim, T}
     ξ = Tuple(normalize(x, mesh))
-    whichcell(ξ, size(mesh))
+    _whichcell(ξ, size(mesh))
 end
 
-@generated function whichcell(ξ::NTuple{dim, T}, gridsize::Dims{dim}) where {dim, T}
+@generated function _whichcell(ξ::NTuple{dim, T}, gridsize::Dims{dim}) where {dim, T}
     quote
         @_inline_meta
         index = map(floor, ξ)
