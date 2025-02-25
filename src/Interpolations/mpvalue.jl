@@ -25,10 +25,10 @@ To create a new interpolation, following methods need to be implemented.
 
 initial_neighboringnodes(::Interpolation, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 
-@generated function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; derivative::Order{k}=Order(1)) where {dim, T, k}
+@generated function create_property(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
     quote
         dims = nfill(gridspan(it), Val(dim))
-        names = @ntuple $(k+1) i -> create_name(Order(i-1))
+        names = @ntuple $(k+1) i -> create_name(Order(i-1), name)
         vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), dims)
         NamedTuple{names}(vals)
     end
@@ -37,16 +37,16 @@ end
 create_elval(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
 create_elval(::Type{Vec{dim, T}}, ::Order{1}) where {dim, T} = zero(Vec{dim, T})
 create_elval(::Type{Vec{dim, T}}, ::Order{k}) where {dim, T, k} = zero(Tensor{Tuple{@Symmetry{ntuple(i->dim, k)...}}, T})
-create_name(::Order{0}) = :w
-create_name(::Order{1}) = :∇w
-create_name(::Order{2}) = :∇²w
-create_name(::Order{3}) = :∇³w
-create_name(::Order{4}) = :∇⁴w
-create_name(::Order{5}) = :∇⁵w
-create_name(::Order{6}) = :∇⁶w
-create_name(::Order{7}) = :∇⁷w
-create_name(::Order{8}) = :∇⁸w
-create_name(::Order{9}) = :∇⁹w
+create_name(::Order{0}, ::Val{name}) where {name} = name
+create_name(::Order{1}, ::Val{name}) where {name} = Symbol(:∇, name)
+create_name(::Order{2}, ::Val{name}) where {name} = Symbol(:∇², name)
+create_name(::Order{3}, ::Val{name}) where {name} = Symbol(:∇³, name)
+create_name(::Order{4}, ::Val{name}) where {name} = Symbol(:∇⁴, name)
+create_name(::Order{5}, ::Val{name}) where {name} = Symbol(:∇⁵, name)
+create_name(::Order{6}, ::Val{name}) where {name} = Symbol(:∇⁶, name)
+create_name(::Order{7}, ::Val{name}) where {name} = Symbol(:∇⁷, name)
+create_name(::Order{8}, ::Val{name}) where {name} = Symbol(:∇⁸, name)
+create_name(::Order{9}, ::Val{name}) where {name} = Symbol(:∇⁹, name)
 
 @generated function prod_each_dimension(::Order{0}, vals::Vararg{Tuple, dim}) where {dim}
     quote
@@ -129,17 +129,6 @@ end
     getfield(mp, :prop)[i]
 end
 
-@inline function check_mpvalue_prop(mp::MPValue)
-    k = length(propertynames(mp)) - 1
-    _check_mpvalue_prop(mp, Val(k))
-end
-@generated function _check_mpvalue_prop(mp::MPValue, ::Val{k}) where {k}
-    quote
-        @_inline_meta
-        @assert @nall $(k+1) i -> create_name(Order(i-1)) === propertynames(mp)[i]
-    end
-end
-
 @inline interpolation(mp::MPValue) = getfield(mp, :it)
 
 @inline neighboringnodes(mp::MPValue) = getfield(mp, :indices)[]
@@ -164,9 +153,19 @@ end
 @inline neighboringnodes_storage(mp::MPValue) = getfield(mp, :indices)
 
 @inline function derivative_order(mp::MPValue)
-    check_mpvalue_prop(mp)
+    @debug check_mpvalue_prop(mp)
     k = length(propertynames(mp)) - 1
     Order(k)
+end
+@inline function check_mpvalue_prop(mp::MPValue)
+    k = length(propertynames(mp)) - 1
+    _check_mpvalue_prop(mp, Val(k))
+end
+@generated function _check_mpvalue_prop(mp::MPValue, ::Val{k}) where {k}
+    quote
+        @_inline_meta
+        @assert @nall $(k+1) i -> create_name(Order(i-1), Val(propertynames(mp)[1])) === propertynames(mp)[i]
+    end
 end
 
 @generated function set_values!(mp::MPValue, ip, vals::Tuple{Vararg{Any, N}}) where {N}

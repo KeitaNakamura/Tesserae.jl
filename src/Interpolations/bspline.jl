@@ -134,7 +134,7 @@ end
 
 function update_property!(mp::MPValue, it::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
-    isnearbounds = size(mp.w) != size(indices)
+    isnearbounds = size(values(mp,1)) != size(indices)
     if isnearbounds
         @inbounds for ip in eachindex(indices)
             i = indices[ip]

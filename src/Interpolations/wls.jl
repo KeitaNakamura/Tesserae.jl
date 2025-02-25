@@ -26,13 +26,13 @@ end
 # a bit faster implementation for B-splines
 @inline function update_property!(mp::MPValue, it::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
-    isnearbounds = size(mp.w) != size(indices) || !alltrue(filter, indices)
+    isnearbounds = size(values(mp,1)) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
         update_property_general!(mp, it, pt, mesh, filter)
     else
         kernel = get_kernel(it)
         @inbounds for ip in eachindex(indices)
-            mp.w[ip] = value(kernel, pt, mesh, indices[ip])
+            values(mp,1)[ip] = value(kernel, pt, mesh, indices[ip])
         end
         update_property_after_moment_matrix!(mp, it, pt, mesh, moment_matrix_inv(kernel, mesh))
     end
@@ -50,7 +50,7 @@ end
         @inbounds begin
             i = indices[ip]
             xᵢ = mesh[i]
-            w = mp.w[ip] = value(kernel, pt, mesh, i) * filter[i]
+            w = values(mp,1)[ip] = value(kernel, pt, mesh, i) * filter[i]
             P = value(poly, xᵢ - xₚ)
             w * P ⊗ P
         end
@@ -68,7 +68,7 @@ end
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]
-        w = mp.w[ip]
+        w = values(mp,1)[ip]
         P = value(poly, xᵢ - xₚ)
         wq = w * (M⁻¹ * P)
         set_values!(mp, ip, map(P₀->wq⊡P₀, P₀__))
