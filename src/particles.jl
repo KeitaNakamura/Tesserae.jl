@@ -10,8 +10,9 @@ Setting `spacing = 1/η` will produce `η^dim` particles per cell, where `dim` i
     spacing :: T = 1/2
 end
 
-function point_sampling(gs::GridSampling, h::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
-    l = T(gs.spacing) * h
+function generate_points(alg::GridSampling, mesh::CartesianMesh{dim, T}) where {dim, T}
+    l = T(alg.spacing) * spacing(mesh)
+    domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
     axis((xmin,xmax)) = (xmin+l/2):l:(xmax)
     vec(CartesianMesh(axis.(domain)...))
 end
@@ -32,20 +33,21 @@ end
 # so that the number of generated particles is almost the same as the grid sampling.
 # This empirical equation is slightly different from a previous work (https://kola.opus.hbz-nrw.de/frontdoor/deliver/index/docId/2129/file/MA_Thesis_Nilles_signed.pdf)
 poisson_disk_sampling_minimum_distance(l::Real, dim::Int) = l/(1.37)^(1/√dim)
-function point_sampling(pds::PoissonDiskSampling, h::T, domain::Vararg{Tuple{T, T}, dim}) where {dim, T}
-    l = T(pds.spacing) * h
+function generate_points(alg::PoissonDiskSampling, mesh::CartesianMesh{dim, T}) where {dim, T}
+    l = T(alg.spacing) * spacing(mesh)
+    domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
     d = poisson_disk_sampling_minimum_distance(l, dim)
-    reinterpret(Vec{dim, T}, poisson_disk_sampling(pds.rng, T, d, domain...; pds.multithreading))
+    reinterpret(Vec{dim, T}, poisson_disk_sampling(alg.rng, T, d, domain...; alg.multithreading))
 end
 
-function generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec}) where {ParticleProp}
+function generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}) where {ParticleProp}
     _generate_particles(ParticleProp, points)
 end
-function _generate_particles(::Type{ParticleProp}, points::AbstractVector{<: Vec}) where {ParticleProp}
+function _generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}) where {ParticleProp}
     if !(isbitstype(ParticleProp))
         error("generate_particles: the property type of grid must be `isbitstype` type")
     end
-    particles = StructVector{ParticleProp}(undef, length(points))
+    particles = StructArray{ParticleProp}(undef, size(points))
     fillzero!(particles)
     getx(particles) .= points
     particles
@@ -108,18 +110,13 @@ julia> particles.F
 function generate_particles(
         ::Type{ParticleProp}, mesh::CartesianMesh{dim, T};
         alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp, dim, T}
-    points = _generate_points(ParticleProp, mesh, alg)
+    points = generate_points(alg, mesh)
     particles = _generate_particles(ParticleProp, points)
     # _reorder_particles!(particles, mesh)
 end
 
 function generate_particles(mesh::CartesianMesh{dim, T}; alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
     generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; alg).x
-end
-
-function _generate_points(::Type{ParticleProp}, mesh::CartesianMesh{dim, T}, alg::SamplingAlgorithm) where {ParticleProp, dim, T}
-    domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
-    point_sampling(alg, spacing(mesh), domain...)
 end
 
 function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)
