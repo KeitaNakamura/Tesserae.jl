@@ -162,7 +162,7 @@ function main()
             end
         end
     end
-    sum(particles.x) / length(particles)
+    sum(particles.x) / length(particles) #src
 end
 
 function residual(U::AbstractVector, state)

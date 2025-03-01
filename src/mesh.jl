@@ -206,3 +206,47 @@ end
         ifelse(isinside, CartesianIndex(@. unsafe_trunc(Int, index) + 1), nothing)
     end
 end
+
+struct UnstructuredMesh{S <: Shape, dim, T, L} <: AbstractMesh{dim, T, 1}
+    shape::S
+    allnodes::Vector{Vec{dim, T}}
+    cellnodeindices::Vector{SVector{L, Int}}
+    nodeindices::Vector{Int}
+end
+
+Base.size(mesh::UnstructuredMesh) = size(mesh.nodeindices)
+Base.IndexStyle(::Type{<: UnstructuredMesh}) = IndexLinear()
+
+@inline function Base.getindex(mesh::UnstructuredMesh, i::Int)
+    @_propagate_inbounds_meta
+    mesh.allnodes[mesh.nodeindices[i]]
+end
+
+cellshape(mesh::UnstructuredMesh) = mesh.shape
+ncells(mesh::UnstructuredMesh) = length(mesh.cellnodeindices)
+
+cellnodeindices(mesh::UnstructuredMesh, c::Int) = mesh.cellnodeindices[c]
+
+_celltype(::CartesianMesh{1}) = Line2()
+_celltype(::CartesianMesh{2}) = Quad4()
+_celltype(::CartesianMesh{3}) = Hex8()
+function _cellnodes_linear(inds::LinearIndices, CI::CartesianIndices{1})
+    inds[CI[1]], inds[CI[2]]
+end
+function _cellnodes_linear(inds::LinearIndices, CI::CartesianIndices{2})
+    inds[CI[1,1]], inds[CI[2,1]], inds[CI[2,2]], inds[CI[1,2]]
+end
+function _cellnodes_linear(inds::LinearIndices, CI::CartesianIndices{3})
+    inds[CI[1,1,1]], inds[CI[2,1,1]], inds[CI[2,2,1]], inds[CI[1,2,1]],
+    inds[CI[1,1,2]], inds[CI[2,1,2]], inds[CI[2,2,2]], inds[CI[1,2,2]]
+end
+function UnstructuredMesh(mesh::CartesianMesh)
+    shape = _celltype(mesh)
+    allnodes = collect(vec(mesh))
+    cellnodeindices = map(vec(CartesianIndices(size(mesh) .- 1))) do cellindex
+        cellnodes_cartesian = cellindex:(cellindex + oneunit(cellindex))
+        SVector(_cellnodes_linear(LinearIndices(mesh), cellnodes_cartesian))
+    end
+    nodeindices = eachindex(allnodes)
+    UnstructuredMesh(shape, allnodes, cellnodeindices, collect(nodeindices))
+end

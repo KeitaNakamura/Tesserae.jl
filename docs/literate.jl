@@ -7,7 +7,8 @@ const TUTORIALS = ["collision.jl",
                    "implicit_jacobian_based.jl",
                    "collapse.jl",
                    "dam_break.jl",
-                   "rigid_body_contact.jl"]
+                   "rigid_body_contact.jl",
+                   "heat.jl"]
 
 for filename in TUTORIALS
     path = joinpath(@__DIR__, "literate/tutorials", filename)

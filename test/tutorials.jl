@@ -53,3 +53,10 @@ module TestRigidBodyContact
         include(joinpath(@__DIR__, "../docs/literate/tutorials/rigid_body_contact.jl"))
     end
 end
+
+module TestHeat
+    const RUN_TESTS = true
+    cd(tempdir()) do
+        include(joinpath(@__DIR__, "../docs/literate/tutorials/heat.jl"))
+    end
+end

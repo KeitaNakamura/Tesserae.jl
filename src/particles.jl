@@ -17,6 +17,26 @@ function generate_points(alg::GridSampling, mesh::CartesianMesh{dim, T}) where {
     vec(CartesianMesh(axis.(domain)...))
 end
 
+struct CellSampling{V <: Union{AbstractVector{<: Vec}, Tuple{Vararg{Vec}}}} <: SamplingAlgorithm
+    qpts::V
+end
+
+function generate_points(alg::CellSampling, mesh::UnstructuredMesh{<: Any, dim, T}) where {dim, T}
+    qpts = alg.qpts
+    shape = cellshape(mesh)
+
+    points = Matrix{Vec{dim, T}}(undef, length(qpts), ncells(mesh))
+    for c in 1:ncells(mesh)
+        indices = cellnodeindices(mesh, c)
+        x = mesh[indices]
+        for (i, qpt) in enumerate(qpts)
+            N = value(shape, qpt)
+            points[i,c] = sum(N .* x)
+        end
+    end
+    points
+end
+
 """
     PoissonDiskSampling(spacing = 1/2, rng = Random.default_rng())
 
@@ -40,9 +60,6 @@ function generate_points(alg::PoissonDiskSampling, mesh::CartesianMesh{dim, T}) 
     reinterpret(Vec{dim, T}, poisson_disk_sampling(alg.rng, T, d, domain...; alg.multithreading))
 end
 
-function generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}) where {ParticleProp}
-    _generate_particles(ParticleProp, points)
-end
 function _generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}) where {ParticleProp}
     if !(isbitstype(ParticleProp))
         error("generate_particles: the property type of grid must be `isbitstype` type")
@@ -108,8 +125,16 @@ julia> particles.F
 ```
 """
 function generate_particles(
-        ::Type{ParticleProp}, mesh::CartesianMesh{dim, T};
-        alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp, dim, T}
+        ::Type{ParticleProp}, mesh::CartesianMesh;
+        alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp}
+    points = generate_points(alg, mesh)
+    particles = _generate_particles(ParticleProp, points)
+    # _reorder_particles!(particles, mesh)
+end
+
+function generate_particles(
+        ::Type{ParticleProp}, mesh::UnstructuredMesh;
+        alg::SamplingAlgorithm=CellSampling(quadpoints(cellshape(mesh)))) where {ParticleProp}
     points = generate_points(alg, mesh)
     particles = _generate_particles(ParticleProp, points)
     # _reorder_particles!(particles, mesh)

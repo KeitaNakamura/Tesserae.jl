@@ -39,9 +39,13 @@ end
     x
 end
 
-function create_property(::Type{T}, it::CPDI, mesh::CartesianMesh{dim}) where {dim, T}
-    len = 2^dim * 2^dim # maximum length
-    (; w=fill(zero(T), len), ∇w=fill(zero(Vec{dim, T}), len))
+@generated function create_property(::Type{Vec{dim, T}}, it::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
+    w = sym
+    ∇w = Symbol(:∇, sym)
+    quote
+        len = 2^dim * 2^dim # maximum length
+        (; $w=fill(zero(T), len), $∇w=fill(zero(Vec{dim, T}), len))
+    end
 end
 
 function initial_neighboringnodes(::CPDI, mesh::CartesianMesh{dim}) where {dim}

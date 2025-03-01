@@ -10,6 +10,7 @@ using Reexport
 @reexport using Tensorial
 using Tensorial: ∂ⁿ
 
+using StaticArrays
 using StructArrays
 
 # sampling
@@ -35,6 +36,7 @@ export
     isinside,
     whichcell,
     extract,
+    UnstructuredMesh,
 # Grid
     Grid,
     SpGrid,
@@ -66,6 +68,7 @@ export
     generate_mpvalues,
     neighboringnodes,
     MPValue,
+    feupdate!,
 # transfer
     @P2G,
     @G2P,
@@ -83,6 +86,9 @@ export
     closepvd
 
 include("utils.jl")
+
+include("shapes.jl")
+
 include("mesh.jl")
 include("blockspace.jl")
 include("sparray.jl")
@@ -97,6 +103,8 @@ include("Interpolations/cpdi.jl")
 include("Interpolations/polynomials.jl")
 include("Interpolations/wls.jl")
 include("Interpolations/kernelcorrection.jl")
+
+include("fem.jl")
 
 include("transfer.jl")
 include("implicit.jl")
