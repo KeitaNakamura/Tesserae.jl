@@ -146,6 +146,23 @@ function create_sparse_matrix(::Type{T}, it::Interpolation, mesh::CartesianMesh{
     create_sparse_matrix(T, reshape(spy, ndofs*prod(dims), ndofs*prod(dims)))
 end
 
+function create_sparse_matrix(::Type{T}, mesh::UnstructuredMesh{<: Any, dim}; ndofs::Int = dim) where {T, dim}
+    spy = falses(ndofs, length(mesh), ndofs, length(mesh))
+    LI = 1:length(mesh)
+    for c in 1:ncells(mesh)
+        indices = cellnodeindices(mesh, c)
+        for i in indices
+            for j in indices
+                spy[1:ndofs, LI[i], 1:ndofs, LI[j]] .= true
+            end
+        end
+    end
+    create_sparse_matrix(T, reshape(spy, ndofs*length(mesh), ndofs*length(mesh)))
+end
+function create_sparse_matrix(mesh::UnstructuredMesh{<: Any, dim}; ndofs::Int = dim) where {dim}
+    create_sparse_matrix(Float64, mesh; ndofs)
+end
+
 function create_sparse_matrix(::Type{T}, spy::AbstractMatrix{Bool}) where {T}
     I = findall(vec(spy))
     V = zeros(T, length(I))
@@ -165,8 +182,15 @@ function extract(S::AbstractMatrix, dofmap::DofMap)
 end
 
 function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
+    if issorted(I)
+        _add!(A, I, J, K, eachindex(I))
+    else
+        _add!(A, I, J, K, sortperm(I))
+    end
+end
+
+function _add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix, perm::AbstractVector{Int})
     @boundscheck checkbounds(A, I, J)
-    @assert issorted(I)
     @assert size(K) == map(length, (I, J))
     rows = rowvals(A)
     vals = nonzeros(A)
@@ -177,8 +201,9 @@ function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}
         while nzrng_i in eachindex(nzrng) && i in eachindex(I)
             k = nzrng[nzrng_i]
             row = rows[k] # row candidate
-            if I[i] == row
-                vals[k] += K[i,j]
+            i′ = perm[i]
+            if I[i′] == row
+                vals[k] += K[i′,j]
                 i += 1
             end
             nzrng_i += 1
@@ -333,6 +358,7 @@ end
 
 @inline trySArray(x::Tensor) = SArray(x)
 @inline trySArray(x::AbstractArray) = x
+@inline trySArray(x::Real) = Scalar(x)
 
 """
     Tesserae.newton!(x::AbstractVector, f, ∇f,

@@ -1,5 +1,29 @@
 import WriteVTK
 
+to_vtk_celltype(::Line2) = WriteVTK.VTKCellTypes.VTK_LINE
+to_vtk_celltype(::Line3) = WriteVTK.VTKCellTypes.VTK_QUADRATIC_EDGE
+to_vtk_celltype(::Line4) = WriteVTK.VTKCellTypes.VTK_CUBIC_LINE
+to_vtk_celltype(::Tri3)  = WriteVTK.VTKCellTypes.VTK_TRIANGLE
+to_vtk_celltype(::Tri6)  = WriteVTK.VTKCellTypes.VTK_QUADRATIC_TRIANGLE
+to_vtk_celltype(::Quad4) = WriteVTK.VTKCellTypes.VTK_QUAD
+to_vtk_celltype(::Quad9) = WriteVTK.VTKCellTypes.VTK_BIQUADRATIC_QUAD
+to_vtk_celltype(::Tet4)  = WriteVTK.VTKCellTypes.VTK_TETRA
+to_vtk_celltype(::Tet10) = WriteVTK.VTKCellTypes.VTK_QUADRATIC_TETRA
+to_vtk_celltype(::Hex8)  = WriteVTK.VTKCellTypes.VTK_HEXAHEDRON
+to_vtk_celltype(::Hex27) = WriteVTK.VTKCellTypes.VTK_TRIQUADRATIC_HEXAHEDRON
+
+to_vtk_connectivity(::Line2) = SVector(1,2)
+to_vtk_connectivity(::Line3) = SVector(1,2,3)
+to_vtk_connectivity(::Line4) = SVector(1,2,3,4)
+to_vtk_connectivity(::Tri3)  = SVector(1,2,3)
+to_vtk_connectivity(::Tri6)  = SVector(1,2,3,4,6,5)
+to_vtk_connectivity(::Quad4) = SVector(1,2,3,4)
+to_vtk_connectivity(::Quad9) = SVector(1,2,3,4,5,6,7,8,9)
+to_vtk_connectivity(::Tet4)  = SVector(1,2,3,4)
+to_vtk_connectivity(::Tet10) = SVector(1,2,3,4,5,8,6,7,10,9)
+to_vtk_connectivity(::Hex8)  = SVector(1,2,3,4,5,6,7,8)
+to_vtk_connectivity(::Hex27) = SVector(1,2,3,4,5,6,7,8,9,12,14,10,17,19,20,18,11,13,15,16,23,24,22,25,21,26,27)
+
 # vtk_grid
 function vtk_particles(vtk, x::AbstractVector{<: Vec}; kwargs...)
     coords = vtk_format(f32(x))
@@ -9,6 +33,17 @@ function vtk_particles(vtk, x::AbstractVector{<: Vec}; kwargs...)
 end
 function vtk_mesh(vtk, mesh::CartesianMesh; kwargs...)
     WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh); kwargs...)
+end
+
+function vtk_mesh(vtk, mesh::UnstructuredMesh; kwargs...)
+    shape = cellshape(mesh)
+    cells = WriteVTK.MeshCell[]
+    celltype = to_vtk_celltype(shape)
+    for c in 1:ncells(mesh)
+        indices = cellnodeindices(mesh, c)
+        push!(cells, WriteVTK.MeshCell(celltype, indices[to_vtk_connectivity(shape)]))
+    end
+    WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh), cells; kwargs...)
 end
 
 # add_field_data

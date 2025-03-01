@@ -31,6 +31,9 @@ makedocs(;
             "tutorials/collapse.md",
             "Incompressible fluid flow" => "tutorials/dam_break.md",
             "tutorials/rigid_body_contact.md",
+            "FEM (experimental)" => [
+                "tutorials/heat.md"
+            ],
         ],
         "Manual" => [
             "mesh.md"

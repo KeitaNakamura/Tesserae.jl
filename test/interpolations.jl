@@ -8,7 +8,7 @@
                 for extension in (identity, WLS, KernelCorrection)
                     it = extension(kernel)
 
-                    function check_mpvalue(mp::Union{MPValue, Tesserae.MPValueVector}, derivative)
+                    function check_mpvalue(mp::Union{MPValue, Tesserae.MPValueArray}, derivative)
                         if derivative isa Order{0}
                             @test hasproperty(mp, :w) && mp.w isa AbstractArray{T}
                             @test !hasproperty(mp, :∇w)
@@ -54,9 +54,9 @@
                     check_mpvalue((@inferred MPValue(T, it, mesh; derivative=Order(2))), Order(2))
                     check_mpvalue((@inferred MPValue(T, it, mesh; derivative=Order(3))), Order(3))
 
-                    #################
-                    # MPValueVector #
-                    #################
+                    ################
+                    # MPValueArray #
+                    ################
                     n = 10
                     mpvalues = @inferred generate_mpvalues(T, it, mesh, n)
                     @test size(mpvalues) === (n,)
