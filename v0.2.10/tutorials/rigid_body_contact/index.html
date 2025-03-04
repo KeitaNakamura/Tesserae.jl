@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Frictional contact with rigid body · Tesserae.jl</title><meta name="title" content="Frictional contact with rigid body · Tesserae.jl"/><meta property="og:title" content="Frictional contact with rigid body · Tesserae.jl"/><meta property="twitter:title" content="Frictional contact with rigid body · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started/">Getting started</a></li><li><a class="tocitem" href="../collision/">Transfer schemes</a></li><li><a class="tocitem" href="../cpdi/">CPDI</a></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox"/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../implicit/">Implicit formulation</a></li><li><a class="tocitem" href="../implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../dam_break/">Incompressible fluid flow</a></li><li class="is-active"><a class="tocitem" href>Frictional contact with rigid body</a></li><li><input class="collapse-toggle" id="menuitem-2-9" type="checkbox"/><label class="tocitem" for="menuitem-2-9"><span class="docs-label">FEM (experimental)</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../heat/">Heat problem using FEM</a></li></ul></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../mesh/">Mesh</a></li><li><a class="tocitem" href="../../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../../interpolation/">Interpolation</a></li><li><a class="tocitem" href="../../transfer/">Transfer between grid and particles</a></li><li><a class="tocitem" href="../../implicit_utils/">Functionalities for implicit methods</a></li><li><a class="tocitem" href="../../export/">Export</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Frictional contact with rigid body</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Frictional contact with rigid body</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/literate/tutorials/rigid_body_contact.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Frictional-contact-with-rigid-body"><a class="docs-heading-anchor" href="#Frictional-contact-with-rigid-body">Frictional contact with rigid body</a><a id="Frictional-contact-with-rigid-body-1"></a><a class="docs-heading-anchor-permalink" href="#Frictional-contact-with-rigid-body" title="Permalink"></a></h1><img src="https://github.com/user-attachments/assets/35e4744f-90ee-475d-bdb7-73f94fb28369" width="300"/><table><tr><th style="text-align: right"># Particles</th><th style="text-align: right"># Iterations</th><th style="text-align: right">Execution time</th></tr><tr><td style="text-align: right">14k</td><td style="text-align: right">220k</td><td style="text-align: right">7 min</td></tr></table><pre><code class="language-julia hljs">using Tesserae
+
+mutable struct Disk{dim, T}
+    x::Vec{dim, T}
+    v::Vec{dim, T}
+end
+
+function main()
+
+    # Simulation parameters
+    h   = 0.004 # Grid spacing
+    T   = 5.0   # Time span
+    g   = 9.81  # Gravity acceleration
+    CFL = 1.0   # Courant number
+
+    # Material constants
+    E  = 1e6                    # Young&#39;s modulus
+    ν  = 0.49                   # Poisson&#39;s ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame&#39;s first parameter
+    G  = E / 2(1 + ν)           # Shear modulus
+    σy = 1e3                    # Yield stress
+    ρ⁰ = 1e3                    # Initial density
+
+    # Disk
+    D = 0.04
+    disk = Disk(Vec(0, 7.5D), Vec(0, -0.25D))
+
+    # Contact parameters
+    k = 1e6 # Penalty coefficient
+    μ = 0.6 # Friction coefficient
+
+    # Utils
+    @inline function contact_force_normal(x, r, x_disk)
+        d = x - x_disk
+        k * max(D/2 - (norm(d)-r), 0) * normalize(d)
+    end
+    @inline function contact_force_tangent(fₙ, v, m, Δt)
+        iszero(fₙ) &amp;&amp; return zero(fₙ)
+        n = normalize(fₙ)
+        fₜ = -m * (v-(v⋅n)*n) / Δt # Sticking force
+        min(1, μ*norm(fₙ)/norm(fₜ)) * fₜ
+    end
+
+    # Properties for grid and particles
+    GridProp = @NamedTuple begin
+        x    :: Vec{2, Float64}
+        m    :: Float64
+        m⁻¹  :: Float64
+        mv   :: Vec{2, Float64}
+        fint :: Vec{2, Float64}
+        fext :: Vec{2, Float64}
+        v    :: Vec{2, Float64}
+        vⁿ   :: Vec{2, Float64}
+    end
+    ParticleProp = @NamedTuple begin
+        x  :: Vec{2, Float64}
+        m  :: Float64
+        V  :: Float64
+        r  :: Float64
+        v  :: Vec{2, Float64}
+        ∇v :: SecondOrderTensor{2, Float64, 4}
+        F  :: SecondOrderTensor{3, Float64, 9}
+        σ  :: SymmetricSecondOrderTensor{3, Float64, 6}
+        ϵ  :: SymmetricSecondOrderTensor{3, Float64, 6}
+        b  :: Vec{2, Float64}
+    end
+
+    # Background grid
+    H = 7D   # Ground height
+    grid = generate_grid(GridProp, CartesianMesh(h, (0,5D), (0,H+D)))
+
+    # Particles
+    particles = generate_particles(ParticleProp, grid.x)
+    disk_points = filter(particles.x) do (x,y) # Points representing a disk just for visualization
+        x^2 + (y-7.5D)^2 &lt; (D/2)^2
+    end
+    particles.V .= volume(grid.x) / length(particles)
+    filter!(pt -&gt; pt.x[2] &lt; H, particles)
+    @. particles.m = ρ⁰ * particles.V
+    @. particles.r = particles.V^(1/2) / 2
+    @. particles.b = Vec(0,-g)
+    @. particles.F = one(particles.F)
+    for p in eachindex(particles)
+        x, y = particles.x[p]
+        σ_y = -ρ⁰ * g * (H - y)
+        σ_x = ν/(1-ν) * σ_y
+        particles.σ[p] = [σ_x 0.0 0.0
+                          0.0 σ_y 0.0
+                          0.0 0.0 σ_x]
+    end
+    @show length(particles)
+
+    # Interpolation
+    mpvalues = generate_mpvalues(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+
+    # Output
+    outdir = mkpath(joinpath(&quot;output&quot;, &quot;rigid_body_contact&quot;))
+    pvdfile = joinpath(outdir, &quot;paraview&quot;)
+    closepvd(openpvd(pvdfile)) # Create file
+
+    t = 0.0
+    step = 0
+    fps = 20
+    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+
+    Tesserae.@showprogress while t &lt; T
+
+        vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
+        Δt = CFL * h / vmax
+
+        for p in eachindex(particles, mpvalues)
+            update!(mpvalues[p], particles.x[p], grid.x)
+        end
+
+        @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p])) # Taylor transfer
+            fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) * ∇w[ip] + w[ip] * m[p] * b[p]
+            fext[i] = @∑ w[ip] * contact_force_normal(x[p], r[p], disk.x)
+        end
+
+        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
+        @. grid.vⁿ  = grid.mv * grid.m⁻¹
+        @. grid.v   = grid.vⁿ + (grid.fint * grid.m⁻¹) * Δt
+        @. grid.fext += contact_force_tangent(grid.fext, grid.v-$Ref(disk.v), grid.m, Δt)
+        @. grid.v    += (grid.fext * grid.m⁻¹) * Δt
+
+        for i in eachindex(grid)[[begin,end],:]
+            grid.v[i] = grid.v[i] .* (false,true)
+        end
+        for i in eachindex(grid)[:,[begin,end]]
+            grid.v[i] = grid.v[i] .* (false,false)
+        end
+
+        @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+            v[p]  = @∑ w[ip] * v[i] # PIC transfer
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+            x[p] += v[p] * Δt
+        end
+
+        for p in 1:length(particles)
+            Δϵ = resize(symmetric(particles.∇v[p]), (3,3)) * Δt
+            particles.σ[p]  = vonmises_model(particles.σ[p], Δϵ; λ, G, σy)
+            particles.V[p] *= 1 + tr(Δϵ)
+            particles.ϵ[p] += Δϵ
+        end
+
+        disk.x += disk.v * Δt
+        disk_points .+= Ref(disk.v * Δt)
+
+        t += Δt
+        step += 1
+
+        if t &gt; first(savepoints)
+            popfirst!(savepoints)
+            openpvd(pvdfile; append=true) do pvd
+                openvtm(string(pvdfile, step)) do vtm
+                    deviatoric_strain(ϵ) = sqrt(2/3 * dev(ϵ) ⊡₂ dev(ϵ))
+                    openvtk(vtm, particles.x) do vtk
+                        vtk[&quot;von Mises stress (kPa)&quot;] = @. 1e-3 * vonmises(particles.σ)
+                        vtk[&quot;Deviatoric strain&quot;] = @. deviatoric_strain(particles.ϵ)
+                    end
+                    openvtk(vtm, disk_points) do vtk
+                    end
+                    pvd[t] = vtm
+                end
+            end
+        end
+    end
+end
+
+function vonmises_model(σⁿ, Δϵ; λ, G, σy)
+    δ = one(SymmetricSecondOrderTensor{3})
+    I = one(SymmetricFourthOrderTensor{3})
+    cᵉ = λ*δ⊗δ + 2G*I
+    σ_trial = σⁿ + cᵉ ⊡₂ Δϵ
+    dfdσ, f_trial = gradient(σ -&gt; vonmises(σ) - σy, σ_trial, :all)
+    if f_trial &gt; 0
+        dλ = f_trial / (dfdσ ⊡₂ cᵉ ⊡₂ dfdσ)
+        σ = σ_trial - cᵉ ⊡₂ (dλ * dfdσ)
+    else
+        σ = σ_trial
+    end
+    if tr(σ)/3 &gt; 0 # simple tension cut-off
+        σ = dev(σ)
+    end
+    σ
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dam_break/">« Incompressible fluid flow</a><a class="docs-footer-nextpage" href="../heat/">Heat problem using FEM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Tuesday 4 March 2025 03:12">Tuesday 4 March 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

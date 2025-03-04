@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Functionalities for implicit methods · Tesserae.jl</title><meta name="title" content="Functionalities for implicit methods · Tesserae.jl"/><meta property="og:title" content="Functionalities for implicit methods · Tesserae.jl"/><meta property="twitter:title" content="Functionalities for implicit methods · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../tutorials/getting_started/">Getting started</a></li><li><a class="tocitem" href="../tutorials/collision/">Transfer schemes</a></li><li><a class="tocitem" href="../tutorials/cpdi/">CPDI</a></li><li><a class="tocitem" href="../tutorials/tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox"/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../implicit/">Implicit formulation</a></li><li><a class="tocitem" href="../tutorials/implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../tutorials/implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../tutorials/collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../tutorials/dam_break/">Incompressible fluid flow</a></li><li><a class="tocitem" href="../tutorials/rigid_body_contact/">Frictional contact with rigid body</a></li><li><input class="collapse-toggle" id="menuitem-2-9" type="checkbox"/><label class="tocitem" for="menuitem-2-9"><span class="docs-label">FEM (experimental)</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../tutorials/heat/">Heat problem using FEM</a></li></ul></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../mesh/">Mesh</a></li><li><a class="tocitem" href="../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../interpolation/">Interpolation</a></li><li><a class="tocitem" href="../transfer/">Transfer between grid and particles</a></li><li class="is-active"><a class="tocitem" href>Functionalities for implicit methods</a><ul class="internal"><li><a class="tocitem" href="#Degrees-of-freedom-(DoF)-mapping"><span>Degrees of freedom (DoF) mapping</span></a></li><li><a class="tocitem" href="#Sparse-matrix"><span>Sparse matrix</span></a></li><li><a class="tocitem" href="#Assembly-of-global-matrix"><span>Assembly of global matrix</span></a></li><li><a class="tocitem" href="#Solvers"><span>Solvers</span></a></li></ul></li><li><a class="tocitem" href="../export/">Export</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li class="is-active"><a href>Functionalities for implicit methods</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Functionalities for implicit methods</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/src/implicit_utils.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Functionalities-for-implicit-methods"><a class="docs-heading-anchor" href="#Functionalities-for-implicit-methods">Functionalities for implicit methods</a><a id="Functionalities-for-implicit-methods-1"></a><a class="docs-heading-anchor-permalink" href="#Functionalities-for-implicit-methods" title="Permalink"></a></h1><h2 id="Degrees-of-freedom-(DoF)-mapping"><a class="docs-heading-anchor" href="#Degrees-of-freedom-(DoF)-mapping">Degrees of freedom (DoF) mapping</a><a id="Degrees-of-freedom-(DoF)-mapping-1"></a><a class="docs-heading-anchor-permalink" href="#Degrees-of-freedom-(DoF)-mapping" title="Permalink"></a></h2><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Tesserae.DofMap" href="#Tesserae.DofMap"><code>Tesserae.DofMap</code></a> — <span class="docstring-category">Type</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">DofMap(mask::AbstractArray{Bool})</code></pre><p>Create a degree of freedom (DoF) map from a <code>mask</code> of size <code>(ndofs, size(grid)...)</code>. <code>ndofs</code> represents the number of DoFs for a field.</p><pre><code class="language-julia-repl hljs">julia&gt; mesh = CartesianMesh(1, (0,2), (0,1));
+
+julia&gt; grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, v::Vec{2,Float64}}, mesh);
+
+julia&gt; grid.v .= reshape(reinterpret(Vec{2,Float64}, 1.0:12.0), 3, 2)
+3×2 Matrix{Vec{2, Float64}}:
+ [1.0, 2.0]  [7.0, 8.0]
+ [3.0, 4.0]  [9.0, 10.0]
+ [5.0, 6.0]  [11.0, 12.0]
+
+julia&gt; dofmask = falses(2, size(grid)...);
+
+julia&gt; dofmask[1,1:2,:] .= true; # activate nodes
+
+julia&gt; dofmask[:,3,2] .= true; # activate nodes
+
+julia&gt; reinterpret(reshape, Vec{2,Bool}, dofmask)
+3×2 reinterpret(reshape, Vec{2, Bool}, ::BitArray{3}) with eltype Vec{2, Bool}:
+ [1, 0]  [1, 0]
+ [1, 0]  [1, 0]
+ [0, 0]  [1, 1]
+
+julia&gt; dofmap = DofMap(dofmask);
+
+julia&gt; dofmap(grid.v)
+6-element view(reinterpret(reshape, Float64, ::Matrix{Vec{2, Float64}}), CartesianIndex{3}[CartesianIndex(1, 1, 1), CartesianIndex(1, 2, 1), CartesianIndex(1, 1, 2), CartesianIndex(1, 2, 2), CartesianIndex(1, 3, 2), CartesianIndex(2, 3, 2)]) with eltype Float64:
+  1.0
+  3.0
+  7.0
+  9.0
+ 11.0
+ 12.0</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/94c836cbb34f210d45bbe0797f6e5cc93f193a9d/src/implicit.jl#L1-L41">source</a></section></article><h2 id="Sparse-matrix"><a class="docs-heading-anchor" href="#Sparse-matrix">Sparse matrix</a><a id="Sparse-matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Sparse-matrix" title="Permalink"></a></h2><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Tesserae.create_sparse_matrix" href="#Tesserae.create_sparse_matrix"><code>Tesserae.create_sparse_matrix</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">create_sparse_matrix(interpolation, mesh; ndofs = ndims(mesh))</code></pre><p>Create a sparse matrix. Since the created matrix accounts for all nodes in the mesh, it needs to be extracted for active nodes using the <code>DofMap</code>. <code>ndofs</code> represents the number of DoFs for a field.</p><pre><code class="language-julia-repl hljs">julia&gt; mesh = CartesianMesh(1, (0,10), (0,10));
+
+julia&gt; A = create_sparse_matrix(BSpline(Linear()), mesh; ndofs = 1)
+121×121 SparseArrays.SparseMatrixCSC{Float64, Int64} with 961 stored entries:
+⎡⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⣀⠈⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠙⢶⣀⠈⠻⣦⡀⠙⢷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠙⢶⣄⠈⠻⣦⡀⠙⠷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠙⢷⣄⠈⠻⣦⡀⠉⠷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠛⣤⡀⠉⠣⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠻⣦⡀⠉⠷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⢦⡄⠈⠱⣦⡀⠉⠷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠻⣦⡀⠙⢷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⣄⠈⠻⣦⡀⠙⢷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢷⣄⠈⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢷⣀⠈⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢶⣀⠈⠻⢆⡀⠘⠳⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢶⣀⠈⠻⣦⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢢⣀⠈⠛⣤⡀⠘⢳⣄⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢶⣀⠈⠻⣦⡀⠙⢷⣄⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢶⣄⠈⠻⣦⡀⠙⠷⣄⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢷⣄⠈⠻⣦⡀⠉⠷⣄⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠻⣦⡀⠉⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢧⡄⠈⠻⣦⎦
+
+julia&gt; dofmask = falses(1, size(mesh)...);
+
+julia&gt; dofmask[:,1:3,1:3] .= true;
+
+julia&gt; dofmap = DofMap(dofmask);
+
+julia&gt; extract(A, dofmap)
+9×9 SparseArrays.SparseMatrixCSC{Float64, Int64} with 49 stored entries:
+ 0.0  0.0   ⋅   0.0  0.0   ⋅    ⋅    ⋅    ⋅
+ 0.0  0.0  0.0  0.0  0.0  0.0   ⋅    ⋅    ⋅
+  ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅    ⋅    ⋅
+ 0.0  0.0   ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅
+ 0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0
+  ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅   0.0  0.0
+  ⋅    ⋅    ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅
+  ⋅    ⋅    ⋅   0.0  0.0  0.0  0.0  0.0  0.0
+  ⋅    ⋅    ⋅    ⋅   0.0  0.0   ⋅   0.0  0.0</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/94c836cbb34f210d45bbe0797f6e5cc93f193a9d/src/implicit.jl#L78-L130">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Tesserae.extract-Tuple{AbstractMatrix, DofMap}" href="#Tesserae.extract-Tuple{AbstractMatrix, DofMap}"><code>Tesserae.extract</code></a> — <span class="docstring-category">Method</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">extract(matrix::AbstractMatrix, dofmap::DofMap)</code></pre><p>Extract the active degrees of freedom.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/94c836cbb34f210d45bbe0797f6e5cc93f193a9d/src/implicit.jl#L172-L176">source</a></section></article><h2 id="Assembly-of-global-matrix"><a class="docs-heading-anchor" href="#Assembly-of-global-matrix">Assembly of global matrix</a><a id="Assembly-of-global-matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Assembly-of-global-matrix" title="Permalink"></a></h2><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Tesserae.@P2G_Matrix" href="#Tesserae.@P2G_Matrix"><code>Tesserae.@P2G_Matrix</code></a> — <span class="docstring-category">Macro</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">@P2G_Matrix grid=&gt;(i,j) particles=&gt;p mpvalues=&gt;(ip,jp) [space] begin
+    equations...
+end</code></pre><p>Particle-to-grid transfer macro for assembling a global matrix. A typical global stiffness matrix can be assembled as follows:</p><pre><code class="language-julia hljs">@P2G_Matrix grid=&gt;(i,j) particles=&gt;p mpvalues=&gt;(ip,jp) begin
+    K[i,j] = @∑ ∇w[ip] ⋅ c[p] ⋅ ∇w[jp] * V[p]
+end</code></pre><p>where <code>c</code> and <code>V</code> denote the stiffness (symmetric fourth-order) tensor and the volume, respectively. It is recommended to create global stiffness <code>K</code> using <a href="#Tesserae.create_sparse_matrix"><code>create_sparse_matrix</code></a>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/94c836cbb34f210d45bbe0797f6e5cc93f193a9d/src/implicit.jl#L225-L241">source</a></section></article><h2 id="Solvers"><a class="docs-heading-anchor" href="#Solvers">Solvers</a><a id="Solvers-1"></a><a class="docs-heading-anchor-permalink" href="#Solvers" title="Permalink"></a></h2><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Tesserae.newton!" href="#Tesserae.newton!"><code>Tesserae.newton!</code></a> — <span class="docstring-category">Function</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">Tesserae.newton!(x::AbstractVector, f, ∇f,
+                 maxiter = 100, atol = zero(eltype(x)), rtol = sqrt(eps(eltype(x))),
+                 linsolve = (x,A,b) -&gt; copyto!(x, A\b), verbose = false)</code></pre><p>A simple implementation of Newton&#39;s method. The functions <code>f(x)</code> and <code>∇f(x)</code> should return the residual vector and its Jacobian, respectively.</p><pre><code class="language-julia-repl hljs">julia&gt; function f(x)
+           [(x[1]+3)*(x[2]^3-7)+18,
+            sin(x[2]*exp(x[1])-1)]
+       end
+f (generic function with 1 method)
+
+julia&gt; function ∇f(x)
+           u = exp(x[1])*cos(x[2]*exp(x[1])-1)
+           [x[2]^3-7 3*x[2]^2*(x[1]+3)
+            x[2]*u   u]
+       end
+∇f (generic function with 1 method)
+
+julia&gt; x = [0.1, 1.2];
+
+julia&gt; issuccess = Tesserae.newton!(x, f, ∇f)
+true
+
+julia&gt; x ≈ [0,1]
+true</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/94c836cbb34f210d45bbe0797f6e5cc93f193a9d/src/implicit.jl#L363-L393">source</a></section></article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../transfer/">« Transfer between grid and particles</a><a class="docs-footer-nextpage" href="../export/">Export »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Tuesday 4 March 2025 03:12">Tuesday 4 March 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
