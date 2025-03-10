@@ -62,7 +62,7 @@ function main()
         ∇v :: SecondOrderTensor{2, Float64, 4}
         F  :: SecondOrderTensor{3, Float64, 9}
         σ  :: SymmetricSecondOrderTensor{3, Float64, 6}
-        ϵ  :: SymmetricSecondOrderTensor{3, Float64, 6}
+        ε  :: SymmetricSecondOrderTensor{3, Float64, 6}
         b  :: Vec{2, Float64}
     end
 
@@ -140,10 +140,12 @@ function main()
         end
 
         for p in 1:length(particles)
-            Δϵ = resize(symmetric(particles.∇v[p]), (3,3)) * Δt
-            particles.σ[p]  = vonmises_model(particles.σ[p], Δϵ; λ, G, σy)
-            particles.V[p] *= 1 + tr(Δϵ)
-            particles.ϵ[p] += Δϵ
+            ∇uₚ = resize(particles.∇v[p], (3,3)) * Δt
+            Δεₚ = symmetric(∇uₚ)
+            σₚ  = vonmises_model(particles.σ[p], Δεₚ; λ, G, σy)
+            particles.σ[p]  = σₚ + 2*symmetric(skew(∇uₚ) * particles.σ[p]) # Consider Jaumann stress-rate
+            particles.V[p] *= 1 + tr(Δεₚ)
+            particles.ε[p] += Δεₚ
         end
 
         disk.x += disk.v * Δt
@@ -156,10 +158,10 @@ function main()
             popfirst!(savepoints)
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, step)) do vtm
-                    deviatoric_strain(ϵ) = sqrt(2/3 * dev(ϵ) ⊡₂ dev(ϵ))
+                    deviatoric_strain(ε) = sqrt(2/3 * dev(ε) ⊡₂ dev(ε))
                     openvtk(vtm, particles.x) do vtk
                         vtk[&quot;von Mises stress (kPa)&quot;] = @. 1e-3 * vonmises(particles.σ)
-                        vtk[&quot;Deviatoric strain&quot;] = @. deviatoric_strain(particles.ϵ)
+                        vtk[&quot;Deviatoric strain&quot;] = @. deviatoric_strain(particles.ε)
                     end
                     openvtk(vtm, disk_points) do vtk
                     end
@@ -170,11 +172,11 @@ function main()
     end
 end
 
-function vonmises_model(σⁿ, Δϵ; λ, G, σy)
+function vonmises_model(σⁿ, Δε; λ, G, σy)
     δ = one(SymmetricSecondOrderTensor{3})
     I = one(SymmetricFourthOrderTensor{3})
     cᵉ = λ*δ⊗δ + 2G*I
-    σ_trial = σⁿ + cᵉ ⊡₂ Δϵ
+    σ_trial = σⁿ + cᵉ ⊡₂ Δε
     dfdσ, f_trial = gradient(σ -&gt; vonmises(σ) - σy, σ_trial, :all)
     if f_trial &gt; 0
         dλ = f_trial / (dfdσ ⊡₂ cᵉ ⊡₂ dfdσ)
@@ -186,4 +188,4 @@ function vonmises_model(σⁿ, Δϵ; λ, G, σy)
         σ = dev(σ)
     end
     σ
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dam_break/">« Incompressible fluid flow</a><a class="docs-footer-nextpage" href="../heat/">Heat problem using FEM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Tuesday 4 March 2025 02:58">Tuesday 4 March 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dam_break/">« Incompressible fluid flow</a><a class="docs-footer-nextpage" href="../heat/">Heat problem using FEM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Monday 10 March 2025 15:32">Monday 10 March 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
