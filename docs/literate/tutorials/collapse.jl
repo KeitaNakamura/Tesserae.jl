@@ -25,7 +25,7 @@ using Tesserae
     b  :: Float64 = 3√2tan(ψ) / sqrt(9+12tan(ψ)^2)
 end
 
-function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, ∇u::SecondOrderTensor{3})
+function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, Δε::SymmetricSecondOrderTensor{3})
     δ = one(SymmetricSecondOrderTensor{3})
     I = one(SymmetricFourthOrderTensor{3})
 
@@ -36,15 +36,15 @@ function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3
 
     ## Elastic predictor
     cᵉ = λ*δ⊗δ + 2G*I
-    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(σⁿ * skew(∇u)) # Consider Jaumann stress-rate
+    σᵗʳ = σⁿ + cᵉ ⊡₂ Δε
     dfdσ, fᵗʳ = gradient(f, σᵗʳ, :all)
     fᵗʳ ≤ 0 && tr(σᵗʳ)/3 ≤ pₜ && return σᵗʳ
 
     ## Plastic corrector
     dgdσ = gradient(g, σᵗʳ)
     Δλ = fᵗʳ / (dfdσ ⊡₂ cᵉ ⊡₂ dgdσ)
-    Δϵᵖ = Δλ * dgdσ
-    σ = σᵗʳ - cᵉ ⊡₂ Δϵᵖ
+    Δεᵖ = Δλ * dgdσ
+    σ = σᵗʳ - cᵉ ⊡₂ Δεᵖ
 
     ## Simple tension cutoff
     if !(tr(σ)/3 ≤ pₜ) # σᵗʳ is not in zone1
@@ -201,7 +201,8 @@ function main()
         for p in eachindex(particles)
             ## Update Cauchy stress using Jaumann stress rate
             ∇uₚ = resize(particles.∇v[p], (3,3)) * Δt
-            particles.σ[p] = cauchy_stress(model, particles.σ[p], ∇uₚ)
+            σₚ = cauchy_stress(model, particles.σ[p], symmetric(∇uₚ))
+            particles.σ[p] = σₚ + 2*symmetric(skew(∇uₚ) * particles.σ[p]) # Consider Jaumann stress-rate
             ## Update deformation gradient and volume
             ΔFₚ = I + particles.∇v[p] * Δt
             particles.F[p] = ΔFₚ * particles.F[p]

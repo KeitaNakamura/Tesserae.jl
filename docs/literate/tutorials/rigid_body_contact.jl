@@ -76,7 +76,7 @@ function main()
         ∇v :: SecondOrderTensor{2, Float64, 4}
         F  :: SecondOrderTensor{3, Float64, 9}
         σ  :: SymmetricSecondOrderTensor{3, Float64, 6}
-        ϵ  :: SymmetricSecondOrderTensor{3, Float64, 6}
+        ε  :: SymmetricSecondOrderTensor{3, Float64, 6}
         b  :: Vec{2, Float64}
     end
 
@@ -154,10 +154,12 @@ function main()
         end
 
         for p in 1:length(particles)
-            Δϵ = resize(symmetric(particles.∇v[p]), (3,3)) * Δt
-            particles.σ[p]  = vonmises_model(particles.σ[p], Δϵ; λ, G, σy)
-            particles.V[p] *= 1 + tr(Δϵ)
-            particles.ϵ[p] += Δϵ
+            ∇uₚ = resize(particles.∇v[p], (3,3)) * Δt
+            Δεₚ = symmetric(∇uₚ)
+            σₚ  = vonmises_model(particles.σ[p], Δεₚ; λ, G, σy)
+            particles.σ[p]  = σₚ + 2*symmetric(skew(∇uₚ) * particles.σ[p]) # Consider Jaumann stress-rate
+            particles.V[p] *= 1 + tr(Δεₚ)
+            particles.ε[p] += Δεₚ
         end
 
         disk.x += disk.v * Δt
@@ -170,10 +172,10 @@ function main()
             popfirst!(savepoints)
             openpvd(pvdfile; append=true) do pvd
                 openvtm(string(pvdfile, step)) do vtm
-                    deviatoric_strain(ϵ) = sqrt(2/3 * dev(ϵ) ⊡₂ dev(ϵ))
+                    deviatoric_strain(ε) = sqrt(2/3 * dev(ε) ⊡₂ dev(ε))
                     openvtk(vtm, particles.x) do vtk
                         vtk["von Mises stress (kPa)"] = @. 1e-3 * vonmises(particles.σ)
-                        vtk["Deviatoric strain"] = @. deviatoric_strain(particles.ϵ)
+                        vtk["Deviatoric strain"] = @. deviatoric_strain(particles.ε)
                     end
                     openvtk(vtm, disk_points) do vtk
                     end
@@ -185,11 +187,11 @@ function main()
     sum(grid.fext) #src
 end
 
-function vonmises_model(σⁿ, Δϵ; λ, G, σy)
+function vonmises_model(σⁿ, Δε; λ, G, σy)
     δ = one(SymmetricSecondOrderTensor{3})
     I = one(SymmetricFourthOrderTensor{3})
     cᵉ = λ*δ⊗δ + 2G*I
-    σ_trial = σⁿ + cᵉ ⊡₂ Δϵ
+    σ_trial = σⁿ + cᵉ ⊡₂ Δε
     dfdσ, f_trial = gradient(σ -> vonmises(σ) - σy, σ_trial, :all)
     if f_trial > 0
         dλ = f_trial / (dfdσ ⊡₂ cᵉ ⊡₂ dfdσ)
