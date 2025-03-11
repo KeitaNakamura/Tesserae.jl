@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Transfer between grid and particles · Tesserae.jl</title><meta name="title" content="Transfer between grid and particles · Tesserae.jl"/><meta property="og:title" content="Transfer between grid and particles · Tesserae.jl"/><meta property="twitter:title" content="Transfer between grid and particles · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../tutorials/getting_started/">Getting started</a></li><li><a class="tocitem" href="../tutorials/collision/">Transfer schemes</a></li><li><a class="tocitem" href="../tutorials/cpdi/">CPDI</a></li><li><a class="tocitem" href="../tutorials/tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox"/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../implicit/">Implicit formulation</a></li><li><a class="tocitem" href="../tutorials/implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../tutorials/implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../tutorials/collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../tutorials/dam_break/">Incompressible fluid flow</a></li><li><a class="tocitem" href="../tutorials/rigid_body_contact/">Frictional contact with rigid body</a></li><li><input class="collapse-toggle" id="menuitem-2-9" type="checkbox"/><label class="tocitem" for="menuitem-2-9"><span class="docs-label">FEM (experimental)</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../tutorials/heat/">Heat problem using FEM</a></li></ul></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../mesh/">Mesh</a></li><li><a class="tocitem" href="../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../interpolation/">Interpolation</a></li><li class="is-active"><a class="tocitem" href>Transfer between grid and particles</a><ul class="internal"><li><a class="tocitem" href="#Transfer-macros"><span>Transfer macros</span></a></li><li><a class="tocitem" href="#Code-snippets"><span>Code snippets</span></a></li></ul></li><li><a class="tocitem" href="../implicit_utils/">Functionalities for implicit methods</a></li><li><a class="tocitem" href="../export/">Export</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li class="is-active"><a href>Transfer between grid and particles</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Transfer between grid and particles</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/src/transfer.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="manual"><a class="docs-heading-anchor" href="#manual">Transfer between grid and particles</a><a id="manual-1"></a><a class="docs-heading-anchor-permalink" href="#manual" title="Permalink"></a></h1><h2 id="Transfer-macros"><a class="docs-heading-anchor" href="#Transfer-macros">Transfer macros</a><a id="Transfer-macros-1"></a><a class="docs-heading-anchor-permalink" href="#Transfer-macros" title="Permalink"></a></h2><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Tesserae.@P2G" href="#Tesserae.@P2G"><code>Tesserae.@P2G</code></a> — <span class="docstring-category">Macro</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip [space] begin
+    equations...
+end</code></pre><p>Particle-to-grid transfer macro. Based on the <code>parent =&gt; index</code> expressions, <code>a[index]</code> in <code>equations</code> translates to <code>parent.a[index]</code>. This <code>index</code> can be replaced with any other name.</p><p><strong>Examples</strong></p><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+
+    # Particle-to-grid transfer
+    m[i]  = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+    f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+
+    # Calculation on grid
+    vⁿ[i] = mv[i] / m[i]
+    v[i]  = vⁿ[i] + (f[i] / m[i]) * Δt
+
+end</code></pre><p>This expands to roughly the following code:</p><pre><code class="language-julia hljs"># Reset grid properties
+@. grid.m  = zero(grid.m)
+@. grid.mv = zero(grid.mv)
+@. grid.f  = zero(grid.f)
+
+# Particle-to-grid transfer
+for p in eachindex(particles)
+    mp = mpvalues[p]
+    nodeindices = neighboringnodes(mp)
+    for ip in eachindex(nodeindices)
+        i = nodeindices[ip]
+        grid.m [i] += mp.w[ip] * particles.m[p]
+        grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
+        grid.mv[i] += -particles.V[p] * particles.σ[p] ⋅ mp.∇w[ip]
+    end
+end
+
+# Calculation on grid
+@. grid.vⁿ = grid.mv / grid.m
+@. grid.v  = grid.vⁿ + (grid.f / grid.m) * Δt</code></pre><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>In <code>@P2G</code>, <code>Calculation on grid</code> part must be placed after <code>Particle-to-grid transfer</code> part.</p></div></div></div><a class="docs-sourcelink" target="_blank" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/66563f92da6da136afa3693e25625dcd1f1bd917/src/transfer.jl#L1-L55">source</a></section></article><article class="docstring"><header><a class="docstring-article-toggle-button fa-solid fa-chevron-down" href="javascript:;" title="Collapse docstring"></a><a class="docstring-binding" id="Tesserae.@G2P" href="#Tesserae.@G2P"><code>Tesserae.@G2P</code></a> — <span class="docstring-category">Macro</span><span class="is-flex-grow-1 docstring-article-toggle-button" title="Collapse docstring"></span></header><section><div><pre><code class="language-julia hljs">@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+    equations...
+end</code></pre><p>Grid-to-particle transfer macro. Based on the <code>parent =&gt; index</code> expressions, <code>a[index]</code> in <code>equations</code> translates to <code>parent.a[index]</code>. This <code>index</code> can be replaced with any other name.</p><p><strong>Examples</strong></p><pre><code class="language-julia hljs">@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+
+    # Grid-to-particle transfer
+    v[p] += @∑ w[ip] * (vⁿ[i] - v[i])
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+    x[p] += @∑ w[ip] * v[i] * Δt
+
+    # Calculation on particle
+    Δϵₚ = symmetric(∇v[p]) * Δt
+    F[p]  = (I + ∇v[p]*Δt) ⋅ F[p]
+    V[p]  = V⁰[p] * det(F[p])
+    σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
+
+end</code></pre><p>This expands to roughly the following code:</p><pre><code class="language-julia hljs"># Grid-to-particle transfer
+for p in eachindex(particles)
+    mp = mpvalues[p]
+    nodeindices = neighboringnodes(mp)
+    Δvₚ = zero(eltype(particles.v))
+    ∇vₚ = zero(eltype(particles.∇v))
+    Δxₚ = zero(eltype(particles.x))
+    for ip in eachindex(nodeindices)
+        i = nodeindices[ip]
+        Δvₚ += mp.w[ip] * (grid.vⁿ[i] - grid.v[i])
+        ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
+        Δxₚ += mp.w[ip] * grid.v[i] * Δt
+    end
+    particles.v[p] += Δvₚ
+    particles.∇v[p] = ∇vₚ
+    particles.x[p] += Δxₚ
+end
+
+# Calculation on particle
+for p in eachindex(particles)
+    Δϵₚ = symmetric(particles.∇v[p]) * Δt
+    particles.F[p]  = (I + particles.∇v[p]*Δt) ⋅ particles.F[p]
+    particles.V[p]  = particles.V⁰[p] * det(particles.F[p])
+    particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
+end</code></pre><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>In <code>@G2P</code>, <code>Calculation on particles</code> part must be placed after <code>Grid-to-particle transfer</code> part.</p></div></div></div><a class="docs-sourcelink" target="_blank" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/66563f92da6da136afa3693e25625dcd1f1bd917/src/transfer.jl#L239-L300">source</a></section></article><h2 id="Code-snippets"><a class="docs-heading-anchor" href="#Code-snippets">Code snippets</a><a id="Code-snippets-1"></a><a class="docs-heading-anchor-permalink" href="#Code-snippets" title="Permalink"></a></h2><div class="admonition is-info"><header class="admonition-header">Info</header><div class="admonition-body"><p>The following snippets are demonstrated in the tutorial <a href="../tutorials/collision/#Transfer-schemes">Transfer schemes</a>.</p></div></div><p>In this section, the following transfer schemes are presented:</p><ul><li><a href="#PIC–FLIP-mixed-transfer">PIC–FLIP mixed transfer</a><sup class="footnote-reference"><a id="citeref-1" href="#footnote-1">[1]</a></sup></li><li><a href="#Affine-PIC-(APIC)">Affine PIC (APIC)</a><sup class="footnote-reference"><a id="citeref-2" href="#footnote-2">[2]</a></sup></li><li><a href="#Taylor-PIC-(TPIC)">Taylor PIC (TPIC)</a><sup class="footnote-reference"><a id="citeref-3" href="#footnote-3">[3]</a></sup></li><li><a href="#eXtended-PIC-(XPIC)">eXtended PIC (XPIC)</a><sup class="footnote-reference"><a id="citeref-4" href="#footnote-4">[4]</a></sup></li></ul><p>We assume that the grid and particle properties have following variables:</p><pre><code class="language-julia hljs">GridProp = @NamedTuple begin
+    x   :: Vec{2, Float64} # Position
+    m   :: Float64         # Mass
+    mv  :: Vec{2, Float64} # Momentum
+    v   :: Vec{2, Float64} # Velocity
+    vⁿ  :: Vec{2, Float64} # Velocity at t = tⁿ
+    # XPIC
+    vᵣ★ :: Vec{2, Float64}
+    v★  :: Vec{2, Float64}
+end
+ParticleProp = @NamedTuple begin
+    x  :: Vec{2, Float64}                           # Position
+    m  :: Float64                                   # Mass
+    V⁰ :: Float64                                   # Initial volume
+    V  :: Float64                                   # Volume
+    v  :: Vec{2, Float64}                           # Velocity
+    ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
+    σ  :: SymmetricSecondOrderTensor{2, Float64, 3} # Cauchy stress
+    F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
+    # APIC
+    B  :: SecondOrderTensor{2, Float64, 4}
+    # XPIC
+    vᵣ★ :: Vec{2, Float64}
+    a★  :: Vec{2, Float64}
+end</code></pre><h3 id="PIC–FLIP-mixed-transfer"><a class="docs-heading-anchor" href="#PIC–FLIP-mixed-transfer">PIC–FLIP mixed transfer</a><a id="PIC–FLIP-mixed-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#PIC–FLIP-mixed-transfer" title="Permalink"></a></h3><p class="math-container">\[\begin{aligned}
+m^n\bm{v}_i^n &amp;= \sum_p w_{ip}^n m_p \bm{v}_p^n \\
+\bm{v}_p^{n+1} &amp;= \sum_i w_{ip}^n \left( (1-\alpha)\bm{v}_i^{n+1} + \alpha (\bm{v}_p^n + (\bm{v}_i^{n+1} - \bm{v}_i^n) \right)) \\
+\end{aligned}\]</p><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+end
+@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+    v[p] = @∑ w[ip] * ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i])))
+end</code></pre><h3 id="Affine-PIC-(APIC)"><a class="docs-heading-anchor" href="#Affine-PIC-(APIC)">Affine PIC (APIC)</a><a id="Affine-PIC-(APIC)-1"></a><a class="docs-heading-anchor-permalink" href="#Affine-PIC-(APIC)" title="Permalink"></a></h3><p class="math-container">\[\begin{aligned}
+m^n\bm{v}_i^n &amp;= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \bm{B}_p^n (\bm{D}_p^n)^{-1} (\bm{x}_i^n - \bm{x}_p^n) \right) \\
+\bm{v}_p^{n+1} &amp;= \sum_i w_{ip}^n \bm{v}_i^{n+1} \\
+\bm{B}_p^{n+1} &amp;= \sum_i w_{ip}^n \bm{v}_i^{n+1} \otimes (\bm{x}_i^n - \bm{x}_p^n)
+\end{aligned}\]</p><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+    mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] * Dₚ⁻¹ * (x[i] - x[p]))
+end
+@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+    v[p] = @∑ w[ip] * v[i]
+    B[p] = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
+end</code></pre><p>where <code>Dₚ</code> should be defined as <code>Dₚ⁻¹ = inv(1/4 * h^2 * I)</code> for <code>BSpline(Quadratic())</code> (see the tutorial <a href="../tutorials/collision/#Transfer-schemes">Transfer schemes</a>).</p><h3 id="Taylor-PIC-(TPIC)"><a class="docs-heading-anchor" href="#Taylor-PIC-(TPIC)">Taylor PIC (TPIC)</a><a id="Taylor-PIC-(TPIC)-1"></a><a class="docs-heading-anchor-permalink" href="#Taylor-PIC-(TPIC)" title="Permalink"></a></h3><p class="math-container">\[\begin{aligned}
+m^n\bm{v}_i^n &amp;= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \nabla\bm{v}_p^n (\bm{x}_i^n - \bm{x}_p^n) \right) \\
+\bm{v}_p^{n+1} &amp;= \sum_i w_{ip}^n \bm{v}_i^{n+1} \\
+\nabla\bm{v}_p^{n+1} &amp;= \sum_i \bm{v}_i^{n+1} \otimes \nabla w_{ip}^n \\
+\end{aligned}\]</p><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+    mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p]))
+end
+@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+    v[p]  = @∑ w[ip] * v[i]
+    ∇v[p] = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
+end</code></pre><h3 id="eXtended-PIC-(XPIC)"><a class="docs-heading-anchor" href="#eXtended-PIC-(XPIC)">eXtended PIC (XPIC)</a><a id="eXtended-PIC-(XPIC)-1"></a><a class="docs-heading-anchor-permalink" href="#eXtended-PIC-(XPIC)" title="Permalink"></a></h3><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>In this section, we follow the notations in the original paper<sup class="footnote-reference"><a id="citeref-4" href="#footnote-4">[4]</a></sup>.</p></div></div><h4 id="Overview-of-XPIC"><a class="docs-heading-anchor" href="#Overview-of-XPIC">Overview of XPIC</a><a id="Overview-of-XPIC-1"></a><a class="docs-heading-anchor-permalink" href="#Overview-of-XPIC" title="Permalink"></a></h4><p>We assume that <span>$\bm{\mathsf{S}}^+$</span> matrix maps particle velocities to the grid and <span>$\bm{\mathsf{S}}$</span> matrix maps them back. In XPIC, a new effective acceleration for particles, <span>$\mathbb{A}$</span>, is employed to update the particle velocity <span>$\bm{V}$</span> and position <span>$\bm{X}$</span>, respectively, as</p><p class="math-container">\[\begin{aligned}
+\bm{V}^{(k+1)} &amp;= \bm{V}^{(k)} + \mathbb{A}^{(k)} \Delta{t} \\
+\bm{X}^{(k+1)} &amp;= \bm{X}^{(k)} + \bm{\mathsf{S}} \bm{v}^{(k+)} \Delta{t} + \left( \frac{1}{2} \mathbb{A}^{(k)} - \bm{\mathsf{S}}\bm{a}^{(k)} \right) (\Delta{t})^2
+\end{aligned}\]</p><p>where <span>$\bm{v}^{(k+)}$</span> is the updated grid velocity:</p><p class="math-container">\[\bm{v}^{(k+)} = \bm{v}^{(k)} + \bm{a}^{(k)} \Delta{t}\]</p><p>The effective acceleration <span>$\mathbb{A}$</span> is represented in XPIC as follows:</p><p class="math-container">\[\mathbb{A}^{(k)} \Delta{t} = (1-m) \bm{\mathsf{S}}\bm{a}^{(k)}\Delta{t} - \bm{V}^{(k)} + m\bm{\mathsf{S}}\bm{v}^{(k+)} - m\bm{\mathsf{S}}\bm{v}^{*}\]</p><p>where</p><p class="math-container">\[\bm{v}^* = \sum_r^m (-1)^r \bm{v}_r^*\]</p><p>This new <span>$\bm{v}_r^*$</span> term, which is unique to XPIC(<span>$m$</span>) with <span>$m&gt;1$</span>, can be evaluated by recursion:</p><p class="math-container">\[\bm{v}_r^* = \frac{m-r+1}{r} \bm{\mathsf{S}}^+ \bm{\mathsf{S}} \bm{v}_{r-1}^*\]</p><p>starting with <span>$\bm{v}_1^*=\bm{v}^{(k)}$</span>.</p><h4 id="Implementation-using-Tesserae"><a class="docs-heading-anchor" href="#Implementation-using-Tesserae">Implementation using Tesserae</a><a id="Implementation-using-Tesserae-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation-using-Tesserae" title="Permalink"></a></h4><p>Based on the above equations, we can derive the following:</p><p class="math-container">\[\begin{aligned}
+\bm{V}^{(k+1)} &amp;= \bm{V}^{(k)} + \bm{\mathsf{S}}\left(\bm{v}^{(k+)}-\bm{v}^{(k)}\right) - \bm{A}^* \Delta{t} \\
+\bm{X}^{(k+1)} &amp;= \bm{X}^{(k)} + \frac{1}{2} \bm{\mathsf{S}} \left(\bm{v}^{(k+)} + \bm{v}^{(k)}\right) \Delta{t} - \frac{1}{2} \bm{A}^* (\Delta{t})^2
+\end{aligned}\]</p><p>where</p><p class="math-container">\[\bm{A}^* \Delta{t} = \bm{V}^{(k)} + m \bm{\mathsf{S}} \left( \bm{v}^* - \bm{v}^{(k)} \right)\]</p><pre><code class="language-julia hljs"># Set the initial values for the recursion:
+@. grid.vᵣ★ = grid.vⁿ
+@. grid.v★ = zero(grid.v★)
+
+# The recursion process to calculate `v★`
+for r in 2:m
+    @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        vᵣ★[p] = @∑ w[ip] * vᵣ★[i]
+    end
+    @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        vᵣ★[i] = @∑ (m-r+1)/r * w[ip] * m[p] * vᵣ★[p] / m[i]
+        v★[i] += (-1)^r * vᵣ★[i]
+    end
+end
+
+# Grid-to-particle transfer in XPIC
+@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+    v[p] += @∑ w[ip] * (v[i] - vⁿ[i]) # same as FLIP
+    x[p] += @∑ w[ip] * (v[i] + vⁿ[i]) * Δt / 2
+    a★[p] = @∑ w[ip] * (v[p] + m*(v★[i] - vⁿ[i])) / Δt
+    v[p] -= a★[p] * Δt
+    x[p] -= a★[p] * Δt^2 / 2
+end</code></pre><p>where <code>a★</code> represents <span>$\bm{A}^*$</span>.</p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1145/2461912.2461948">Stomakhin, A., Schroeder, C., Chai, L., Teran, J. and Selle, A., 2013. A material point method for snow simulation. ACM Transactions on Graphics (TOG), 32(4), pp.1-10.</a></li><li class="footnote" id="footnote-2"><a class="tag is-link" href="#citeref-2">2</a><a href="https://doi.org/10.1145/2766996">Jiang, C., Schroeder, C., Selle, A., Teran, J. and Stomakhin, A., 2015. The affine particle-in-cell method. ACM Transactions on Graphics (TOG), 34(4), pp.1-10.</a></li><li class="footnote" id="footnote-3"><a class="tag is-link" href="#citeref-3">3</a><a href="https://doi.org/10.1016/j.cma.2022.115720">Nakamura, K., Matsumura, S. and Mizutani, T., 2023. Taylor particle-in-cell transfer and kernel correction for material point method. Computer Methods in Applied Mechanics and Engineering, 403, p.115720.</a></li><li class="footnote" id="footnote-4"><a class="tag is-link" href="#citeref-4">4</a><a href="https://doi.org/10.1016/j.cma.2017.01.035">Hammerquist, C.C. and Nairn, J.A., 2017. A new method for material point method particle updates that reduces noise and enhances stability. Computer methods in applied mechanics and engineering, 318, pp.724-738.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../interpolation/">« Interpolation</a><a class="docs-footer-nextpage" href="../implicit_utils/">Functionalities for implicit methods »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Tuesday 11 March 2025 07:59">Tuesday 11 March 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
