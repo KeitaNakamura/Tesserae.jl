@@ -184,7 +184,7 @@ function residual(U::AbstractVector, state)
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
-    geometric(τ) = @einsum G[i,j,k,l] := τ[i,l] * one(τ)[j,k]
+    geometric(τ) = @einsum (i,j,k,l) -> τ[i,l] * one(τ)[j,k]
     @G2P grid=>i particles=>p mpvalues=>ip begin
         ## In addition to updating the stress tensor, the stiffness tensor,
         ## which is utilized in the Jacobian-vector product, is also updated.
@@ -205,7 +205,7 @@ end
 function jacobian(U::AbstractVector, state)
     (; grid, particles, mpvalues, β, A, dofmap, Δt) = state
 
-    dotdot(a,ℂ,b) = @einsum C[i,j] := a[k] * ℂ[i,k,j,l] * b[l]
+    dotdot(a,ℂ,b) = @einsum (i,j) -> a[k] * ℂ[i,k,j,l] * b[l]
     @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
         A[i,j] = @∑ dotdot(∇w[ip] ⊡ ΔF⁻¹[p], ℂ[p], ∇w[jp] ⊡ ΔF⁻¹[p]) * V⁰[p]
     end

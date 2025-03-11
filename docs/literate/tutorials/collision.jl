@@ -123,7 +123,7 @@ function main(transfer = FLIP(1.0))
     function cauchy_stress(F)
         J = det(F)
         S = 2 * gradient(stored_energy, symmetric(F'F))
-        @einsum typeof(S) σ[i,j] := inv(J) * F[i,k] * S[k,l] * F[j,l]
+        @einsum typeof(S) (i,j) -> inv(J) * F[i,k] * S[k,l] * F[j,l]
     end
 
     ## Outputs
