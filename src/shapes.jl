@@ -45,12 +45,12 @@ function value(::Line2, X::Vec{1, T}) where {T}
 end
 
 function quadpoints(::Type{T}, ::Line2) where {T}
-    NTuple{1, Vec{1, T}}((
+    SVector{1, Vec{1, T}}((
         (0,),
     ))
 end
 function quadweights(::Type{T}, ::Line2) where {T}
-    NTuple{1, T}((2,))
+    SVector{1, T}((2,))
 end
 
 """
@@ -86,13 +86,13 @@ end
 
 function quadpoints(::Type{T}, ::Line3) where {T}
     ξ = √3 / 3
-    NTuple{2, Vec{1, T}}((
+    SVector{2, Vec{1, T}}((
         (-ξ,),
         ( ξ,),
     ))
 end
 function quadweights(::Type{T}, ::Line3) where {T}
-    NTuple{2, T}((1, 1))
+    SVector{2, T}((1, 1))
 end
 
 """
@@ -130,14 +130,14 @@ end
 
 function quadpoints(::Type{T}, ::Line4) where {T}
     ξ = √(3/5)
-    NTuple{3, Vec{1, T}}((
+    SVector{3, Vec{1, T}}((
         (-ξ,),
         ( 0,),
         ( ξ,),
     ))
 end
 function quadweights(::Type{T}, ::Line4) where {T}
-    NTuple{3, T}((5/9, 8/9, 5/9))
+    SVector{3, T}((5/9, 8/9, 5/9))
 end
 
 ########
@@ -186,7 +186,7 @@ end
 
 function quadpoints(::Type{T}, ::Quad4) where {T}
     ξ = η = √3 / 3
-    NTuple{4, Vec{2, T}}((
+    SVector{4, Vec{2, T}}((
         (-ξ, -η),
         ( ξ, -η),
         ( ξ,  η),
@@ -194,7 +194,7 @@ function quadpoints(::Type{T}, ::Quad4) where {T}
     ))
 end
 function quadweights(::Type{T}, ::Quad4) where {T}
-    NTuple{4, T}((1, 1, 1, 1))
+    SVector{4, T}((1, 1, 1, 1))
 end
 
 """
@@ -247,7 +247,7 @@ end
 
 function quadpoints(::Type{T}, ::Quad9) where {T}
     ξ = η = √(3/5)
-    NTuple{9, Vec{2, T}}((
+    SVector{9, Vec{2, T}}((
         (-ξ, -η),
         ( 0, -η),
         ( ξ, -η),
@@ -260,7 +260,7 @@ function quadpoints(::Type{T}, ::Quad9) where {T}
     ))
 end
 function quadweights(::Type{T}, ::Quad9) where {T}
-    NTuple{9, T}((
+    SVector{9, T}((
         5/9 * 5/9,
         8/9 * 5/9,
         5/9 * 5/9,
@@ -329,7 +329,7 @@ end
 
 function quadpoints(::Type{T}, ::Hex8) where {T}
     ξ = η = ζ = √3 / 3
-    NTuple{8, Vec{3, T}}((
+    SVector{8, Vec{3, T}}((
         (-ξ, -η, -ζ),
         ( ξ, -η, -ζ),
         ( ξ,  η, -ζ),
@@ -341,7 +341,7 @@ function quadpoints(::Type{T}, ::Hex8) where {T}
     ))
 end
 function quadweights(::Type{T}, ::Hex8) where {T}
-    NTuple{8, T}((1, 1, 1, 1, 1, 1, 1, 1))
+    SVector{8, T}((1, 1, 1, 1, 1, 1, 1, 1))
 end
 
 @doc raw"""
@@ -433,7 +433,7 @@ end
 
 function quadpoints(::Type{T}, ::Hex27) where {T}
     ξ = η = ζ = √(3/5)
-    NTuple{27, Vec{3, T}}((
+    SVector{27, Vec{3, T}}((
         (-ξ, -η, -ζ),
         ( 0, -η, -ζ),
         ( ξ, -η, -ζ),
@@ -464,7 +464,7 @@ function quadpoints(::Type{T}, ::Hex27) where {T}
     ))
 end
 function quadweights(::Type{T}, ::Hex27) where {T}
-    NTuple{27, T}((
+    SVector{27, T}((
         5/9 * 5/9 * 5/9,
         8/9 * 5/9 * 5/9,
         5/9 * 5/9 * 5/9,
@@ -534,12 +534,12 @@ function value(::Tri3, X::Vec{2, T}) where {T}
 end
 
 function quadpoints(::Type{T}, ::Tri3) where {T}
-    NTuple{1, Vec{2, T}}((
+    SVector{1, Vec{2, T}}((
         (1/3, 1/3),
     ))
 end
 function quadweights(::Type{T}, ::Tri3) where {T}
-    NTuple{1, T}((0.5,))
+    SVector{1, T}((0.5,))
 end
 
 @doc raw"""
@@ -586,14 +586,14 @@ function value(::Tri6, X::Vec{2, T}) where {T}
 end
 
 function quadpoints(::Type{T}, ::Tri6) where {T}
-    NTuple{3, Vec{2, T}}((
+    SVector{3, Vec{2, T}}((
         (1/6, 1/6),
         (2/3, 1/6),
         (1/6, 2/3),
     ))
 end
 function quadweights(::Type{T}, ::Tri6) where {T}
-    NTuple{3, T}((1/6, 1/6, 1/6))
+    SVector{3, T}((1/6, 1/6, 1/6))
 end
 
 #######
@@ -645,12 +645,12 @@ function value(::Tet4, X::Vec{3, T}) where {T}
 end
 
 function quadpoints(::Type{T}, ::Tet4) where {T}
-    NTuple{1, Vec{3, T}}((
+    SVector{1, Vec{3, T}}((
         (1/4, 1/4, 1/4),
     ))
 end
 function quadweights(::Type{T}, ::Tet4) where {T}
-    NTuple{1, T}((1/6,))
+    SVector{1, T}((1/6,))
 end
 
 @doc raw"""
@@ -713,7 +713,7 @@ function value(::Tet10, X::Vec{3, T}) where {T}
 end
 
 function quadpoints(::Type{T}, ::Tet10) where {T}
-    NTuple{4, Vec{3, T}}((
+    SVector{4, Vec{3, T}}((
         (1/4 -  √5/20, 1/4 -  √5/20, 1/4 -  √5/20),
         (1/4 + 3√5/20, 1/4 -  √5/20, 1/4 -  √5/20),
         (1/4 -  √5/20, 1/4 + 3√5/20, 1/4 -  √5/20),
@@ -721,5 +721,5 @@ function quadpoints(::Type{T}, ::Tet10) where {T}
     ))
 end
 function quadweights(::Type{T}, ::Tet10) where {T}
-    NTuple{4, T}((1/24, 1/24, 1/24, 1/24))
+    SVector{4, T}((1/24, 1/24, 1/24, 1/24))
 end
