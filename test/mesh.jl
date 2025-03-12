@@ -48,3 +48,17 @@
     @test Tesserae.whichcell(Vec(0.0,0.0), mesh) === CartesianIndex(1,1)
     @test Tesserae.whichcell(Vec(3.0,4.0), mesh) === nothing
 end
+
+@testset "UnstructuredMesh" begin
+    cmesh = CartesianMesh(0.5, (0,2), (0,3))
+    mesh = UnstructuredMesh(cmesh)
+    @test length(mesh) == 35
+    @test Tesserae.ncells(mesh) == 24
+    @test mesh == vec(cmesh)
+    cmesh′ = CartesianMesh(0.5, (1,3), (1,4))
+    mesh .= vec(cmesh′) # test setindex!
+    @test mesh == vec(cmesh′)
+    @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2)))) == Tesserae.Line2()
+    @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2), (0,3)))) == Tesserae.Quad4()
+    @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2), (0,3), (0,4)))) == Tesserae.Hex8()
+end
