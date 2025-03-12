@@ -221,6 +221,10 @@ Base.IndexStyle(::Type{<: UnstructuredMesh}) = IndexLinear()
     @_propagate_inbounds_meta
     mesh.allnodes[mesh.nodeindices[i]]
 end
+@inline function Base.setindex!(mesh::UnstructuredMesh, x, i::Int)
+    @_propagate_inbounds_meta
+    mesh.allnodes[mesh.nodeindices[i]] = x
+end
 
 cellshape(mesh::UnstructuredMesh) = mesh.shape
 ncells(mesh::UnstructuredMesh) = length(mesh.cellnodeindices)
