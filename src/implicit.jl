@@ -39,36 +39,26 @@ julia> dofmap(grid.v)
  12.0
 ```
 """
-struct DofMap{dim, N, I <: AbstractVector{CartesianIndex{N}}}
-    dimension::Int
-    gridsize::Dims{dim}
-    indices::I # (direction, x, y, z)
-    function DofMap{dim, N, I}(dimension::Int, gridsize::Dims{dim}, indices::I) where {dim, N, I <: AbstractVector{CartesianIndex{N}}}
-        @assert dim+1 == N
-        new{dim, N, I}(dimension, gridsize, indices)
-    end
-end
-function DofMap(dimension::Int, gridsize::Dims{dim}, indices::I) where {dim, N, I <: AbstractVector{CartesianIndex{N}}}
-    DofMap{dim, N, I}(dimension, gridsize, indices)
+struct DofMap{N, I <: AbstractVector{<: CartesianIndex}}
+    masksize::Dims{N}
+    indices::I # (dof, x, y, z)
 end
 
-DofMap(mask::AbstractArray{Bool}) = DofMap(size(mask, 1), Base.tail(size(mask)), findall(mask))
-DofMap(dims::Dims) = DofMap(dims[1], Base.tail(dims), vec(CartesianIndices(dims)))
-
+DofMap(mask::AbstractArray{Bool}) = DofMap(size(mask), findall(mask))
 ndofs(dofmap::DofMap) = length(dofmap.indices)
 
-function (dofmap::DofMap{1, 2})(A::AbstractArray{T, 1}) where {T <: Vec}
+function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Vec{1}}
     A′ = reshape(reinterpret(eltype(T), A), 1, length(A))
     @boundscheck checkbounds(A′, dofmap.indices)
     @inbounds view(A′, dofmap.indices)
 end
-function (dofmap::DofMap{dim, N})(A::AbstractArray{T, dim}) where {dim, N, T <: Vec}
+function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Vec}
     A′ = reinterpret(reshape, eltype(T), A)
     @boundscheck checkbounds(A′, dofmap.indices)
     @inbounds view(A′, dofmap.indices)
 end
 
-function (dofmap::DofMap{dim, N})(A::AbstractArray{T, dim}) where {dim, N, T <: Real}
+function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
     A′ = reshape(A, 1, size(A)...)
     indices′ = maparray(I->CartesianIndex(1,Base.tail(Tuple(I))...), dofmap.indices)
     @boundscheck checkbounds(A′, indices′)
@@ -175,9 +165,9 @@ end
 Extract the active degrees of freedom.
 """
 function extract(S::AbstractMatrix, dofmap::DofMap)
-    n = dofmap.dimension * prod(dofmap.gridsize)
+    n = prod(dofmap.masksize)
     @assert size(S) == (n, n)
-    I = view(LinearIndices((dofmap.dimension, dofmap.gridsize...)), dofmap.indices)
+    I = view(LinearIndices(dofmap.masksize), dofmap.indices)
     S[I, I]
 end
 
