@@ -4,18 +4,18 @@ struct BlockSpace{dim, L <: CartesianMesh{dim}, ElType} <: AbstractArray{ElType,
     mesh::L
     particleindices::Vector{Int}
     stops::Array{Int, dim}
-    nparticles::Vector{Array{Int, dim}}
+    nparticles_chunks::Vector{Array{Int, dim}}
     blockindices::Vector{Int}
     localindices::Vector{Int}
 end
 
 function BlockSpace(mesh::CartesianMesh{dim}) where {dim}
     dims = blocksize(mesh)
-    nparticles = [zeros(Int, dims) for _ in 1:Threads.nthreads()]
+    nparticles_chunks = [zeros(Int, dims) for _ in 1:Threads.nthreads()]
     particleindices = Int[]
     stops = zeros(Int, dims)
     ElType = Base._return_type(_getindex, Tuple{typeof(particleindices), typeof(stops), Int})
-    BlockSpace{dim, typeof(mesh), ElType}(mesh, particleindices, stops, nparticles, Int[], Int[])
+    BlockSpace{dim, typeof(mesh), ElType}(mesh, particleindices, stops, nparticles_chunks, Int[], Int[])
 end
 
 Base.IndexStyle(::Type{<: BlockSpace}) = IndexLinear()
@@ -36,30 +36,31 @@ function update!(s::BlockSpace, xₚ::AbstractVector{<: Vec})
     resize!(s.particleindices, n)
     resize!(s.blockindices, n)
     resize!(s.localindices, n)
-    foreach(fillzero!, s.nparticles)
+    foreach(fillzero!, s.nparticles_chunks)
 
-    @threaded :static for p in 1:n
-        @inbounds begin
-            id = Threads.threadid()
+    nchunks = length(s.nparticles_chunks)
+    chunks = collect(Iterators.partition(1:n, n÷nchunks))
+
+    @threaded for chunk_id in 1:nchunks
+        @inbounds for p in chunks[chunk_id]
             blk = sub2ind(size(s), whichblock(xₚ[p], s.mesh))
             s.blockindices[p] = blk
             if !iszero(blk)
-                s.localindices[p] = (s.nparticles[id][blk] += 1)
+                s.localindices[p] = (s.nparticles_chunks[chunk_id][blk] += 1)
             end
         end
     end
-    for i in 1:Threads.nthreads()-1
-        broadcast!(+, s.nparticles[i+1], s.nparticles[i+1], s.nparticles[i])
+    for i in 1:nchunks-1
+        broadcast!(+, s.nparticles_chunks[i+1], s.nparticles_chunks[i+1], s.nparticles_chunks[i])
     end
-    nptsinblks = last(s.nparticles) # last entry has a complete list
+    nptsinblks = last(s.nparticles_chunks) # last entry has a complete list
 
     cumsum!(vec(s.stops), vec(nptsinblks))
-    @threaded :static for p in 1:n
-        @inbounds begin
+    @threaded for chunk_id in 1:nchunks
+        @inbounds for p in chunks[chunk_id]
             blk = s.blockindices[p]
             if !iszero(blk)
-                id = Threads.threadid()
-                offset = id==1 ? 0 : s.nparticles[id-1][blk]
+                offset = chunk_id==1 ? 0 : s.nparticles_chunks[chunk_id-1][blk]
                 i = offset + s.localindices[p]
                 stop = s.stops[blk]
                 len = nptsinblks[blk]
