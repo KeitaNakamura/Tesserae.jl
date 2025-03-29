@@ -278,4 +278,4 @@ end
     right = lastindex(ax) - i
     ifelse(left < right, left, -right)
 end
-node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(node_position, get_axes(mesh), Tuple(index)))
+node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(node_position, mesh.axes, Tuple(index)))

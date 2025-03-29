@@ -2,29 +2,6 @@ abstract type AbstractMesh{dim, T, N} <: AbstractArray{Vec{dim, T}, N} end
 
 fillzero!(x::AbstractMesh) = x
 
-struct AxisArray{dim, T, V <:AbstractVector{T}} <: AbstractArray{NTuple{dim, T}, dim}
-    axes::NTuple{dim, V}
-end
-get_axes(A::AxisArray) = A.axes
-Base.size(A::AxisArray) = map(length, A.axes)
-@generated function Base.getindex(A::AxisArray{dim}, i::Vararg{Integer, dim}) where {dim}
-    quote
-        @_inline_meta
-        @_propagate_inbounds_meta
-        @ntuple $dim d -> A.axes[d][i[d]]
-    end
-end
-@inline function Base.getindex(A::AxisArray{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
-    @_propagate_inbounds_meta
-    AxisArray(map(getindex, A.axes, ranges))
-end
-@inline function Base.getindex(A::AxisArray, indices::CartesianIndices)
-    @_propagate_inbounds_meta
-    A[indices.indices...]
-end
-
-Base.copy(A::AxisArray) = AxisArray(map(copy, A.axes))
-
 """
     CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...)
 
@@ -41,13 +18,12 @@ julia> CartesianMesh(1.0, (0,3), (1,4))
 ```
 """
 struct CartesianMesh{dim, T, V <: AbstractVector{T}} <: AbstractMesh{dim, T, dim}
-    axisarray::AxisArray{dim, T, V}
+    axes::NTuple{dim, V}
     h::T
     h_inv::T
 end
 
-get_axisarray(x::CartesianMesh) = x.axisarray
-Base.size(x::CartesianMesh) = size(get_axisarray(x))
+Base.size(mesh::CartesianMesh) = map(length, mesh.axes)
 Base.IndexStyle(::Type{<: CartesianMesh}) = IndexCartesian()
 
 """
@@ -55,11 +31,9 @@ Base.IndexStyle(::Type{<: CartesianMesh}) = IndexCartesian()
 
 Return the spacing of the mesh.
 """
-spacing(x::CartesianMesh) = x.h
-spacing_inv(x::CartesianMesh) = x.h_inv
+spacing(mesh::CartesianMesh) = mesh.h
+spacing_inv(mesh::CartesianMesh) = mesh.h_inv
 
-get_axes(x::CartesianMesh) = get_axes(x.axisarray)
-get_axes(x::CartesianMesh, i::Integer) = (@_propagate_inbounds_meta; get_axes(x)[i])
 @inline get_xmin(x::CartesianMesh{dim}) where {dim} = @inbounds x[oneunit(CartesianIndex{dim})]
 @inline get_xmax(x::CartesianMesh{dim}) where {dim} = @inbounds x[size(x)...]
 
@@ -73,13 +47,13 @@ volume(x::CartesianMesh) = prod(get_xmax(x) - get_xmin(x))
 function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
     @assert all(ax->step(ax)==step(first(axes)), axes)
     h = step(first(axes))
-    CartesianMesh(AxisArray(axes), h, inv(h))
+    CartesianMesh(axes, h, inv(h))
 end
 
 function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
     @assert all(x->x[1]<x[2], minmax)
-    axisarray = AxisArray(map(lims->Vector{T}(range(lims...; step=h)), minmax))
-    CartesianMesh(axisarray, T(h), T(inv(h)))
+    axes = map(lims->Vector{T}(range(lims...; step=h)), minmax)
+    CartesianMesh(axes, T(h), T(inv(h)))
 end
 CartesianMesh(h::Real, minmax::Tuple{Real, Real}...) = CartesianMesh(Float64, h, minmax...)
 
@@ -92,7 +66,7 @@ The extracted mesh retains the original origin and spacing.
 function extract(mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim}) where {dim}
     @assert all(x->x[1]<x[2], minmax)
     indices = CartesianIndices(ntuple(Val(dim)) do d
-        ax = get_axes(mesh, d)
+        ax = mesh.axes[d]
         xmin, xmax = minmax[d]
         imin =  findlast(x -> (x < xmin) || (x ≈ xmin), ax)
         imax = findfirst(x -> (x > xmax) || (x ≈ xmax), ax)
@@ -103,11 +77,11 @@ end
 
 @inline function Base.getindex(mesh::CartesianMesh{dim}, i::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(mesh, i...)
-    @inbounds Vec(get_axisarray(mesh)[i...])
+    @inbounds Vec(map(getindex, mesh.axes, i))
 end
 @inline function Base.getindex(mesh::CartesianMesh{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
     @boundscheck checkbounds(mesh, ranges...)
-    @inbounds CartesianMesh(get_axisarray(mesh)[ranges...], spacing(mesh), spacing_inv(mesh))
+    @inbounds CartesianMesh(map(getindex, mesh.axes, ranges), spacing(mesh), spacing_inv(mesh))
 end
 @inline function Base.getindex(mesh::CartesianMesh, indices::CartesianIndices)
     @_propagate_inbounds_meta
