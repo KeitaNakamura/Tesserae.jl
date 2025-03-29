@@ -139,13 +139,14 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
 end
 
 function P2G_expr(schedule::QuoteNode, grid, particles, mpvalues, space, p, body)
-    if isnothing(space)
-        body = quote
-            $(schedule.value != :nothing) && @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
-            for $p in Tesserae.eachparticleindex($particles, $mpvalues)
-                $body
-            end
+    default = quote
+        $(schedule.value != :nothing) && @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
+        for $p in Tesserae.eachparticleindex($particles, $mpvalues)
+            $body
         end
+    end
+    if isnothing(space)
+        body = default
     else
         @gensym blocks blk
         body = :(for $blk in $blocks
@@ -157,8 +158,12 @@ function P2G_expr(schedule::QuoteNode, grid, particles, mpvalues, space, p, body
             body = :(@threaded $schedule $body)
         end
         body = quote
-            for $blocks in Tesserae.threadsafe_blocks($space)
-                $body
+            if $space === nothing
+                $default
+            else
+                for $blocks in Tesserae.threadsafe_blocks($space)
+                    $body
+                end
             end
         end
     end
