@@ -1,7 +1,7 @@
 name = "Tesserae"
 uuid = "fd374396-9d9c-4d88-9aa5-37a7f6105aca"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
-version = "0.2.11"
+version = "0.2.12"
 
 [deps]
 FastClosures = "9aa1b823-49e4-5ca5-8b0f-3971ec8bab6a"
