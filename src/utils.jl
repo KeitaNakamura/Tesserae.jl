@@ -108,6 +108,57 @@ end
 
 const THREADED = Preferences.@load_preference("threaded_macro", true)
 
+abstract type Scheduler end
+struct BuiltinStaticScheduler  <: Scheduler end
+struct BuiltinDynamicScheduler <: Scheduler end
+struct BuiltinGreedyScheduler  <: Scheduler end
+struct DynamicScheduler        <: Scheduler end
+struct SequentialScheduler     <: Scheduler end
+
+get_scheduler(sch::Scheduler) = sch
+get_scheduler(sch::Symbol) = get_scheduler(Val(sch))
+get_scheduler(::Val{:builtin_static}) = BuiltinStaticScheduler()
+get_scheduler(::Val{:builtin_dynamic}) = BuiltinDynamicScheduler()
+get_scheduler(::Val{:builtin_greedy}) = BuiltinGreedyScheduler()
+get_scheduler(::Val{:dynamic}) = DynamicScheduler()
+get_scheduler(::Val{:nothing}) = SequentialScheduler()
+
+function tforeach(f, iter, scheduler=DynamicScheduler(); kwargs...)
+    if Threads.nthreads() > 1 && THREADED
+        _tforeach(f, iter, get_scheduler(scheduler); kwargs...)
+    else
+        foreach(f, iter)
+    end
+end
+
+function _tforeach(f, iter, ::BuiltinStaticScheduler)
+    Threads.@threads :static for i in iter
+        f(i)
+    end
+end
+function _tforeach(f, iter, ::BuiltinDynamicScheduler)
+    Threads.@threads :dynamic for i in iter
+        f(i)
+    end
+end
+function _tforeach(f, iter, ::BuiltinGreedyScheduler)
+    Threads.@threads :greedy for i in iter
+        f(i)
+    end
+end
+function _tforeach(f, iter, ::DynamicScheduler; ntasks::Integer=8*Threads.nthreads())
+    chunk_size = max(1, length(iter) ÷ ntasks)
+    tasks = map(Iterators.partition(iter, chunk_size)) do chunk
+        Threads.@spawn for i in chunk
+            f(i)
+        end
+    end
+    foreach(fetch, tasks)
+end
+function _tforeach(f, iter, ::SequentialScheduler)
+    foreach(f, iter)
+end
+
 macro threaded(schedule::QuoteNode, expr)
     threaded_expr(schedule, expr)
 end
@@ -117,32 +168,13 @@ end
 
 function threaded_expr(schedule::QuoteNode, expr::Expr)
     if Meta.isexpr(expr, :for)
-        if schedule.value == :static
-            quote
-                if Threads.nthreads() > 1 && $THREADED
-                    Threads.@threads $schedule $expr
-                else
-                    $expr
-                end
-            end |> esc
-        else
-            head = expr.args[1]
-            index = esc(head.args[1])
-            iter = esc(head.args[2])
-            body = esc(expr.args[2])
-            quote
-                if Threads.nthreads() > 1 && $THREADED
-                    iter = $iter
-                    chunk_size = max(1, length(iter) ÷ (8*Threads.nthreads()))
-                    tasks = map(Iterators.partition(iter, chunk_size)) do chunk
-                        Threads.@spawn for $index in chunk
-                            $body
-                        end
-                    end
-                    fetch.(tasks)
-                else
-                    $(esc(expr))
-                end
+        head = expr.args[1]
+        index = esc(head.args[1])
+        iter = esc(head.args[2])
+        body = esc(expr.args[2])
+        quote
+            Tesserae.tforeach($iter, $schedule) do $index
+                $body
             end
         end
     elseif Meta.isexpr(expr, :macrocall) &&
