@@ -109,18 +109,16 @@ end
 const THREADED = Preferences.@load_preference("threaded_macro", true)
 
 abstract type Scheduler end
-struct BuiltinStaticScheduler  <: Scheduler end
-struct BuiltinDynamicScheduler <: Scheduler end
-struct BuiltinGreedyScheduler  <: Scheduler end
-struct DynamicScheduler        <: Scheduler end
-struct SequentialScheduler     <: Scheduler end
+struct StaticScheduler     <: Scheduler end
+struct DynamicScheduler    <: Scheduler end
+struct GreedyScheduler     <: Scheduler end
+struct SequentialScheduler <: Scheduler end
 
 get_scheduler(sch::Scheduler) = sch
 get_scheduler(sch::Symbol) = get_scheduler(Val(sch))
-get_scheduler(::Val{:builtin_static}) = BuiltinStaticScheduler()
-get_scheduler(::Val{:builtin_dynamic}) = BuiltinDynamicScheduler()
-get_scheduler(::Val{:builtin_greedy}) = BuiltinGreedyScheduler()
+get_scheduler(::Val{:static})  = StaticScheduler()
 get_scheduler(::Val{:dynamic}) = DynamicScheduler()
+get_scheduler(::Val{:greedy})  = GreedyScheduler()
 get_scheduler(::Val{:nothing}) = SequentialScheduler()
 
 function tforeach(f, iter, scheduler=DynamicScheduler(); kwargs...)
@@ -131,29 +129,21 @@ function tforeach(f, iter, scheduler=DynamicScheduler(); kwargs...)
     end
 end
 
-function _tforeach(f, iter, ::BuiltinStaticScheduler)
+# Modify the following funcitons for custom multi-threading. For now, just use Threads.@threads.
+function _tforeach(f, iter, ::StaticScheduler)
     Threads.@threads :static for i in iter
         f(i)
     end
 end
-function _tforeach(f, iter, ::BuiltinDynamicScheduler)
+function _tforeach(f, iter, ::DynamicScheduler)
     Threads.@threads :dynamic for i in iter
         f(i)
     end
 end
-function _tforeach(f, iter, ::BuiltinGreedyScheduler)
+function _tforeach(f, iter, ::GreedyScheduler)
     Threads.@threads :greedy for i in iter
         f(i)
     end
-end
-function _tforeach(f, iter, ::DynamicScheduler; ntasks::Integer=8*Threads.nthreads())
-    chunk_size = max(1, length(iter) ÷ ntasks)
-    tasks = map(Iterators.partition(iter, chunk_size)) do chunk
-        Threads.@spawn for i in chunk
-            f(i)
-        end
-    end
-    foreach(fetch, tasks)
 end
 function _tforeach(f, iter, ::SequentialScheduler)
     foreach(f, iter)
