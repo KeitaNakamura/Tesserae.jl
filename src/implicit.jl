@@ -232,17 +232,17 @@ It is recommended to create global stiffness `K` using [`create_sparse_matrix`](
 macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_Matrix_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, nothing, equations)
 end
-macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
-    P2G_Matrix_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, space, equations)
+    P2G_Matrix_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, space, equations)
 end
 macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
     P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
 end
-macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
-    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
+    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, space, equations)
 end
 
-function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, blockspace, equations)
+function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
     grid, (i,j) = unpair2(grid_pair)
     particles, p = unpair(particles_pair)
     mpvalues, (ip,jp) = unpair2(mpvalues_pair)
@@ -319,13 +319,11 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
         body = :(@inbounds $body)
     end
 
-    body = P2G_expr(schedule, grid, particles, mpvalues, blockspace, p, body)
-
     body = quote
         $(assertions...)
         $(init_global_matrices...)
         $fulldofs = LinearIndices((size($(first(global_matrices)),1)÷length($grid), size($grid)...))
-        $body
+        $P2G((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), Val($schedule), $grid, $particles, $mpvalues, $space)
     end
 
     if !isempty(grid_sums)

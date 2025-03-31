@@ -4,6 +4,7 @@ authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
 version = "0.2.11"
 
 [deps]
+FastClosures = "9aa1b823-49e4-5ca5-8b0f-3971ec8bab6a"
 PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
@@ -16,6 +17,7 @@ Tensorial = "98f94333-fa9f-48a9-ad80-1c66397b2b38"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
+FastClosures = "0.3"
 PoissonDiskSampling = "0.11"
 Preferences = "1"
 ProgressMeter = "1.8"

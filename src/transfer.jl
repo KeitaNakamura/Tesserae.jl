@@ -134,40 +134,25 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     
     quote
         $(init_gridprops...)
-        $(P2G_expr(schedule, grid, particles, mpvalues, space, p, body))
+        $P2G((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), Val($schedule), $grid, $particles, $mpvalues, $space)
     end
 end
 
-function P2G_expr(schedule::QuoteNode, grid, particles, mpvalues, space, p, body)
-    default = quote
-        $(schedule.value != :nothing) && @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
-        for $p in Tesserae.eachparticleindex($particles, $mpvalues)
-            $body
-        end
-    end
-    if isnothing(space)
-        body = default
-    else
-        @gensym blocks blk
-        body = :(for $blk in $blocks
-                     for $p in $space[$blk]
-                         $body
-                     end
-                 end)
-        if schedule.value != :nothing
-            body = :(@threaded $schedule $body)
-        end
-        body = quote
-            if $space === nothing
-                $default
-            else
-                for $blocks in Tesserae.threadsafe_blocks($space)
-                    $body
-                end
+function P2G(f, ::Val{scheduler}, grid, particles, mpvalues, space::BlockSpace) where {scheduler}
+    for blocks in threadsafe_blocks(space)
+        tforeach(blocks, scheduler) do blk
+            @_inline_meta
+            for p in space[blk]
+                @inline f(grid, particles, mpvalues, p)
             end
         end
     end
-    body
+end
+function P2G(f, ::Val{scheduler}, grid, particles, mpvalues, ::Nothing) where {scheduler}
+    scheduler == :nothing || @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
+    for p in eachparticleindex(particles, mpvalues)
+        @inline f(grid, particles, mpvalues, p)
+    end
 end
 
 function P2G_nosum_macro(schedule, grid_pair, nosum_equations::Vector)
@@ -330,7 +315,6 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     body2 = G2P_nosum_macro(particles_pair, nosum_equations)
 
     body = quote
-        $check_arguments_for_G2P($grid, $particles, $mpvalues)
         $body1
         $body2
     end
@@ -340,26 +324,20 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     end
 
     if isallunderscore(mpvalues)
-        iterator = :(eachindex($particles))
-    else
-        iterator = :(Tesserae.eachparticleindex($particles, $mpvalues))
+        mpvalues = nothing
     end
-
-    if schedule.value == :nothing
-        body = quote
-            for $p in $iterator
-                $body
-            end
-        end
-    else
-        body = quote
-            @threaded $schedule for $p in $iterator
-                $body
-            end
-        end
+    body = quote
+        $check_arguments_for_G2P($grid, $particles, $mpvalues)
+        $G2P((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), Val($schedule), $grid, $particles, $mpvalues)
     end
 
     esc(body)
+end
+
+function G2P(f, ::Val{scheduler}, grid, particles, mpvalues) where {scheduler}
+    tforeach(eachparticleindex(particles, mpvalues), scheduler) do p
+        @inline f(grid, particles, mpvalues, p)
+    end
 end
 
 function G2P_sum_macro(grid_pair, particles_pair, mpvalues_pair, sum_equations::Vector)
@@ -496,6 +474,9 @@ findarrays_from_index!(set::Set{Expr}, index::Symbol, expr) = nothing
 
 function eachparticleindex(particles::AbstractArray, mpvalues::AbstractArray{<: MPValue})
     @assert length(particles) ≤ length(mpvalues)
+    eachindex(particles)
+end
+function eachparticleindex(particles::AbstractArray, ::Nothing)
     eachindex(particles)
 end
 
