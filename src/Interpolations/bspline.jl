@@ -11,7 +11,7 @@ gridspan(::AbstractBSpline{Degree{5}}) = 6
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
-    offset = _neighboringnodes_offset(spline)
+    offset = _neighboringnodes_offset(eltype(x), spline)
     r = gridspan(spline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
     stop = @. start + r
@@ -19,11 +19,11 @@ gridspan(::AbstractBSpline{Degree{5}}) = 6
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
-@inline _neighboringnodes_offset(::AbstractBSpline{Degree{1}}) = 0.0
-@inline _neighboringnodes_offset(::AbstractBSpline{Degree{2}}) = 0.5
-@inline _neighboringnodes_offset(::AbstractBSpline{Degree{3}}) = 1.0
-@inline _neighboringnodes_offset(::AbstractBSpline{Degree{4}}) = 1.5
-@inline _neighboringnodes_offset(::AbstractBSpline{Degree{5}}) = 2.0
+@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{1}}) where {T} = T(0.0)
+@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{2}}) where {T} = T(0.5)
+@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{3}}) where {T} = T(1.0)
+@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{4}}) where {T} = T(1.5)
+@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{5}}) where {T} = T(2.0)
 
 @inline value(spline::AbstractBSpline, pt, mesh::CartesianMesh, i) = only(values(Order(0), spline, pt, mesh, i))
 

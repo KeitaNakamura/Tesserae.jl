@@ -320,10 +320,11 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
     end
 
     body = quote
+        $check_arguments_for_P2G_Matrix($grid, $particles, $mpvalues, $space)
         $(assertions...)
         $(init_global_matrices...)
         $fulldofs = LinearIndices((size($(first(global_matrices)),1)÷length($grid), size($grid)...))
-        $P2G((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), Val($schedule), $grid, $particles, $mpvalues, $space)
+        $P2G((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), $get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $space)
     end
 
     if !isempty(grid_sums)
@@ -337,6 +338,11 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
     end
 
     esc(body)
+end
+
+function check_arguments_for_P2G_Matrix(grid, particles, mpvalues, space)
+    check_arguments_for_P2G(grid, particles, mpvalues, space)
+    @assert get_device(grid) isa CPUDevice
 end
 
 function unpair2(expr::Expr)

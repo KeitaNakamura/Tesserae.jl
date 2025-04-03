@@ -22,6 +22,12 @@ import Random
 import Preferences
 import ProgressMeter
 
+# GPU
+using GPUArraysCore
+using KernelAbstractions
+using Adapt
+using Atomix
+
 export
 # utils
     fillzero!,
@@ -84,8 +90,12 @@ export
     openpvd,
     closevtk,
     closevtm,
-    closepvd
+    closepvd,
+# GPU
+    cpu,
+    gpu
 
+include("devices.jl")
 include("utils.jl")
 
 include("shapes.jl")
@@ -111,5 +121,7 @@ include("transfer.jl")
 include("implicit.jl")
 
 include("vtk.jl")
+
+include("gpu.jl")
 
 end # module Tesserae

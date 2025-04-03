@@ -111,7 +111,7 @@ julia> sum(eachindex(nodeindices)) do ip # linear field reproduction
 true
 ```
 """
-struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any, 0}}
+struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any}}
     it::It
     prop::Prop
     indices::Indices
@@ -226,7 +226,7 @@ function _generate_mpvalues(::Type{T}, it, mesh::AbstractMesh{dim}, dims::Dims{N
     Prop = typeof(prop)
     Indices = typeof(indices)
     ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
-    MPValueArray{It, Prop, Indices, ElType, N}(it, prop, indices)
+    MPValueArray{It, Prop, Indices, ElType, N}(it, prop, indices) |> get_device(mesh)
 end
 
 _todims(x::Tuple{Vararg{Int}}) = x
@@ -258,7 +258,7 @@ end
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        MPValue(it, NamedTuple{names}(tuple($(exps...))), view(indices, I...))
+        MPValue(it, NamedTuple{names}(tuple($(exps...))), view(indices, map(:, I, I)...))
     end
 end
 
@@ -305,9 +305,40 @@ function update!(mp::MPValue, pt, mesh::AbstractMesh)
     mp
 end
 function update!(mp::MPValue, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
-    @debug @assert size(mesh) == size(filter)
+    @assert size(mesh) == size(filter)
     it = interpolation(mp)
     neighboringnodes_storage(mp)[] = neighboringnodes(it, pt, mesh)
     update_property!(mp, it, pt, mesh, filter)
     mp
+end
+function update_property!(mp::MPValue, it, pt, mesh::AbstractMesh, filter)
+    @assert filter isa Trues
+    update_property!(mp, it, pt, mesh)
+end
+
+# accelerations
+
+@kernel function gpukernel_update_mpvalue(mpvalues, @Const(particles), @Const(mesh), @Const(filter))
+    p = @index(Global)
+    update!(mpvalues[p], LazyRow(particles, p), mesh, filter)
+end
+
+function update!(mpvalues::MPValueArray, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray=Trues(size(mesh)))
+    @assert length(mpvalues) == length(particles)
+
+    # check backend
+    backend = get_backend(mpvalues)
+    @assert get_backend(mpvalues) == get_backend(particles) == get_backend(mesh) == backend
+    @assert filter isa Trues || get_backend(filter) == backend
+
+    if backend isa CPU
+        @threaded for p in 1:length(particles)
+            @inbounds update!(mpvalues[p], LazyRow(particles, p), mesh, filter)
+        end
+    else
+        kernel = gpukernel_update_mpvalue(backend, 256)
+        kernel(mpvalues, particles, mesh, filter; ndrange=length(particles))
+        synchronize(backend)
+    end
+    mpvalues
 end

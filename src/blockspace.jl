@@ -1,7 +1,7 @@
 const BLOCKFACTOR = unsigned(Preferences.@load_preference("block_factor", 3)) # 2^n
 
-struct BlockSpace{dim, L <: CartesianMesh{dim}, ElType} <: AbstractArray{ElType, dim}
-    mesh::L
+struct BlockSpace{dim, Mesh <: CartesianMesh{dim}, ElType} <: AbstractArray{ElType, dim}
+    mesh::Mesh
     particleindices::Vector{Int}
     stops::Array{Int, dim}
     nparticles_chunks::Vector{Array{Int, dim}}
