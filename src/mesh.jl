@@ -66,8 +66,9 @@ CartesianMesh(h::Real, minmax::Tuple{Real, Real}...) = CartesianMesh(Float64, h,
 Extract a portion of the `mesh`.
 The extracted mesh retains the original origin and spacing.
 """
-function extract(mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim}) where {dim}
+function extract(given_mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim}) where {dim}
     @assert all(x->x[1]<x[2], minmax)
+    mesh = given_mesh |> cpu
     indices = CartesianIndices(ntuple(Val(dim)) do d
         ax = mesh.axes[d]
         xmin, xmax = minmax[d]
@@ -75,7 +76,7 @@ function extract(mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim
         imax = findfirst(x -> (x > xmax) || (x ≈ xmax), ax)
         imin:imax
     end)
-    mesh[indices]
+    mesh[indices] |> get_device(given_mesh)
 end
 
 @inline function Base.getindex(mesh::CartesianMesh{dim}, i::Vararg{Integer, dim}) where {dim}
