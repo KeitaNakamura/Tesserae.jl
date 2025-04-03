@@ -1,3 +1,56 @@
+###############
+# HybridArray #
+###############
+
+# HybridArray is used to handle atomic operations on the GPU.
+# Since atomic operations do not support custom bitstypes such as `Tensor`,
+# the data is flattened into a HybridArray.
+
+struct HybridArray{T, N, A <: AbstractArray{T, N}, B <: AbstractArray, D <: AbstractDevice} <: AbstractArray{T, N}
+    parent::A
+    flat::B
+    device::D # stored in advance to avoid the overhead of calling `get_device` in a loop.
+end
+
+Base.parent(A::HybridArray) = A.parent
+flatten(A::HybridArray) =  A.flat
+get_device(A::HybridArray) = A.device
+
+Base.size(A::HybridArray) = size(parent(A))
+Base.IndexStyle(::Type{<: HybridArray{<: Any, <: Any, A}}) where {A} = IndexStyle(A)
+
+@inline function Base.getindex(A::HybridArray, I...)
+    @boundscheck checkbounds(parent(A), I...)
+    @inbounds parent(A)[I...]
+end
+@inline function Base.setindex!(A::HybridArray, v, I...)
+    @boundscheck checkbounds(parent(A), I...)
+    @inbounds parent(A)[I...] = v
+    A
+end
+
+@inline add!(A::HybridArray{T}, i, v::T) where {T} = (@_propagate_inbounds_meta; _add!(get_device(A), A, i, v))
+@inline _add!(::CPUDevice, A::HybridArray, i, v) = (@_propagate_inbounds_meta; A[i] += v)
+@inline function _add!(::GPUDevice, A::HybridArray, i, v::Number)
+    @_propagate_inbounds_meta
+    Atomix.@atomic parent(A)[i] += v
+end
+@inline function _add!(::GPUDevice, A::HybridArray, i, v::Union{Tensor, StaticArray})
+    @_propagate_inbounds_meta
+    data = Tuple(v)
+    for j in eachindex(data)
+        Atomix.@atomic flatten(A)[j,i] += data[j]
+    end
+end
+
+flatten(A::AbstractArray{T}) where {T <: Number} = reshape(A, 1, size(A)...)
+flatten(A::AbstractArray{T}) where {T <: Tensor} = reinterpret(reshape, eltype(T), A)
+
+hybrid(A::AbstractArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
+hybrid(A::SpArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
+hybrid(A::StructArray) = StructArray(map(hybrid, StructArrays.components(A)))
+hybrid(mesh::AbstractMesh) = mesh
+
 """
     @P2G grid=>i particles=>p mpvalues=>ip [space] begin
         equations...
@@ -115,7 +168,7 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
         push!(sum_names, lhs.args[1].args[2].value) # extract `m` for `grid.m[i]`
     end
 
-    foreach(ex->ex.head=:(+=), sum_equations)
+    sum_equations = map(eq -> :($add!($(eq.args[1].args...), $(eq.args[2]))), sum_equations)
 
     body = quote
         $(vars[2]...)
@@ -134,11 +187,20 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     
     quote
         $(init_gridprops...)
-        $P2G((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), Val($schedule), $grid, $particles, $mpvalues, $space)
+        $P2G((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), $get_device($grid), Val($schedule), $hybrid($grid), $particles, $mpvalues, $space)
     end
 end
 
-function P2G(f, ::Val{scheduler}, grid, particles, mpvalues, space::BlockSpace) where {scheduler}
+# CPU: sequential
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues, ::Nothing) where {scheduler}
+    scheduler == :nothing || @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
+    for p in eachparticleindex(particles, mpvalues)
+        @inline f(grid, particles, mpvalues, p)
+    end
+end
+
+# CPU: multi-threading
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues, space::BlockSpace) where {scheduler}
     for blocks in threadsafe_blocks(space)
         tforeach(blocks, scheduler) do blk
             @_inline_meta
@@ -148,11 +210,18 @@ function P2G(f, ::Val{scheduler}, grid, particles, mpvalues, space::BlockSpace) 
         end
     end
 end
-function P2G(f, ::Val{scheduler}, grid, particles, mpvalues, ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
-    for p in eachparticleindex(particles, mpvalues)
-        @inline f(grid, particles, mpvalues, p)
-    end
+
+# GPU
+@kernel function gpukernel_P2G(f, grid, @Const(particles), @Const(mpvalues))
+    p = @index(Global)
+    f(grid, particles, mpvalues, p)
+end
+function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, mpvalues, ::Nothing) where {scheduler}
+    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    backend = get_backend(device)
+    kernel = gpukernel_P2G(backend, 256)
+    kernel(f, grid, particles, mpvalues; ndrange=length(particles))
+    synchronize(backend)
 end
 
 function P2G_nosum_macro(schedule, grid_pair, nosum_equations::Vector)
@@ -224,6 +293,9 @@ function check_arguments_for_P2G(grid, particles, mpvalues, space)
         @assert blocksize(grid) == size(space)
         sum(length, space) == 0 && error("@P2G: BlockSpace not activated")
     end
+    # check device
+    device = get_device(grid)
+    @assert get_device(particles) == get_device(mpvalues) == device
 end
 
 """
@@ -328,16 +400,30 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     end
     body = quote
         $check_arguments_for_G2P($grid, $particles, $mpvalues)
-        $G2P((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), Val($schedule), $grid, $particles, $mpvalues)
+        $G2P((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), $get_device($grid), Val($schedule), $grid, $particles, $mpvalues)
     end
 
     esc(body)
 end
 
-function G2P(f, ::Val{scheduler}, grid, particles, mpvalues) where {scheduler}
+# CPU: sequential & multi-threading
+function G2P(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues) where {scheduler}
     tforeach(eachparticleindex(particles, mpvalues), scheduler) do p
         @inline f(grid, particles, mpvalues, p)
     end
+end
+
+# GPU
+@kernel function gpukernel_G2P(f, @Const(grid), particles, @Const(mpvalues))
+    p = @index(Global)
+    f(grid, particles, mpvalues, p)
+end
+function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, mpvalues) where {scheduler}
+    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    backend = get_backend(device)
+    kernel = gpukernel_G2P(backend, 256)
+    kernel(f, grid, particles, mpvalues; ndrange=length(particles))
+    synchronize(backend)
 end
 
 function G2P_sum_macro(grid_pair, particles_pair, mpvalues_pair, sum_equations::Vector)
@@ -503,4 +589,7 @@ function check_arguments_for_G2P(grid, particles, mpvalues)
         end
     end
     @assert length(particles) ≤ length(mpvalues)
+    # check device
+    device = get_device(grid)
+    @assert get_device(particles) == get_device(mpvalues) == device
 end

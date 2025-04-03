@@ -127,16 +127,18 @@ julia> particles.F
 function generate_particles(
         ::Type{ParticleProp}, mesh::CartesianMesh;
         alg::SamplingAlgorithm=PoissonDiskSampling()) where {ParticleProp}
-    points = generate_points(alg, mesh)
+    points = generate_points(alg, mesh |> cpu)
     particles = _generate_particles(ParticleProp, points)
+    particles |> get_device(mesh)
     # _reorder_particles!(particles, mesh)
 end
 
 function generate_particles(
         ::Type{ParticleProp}, mesh::UnstructuredMesh;
         alg::SamplingAlgorithm=CellSampling(quadpoints(cellshape(mesh)))) where {ParticleProp}
-    points = generate_points(alg, mesh)
+    points = generate_points(alg, mesh |> cpu)
     particles = _generate_particles(ParticleProp, points)
+    particles |> get_device(mesh)
     # _reorder_particles!(particles, mesh)
 end
 

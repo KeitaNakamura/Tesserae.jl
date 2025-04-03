@@ -12,6 +12,7 @@ Tesserae is a toolkit for implementing the material point method in Julia. It is
 * Multithreading support
 * Exporting VTK files for visualization
 * Unified framework for FEM (experimental)
+* GPU computation with CUDA and Metal (experimental)
 
 ## Installation
 
