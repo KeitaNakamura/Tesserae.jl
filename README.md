@@ -44,6 +44,7 @@ The following examples are taken from the tutorials.
 Some functionalities are inspired from the following packages:
 
 * [Ferrite.jl](https://github.com/Ferrite-FEM/Ferrite.jl)
+* [Flux.jl](https://github.com/FluxML/Flux.jl)
 * [taichi_mpm](https://github.com/yuanming-hu/taichi_mpm)
 
 ## Citation
