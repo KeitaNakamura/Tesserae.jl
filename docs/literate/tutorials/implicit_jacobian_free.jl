@@ -10,8 +10,8 @@
 
 using Tesserae
 
-using IterativeSolvers: gmres!
-using LinearMaps: LinearMap
+using Krylov: gmres
+using LinearOperators: LinearOperator
 
 function main()
 
@@ -137,7 +137,7 @@ function main()
         U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
         compute_residual(U) = residual(U, state)
         compute_jacobian(U) = jacobian(U, state)
-        Tesserae.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)->gmres!(x,A,b))
+        Tesserae.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)->copy!(x,gmres(A,b)[1]))
 
         ## Grid dispacement, velocity and acceleration have been updated during Newton's iterations
         @G2P grid=>i particles=>p mpvalues=>ip begin
@@ -197,7 +197,7 @@ function jacobian(U::AbstractVector, state)
     ## `U` is acutally not used because the stiffness tensor is already calculated
     ## when computing the residual vector.
     fillzero!(grid.δu)
-    LinearMap(ndofs(dofmap)) do JδU, δU
+    function mul!(JδU, δU)
         dofmap(grid.δu) .= δU
 
         @G2P grid=>i particles=>p mpvalues=>ip begin
@@ -210,6 +210,7 @@ function jacobian(U::AbstractVector, state)
 
         @. JδU = δU + β*Δt^2 * $dofmap(grid.f) * $dofmap(grid.m⁻¹)
     end
+    LinearOperator(Float64, ndofs(dofmap), ndofs(dofmap), false, false, mul!)
 end
 
 using Test                                #src
