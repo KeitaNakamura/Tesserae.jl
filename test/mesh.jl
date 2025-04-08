@@ -61,4 +61,27 @@ end
     @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2)))) == Tesserae.Line2()
     @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2), (0,3)))) == Tesserae.Quad4()
     @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2), (0,3), (0,4)))) == Tesserae.Hex8()
+
+    lims = ((0,2), (-1,3), (2,5))
+    for dim in 1:3
+        if dim == 1
+            shapes = (Tesserae.Line2(), Tesserae.Line3())
+        elseif dim == 2
+            shapes = (Tesserae.Quad4(), Tesserae.Quad9(), Tesserae.Tri3(), Tesserae.Tri6())
+        elseif dim == 3
+            shapes = (Tesserae.Hex8(), Tesserae.Hex27(), Tesserae.Tet4(), Tesserae.Tet10())
+        end
+        for shape in shapes
+            ParticleProp = @NamedTuple begin
+                x      :: Vec{dim, Float64}
+                detJdV :: Float64
+            end
+            cmesh = CartesianMesh(0.5, lims[1:dim]...)
+            mesh = UnstructuredMesh(shape, cmesh)
+            particles = generate_particles(ParticleProp, mesh)
+            mpvalues = generate_mpvalues(mesh, size(particles))
+            feupdate!(mpvalues, particles.detJdV, mesh)
+            @test sum(particles.detJdV) ≈ volume(cmesh)
+        end
+    end
 end

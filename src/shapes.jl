@@ -29,6 +29,8 @@ abstract type Line <: Shape end
 """
 struct Line2 <: Line end
 
+get_order(::Line2) = Order(1)
+
 function localnodes(::Type{T}, ::Line2) where {T}
     SVector{2, Vec{1, T}}(
         (-1.0,),
@@ -66,6 +68,8 @@ end
 ```
 """
 struct Line3 <: Line end
+
+get_order(::Line3) = Order(2)
 
 function localnodes(::Type{T}, ::Line3) where {T}
     SVector{3, Vec{1, T}}(
@@ -108,6 +112,8 @@ end
 ```
 """
 struct Line4 <: Line end
+
+get_order(::Line4) = Order(3)
 
 function localnodes(::Type{T}, ::Line4) where {T}
     SVector{4, Vec{1, T}}(
@@ -165,6 +171,8 @@ abstract type Quad <: Shape end
 """
 struct Quad4 <: Quad end
 
+get_order(::Quad4) = Order(1)
+
 function localnodes(::Type{T}, ::Quad4) where {T}
     SVector{4, Vec{2, T}}(
         (-1.0, -1.0),
@@ -215,6 +223,8 @@ end
 ```
 """
 struct Quad9 <: Quad end
+
+get_order(::Quad9) = Order(2)
 
 function localnodes(::Type{T}, ::Quad9) where {T}
     SVector{9, Vec{2, T}}(
@@ -300,6 +310,8 @@ abstract type Hex <: Shape end
 """
 struct Hex8 <: Hex end
 
+get_order(::Hex8) = Order(1)
+
 function localnodes(::Type{T}, ::Hex8) where {T}
     SVector{8, Vec{3, T}}(
         (-1.0, -1.0, -1.0),
@@ -365,6 +377,8 @@ end
 ```
 """
 struct Hex27 <: Hex end
+
+get_order(::Hex27) = Order(2)
 
 function localnodes(::Type{T}, ::Hex27) where {T}
     SVector{27, Vec{3, T}}(
@@ -520,6 +534,8 @@ abstract type Tri <: Shape end
 """
 struct Tri3 <: Tri end
 
+get_order(::Tri3) = Order(1)
+
 function localnodes(::Type{T}, ::Tri3) where {T}
     SVector{3, Vec{2, T}}(
         (0.0, 0.0),
@@ -560,6 +576,8 @@ end
 ```
 """
 struct Tri6 <: Tri end
+
+get_order(::Tri6) = Order(2)
 
 function localnodes(::Type{T}, ::Tri6) where {T}
     SVector{6, Vec{2, T}}(
@@ -629,6 +647,8 @@ abstract type Tet <: Shape end
 """
 struct Tet4 <: Tet end
 
+get_order(::Tet4) = Order(1)
+
 function localnodes(::Type{T}, ::Tet4) where {T}
     SVector{4, Vec{3, T}}(
         (0.0, 0.0, 0.0),
@@ -679,6 +699,8 @@ end
 ```
 """
 struct Tet10 <: Tet end
+
+get_order(::Tet10) = Order(2)
 
 function localnodes(::Type{T}, ::Tet10) where {T}
     SVector{10, Vec{3, T}}(
