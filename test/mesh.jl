@@ -67,9 +67,9 @@ end
         if dim == 1
             shapes = (Tesserae.Line2(), Tesserae.Line3())
         elseif dim == 2
-            shapes = (Tesserae.Quad4(), Tesserae.Quad9(), Tesserae.Tri3(), Tesserae.Tri6())
+            shapes = (Tesserae.Quad4(), Tesserae.Quad8(), Tesserae.Quad9(), Tesserae.Tri3(), Tesserae.Tri6())
         elseif dim == 3
-            shapes = (Tesserae.Hex8(), Tesserae.Hex27(), Tesserae.Tet4(), Tesserae.Tet10())
+            shapes = (Tesserae.Hex8(), Tesserae.Hex20(), Tesserae.Hex27(), Tesserae.Tet4(), Tesserae.Tet10())
         end
         for shape in shapes
             ParticleProp = @NamedTuple begin
