@@ -216,49 +216,48 @@ default_cellshape(::CartesianMesh{3}) = Hex8()
 function UnstructuredMesh(shape::Shape, mesh::CartesianMesh)
     mesh′ = adapt_mesh(get_order(shape), mesh)
 
-    cells = cellnodes_cartesian(get_order(shape), size(mesh).-1)
-    nodeindices_linear = zeros(Int, size(mesh′)) # handle Serendipity cell
-    for cell in cells
-        for inds in _shape_cellnodes(shape, cell)
-            nodeindices_linear[inds] .= 1
+    cellranges = _cellnodes_ranges(get_order(shape), size(mesh).-1)
+    nodeindices = zeros(Int, size(mesh′)) # handle Serendipity cell
+    for range in cellranges
+        for conn in _cellnodes_connectivities(shape, range)
+            nodeindices[conn] .= 1
         end
     end
     count = 0
-    for i in eachindex(nodeindices_linear)
-        if nodeindices_linear[i] != 0
-            nodeindices_linear[i] = (count+=1)
+    for i in eachindex(nodeindices)
+        if nodeindices[i] != 0
+            nodeindices[i] = (count+=1)
         end
     end
 
-    allnodes = mesh′[findall(>(0), nodeindices_linear)]
-    nodeindices = eachindex(allnodes)
+    allnodes = mesh′[findall(>(0), nodeindices)]
 
     cellnodeindices = SVector{nlocalnodes(shape), Int}[]
-    sizehint!(cellnodeindices, length(cells))
-    for cell in cells
-        for inds in _shape_cellnodes(shape, cell)
-            conn = SVector(nodeindices_linear[inds])
-            @assert all(>(0), conn)
-            push!(cellnodeindices, conn)
+    sizehint!(cellnodeindices, length(cellranges))
+    for range in cellranges
+        for conn in _cellnodes_connectivities(shape, range)
+            inds = SVector(nodeindices[conn])
+            @assert all(>(0), inds)
+            push!(cellnodeindices, inds)
         end
     end
 
-    UnstructuredMesh(shape, allnodes, cellnodeindices, collect(nodeindices))
+    UnstructuredMesh(shape, allnodes, cellnodeindices, collect(eachindex(allnodes)))
 end
-cellnodes_cartesian(::Order{1}, cellsize::Dims) = maparray(I -> I:(I+oneunit(I)), CartesianIndices(cellsize))
-cellnodes_cartesian(::Order{2}, cellsize::Dims) = maparray(I -> (2I-oneunit(I)):(2I+oneunit(I)), CartesianIndices(cellsize))
-_shape_cellnodes(::Line2, CI::CartesianIndices{1}) = (SVector(CI[1], CI[2]),)
-_shape_cellnodes(::Line3, CI::CartesianIndices{1}) = (SVector(CI[1], CI[3], CI[2]),)
-_shape_cellnodes(::Quad4, CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[2,1], CI[2,2], CI[1,2]),)
-_shape_cellnodes(::Quad8, CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[3,1], CI[3,3], CI[1,3], CI[2,1], CI[3,2], CI[2,3], CI[1,2]),)
-_shape_cellnodes(::Quad9, CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[3,1], CI[3,3], CI[1,3], CI[2,1], CI[3,2], CI[2,3], CI[1,2], CI[2,2]),)
-_shape_cellnodes(::Hex8,  CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[2,1,1], CI[2,2,1], CI[1,2,1], CI[1,1,2], CI[2,1,2], CI[2,2,2], CI[1,2,2]),)
-_shape_cellnodes(::Hex20, CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[1,3,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,3,3], CI[2,1,1], CI[1,2,1], CI[1,1,2], CI[3,2,1], CI[3,1,2], CI[2,3,1], CI[3,3,2], CI[1,3,2], CI[2,1,3], CI[1,2,3], CI[3,2,3], CI[2,3,3]),)
-_shape_cellnodes(::Hex27, CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[1,3,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,3,3], CI[2,1,1], CI[1,2,1], CI[1,1,2], CI[3,2,1], CI[3,1,2], CI[2,3,1], CI[3,3,2], CI[1,3,2], CI[2,1,3], CI[1,2,3], CI[3,2,3], CI[2,3,3], CI[2,2,1], CI[2,1,2], CI[1,2,2], CI[3,2,2], CI[2,3,2], CI[2,2,3], CI[2,2,2]),)
-_shape_cellnodes(::Tri3,  CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[2,1], CI[1,2]), SVector(CI[2,2], CI[1,2], CI[2,1]))
-_shape_cellnodes(::Tri6,  CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[3,1], CI[1,3], CI[2,1], CI[1,2], CI[2,2]), SVector(CI[3,3], CI[1,3], CI[3,1], CI[2,3], CI[3,2], CI[2,2]))
-_shape_cellnodes(::Tet4,  CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[2,1,1], CI[2,2,1], CI[2,2,2]), SVector(CI[1,1,1], CI[2,1,2], CI[2,1,1], CI[2,2,2]), SVector(CI[1,1,1], CI[2,2,1], CI[1,2,1], CI[2,2,2]), SVector(CI[1,1,1], CI[1,2,1], CI[1,2,2], CI[2,2,2]), SVector(CI[1,1,1], CI[1,2,2], CI[1,1,2], CI[2,2,2]), SVector(CI[1,1,1], CI[1,1,2], CI[2,1,2], CI[2,2,2]))
-_shape_cellnodes(::Tet10, CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[3,3,3], CI[2,1,1], CI[2,2,1], CI[2,2,2], CI[3,2,1], CI[3,3,2], CI[3,2,2]), SVector(CI[1,1,1], CI[3,1,3], CI[3,1,1], CI[3,3,3], CI[2,1,2], CI[2,1,1], CI[2,2,2], CI[3,1,2], CI[3,2,2], CI[3,2,3]), SVector(CI[1,1,1], CI[3,3,1], CI[1,3,1], CI[3,3,3], CI[2,2,1], CI[1,2,1], CI[2,2,2], CI[2,3,1], CI[2,3,2], CI[3,3,2]), SVector(CI[1,1,1], CI[1,3,1], CI[1,3,3], CI[3,3,3], CI[1,2,1], CI[1,2,2], CI[2,2,2], CI[1,3,2], CI[2,3,3], CI[2,3,2]), SVector(CI[1,1,1], CI[1,3,3], CI[1,1,3], CI[3,3,3], CI[1,2,2], CI[1,1,2], CI[2,2,2], CI[1,2,3], CI[2,2,3], CI[2,3,3]), SVector(CI[1,1,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,1,2], CI[2,1,2], CI[2,2,2], CI[2,1,3], CI[3,2,3], CI[2,2,3]))
+_cellnodes_ranges(::Order{1}, cellsize::Dims) = maparray(I -> I:(I+oneunit(I)), CartesianIndices(cellsize))
+_cellnodes_ranges(::Order{2}, cellsize::Dims) = maparray(I -> (2I-oneunit(I)):(2I+oneunit(I)), CartesianIndices(cellsize))
+_cellnodes_connectivities(::Line2, CI::CartesianIndices{1}) = (SVector(CI[1], CI[2]),)
+_cellnodes_connectivities(::Line3, CI::CartesianIndices{1}) = (SVector(CI[1], CI[3], CI[2]),)
+_cellnodes_connectivities(::Quad4, CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[2,1], CI[2,2], CI[1,2]),)
+_cellnodes_connectivities(::Quad8, CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[3,1], CI[3,3], CI[1,3], CI[2,1], CI[3,2], CI[2,3], CI[1,2]),)
+_cellnodes_connectivities(::Quad9, CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[3,1], CI[3,3], CI[1,3], CI[2,1], CI[3,2], CI[2,3], CI[1,2], CI[2,2]),)
+_cellnodes_connectivities(::Hex8,  CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[2,1,1], CI[2,2,1], CI[1,2,1], CI[1,1,2], CI[2,1,2], CI[2,2,2], CI[1,2,2]),)
+_cellnodes_connectivities(::Hex20, CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[1,3,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,3,3], CI[2,1,1], CI[1,2,1], CI[1,1,2], CI[3,2,1], CI[3,1,2], CI[2,3,1], CI[3,3,2], CI[1,3,2], CI[2,1,3], CI[1,2,3], CI[3,2,3], CI[2,3,3]),)
+_cellnodes_connectivities(::Hex27, CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[1,3,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,3,3], CI[2,1,1], CI[1,2,1], CI[1,1,2], CI[3,2,1], CI[3,1,2], CI[2,3,1], CI[3,3,2], CI[1,3,2], CI[2,1,3], CI[1,2,3], CI[3,2,3], CI[2,3,3], CI[2,2,1], CI[2,1,2], CI[1,2,2], CI[3,2,2], CI[2,3,2], CI[2,2,3], CI[2,2,2]),)
+_cellnodes_connectivities(::Tri3,  CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[2,1], CI[1,2]), SVector(CI[2,2], CI[1,2], CI[2,1]))
+_cellnodes_connectivities(::Tri6,  CI::CartesianIndices{2}) = (SVector(CI[1,1], CI[3,1], CI[1,3], CI[2,1], CI[1,2], CI[2,2]), SVector(CI[3,3], CI[1,3], CI[3,1], CI[2,3], CI[3,2], CI[2,2]))
+_cellnodes_connectivities(::Tet4,  CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[2,1,1], CI[2,2,1], CI[2,2,2]), SVector(CI[1,1,1], CI[2,1,2], CI[2,1,1], CI[2,2,2]), SVector(CI[1,1,1], CI[2,2,1], CI[1,2,1], CI[2,2,2]), SVector(CI[1,1,1], CI[1,2,1], CI[1,2,2], CI[2,2,2]), SVector(CI[1,1,1], CI[1,2,2], CI[1,1,2], CI[2,2,2]), SVector(CI[1,1,1], CI[1,1,2], CI[2,1,2], CI[2,2,2]))
+_cellnodes_connectivities(::Tet10, CI::CartesianIndices{3}) = (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[3,3,3], CI[2,1,1], CI[2,2,1], CI[2,2,2], CI[3,2,1], CI[3,3,2], CI[3,2,2]), SVector(CI[1,1,1], CI[3,1,3], CI[3,1,1], CI[3,3,3], CI[2,1,2], CI[2,1,1], CI[2,2,2], CI[3,1,2], CI[3,2,2], CI[3,2,3]), SVector(CI[1,1,1], CI[3,3,1], CI[1,3,1], CI[3,3,3], CI[2,2,1], CI[1,2,1], CI[2,2,2], CI[2,3,1], CI[2,3,2], CI[3,3,2]), SVector(CI[1,1,1], CI[1,3,1], CI[1,3,3], CI[3,3,3], CI[1,2,1], CI[1,2,2], CI[2,2,2], CI[1,3,2], CI[2,3,3], CI[2,3,2]), SVector(CI[1,1,1], CI[1,3,3], CI[1,1,3], CI[3,3,3], CI[1,2,2], CI[1,1,2], CI[2,2,2], CI[1,2,3], CI[2,2,3], CI[2,3,3]), SVector(CI[1,1,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,1,2], CI[2,1,2], CI[2,2,2], CI[2,1,3], CI[3,2,3], CI[2,2,3]))
 
 adapt_mesh(::Order{1}, mesh::CartesianMesh) = mesh
 function adapt_mesh(::Order{2}, mesh::CartesianMesh{dim}) where {dim}
