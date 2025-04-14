@@ -187,40 +187,40 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     
     quote
         $(init_gridprops...)
-        $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $hybrid($grid), $particles, $mpvalues, $space)
+        $P2G(($particles, $p, $grid, $mpvalues) -> $body, $get_device($grid), Val($schedule), $space, $particles, $hybrid($grid), $mpvalues)
     end
 end
 
 # CPU: sequential
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues, ::Nothing) where {scheduler}
+function P2G(f, ::CPUDevice, ::Val{scheduler}, ::Nothing, particles, args...) where {scheduler}
     scheduler == :nothing || @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
-    for p in eachparticleindex(particles, mpvalues)
-        @inline f(grid, particles, mpvalues, p)
+    for p in eachindex(particles)
+        @inline f(particles, p, args...)
     end
 end
 
 # CPU: multi-threading
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues, space::BlockSpace) where {scheduler}
+function P2G(f, ::CPUDevice, ::Val{scheduler}, space::BlockSpace, particles, args...) where {scheduler}
     for blocks in threadsafe_blocks(space)
         tforeach(blocks, scheduler) do blk
             @_inline_meta
             for p in space[blk]
-                @inline f(grid, particles, mpvalues, p)
+                @inline f(particles, p, args...)
             end
         end
     end
 end
 
 # GPU
-@kernel function gpukernel_P2G(f, grid, @Const(particles), @Const(mpvalues))
+@kernel function gpukernel_P2G(f, @Const(particles), args...)
     p = @index(Global)
-    f(grid, particles, mpvalues, p)
+    f(particles, p, args...)
 end
-function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, mpvalues, ::Nothing) where {scheduler}
+function P2G(f, device::GPUDevice, ::Val{scheduler}, ::Nothing, particles, args...) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
     backend = get_backend(device)
     kernel = gpukernel_P2G(backend, 256)
-    kernel(f, grid, particles, mpvalues; ndrange=length(particles))
+    kernel(f, particles, args...; ndrange=length(particles))
     synchronize(backend)
 end
 

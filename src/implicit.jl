@@ -237,7 +237,6 @@ end
 
 function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
     @boundscheck checkbounds(A, I, J)
-    @assert issorted(I)
     @assert size(K) == map(length, (I, J))
     @inbounds @views A[I,J] .+= K
 end
@@ -273,10 +272,10 @@ macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, 
 end
 
 function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
-    grid, (i,j) = unpair2(grid_pair)
+    (grid_i,grid_j), (i,j) = unpair2(grid_pair)
     particles, p = unpair(particles_pair)
-    mpvalues, (ip,jp) = unpair2(mpvalues_pair)
-    @gensym mp gridindices localdofs I J dofs fulldofs
+    (mpvalues_i,mpvalues_j), (ip,jp) = unpair2(mpvalues_pair)
+    @gensym mp_i mp_j gridindices_i gridindices_j localdofs_i localdofs_j I J dofs_i dofs_j fulldofs_i fulldofs_j
 
     @assert equations.head == :block
     Base.remove_linenums!(equations)
@@ -288,7 +287,7 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
 
     @assert all(map(ex->issumexpr(ex, i, j), sum_equations))
 
-    pairs = [grid=>i, grid=>j, particles=>p, mp=>ip, mp=>jp]
+    pairs = [grid_i=>i, grid_j=>j, particles=>p, mp_i=>ip, mp_j=>jp]
     vars = [Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}()]
 
     init_global_matrices = Expr[]
@@ -306,39 +305,36 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
 
         Meta.isexpr(ex, :(=)) && push!(init_global_matrices, :(Tesserae.fillzero!($globalname)))
         push!(global_matrices, globalname)
-        push!(create_local_matrices, :($localname = Array{eltype($globalname)}(undef, length($localdofs), length($localdofs))))
+        push!(create_local_matrices, :($localname = Array{eltype($globalname)}(undef, length($localdofs_i), length($localdofs_j))))
         push!(assemble_local_matrices, :(@inbounds $localname[$I,$J] .= $trySArray($rhs))) # converting `Tensor` to `SArray` is faster for setindex!
-        push!(add_local_to_global, :(Tesserae.add!($globalname, $dofs, $dofs, $localname)))
+        push!(add_local_to_global, :(Tesserae.add!($globalname, $dofs_i, $dofs_j, $localname)))
     end
 
-    grid_sums = Expr[]
-    for ex in nosum_equations
-        lhs = ex.args[1]
-        @assert ex.head == :(+=)
-        @assert Meta.isexpr(lhs, :ref) && all(lhs.args[2:end] .== i) # currently support only `A[i,i] = ...`
-        complete_parent_from_index!(ex.args[2], [grid=>i])
-        globalname = lhs.args[1]
-        push!(grid_sums, :(Tesserae.add!($globalname, $I, $I, $(ex.args[2]))))
-    end
+    same_grid = grid_i == grid_j
+    same_mpvalues = mpvalues_i == mpvalues_j
 
     body = quote
         $(vars[3]...)
-        $mp = $mpvalues[$p]
-        $gridindices = neighboringnodes($mp, $grid)
-        $localdofs = LinearIndices((size($fulldofs, 1), size($gridindices)...))
+        $mp_i = $mpvalues_i[$p]
+        $mp_j = $(ifelse(same_mpvalues, mp_i, :($mpvalues_j[$p])))
+        $gridindices_i = neighboringnodes($mp_i, $grid_i)
+        $gridindices_j = $(ifelse(same_grid && same_mpvalues, gridindices_i, :(neighboringnodes($mp_j, $grid_j))))
+        $localdofs_i = LinearIndices((size($fulldofs_i, 1), size($gridindices_i)...))
+        $localdofs_j = LinearIndices((size($fulldofs_j, 1), size($gridindices_j)...))
         $(create_local_matrices...)
-        for $jp in eachindex($gridindices)
-            $j = $gridindices[$jp]
+        for $jp in eachindex($gridindices_j)
+            $j = $gridindices_j[$jp]
             $(union(vars[2], vars[5])...)
-            $J = vec(view($localdofs,:,$jp))
-            for $ip in eachindex($gridindices)
-                $i = $gridindices[$ip]
+            $J = vec(view($localdofs_j,:,$jp))
+            for $ip in eachindex($gridindices_i)
+                $i = $gridindices_i[$ip]
                 $(union(vars[1], vars[4])...)
-                $I = vec(view($localdofs,:,$ip))
+                $I = vec(view($localdofs_i,:,$ip))
                 $(assemble_local_matrices...)
             end
         end
-        $dofs = collect(vec(view($fulldofs, :, $gridindices)))
+        $dofs_i = collect(vec(view($fulldofs_i, :, $gridindices_i)))
+        $dofs_j = $(ifelse(same_grid && same_mpvalues, dofs_i, :(collect(vec(view($fulldofs_j, :, $gridindices_j))))))
         $(add_local_to_global...)
     end
 
@@ -346,22 +342,16 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
         body = :(@inbounds $body)
     end
 
+    grid_args = unique([grid_i, grid_j])
+    mpvalues_args = unique([mpvalues_i, mpvalues_j])
     body = quote
-        $check_arguments_for_P2G_Matrix($grid, $particles, $mpvalues, $space)
+        $check_arguments_for_P2G_Matrix($grid_i, $particles, $mpvalues_i, $space)
+        $check_arguments_for_P2G_Matrix($grid_j, $particles, $mpvalues_j, $space)
         $(init_global_matrices...)
-        $fulldofs = LinearIndices((size($(first(global_matrices)),1)÷length($grid), size($grid)...))
-        @assert all(==((length($fulldofs), length($fulldofs))), map(size, ($(global_matrices...),)))
-        $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $space)
-    end
-
-    if !isempty(grid_sums)
-        body = quote
-            $body
-            for $i in eachindex($grid)
-                $I = vec(view($fulldofs,:,$i))
-                $(grid_sums...)
-            end
-        end
+        $fulldofs_i = LinearIndices((size($(first(global_matrices)),1)÷length($grid_i), size($grid_i)...))
+        $fulldofs_j = LinearIndices((size($(first(global_matrices)),2)÷length($grid_j), size($grid_j)...))
+        @assert all(==((length($fulldofs_i), length($fulldofs_j))), map(size, ($(global_matrices...),)))
+        $P2G(($particles, $p, $(grid_args...), $(mpvalues_args...)) -> $body, $get_device($grid_i), Val($schedule), $space, $particles, $(grid_args...), $(mpvalues_args...))
     end
 
     esc(body)
@@ -373,8 +363,13 @@ function check_arguments_for_P2G_Matrix(grid, particles, mpvalues, space)
 end
 
 function unpair2(expr::Expr)
-    @assert expr.head==:call && expr.args[1]==:(=>) && isa(expr.args[2],Symbol) && Meta.isexpr(expr.args[3],:tuple) && length(expr.args[3].args)==2
-    expr.args[2], (expr.args[3].args...,)
+    @assert expr.head==:call && expr.args[1]==:(=>) && Meta.isexpr(expr.args[3],:tuple) && length(expr.args[3].args)==2
+    if Meta.isexpr(expr.args[2],:tuple)
+        @assert length(expr.args[2].args) == 2
+        (expr.args[2].args...,), (expr.args[3].args...,)
+    else
+        (expr.args[2],expr.args[2]), (expr.args[3].args...,)
+    end
 end
 
 @inline trySArray(x::Tensor) = SArray(x)
