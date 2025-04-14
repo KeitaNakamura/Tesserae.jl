@@ -32,6 +32,7 @@ abstract type Line <: Shape{1} end
 struct Line2 <: Line end
 
 get_order(::Line2) = Order(1)
+primarynodes_indices(::Line2) = SOneTo(2)
 
 function localnodes(::Type{T}, ::Line2) where {T}
     SVector{2, Vec{1, T}}(
@@ -72,6 +73,7 @@ end
 struct Line3 <: Line end
 
 get_order(::Line3) = Order(2)
+primarynodes_indices(::Line3) = SOneTo(2)
 
 function localnodes(::Type{T}, ::Line3) where {T}
     SVector{3, Vec{1, T}}(
@@ -116,6 +118,7 @@ end
 struct Line4 <: Line end
 
 get_order(::Line4) = Order(3)
+primarynodes_indices(::Line4) = SOneTo(2)
 
 function localnodes(::Type{T}, ::Line4) where {T}
     SVector{4, Vec{1, T}}(
@@ -174,6 +177,7 @@ abstract type Quad <: Shape{2} end
 struct Quad4 <: Quad end
 
 get_order(::Quad4) = Order(1)
+primarynodes_indices(::Quad4) = SOneTo(4)
 
 faceshape(::Quad4) = Line2()
 faces(::Quad4) = SVector(SVector(1,2), SVector(2,3), SVector(3,4), SVector(4,1))
@@ -230,6 +234,7 @@ end
 struct Quad8 <: Quad end
 
 get_order(::Quad8) = Order(2)
+primarynodes_indices(::Quad8) = SOneTo(4)
 
 faceshape(::Quad8) = Line3()
 faces(::Quad8) = SVector(SVector(1,2,5), SVector(2,3,6), SVector(3,4,7), SVector(4,1,8))
@@ -309,6 +314,7 @@ end
 struct Quad9 <: Quad end
 
 get_order(::Quad9) = Order(2)
+primarynodes_indices(::Quad9) = SOneTo(4)
 
 faceshape(::Quad9) = Line3()
 faces(::Quad9) = SVector(SVector(1,2,5), SVector(2,3,6), SVector(3,4,7), SVector(4,1,8))
@@ -373,6 +379,7 @@ abstract type Hex <: Shape{3} end
 struct Hex8 <: Hex end
 
 get_order(::Hex8) = Order(1)
+primarynodes_indices(::Hex8) = SOneTo(8)
 
 faceshape(::Hex8) = Quad4()
 faces(::Hex8) = SVector(SVector(1,5,8,4), SVector(6,2,3,7), SVector(1,2,6,5), SVector(3,4,8,7), SVector(2,1,4,3), SVector(5,6,7,8))
@@ -444,6 +451,7 @@ end
 struct Hex20 <: Hex end
 
 get_order(::Hex20) = Order(2)
+primarynodes_indices(::Hex20) = SOneTo(8)
 
 faceshape(::Hex20) = Quad8()
 faces(::Hex20) = SVector(SVector(1,5,8,4,11,18,16,10), SVector(6,2,3,7,13,12,15,19), SVector(1,2,6,5,9,13,17,11), SVector(3,4,8,7,14,16,20,15), SVector(2,1,4,3,9,10,14,12), SVector(5,6,7,8,17,19,20,18))
@@ -586,6 +594,7 @@ end
 struct Hex27 <: Hex end
 
 get_order(::Hex27) = Order(2)
+primarynodes_indices(::Hex27) = SOneTo(8)
 
 faceshape(::Hex27) = Quad9()
 faces(::Hex27) = SVector(SVector(1,5,8,4,11,18,16,10,23), SVector(6,2,3,7,13,12,15,19,24), SVector(1,2,6,5,9,13,17,11,22), SVector(3,4,8,7,14,16,20,15,25), SVector(2,1,4,3,9,10,14,12,21), SVector(5,6,7,8,17,19,20,18,26))
@@ -684,6 +693,7 @@ abstract type Tri <: Shape{2} end
 struct Tri3 <: Tri end
 
 get_order(::Tri3) = Order(1)
+primarynodes_indices(::Tri3) = SOneTo(3)
 
 faceshape(::Tri3) = Line2()
 faces(::Tri3) = SVector(SVector(1,2), SVector(2,3), SVector(3,1))
@@ -730,6 +740,7 @@ end
 struct Tri6 <: Tri end
 
 get_order(::Tri6) = Order(2)
+primarynodes_indices(::Tri6) = SOneTo(3)
 
 faceshape(::Tri6) = Line3()
 faces(::Tri6) = SVector(SVector(1,2,4), SVector(2,3,6), SVector(3,1,5))
@@ -803,6 +814,7 @@ abstract type Tet <: Shape{3} end
 struct Tet4 <: Tet end
 
 get_order(::Tet4) = Order(1)
+primarynodes_indices(::Tet4) = SOneTo(4)
 
 faceshape(::Tet4) = Tri3()
 faces(::Tet4) = SVector(SVector(2,1,3), SVector(1,4,3), SVector(4,2,3), SVector(1,2,4))
@@ -859,6 +871,7 @@ end
 struct Tet10 <: Tet end
 
 get_order(::Tet10) = Order(2)
+primarynodes_indices(::Tet10) = SOneTo(4)
 
 faceshape(::Tet10) = Tri6()
 faces(::Tet10) = SVector(SVector(2,1,3,5,8,6), SVector(1,4,3,7,6,9), SVector(4,2,3,10,9,8), SVector(1,2,4,5,7,10))

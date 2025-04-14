@@ -10,5 +10,6 @@ include("sparray.jl")
 include("grid.jl")
 
 include("interpolations.jl")
+include("shapes.jl")
 
 include("tutorials.jl")
