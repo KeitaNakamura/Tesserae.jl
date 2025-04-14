@@ -28,8 +28,8 @@ end
 
 # UnstructuredMesh
 function KernelAbstractions.get_backend(mesh::UnstructuredMesh)
-    backend = get_backend(mesh.allnodes)
-    @assert get_backend(mesh.cellnodeindices) == get_backend(mesh.nodeindices) == backend
+    backend = get_backend(mesh.nodes)
+    @assert get_backend(mesh.cellnodeindices) == backend
     backend
 end
 

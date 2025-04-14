@@ -186,21 +186,20 @@ end
 
 struct UnstructuredMesh{S <: Shape, dim, T, L} <: AbstractMesh{dim, T, 1}
     shape::S
-    allnodes::Vector{Vec{dim, T}}
+    nodes::Vector{Vec{dim, T}}
     cellnodeindices::Vector{SVector{L, Int}}
-    nodeindices::Vector{Int}
 end
 
-Base.size(mesh::UnstructuredMesh) = size(mesh.nodeindices)
+Base.size(mesh::UnstructuredMesh) = size(mesh.nodes)
 Base.IndexStyle(::Type{<: UnstructuredMesh}) = IndexLinear()
 
 @inline function Base.getindex(mesh::UnstructuredMesh, i::Int)
     @_propagate_inbounds_meta
-    mesh.allnodes[mesh.nodeindices[i]]
+    mesh.nodes[i]
 end
 @inline function Base.setindex!(mesh::UnstructuredMesh, x, i::Int)
     @_propagate_inbounds_meta
-    mesh.allnodes[mesh.nodeindices[i]] = x
+    mesh.nodes[i] = x
 end
 
 cellshape(mesh::UnstructuredMesh) = mesh.shape
@@ -230,19 +229,19 @@ function UnstructuredMesh(shape::Shape, mesh::CartesianMesh)
         end
     end
 
-    allnodes = mesh′[findall(>(0), nodeindices)]
+    nodes = mesh′[findall(>(0), nodeindices)]
 
     cellnodeindices = SVector{nlocalnodes(shape), Int}[]
     sizehint!(cellnodeindices, length(cellranges))
     for range in cellranges
         for conn in _cellnodes_connectivities(shape, range)
-            inds = SVector(nodeindices[conn])
+            inds = @view nodeindices[conn]
             @assert all(>(0), inds)
             push!(cellnodeindices, inds)
         end
     end
 
-    UnstructuredMesh(shape, allnodes, cellnodeindices, collect(eachindex(allnodes)))
+    UnstructuredMesh(shape, nodes, cellnodeindices)
 end
 _cellnodes_ranges(::Order{1}, cellsize::Dims) = maparray(I -> I:(I+oneunit(I)), CartesianIndices(cellsize))
 _cellnodes_ranges(::Order{2}, cellsize::Dims) = maparray(I -> (2I-oneunit(I)):(2I+oneunit(I)), CartesianIndices(cellsize))
