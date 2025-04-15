@@ -101,7 +101,7 @@ function maparray(f::Type{T}, args...) where {T}
     MapArray{T, ndims(first(args)), Type{T}, Tuple{Args...}}(T, args)
 end
 Base.size(A::MapArray) = size(first(A.args))
-Base.IndexStyle(::Type{<: MapArray{<: Any, <: Any, F, Args}}) where {F, Args} = IndexStyle(Base._return_type(map, Tuple{F, Args.parameters...}))
+Base.IndexStyle(::Type{<: MapArray}) = IndexCartesian()
 @inline function Base.getindex(A::MapArray, i::Integer...)
     @boundscheck checkbounds(A, i...)
     @inbounds A.f(getindex.(A.args, i...)...)
