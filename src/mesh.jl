@@ -294,3 +294,37 @@ function extract_face(mesh::UnstructuredMesh, nodeindices::AbstractVector{Int})
     end
     UnstructuredMesh(shape, mesh.nodes, unique(cells))
 end
+
+function Base.merge!(dest::UnstructuredMesh{S}, src::UnstructuredMesh{S}) where {S}
+    isapproxzero(x) = dot(x,x) < eps(eltype(x))
+
+    nodemap = Vector{Int}(undef, length(src))
+    @threaded for i in eachindex(src, nodemap)
+        x = src[i]
+        index = findfirst(y -> isapproxzero(x-y), dest)
+        nodemap[i] = ifelse(isnothing(index), 0, index)
+    end
+    for i in eachindex(src, nodemap)
+        if nodemap[i] == 0
+            push!(dest.nodes, src[i])
+            nodemap[i] = length(dest)
+        end
+    end
+
+    sortedinds_src = map(inds -> sort(nodemap[inds]), src.cellnodeindices)
+    sortedinds_dst = map(sort, dest.cellnodeindices)
+    for c in 1:ncells(src)
+        inds_src = sortedinds_src[c]
+        if all(inds_dest -> inds_src !== inds_dest, sortedinds_dst)
+            push!(dest.cellnodeindices, nodemap[cellnodeindices(src, c)])
+        end
+    end
+    dest
+end
+function Base.merge!(dest::UnstructuredMesh{S}, src1::UnstructuredMesh{S}, src2::UnstructuredMesh{S}, others::UnstructuredMesh{S}...) where {S}
+    merge!(merge!(dest, src1), src2, others...)
+end
+function Base.merge(x::UnstructuredMesh{S}, y::UnstructuredMesh{S}, z::UnstructuredMesh{S}...) where {S}
+    dest = UnstructuredMesh(cellshape(x), copy(x.nodes), copy(x.cellnodeindices))
+    merge!(dest, y, z...)
+end
