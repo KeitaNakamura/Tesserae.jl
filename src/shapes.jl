@@ -1,6 +1,6 @@
 # This is basically for FEM
 
-abstract type Shape end
+abstract type Shape{dim} end
 
 localnodes(s::Shape) = localnodes(Float64, s)
 quadpoints(s::Shape) = quadpoints(Float64, s)
@@ -9,11 +9,13 @@ quadweights(s::Shape) = quadweights(Float64, s)
 nlocalnodes(s::Shape) = length(localnodes(s))
 nquadpoints(s::Shape) = length(quadpoints(s))
 
+get_dimension(::Shape{dim}) where {dim} = dim
+
 ########
 # Line #
 ########
 
-abstract type Line <: Shape end
+abstract type Line <: Shape{1} end
 
 """
     Line2()
@@ -150,7 +152,7 @@ end
 # Quad #
 ########
 
-abstract type Quad <: Shape end
+abstract type Quad <: Shape{2} end
 
 """
     Quad4()
@@ -172,6 +174,9 @@ abstract type Quad <: Shape end
 struct Quad4 <: Quad end
 
 get_order(::Quad4) = Order(1)
+
+faceshape(::Quad4) = Line2()
+faces(::Quad4) = SVector(SVector(1,2), SVector(2,3), SVector(3,4), SVector(4,1))
 
 function localnodes(::Type{T}, ::Quad4) where {T}
     SVector{4, Vec{2, T}}(
@@ -225,6 +230,9 @@ end
 struct Quad8 <: Quad end
 
 get_order(::Quad8) = Order(2)
+
+faceshape(::Quad8) = Line3()
+faces(::Quad8) = SVector(SVector(1,2,5), SVector(2,3,6), SVector(3,4,7), SVector(4,1,8))
 
 function localnodes(::Type{T}, ::Quad8) where {T}
     SVector{8, Vec{2, T}}(
@@ -302,6 +310,9 @@ struct Quad9 <: Quad end
 
 get_order(::Quad9) = Order(2)
 
+faceshape(::Quad9) = Line3()
+faces(::Quad9) = SVector(SVector(1,2,5), SVector(2,3,6), SVector(3,4,7), SVector(4,1,8))
+
 function localnodes(::Type{T}, ::Quad9) where {T}
     SVector{9, Vec{2, T}}(
         (-1.0, -1.0),
@@ -338,7 +349,7 @@ quadweights(::Type{T}, ::Quad9) where {T} = quadweights(T, Quad8())
 # Hex #
 #######
 
-abstract type Hex <: Shape end
+abstract type Hex <: Shape{3} end
 
 @doc raw"""
     Hex8()
@@ -362,6 +373,9 @@ abstract type Hex <: Shape end
 struct Hex8 <: Hex end
 
 get_order(::Hex8) = Order(1)
+
+faceshape(::Hex8) = Quad4()
+faces(::Hex8) = SVector(SVector(1,5,8,4), SVector(6,2,3,7), SVector(1,2,6,5), SVector(3,4,8,7), SVector(2,1,4,3), SVector(5,6,7,8))
 
 function localnodes(::Type{T}, ::Hex8) where {T}
     SVector{8, Vec{3, T}}(
@@ -430,6 +444,9 @@ end
 struct Hex20 <: Hex end
 
 get_order(::Hex20) = Order(2)
+
+faceshape(::Hex20) = Quad8()
+faces(::Hex20) = SVector(SVector(1,5,8,4,11,18,16,10), SVector(6,2,3,7,13,12,15,19), SVector(1,2,6,5,9,13,17,11), SVector(3,4,8,7,14,16,20,15), SVector(2,1,4,3,9,10,14,12), SVector(5,6,7,8,17,19,20,18))
 
 function localnodes(::Type{T}, ::Hex20) where {T}
     SVector{20, Vec{3, T}}(
@@ -570,6 +587,9 @@ struct Hex27 <: Hex end
 
 get_order(::Hex27) = Order(2)
 
+faceshape(::Hex27) = Quad9()
+faces(::Hex27) = SVector(SVector(1,5,8,4,11,18,16,10,23), SVector(6,2,3,7,13,12,15,19,24), SVector(1,2,6,5,9,13,17,11,22), SVector(3,4,8,7,14,16,20,15,25), SVector(2,1,4,3,9,10,14,12,21), SVector(5,6,7,8,17,19,20,18,26))
+
 function localnodes(::Type{T}, ::Hex27) where {T}
     SVector{27, Vec{3, T}}(
         (-1.0, -1.0, -1.0),
@@ -642,7 +662,7 @@ quadweights(::Type{T}, ::Hex27) where {T} = quadweights(T, Hex20())
 # Tri #
 #######
 
-abstract type Tri <: Shape end
+abstract type Tri <: Shape{2} end
 
 @doc raw"""
     Tri3()
@@ -664,6 +684,9 @@ abstract type Tri <: Shape end
 struct Tri3 <: Tri end
 
 get_order(::Tri3) = Order(1)
+
+faceshape(::Tri3) = Line2()
+faces(::Tri3) = SVector(SVector(1,2), SVector(2,3), SVector(3,1))
 
 function localnodes(::Type{T}, ::Tri3) where {T}
     SVector{3, Vec{2, T}}(
@@ -708,6 +731,9 @@ struct Tri6 <: Tri end
 
 get_order(::Tri6) = Order(2)
 
+faceshape(::Tri6) = Line3()
+faces(::Tri6) = SVector(SVector(1,2,4), SVector(2,3,6), SVector(3,1,5))
+
 function localnodes(::Type{T}, ::Tri6) where {T}
     SVector{6, Vec{2, T}}(
         (0.0, 0.0),
@@ -747,7 +773,7 @@ end
 # Tet #
 #######
 
-abstract type Tet <: Shape end
+abstract type Tet <: Shape{3} end
 
 @doc raw"""
     Tet4()
@@ -777,6 +803,9 @@ abstract type Tet <: Shape end
 struct Tet4 <: Tet end
 
 get_order(::Tet4) = Order(1)
+
+faceshape(::Tet4) = Tri3()
+faces(::Tet4) = SVector(SVector(2,1,3), SVector(1,4,3), SVector(4,2,3), SVector(1,2,4))
 
 function localnodes(::Type{T}, ::Tet4) where {T}
     SVector{4, Vec{3, T}}(
@@ -830,6 +859,9 @@ end
 struct Tet10 <: Tet end
 
 get_order(::Tet10) = Order(2)
+
+faceshape(::Tet10) = Tri6()
+faces(::Tet10) = SVector(SVector(2,1,3,5,8,6), SVector(1,4,3,7,6,9), SVector(4,2,3,10,9,8), SVector(1,2,4,5,7,10))
 
 function localnodes(::Type{T}, ::Tet10) where {T}
     SVector{10, Vec{3, T}}(

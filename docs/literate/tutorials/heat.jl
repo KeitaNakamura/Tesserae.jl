@@ -28,7 +28,7 @@ function main()
 
     ## Interpolation
     mpvalues = generate_mpvalues(mesh, size(particles); name=Val(:N))
-    feupdate!(mpvalues, particles.detJdV, mesh) # Use `feupdate!` instead of `update!`
+    feupdate!(mpvalues, mesh; volume = particles.detJdV) # Use `feupdate!` instead of `update!`
 
     ## Global matrix
     ndofs = 1 # Degrees of freedom per node
