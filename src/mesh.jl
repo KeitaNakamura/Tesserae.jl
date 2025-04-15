@@ -267,3 +267,30 @@ function adapt_mesh(::Order{2}, mesh::CartesianMesh{dim}) where {dim}
         xmin:(h/2):xmax
     end...)
 end
+
+function extract(mesh::UnstructuredMesh, nodeindices::AbstractVector{Int})
+    shape = cellshape(mesh)
+    cells = SVector{nlocalnodes(shape), Int}[]
+    for c in 1:ncells(mesh)
+        indices = cellnodeindices(mesh, c)
+        if all(in.(indices, Ref(nodeindices)))
+            push!(cells, indices)
+        end
+    end
+    UnstructuredMesh(shape, mesh.nodes, cells)
+end
+
+function extract_face(mesh::UnstructuredMesh, nodeindices::AbstractVector{Int})
+    shape = faceshape(cellshape(mesh))
+    cells = SVector{nlocalnodes(shape), Int}[]
+    for c in 1:ncells(mesh)
+        indices = cellnodeindices(mesh, c)
+        for conn in faces(cellshape(mesh))
+            faceindices = indices[conn]
+            if all(in.(faceindices, Ref(nodeindices)))
+                push!(cells, faceindices)
+            end
+        end
+    end
+    UnstructuredMesh(shape, mesh.nodes, unique(cells))
+end

@@ -80,8 +80,28 @@ end
             mesh = UnstructuredMesh(shape, cmesh)
             particles = generate_particles(ParticleProp, mesh)
             mpvalues = generate_mpvalues(mesh, size(particles))
-            feupdate!(mpvalues, particles.detJdV, mesh)
+            feupdate!(mpvalues, mesh; volume = particles.detJdV)
             @test sum(particles.detJdV) ≈ volume(cmesh)
         end
     end
+
+    lims = ((0,1), (0,1), (0,1))
+    function compute_area(shape)
+        dim = Tesserae.get_dimension(shape)
+        ParticleProp = @NamedTuple begin
+            x      :: Vec{dim, Float64}
+            n      :: Vec{dim, Float64}
+            detJdA :: Float64
+        end
+        mesh_body = UnstructuredMesh(shape, CartesianMesh(1, lims[1:dim]...))
+        mesh_face = Tesserae.extract_face(mesh_body, 1:length(mesh_body))
+        particles = generate_particles(ParticleProp, mesh_face)
+        mpvalues = generate_mpvalues(mesh_face, size(particles))
+        feupdate!(mpvalues, mesh_face; normal = particles.n, area = particles.detJdA)
+        sum(particles.detJdA)
+    end
+    @test compute_area(Tesserae.Quad4()) ≈ compute_area(Tesserae.Quad8()) ≈ compute_area(Tesserae.Quad9()) ≈ 4
+    @test compute_area(Tesserae.Hex8()) ≈ compute_area(Tesserae.Hex20()) ≈ compute_area(Tesserae.Hex27()) ≈ 6
+    @test compute_area(Tesserae.Tri3()) ≈ compute_area(Tesserae.Tri6()) ≈ 4 + 2√2
+    @test compute_area(Tesserae.Tet4()) ≈ compute_area(Tesserae.Tet10()) ≈ 6 * (1+√2)
 end
