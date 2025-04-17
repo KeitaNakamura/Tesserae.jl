@@ -12,7 +12,6 @@ using Tensorial: ∂ⁿ
 
 using StaticArrays
 using StructArrays
-using FastClosures
 
 # sampling
 import PoissonDiskSampling: generate as poisson_disk_sampling

@@ -187,7 +187,7 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     
     quote
         $(init_gridprops...)
-        $P2G((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), $get_device($grid), Val($schedule), $hybrid($grid), $particles, $mpvalues, $space)
+        $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $hybrid($grid), $particles, $mpvalues, $space)
     end
 end
 
@@ -400,7 +400,7 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     end
     body = quote
         $check_arguments_for_G2P($grid, $particles, $mpvalues)
-        $G2P((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), $get_device($grid), Val($schedule), $grid, $particles, $mpvalues)
+        $G2P(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues)
     end
 
     esc(body)

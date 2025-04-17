@@ -6,7 +6,6 @@ version = "0.2.15"
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 Atomix = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
-FastClosures = "9aa1b823-49e4-5ca5-8b0f-3971ec8bab6a"
 GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 PoissonDiskSampling = "d57be0ce-7c7e-4f32-9a47-3bfb603400bb"
@@ -25,14 +24,13 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 
 [extensions]
-TesseraeMetalExt = "Metal"
 TesseraeCUDAExt = "CUDA"
+TesseraeMetalExt = "Metal"
 
 [compat]
 Adapt = "4"
 Atomix = "1"
 CUDA = "5"
-FastClosures = "0.3"
 GPUArraysCore = "0.2"
 KernelAbstractions = "0.9"
 Metal = "1"
