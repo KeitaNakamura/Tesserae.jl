@@ -324,7 +324,7 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
         $(assertions...)
         $(init_global_matrices...)
         $fulldofs = LinearIndices((size($(first(global_matrices)),1)÷length($grid), size($grid)...))
-        $P2G((Tesserae.@closure ($grid, $particles, $mpvalues, $p) -> $body), $get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $space)
+        $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $space)
     end
 
     if !isempty(grid_sums)
