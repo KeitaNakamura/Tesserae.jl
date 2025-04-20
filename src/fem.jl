@@ -38,7 +38,7 @@ _get_normal(J::Mat{2,1}) = Vec(J[2,1], -J[1,1])
 function feupdate!(
         mpvalues::AbstractArray{<: MPValue{S}}, mesh::UnstructuredMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
-        area::AbstractArray = nothing, normal::AbstractArray = nothing,
+        area::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
         quadrature::Tuple = (quadpoints(cellshape(mesh)), quadweights(cellshape(mesh))),
     ) where {S <: Shape, dim}
     qpts, qwts = quadrature
