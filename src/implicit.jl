@@ -266,7 +266,6 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
     create_local_matrices = Expr[]
     assemble_local_matrices = Expr[]
     add_local_to_global = Expr[]
-    assertions = Expr[]
     for ex in sum_equations
         rhs = remove_∑(ex.args[2])
         complete_sumeq_rhs_expr!(Meta.quot(rhs), pairs, vars) # rhs
@@ -280,9 +279,7 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
         push!(create_local_matrices, :($localname = Array{eltype($globalname)}(undef, length($localdofs), length($localdofs))))
         push!(assemble_local_matrices, :(@inbounds $localname[$I,$J] .= $trySArray($rhs))) # converting `Tensor` to `SArray` is faster for setindex!
         push!(add_local_to_global, :(Tesserae.add!($globalname, $dofs, $dofs, $localname)))
-        push!(assertions, :(@assert $globalname isa AbstractMatrix && size($globalname, 1) == size($globalname, 2)))
     end
-    push!(assertions, :(@assert allequal($([:(size($m)) for m in global_matrices]...,))))
 
     grid_sums = Expr[]
     for ex in nosum_equations
@@ -321,9 +318,9 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
 
     body = quote
         $check_arguments_for_P2G_Matrix($grid, $particles, $mpvalues, $space)
-        $(assertions...)
         $(init_global_matrices...)
         $fulldofs = LinearIndices((size($(first(global_matrices)),1)÷length($grid), size($grid)...))
+        @assert all(==((length($fulldofs), length($fulldofs))), map(size, ($(global_matrices...),)))
         $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $space)
     end
 
