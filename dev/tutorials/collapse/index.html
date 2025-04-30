@@ -14,7 +14,7 @@
     b  :: Float64 = 3√2tan(ψ) / sqrt(9+12tan(ψ)^2)
 end
 
-function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, Δε::SymmetricSecondOrderTensor{3})
+function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, ∇u::SecondOrderTensor{3})
     δ = one(SymmetricSecondOrderTensor{3})
     I = one(SymmetricFourthOrderTensor{3})
 
@@ -25,7 +25,7 @@ function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3
 
     # Elastic predictor
     cᵉ = λ*δ⊗δ + 2G*I
-    σᵗʳ = σⁿ + cᵉ ⊡₂ Δε
+    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(σⁿ * skew(∇u)) # Consider Jaumann stress-rate
     dfdσ, fᵗʳ = gradient(f, σᵗʳ, :all)
     fᵗʳ ≤ 0 &amp;&amp; tr(σᵗʳ)/3 ≤ pₜ &amp;&amp; return σᵗʳ
 
@@ -177,18 +177,13 @@ end</code></pre><h2 id="Sand-column-collapse"><a class="docs-heading-anchor" hre
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += @∑ w[ip] * v[i] * Δt
-        end
-
-        # Update other particle properties
-        for p in eachindex(particles)
             # Update Cauchy stress using Jaumann stress rate
-            ∇uₚ = resize(particles.∇v[p], (3,3)) * Δt
-            σₚ = cauchy_stress(model, particles.σ[p], symmetric(∇uₚ))
-            particles.σ[p] = σₚ + 2*symmetric(skew(∇uₚ) * particles.σ[p]) # Consider Jaumann stress-rate
+            ∇uₚ = resize(∇v[p], (3,3)) * Δt
+            σ[p] = cauchy_stress(model, σ[p], ∇uₚ)
             # Update deformation gradient and volume
-            ΔFₚ = I + particles.∇v[p] * Δt
-            particles.F[p] = ΔFₚ * particles.F[p]
-            particles.V[p] = det(ΔFₚ) * particles.V[p]
+            ΔFₚ = I + ∇v[p] * Δt
+            F[p] = ΔFₚ * F[p]
+            V[p] = det(ΔFₚ) * V[p]
         end
 
         t += Δt
@@ -210,4 +205,4 @@ end</code></pre><h2 id="Sand-column-collapse"><a class="docs-heading-anchor" hre
             end
         end
     end
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_based/">« Jacobian-based</a><a class="docs-footer-nextpage" href="../dam_break/">Incompressible fluid flow »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.1 on <span class="colophon-date" title="Wednesday 23 April 2025 02:37">Wednesday 23 April 2025</span>. Using Julia version 1.11.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_based/">« Jacobian-based</a><a class="docs-footer-nextpage" href="../dam_break/">Incompressible fluid flow »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.2 on <span class="colophon-date" title="Wednesday 30 April 2025 03:12">Wednesday 30 April 2025</span>. Using Julia version 1.11.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
