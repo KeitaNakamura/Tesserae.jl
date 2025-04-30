@@ -151,15 +151,10 @@ function main()
             v[p]  = @∑ w[ip] * v[i] # PIC transfer
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += v[p] * Δt
-        end
-
-        for p in 1:length(particles)
-            ∇uₚ = resize(particles.∇v[p], (3,3)) * Δt
-            Δεₚ = symmetric(∇uₚ)
-            σₚ  = vonmises_model(particles.σ[p], Δεₚ; λ, G, σy)
-            particles.σ[p]  = σₚ + 2*symmetric(skew(∇uₚ) * particles.σ[p]) # Consider Jaumann stress-rate
-            particles.V[p] *= 1 + tr(Δεₚ)
-            particles.ε[p] += Δεₚ
+            ∇uₚ = resize(∇v[p], (3,3)) * Δt
+            σ[p] = vonmises_model(σ[p], ∇uₚ; λ, G, σy)
+            V[p] *= det(I + ∇uₚ)
+            ε[p] += symmetric(∇uₚ)
         end
 
         disk.x += disk.v * Δt
@@ -187,17 +182,17 @@ function main()
     sum(grid.fext) #src
 end
 
-function vonmises_model(σⁿ, Δε; λ, G, σy)
+function vonmises_model(σⁿ, ∇u; λ, G, σy)
     δ = one(SymmetricSecondOrderTensor{3})
     I = one(SymmetricFourthOrderTensor{3})
     cᵉ = λ*δ⊗δ + 2G*I
-    σ_trial = σⁿ + cᵉ ⊡₂ Δε
-    dfdσ, f_trial = gradient(σ -> vonmises(σ) - σy, σ_trial, :all)
-    if f_trial > 0
-        dλ = f_trial / (dfdσ ⊡₂ cᵉ ⊡₂ dfdσ)
-        σ = σ_trial - cᵉ ⊡₂ (dλ * dfdσ)
+    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(σⁿ * skew(∇u)) # Consider Jaumann stress-rate
+    dfdσ, fᵗʳ = gradient(σ -> vonmises(σ) - σy, σᵗʳ, :all)
+    if fᵗʳ > 0
+        dλ = fᵗʳ / (dfdσ ⊡₂ cᵉ ⊡₂ dfdσ)
+        σ = σᵗʳ - cᵉ ⊡₂ (dλ * dfdσ)
     else
-        σ = σ_trial
+        σ = σᵗʳ
     end
     if tr(σ)/3 > 0 # simple tension cut-off
         σ = dev(σ)
