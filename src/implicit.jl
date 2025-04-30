@@ -151,6 +151,7 @@ function create_sparse_matrix(::Type{T}, meshes::Tuple{Vararg{UnstructuredMesh, 
         gdofs_i = gdofs[i]
         for c_i in 1:ncells(mesh_i)
             cellnodes_i = cellnodeindices(mesh_i, c_i)
+            primarycellnodes_i = cellnodes_i[primarynodes_indices(cellshape(mesh_i))]
             celldofs_i = gdofs_i[:, cellnodes_i]
             for j in 1:N
                 if i == j
@@ -160,7 +161,6 @@ function create_sparse_matrix(::Type{T}, meshes::Tuple{Vararg{UnstructuredMesh, 
                     gdofs_j = gdofs[j]
                     for c_j in 1:ncells(mesh_j)
                         cellnodes_j = cellnodeindices(mesh_j, c_j)
-                        primarycellnodes_i = cellnodes_i[primarynodes_indices(cellshape(mesh_i))]
                         primarycellnodes_j = cellnodes_j[primarynodes_indices(cellshape(mesh_j))]
                         if mesh_i[primarycellnodes_i] ≈ mesh_j[primarycellnodes_j] # TODO: better way because this is very slow
                             celldofs_j = gdofs_j[:, cellnodes_j]
