@@ -154,9 +154,6 @@ function main(transfer = FLIP(1.0))
             end
         end
 
-        ## Truncate the negative mass caused by the kernel correction to zero.
-        @. grid.m = max(grid.m, 0)
-
         @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
         @. grid.vⁿ = grid.mv * grid.m⁻¹
         @. grid.aⁿ = grid.ma * grid.m⁻¹
