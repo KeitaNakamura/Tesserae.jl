@@ -39,7 +39,7 @@ function update!(s::BlockSpace, xₚ::AbstractVector{<: Vec})
     foreach(fillzero!, s.nparticles_chunks)
 
     nchunks = length(s.nparticles_chunks)
-    chunks = collect(Iterators.partition(1:n, n÷nchunks))
+    chunks = collect(Iterators.partition(1:n, max(1, n÷nchunks+1)))
 
     @threaded for chunk_id in 1:nchunks
         @inbounds for p in chunks[chunk_id]
