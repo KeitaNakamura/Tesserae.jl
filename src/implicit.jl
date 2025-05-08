@@ -106,7 +106,7 @@ julia> dofmask[:,1:3,1:3] .= true;
 julia> dofmap = DofMap(dofmask);
 
 julia> extract(A, dofmap)
-9×9 view(::SparseArrays.SparseMatrixCSC{Float64, Int64}, [1, 2, 3, 12, 13, 14, 23, 24, 25], [1, 2, 3, 12, 13, 14, 23, 24, 25]) with eltype Float64:
+9×9 SparseArrays.SparseMatrixCSC{Float64, Int64} with 49 stored entries:
  0.0  0.0   ⋅   0.0  0.0   ⋅    ⋅    ⋅    ⋅
  0.0  0.0  0.0  0.0  0.0  0.0   ⋅    ⋅    ⋅
   ⋅   0.0  0.0   ⋅   0.0  0.0   ⋅    ⋅    ⋅
@@ -195,11 +195,19 @@ create_sparse_matrix(mesh::UnstructuredMesh{<: Any, dim}; ndofs::Int = dim) wher
 Extract the active degrees of freedom of a matrix.
 """
 function extract(S::AbstractMatrix, dofmap_i::DofMap, dofmap_j::DofMap = dofmap_i)
+    I, J = _indices_for_extract(S, dofmap_i, dofmap_j)
+    S[I, J]
+end
+function extract(::typeof(view), S::AbstractMatrix, dofmap_i::DofMap, dofmap_j::DofMap = dofmap_i)
+    I, J = _indices_for_extract(S, dofmap_i, dofmap_j)
+    view(S, I, J)
+end
+function _indices_for_extract(S::AbstractMatrix, dofmap_i::DofMap, dofmap_j::DofMap)
     m, n = prod(dofmap_i.masksize), prod(dofmap_j.masksize)
     @assert size(S) == (m, n)
     I = view(LinearIndices(dofmap_i.masksize), dofmap_i.indices)
     J = view(LinearIndices(dofmap_j.masksize), dofmap_j.indices)
-    view(S, I, J)
+    I, J
 end
 
 function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
