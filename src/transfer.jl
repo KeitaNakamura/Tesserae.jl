@@ -395,9 +395,6 @@ function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
         body = :(@inbounds $body)
     end
 
-    if isallunderscore(mpvalues)
-        mpvalues = nothing
-    end
     body = quote
         $check_arguments_for_G2P($grid, $particles, $mpvalues)
         $G2P(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues)
@@ -477,10 +474,6 @@ function unpair(expr::Expr)
     @assert expr.head==:call && expr.args[1]==:(=>) && isa(expr.args[2],Symbol) && isa(expr.args[3],Symbol)
     expr.args[2], expr.args[3]
 end
-function unpair(s::Symbol)
-    @assert isallunderscore(s)
-    s, s
-end
 
 function issumexpr(expr::Expr, inds::Symbol...)
     if length(expr.args) == 2 && _issumexpr(expr.args[2])
@@ -557,8 +550,6 @@ function findarrays_from_index!(set::Set{Expr}, index::Symbol, expr::Expr)
     end
 end
 findarrays_from_index!(set::Set{Expr}, index::Symbol, expr) = nothing
-
-isallunderscore(s::Symbol) = all(==('_'), string(s))
 
 function replace_dollar_by_identity!(expr::Expr)
     if Meta.isexpr(expr, :$)
