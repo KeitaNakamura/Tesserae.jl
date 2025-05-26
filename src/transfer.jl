@@ -229,56 +229,10 @@ function P2G_nosum_macro(schedule, grid_pair, nosum_equations::Vector)
 
     grid, i = unpair(grid_pair)
     foreach(ex->complete_parent_from_index!(ex, [grid=>i]), nosum_equations)
+    foreach(ex->remove_indexing!(ex, [grid=>i]), nosum_equations)
 
-    vars = Set{Expr}()
-    foreach(ex->findarrays_from_index!(vars, i, ex), nosum_equations)
-
-    body = quote
-        Tesserae.foreach_gridindex(Val($schedule), Tesserae.GridIndexStyle($(vars...)), $grid) do $i
-            Base.@_inline_meta
-            $(nosum_equations...)
-        end
-    end
-
-    body
+    Expr(:block, map(ex -> :(@. $ex), nosum_equations)...)
 end
-
-struct IndexSpArray end
-GridIndexStyle(::Type{T}) where {T <: AbstractArray} = IndexStyle(T)
-GridIndexStyle(::Type{<: SpArray}) = IndexSpArray()
-GridIndexStyle(A::AbstractArray) = GridIndexStyle(typeof(A))
-GridIndexStyle(A::AbstractArray, B::AbstractArray) = GridIndexStyle(GridIndexStyle(A), GridIndexStyle(B))
-GridIndexStyle(A::AbstractArray, B::AbstractArray...) = GridIndexStyle(GridIndexStyle(A), GridIndexStyle(B...))
-GridIndexStyle(::IndexLinear, ::IndexLinear) = IndexLinear()
-GridIndexStyle(::IndexSpArray, ::IndexSpArray) = IndexSpArray()
-GridIndexStyle(::IndexStyle, ::IndexStyle) = IndexCartesian()
-
-for schedule in QuoteNode.((:nothing, :static, :dynamic))
-    wrap(ex, sch) = sch.value==:nothing ? :(@simd $ex) : :(@threaded $sch $ex)
-
-    body = wrap(:(for i in eachindex(style, grid)
-                      @inbounds f(i)
-                  end), schedule)
-    @eval foreach_gridindex(f, ::Val{$schedule}, style::IndexStyle, grid::Grid) = $body
-
-    body = wrap(:(for i in eachindex(style, grid)
-                      @inbounds if isactive(grid, i)
-                          f(i)
-                      end
-                  end), schedule)
-    @eval foreach_gridindex(f, ::Val{$schedule}, style::IndexCartesian, grid::SpGrid) = $body
-
-    body = wrap(:(for i in eachindex(get_data(getproperty(grid, 2)))
-                      @inbounds f(UnsafeSpIndex(i))
-                  end), schedule)
-    @eval foreach_gridindex(f, ::Val{$schedule}, style::IndexSpArray, grid::SpGrid) = $body
-end
-
-struct UnsafeSpIndex{I}
-    i::I
-end
-@inline Base.getindex(A::SpArray, i::UnsafeSpIndex) = (@_propagate_inbounds_meta; get_data(A)[i.i])
-@inline Base.setindex!(A::SpArray, v, i::UnsafeSpIndex) = (@_propagate_inbounds_meta; get_data(A)[i.i]=v; A)
 
 function check_arguments_for_P2G(grid, particles, mpvalues, space)
     get_mesh(grid) isa AbstractMesh || error("@P2G: grid must have a mesh")
@@ -522,6 +476,22 @@ function complete_parent_from_index!(expr::Expr, pairs::Vector{Pair{Symbol, Symb
 end
 complete_parent_from_index!(expr, pairs::Vector{Pair{Symbol, Symbol}}) = nothing
 
+function remove_indexing!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}})
+    for i in eachindex(expr.args)
+        ex = expr.args[i]
+        if Meta.isexpr(ex, :ref) && length(ex.args) == 2 # support only single index
+            for p in pairs
+                if p.second == ex.args[2] # same index
+                    expr.args[i] = ex.args[1]
+                end
+            end
+        else
+            remove_indexing!(ex, pairs)
+        end
+    end
+end
+remove_indexing!(expr, pairs::Vector{Pair{Symbol, Symbol}}) = nothing
+
 function complete_sumeq_rhs_expr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector)
     for i in eachindex(expr.args)
         ex = expr.args[i]
@@ -540,16 +510,6 @@ function complete_sumeq_rhs_expr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}
     end
 end
 complete_sumeq_rhs_expr!(expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector) = nothing
-
-function findarrays_from_index!(set::Set{Expr}, index::Symbol, expr::Expr)
-    if Meta.isexpr(expr, :ref) && length(expr.args)==2 && expr.args[2]==index
-        push!(set, expr.args[1])
-    end
-    for ex in expr.args
-        findarrays_from_index!(set, index, ex)
-    end
-end
-findarrays_from_index!(set::Set{Expr}, index::Symbol, expr) = nothing
 
 function replace_dollar_by_identity!(expr::Expr)
     if Meta.isexpr(expr, :$)
