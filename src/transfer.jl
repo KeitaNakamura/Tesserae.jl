@@ -194,7 +194,7 @@ end
 # CPU: sequential
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues, ::Nothing) where {scheduler}
     scheduler == :nothing || @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
-    for p in eachparticleindex(particles, mpvalues)
+    for p in eachindex(particles)
         @inline f(grid, particles, mpvalues, p)
     end
 end
@@ -408,7 +408,7 @@ end
 
 # CPU: sequential & multi-threading
 function G2P(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues) where {scheduler}
-    tforeach(eachparticleindex(particles, mpvalues), scheduler) do p
+    tforeach(eachindex(particles), scheduler) do p
         @inline f(grid, particles, mpvalues, p)
     end
 end
@@ -557,14 +557,6 @@ function findarrays_from_index!(set::Set{Expr}, index::Symbol, expr::Expr)
     end
 end
 findarrays_from_index!(set::Set{Expr}, index::Symbol, expr) = nothing
-
-function eachparticleindex(particles::AbstractArray, mpvalues::AbstractArray{<: MPValue})
-    @assert length(particles) ≤ length(mpvalues)
-    eachindex(particles)
-end
-function eachparticleindex(particles::AbstractArray, ::Nothing)
-    eachindex(particles)
-end
 
 isallunderscore(s::Symbol) = all(==('_'), string(s))
 
