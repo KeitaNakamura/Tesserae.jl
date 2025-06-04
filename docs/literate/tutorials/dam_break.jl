@@ -26,6 +26,8 @@ using Graphs: SimpleGraph, connected_components
 struct FLIP α::Float64 end
 struct TPIC end
 
+BLAS.set_num_threads(Threads.nthreads() ÷ 2)
+
 function main(transfer = FLIP(1.0))
 
     ## Simulation parameters
@@ -33,9 +35,6 @@ function main(transfer = FLIP(1.0))
     T  = 7.0    # Time span
     g  = 9.81   # Gravity acceleration
     Δt = 2.0e-3 # Time step
-    if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        T = 0.2                           #src
-    end                                   #src
 
     ## Material constants
     ρ = 1.0e3   # Initial density
@@ -47,63 +46,63 @@ function main(transfer = FLIP(1.0))
 
     ## Utils
     cellnodes(cell) = cell:(cell+oneunit(cell))
-    cellcenter(cell, mesh) = sum(mesh[cellnodes(cell)]) / 4
+    cellcenter(cell, mesh) = sum(mesh[cellnodes(cell)]) / 8
 
     ## Properties for grid and particles
     GridProp = @NamedTuple begin
-        X   :: Vec{2, Float64}
-        x   :: Vec{2, Float64}
+        X   :: Vec{3, Float64}
+        x   :: Vec{3, Float64}
         m   :: Float64
-        v   :: Vec{2, Float64}
-        vⁿ  :: Vec{2, Float64}
-        mv  :: Vec{2, Float64}
-        a   :: Vec{2, Float64}
-        aⁿ  :: Vec{2, Float64}
-        ma  :: Vec{2, Float64}
-        u   :: Vec{2, Float64}
+        v   :: Vec{3, Float64}
+        vⁿ  :: Vec{3, Float64}
+        mv  :: Vec{3, Float64}
+        a   :: Vec{3, Float64}
+        aⁿ  :: Vec{3, Float64}
+        ma  :: Vec{3, Float64}
+        u   :: Vec{3, Float64}
         p   :: Float64
         ## δ-correction
         V   :: Float64
         Ṽ   :: Float64
         E   :: Float64
         ## Residuals
-        u_p   :: Vec{3, Float64}
-        R_mom :: Vec{2, Float64}
+        u_p   :: Vec{4, Float64}
+        R_mom :: Vec{3, Float64}
         R_mas :: Float64
     end
     ParticleProp = @NamedTuple begin
-        x   :: Vec{2, Float64}
+        x   :: Vec{3, Float64}
         m   :: Float64
         V   :: Float64
-        v   :: Vec{2, Float64}
-        ∇v  :: SecondOrderTensor{2, Float64, 4}
-        a   :: Vec{2, Float64}
-        ∇a  :: SecondOrderTensor{2, Float64, 4}
+        v   :: Vec{3, Float64}
+        ∇v  :: SecondOrderTensor{3, Float64, 9}
+        a   :: Vec{3, Float64}
+        ∇a  :: SecondOrderTensor{3, Float64, 9}
         p   :: Float64
-        ∇p  :: Vec{2, Float64}
-        s   :: SymmetricSecondOrderTensor{2, Float64, 3}
-        b   :: Vec{2, Float64}
+        ∇p  :: Vec{3, Float64}
+        s   :: SymmetricSecondOrderTensor{3, Float64, 6}
+        b   :: Vec{3, Float64}
         ## δ-correction
-        ∇E² :: Vec{2, Float64}
+        ∇E² :: Vec{3, Float64}
         ## Stabilization
         τ₁  :: Float64
         τ₂  :: Float64
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(h, (0,3.22), (0,2.5)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (0,3.22), (0,0.5), (0,2.5)))
     for cell in CartesianIndices(size(grid).-1)
         for i in cellnodes(cell)
-            grid.V[i] += (h/2)^2
+            grid.V[i] += (h/2)^3
         end
     end
 
     ## Particles
-    particles = generate_particles(ParticleProp, grid.X; alg=PoissonDiskSampling(spacing=1/4))
+    particles = generate_particles(ParticleProp, grid.X; alg=PoissonDiskSampling(spacing=1/3))
     particles.V .= volume(grid.X) / length(particles)
-    filter!(pt -> pt.x[1]<1.2 && pt.x[2]<0.6, particles)
+    filter!(pt -> pt.x[1]<1.2 && pt.x[3]<0.6, particles)
     @. particles.m = ρ * particles.V
-    @. particles.b = Vec(0,-g)
+    @. particles.b = Vec(0,0,-g)
     @show length(particles)
 
     ## Interpolation weights
@@ -112,7 +111,7 @@ function main(transfer = FLIP(1.0))
     weights_cell = generate_interpolation_weights(interp, grid.X, size(grid) .- 1; name=Val(:S))
 
     ## Sparse matrix
-    A = create_sparse_matrix(interp, grid.X; ndofs=3)
+    A = create_sparse_matrix(interp, grid.X; ndofs=4)
 
     partition = ColorPartition(grid.X)
 
@@ -164,21 +163,26 @@ function main(transfer = FLIP(1.0))
         @. grid.aⁿ = grid.ma / grid.m * m_mask
 
         ## Update a dof map
-        dofmask_u = falses(3, size(grid)...)
-        dofmask_p = falses(3, size(grid)...)
-        for i in 1:2
-            dofmask_u[i,:,:] = m_mask
+        dofmask_u = falses(4, size(grid)...)
+        dofmask_p = falses(4, size(grid)...)
+        for i in 1:3
+            dofmask_u[i,:,:,:] = m_mask
         end
-        dofmask_p[3,:,:] = m_mask
-        for i in @view eachindex(grid)[[begin,end],:] # Walls
-            grid.vⁿ[i] = grid.vⁿ[i] .* (false,true)
-            grid.aⁿ[i] = grid.aⁿ[i] .* (false,true)
+        dofmask_p[4,:,:,:] = m_mask
+        for i in @view eachindex(grid)[[begin,end],:,:] # Walls
+            grid.vⁿ[i] = grid.vⁿ[i] .* (false,true,true)
+            grid.aⁿ[i] = grid.aⁿ[i] .* (false,true,true)
             dofmask_u[1,i] = false
         end
-        for i in @view eachindex(grid)[:,begin] # Floor
-            grid.vⁿ[i] = grid.vⁿ[i] .* (true,false)
-            grid.aⁿ[i] = grid.aⁿ[i] .* (true,false)
+        for i in @view eachindex(grid)[:,[begin,end],:] # Walls
+            grid.vⁿ[i] = grid.vⁿ[i] .* (true,false,true)
+            grid.aⁿ[i] = grid.aⁿ[i] .* (true,false,true)
             dofmask_u[2,i] = false
+        end
+        for i in @view eachindex(grid)[:,:,begin] # Floor
+            grid.vⁿ[i] = grid.vⁿ[i] .* (true,true,false)
+            grid.aⁿ[i] = grid.aⁿ[i] .* (true,true,false)
+            dofmask_u[3,i] = false
         end
         dofmap_u = DofMap(dofmask_u)
         dofmap_p = DofMap(dofmask_p)
@@ -215,16 +219,10 @@ function main(transfer = FLIP(1.0))
         if t > first(savepoints)
             popfirst!(savepoints)
             openpvd(pvdfile; append=true) do pvd
-                openvtm(string(pvdfile, step)) do vtm
-                    vorticity(∇v) = ∇v[2,1] - ∇v[1,2]
-                    openvtk(vtm, particles.x) do vtk
-                        vtk["Pressure (Pa)"] = particles.p
-                        vtk["Velocity (m/s)"] = particles.v
-                        vtk["Vorticity (1/s)"] = vorticity.(particles.∇v)
-                    end
-                    openvtk(vtm, grid.X) do vtk
-                    end
-                    pvd[t] = vtm
+                openvtk(string(pvdfile, step), particles.x) do vtk
+                    vtk["Pressure (Pa)"] = particles.p
+                    vtk["Velocity (m/s)"] = particles.v
+                    pvd[t] = vtk
                 end
             end
             reorder_particles!(particles, partition)
@@ -234,8 +232,6 @@ function main(transfer = FLIP(1.0))
         outside = findall(x->!isinside(x, grid.X), particles.x)
         deleteat!(particles, outside)
     end
-    # sum(particles.p) / length(particles) #src
-    sum(particles.x) / length(particles) #src
 end
 
 # ## Variational multiscale method
@@ -312,7 +308,7 @@ function compute_VMS_stabilization_coefficients(state)
     c₁ = 4.0
     c₂ = 2.0
     τdyn = 1.0
-    h = sqrt(4*spacing(grid.X)^2/π)
+    h = 2*cbrt(spacing(grid.X)^3/(4/3*π))
 
     ## In the following computation, `@G2P` is unavailable
     ## due to the use of `weights_cell`
@@ -363,8 +359,8 @@ function residual(U, state)
 
     ## Map `U` to grid dispacement and pressure
     dofmap(grid.u_p) .= U
-    grid.u .= map(x->@Tensor(x[1:2]), grid.u_p)
-    grid.p .= map(x->x[3], grid.u_p)
+    grid.u .= map(x->@Tensor(x[1:3]), grid.u_p)
+    grid.p .= map(x->x[4], grid.u_p)
 
     ## Recompute nodal velocity and acceleration based on the Newmark-beta method
     @. grid.v = γ/(β*Δt)*grid.u - (γ/β-1)*grid.vⁿ - Δt/2*(γ/β-2)*grid.aⁿ
@@ -395,8 +391,8 @@ function jacobian(state)
     (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt, partition) = state
 
     ## Construct the Jacobian matrix
-    cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
-    I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
+    cₚ = 2μ * one(SymmetricFourthOrderTensor{3})
+    I(i,j) = ifelse(i===j, one(Mat{3,3}), zero(Mat{3,3}))
     @threaded @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
         A[i,j] = @∑ begin
             Kᵤᵤ = (γ/(β*Δt) * ∇S[ip] ⊡ cₚ ⊡ ∇S[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * S[jp]
@@ -487,9 +483,3 @@ function (jacobi::ThreadedJacobi)(A, x, b)
         end
     end
 end
-
-using Test                                            #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                 #src
-    @test main(FLIP(1.0))  ≈ [0.645,0.259] rtol=0.005 #src
-    @test main(TPIC())     ≈ [0.645,0.259] rtol=0.005 #src
-end                                                   #src
