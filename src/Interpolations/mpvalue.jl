@@ -211,7 +211,7 @@ function _generate_mpvalues(::Type{T}, it, mesh::AbstractMesh{dim}, dims::Dims{N
     Prop = typeof(prop)
     Indices = typeof(indices)
     ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
-    MPValueArray{It, Prop, Indices, ElType, N}(it, prop, indices) |> get_device(mesh)
+    MPValueArray{It, Prop, Indices, ElType, N}(it, prop, indices)
 end
 
 _todims(x::Tuple{Vararg{Int}}) = x

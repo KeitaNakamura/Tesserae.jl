@@ -42,10 +42,7 @@ spacing_inv(mesh::CartesianMesh) = mesh.h_inv
 
 Return the volume of the mesh.
 """
-function volume(x::CartesianMesh)
-    y = x |> cpu
-    prod(get_xmax(y) - get_xmin(y))
-end
+volume(mesh::CartesianMesh) = prod(get_xmax(mesh) - get_xmin(mesh))
 
 function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
     @assert all(ax->step(ax)==step(first(axes)), axes)

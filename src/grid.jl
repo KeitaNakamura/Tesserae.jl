@@ -73,7 +73,7 @@ end
 function generate_grid(::Type{Array}, ::Type{GridProp}, mesh::AbstractMesh) where {GridProp}
     check_gridproperty(GridProp, eltype(mesh))
     arrays = map(T->Array{T}(undef, size(mesh)), Base.tail(fieldtypes(GridProp)))
-    fillzero!(StructArray{GridProp}(tuple(mesh, arrays...))) |> get_device(mesh)
+    fillzero!(StructArray{GridProp}(tuple(mesh, arrays...)))
 end
 
 # SpArray is designed for Cartesian mesh
@@ -81,7 +81,7 @@ function generate_grid(::Type{SpArray}, ::Type{GridProp}, mesh::CartesianMesh) w
     check_gridproperty(GridProp, eltype(mesh))
     spinds = SpIndices(size(mesh))
     arrays = map(T->SpArray{T}(spinds), Base.tail(fieldtypes(GridProp)))
-    StructArray{GridProp}(tuple(mesh, arrays...)) |> get_device(mesh)
+    StructArray{GridProp}(tuple(mesh, arrays...))
 end
 
 get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
