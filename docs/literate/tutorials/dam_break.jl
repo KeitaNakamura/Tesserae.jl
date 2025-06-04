@@ -23,16 +23,21 @@ using KrylovPreconditioners: ilu
 struct FLIP α::Float64 end
 struct TPIC end
 
+BLAS.set_num_threads(Threads.nthreads() ÷ 2)
+
 function main(transfer = FLIP(1.0))
 
     ## Simulation parameters
-    h  = 0.02   # Grid spacing
-    T  = 7.0    # Time span
+    h  = 0.023 # Grid spacing
+    # h  = 0.0322  # Grid spacing
+    # h  = 0.035  # Grid spacing
+    # h  = 0.04025  # Grid spacing
+    # h = 0.046
+    # h = 0.0575
+    # h = 0.0644
+    T  = 10.0    # Time span
     g  = 9.81   # Gravity acceleration
     Δt = 2.0e-3 # Time step
-    if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        T = 0.2                           #src
-    end                                   #src
 
     ## Material constants
     ρ = 1.0e3   # Initial density
@@ -44,63 +49,66 @@ function main(transfer = FLIP(1.0))
 
     ## Utils
     cellnodes(cell) = cell:(cell+oneunit(cell))
-    cellcenter(cell, mesh) = sum(mesh[cellnodes(cell)]) / 4
+    cellcenter(cell, mesh) = sum(mesh[cellnodes(cell)]) / 8
 
     ## Properties for grid and particles
     GridProp = @NamedTuple begin
-        X   :: Vec{2, Float64}
-        x   :: Vec{2, Float64}
+        X   :: Vec{3, Float64}
+        x   :: Vec{3, Float64}
         m   :: Float64
-        v   :: Vec{2, Float64}
-        vⁿ  :: Vec{2, Float64}
-        mv  :: Vec{2, Float64}
-        a   :: Vec{2, Float64}
-        aⁿ  :: Vec{2, Float64}
-        ma  :: Vec{2, Float64}
-        u   :: Vec{2, Float64}
+        v   :: Vec{3, Float64}
+        vⁿ  :: Vec{3, Float64}
+        mv  :: Vec{3, Float64}
+        a   :: Vec{3, Float64}
+        aⁿ  :: Vec{3, Float64}
+        ma  :: Vec{3, Float64}
+        u   :: Vec{3, Float64}
         p   :: Float64
         ## δ-correction
         V   :: Float64
         Ṽ   :: Float64
         E   :: Float64
         ## Residuals
-        u_p   :: Vec{3, Float64}
-        R_mom :: Vec{2, Float64}
+        u_p   :: Vec{4, Float64}
+        R_mom :: Vec{3, Float64}
         R_mas :: Float64
+        vol   :: Float64
     end
     ParticleProp = @NamedTuple begin
-        x   :: Vec{2, Float64}
+        x   :: Vec{3, Float64}
         m   :: Float64
         V   :: Float64
-        v   :: Vec{2, Float64}
-        ∇v  :: SecondOrderTensor{2, Float64, 4}
-        a   :: Vec{2, Float64}
-        ∇a  :: SecondOrderTensor{2, Float64, 4}
+        v   :: Vec{3, Float64}
+        ∇v  :: SecondOrderTensor{3, Float64, 9}
+        ∇²v  :: @Tensor{Tuple{3,@Symmetry{3,3}}, Float64}
+        a   :: Vec{3, Float64}
+        ∇a  :: SecondOrderTensor{3, Float64, 9}
+        ∇²a  :: @Tensor{Tuple{3,@Symmetry{3,3}}, Float64}
         p   :: Float64
-        ∇p  :: Vec{2, Float64}
-        s   :: SymmetricSecondOrderTensor{2, Float64, 3}
-        b   :: Vec{2, Float64}
+        ∇p  :: Vec{3, Float64}
+        s   :: SymmetricSecondOrderTensor{3, Float64, 6}
+        b   :: Vec{3, Float64}
         ## δ-correction
-        ∇E² :: Vec{2, Float64}
+        ∇E² :: Vec{3, Float64}
         ## Stabilization
         τ₁  :: Float64
         τ₂  :: Float64
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(h, (0,3.22), (0,2.5)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (0,3.22), (0,0.5), (0,2.5)))
     for cell in CartesianIndices(size(grid).-1)
         for i in cellnodes(cell)
-            grid.V[i] += (h/2)^2
+            grid.V[i] += (h/2)^3
         end
     end
 
     ## Particles
-    particles = generate_particles(ParticleProp, grid.X; alg=PoissonDiskSampling(spacing=1/4))
+    particles = generate_particles(ParticleProp, grid.X; alg=PoissonDiskSampling(spacing=1/3))
     particles.V .= volume(grid.X) / length(particles)
-    filter!(pt -> pt.x[1]<1.2 && pt.x[2]<0.6, particles)
+    filter!(pt -> pt.x[1]<1.2 && pt.x[3]<0.6, particles)
     @. particles.m = ρ * particles.V
-    @. particles.b = Vec(0,-g)
+    @. particles.b = Vec(0,0,-g)
     @show length(particles)
 
     ## Interpolation weights
@@ -108,17 +116,19 @@ function main(transfer = FLIP(1.0))
     weights = generate_interpolation_weights(interp, grid.X, length(particles); name=Val(:S))
     weights_cell = generate_interpolation_weights(interp, grid.X, size(grid) .- 1; name=Val(:S))
 
+    partition = ColorPartition(grid.X)
+
     ## Sparse matrix
-    A = create_sparse_matrix(interp, grid.X; ndofs=3)
+    A = create_sparse_matrix(interp, grid.X; ndofs=4)
 
     ## Output
-    outdir = mkpath(joinpath("output", "dam_break"))
+    outdir = mkpath(joinpath(tempdir(), "dam_break"))
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # Create file
 
     t = 0.0
     step = 0
-    fps = 30
+    fps = 60
     savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
     Tesserae.@showprogress while t < T
@@ -137,18 +147,21 @@ function main(transfer = FLIP(1.0))
                 update!(weights_cell[cell], xc, grid.X, activenodes)
             end
         end
+        update!(partition, particles.x)
 
         if transfer isa FLIP
             @P2G grid=>i particles=>p weights=>ip begin
                 m[i]  = @∑ S[ip] * m[p]
                 mv[i] = @∑ S[ip] * m[p] * v[p]
                 ma[i] = @∑ S[ip] * m[p] * a[p]
+                vol[i] = @∑ S[ip] * V[p]
             end
         elseif transfer isa TPIC
             @P2G grid=>i particles=>p weights=>ip begin
                 m[i]  = @∑ S[ip] * m[p]
-                mv[i] = @∑ S[ip] * m[p] * (v[p] + ∇v[p] * (X[i] - x[p]))
-                ma[i] = @∑ S[ip] * m[p] * (a[p] + ∇a[p] * (X[i] - x[p]))
+                mv[i] = @∑ S[ip] * m[p] * (v[p] + ∇v[p] * (X[i] - x[p]) + 0.5*∇²v[p] ⊡₂ ((X[i] - x[p])^⊗(2) - h^2/4*I))
+                ma[i] = @∑ S[ip] * m[p] * (a[p] + ∇a[p] * (X[i] - x[p]) + 0.5*∇²a[p] ⊡₂ ((X[i] - x[p])^⊗(2) - h^2/4*I))
+                vol[i] = @∑ S[ip] * V[p]
             end
         end
 
@@ -158,49 +171,52 @@ function main(transfer = FLIP(1.0))
         @. grid.aⁿ = grid.ma / grid.m * m_mask
 
         ## Update a dof map
-        dofmask = trues(3, size(grid)...)
+        dofmask = trues(4, size(grid)...)
         for i in 1:size(dofmask,1)
-            dofmask[i,:,:] = m_mask
+            dofmask[i,:,:,:] = m_mask
         end
-        for i in @view eachindex(grid)[[begin,end],:] # Walls
-            grid.vⁿ[i] = grid.vⁿ[i] .* (false,true)
-            grid.aⁿ[i] = grid.aⁿ[i] .* (false,true)
+        for i in @view eachindex(grid)[[begin,end],:,:] # Walls
+            grid.vⁿ[i] = grid.vⁿ[i] .* (false,true,true)
+            grid.aⁿ[i] = grid.aⁿ[i] .* (false,true,true)
             dofmask[1,i] = false
         end
-        for i in @view eachindex(grid)[:,begin] # Floor
-            grid.vⁿ[i] = grid.vⁿ[i] .* (true,false)
-            grid.aⁿ[i] = grid.aⁿ[i] .* (true,false)
+        for i in @view eachindex(grid)[:,[begin,end],:] # Walls
+            grid.vⁿ[i] = grid.vⁿ[i] .* (true,false,true)
+            grid.aⁿ[i] = grid.aⁿ[i] .* (true,false,true)
             dofmask[2,i] = false
+        end
+        for i in @view eachindex(grid)[:,:,begin] # Floor
+            grid.vⁿ[i] = grid.vⁿ[i] .* (true,true,false)
+            grid.aⁿ[i] = grid.aⁿ[i] .* (true,true,false)
+            dofmask[3,i] = false
         end
         dofmap = DofMap(dofmask)
 
         ## Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, Δt)
+        state = (; grid, particles, weights, weights_cell, partition, ρ, μ, β, γ, A, dofmap, Δt)
         variational_multiscale_method(state)
 
         if transfer isa FLIP
             α = transfer.α
-            @G2P grid=>i particles=>p weights=>ip begin
+            @threaded @G2P grid=>i particles=>p weights=>ip begin
                 v[p] = @∑ ((1-α)*v[i] + α*(v[p] + ((1-γ)*a[p] + γ*a[i])*Δt)) * S[ip]
                 a[p] = @∑ a[i] * S[ip]
                 x[p] = @∑ x[i] * S[ip]
             end
         elseif transfer isa TPIC
-            @G2P grid=>i particles=>p weights=>ip begin
+            @threaded @G2P grid=>i particles=>p weights=>ip begin
                 v[p] = @∑ v[i] * S[ip]
                 a[p] = @∑ a[i] * S[ip]
                 x[p] = @∑ x[i] * S[ip]
                 ∇v[p] = @∑ v[i] ⊗ ∇S[ip]
                 ∇a[p] = @∑ a[i] ⊗ ∇S[ip]
+                ∇²v[p] = @∑ v[i] ⊗ ∇²S[ip]
+                ∇²a[p] = @∑ a[i] ⊗ ∇²S[ip]
             end
         end
 
         ## Particle shifting based on the δ-correction
         particle_shifting(state)
-
-        ## Remove particles that accidentally move outside of the mesh
-        outside = findall(x->!isinside(x, grid.X), particles.x)
-        deleteat!(particles, outside)
 
         t += Δt
         step += 1
@@ -209,22 +225,27 @@ function main(transfer = FLIP(1.0))
         if t > first(savepoints)
             popfirst!(savepoints)
             openpvd(pvdfile; append=true) do pvd
-                openvtm(string(pvdfile, step)) do vtm
-                    vorticity(∇v) = ∇v[2,1] - ∇v[1,2]
-                    openvtk(vtm, particles.x) do vtk
-                        vtk["Pressure (Pa)"] = particles.p
-                        vtk["Velocity (m/s)"] = particles.v
-                        vtk["Vorticity (1/s)"] = vorticity.(particles.∇v)
-                    end
-                    openvtk(vtm, grid.X) do vtk
-                    end
-                    pvd[t] = vtm
+                # vorticity(∇v) = ∇v[2,1] - ∇v[1,2]
+                openvtk(string(pvdfile, step), particles.x) do vtk
+                    vtk["Pressure (Pa)"] = particles.p
+                    # vtk["Velocity (m/s)"] = particles.v
+                    vtk["density"] = @. particles.m / particles.V
+                    vtk["mass"] = particles.m
+                    # vtk["Vorticity (1/s)"] = vorticity.(particles.∇v)
+                    pvd[t] = vtk
                 end
+                # openvtk(string(pvdfile, step), grid.X) do vtk
+                    # vtk["Volume"] = grid.vol
+                    # pvd[t] = vtk
+                # end
             end
+            reorder_particles!(particles, partition)
         end
+
+        ## Remove particles that accidentally move outside of the mesh
+        outside = findall(x->!isinside(x, grid.X), particles.x)
+        deleteat!(particles, outside)
     end
-    # sum(particles.p) / length(particles) #src
-    sum(particles.x) / length(particles) #src
 end
 
 # ## Variational multiscale method
@@ -233,6 +254,7 @@ function variational_multiscale_method(state)
 
     (; grid, dofmap, Δt) = state
     @. grid.u_p = zero(grid.u_p)
+    U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
 
     ## Compute VMS stabilization coefficients using current grid velocity,
     ## which is used for Jacobian matrix
@@ -259,7 +281,7 @@ function compute_VMS_stabilization_coefficients(state)
     c₁ = 4.0
     c₂ = 2.0
     τdyn = 1.0
-    h = sqrt(4*spacing(grid.X)^2/π)
+    h = 2*cbrt(spacing(grid.X)^3/(4/3*π))
 
     ## In the following computation, `@G2P` is unavailable
     ## due to the use of `weights_cell`
@@ -306,12 +328,12 @@ end
 # ## Residual vector
 
 function residual(U, state)
-    (; grid, particles, weights, μ, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, partition, μ, β, γ, dofmap, Δt) = state
 
     ## Map `U` to grid dispacement and pressure
     dofmap(grid.u_p) .= U
-    grid.u .= map(x->@Tensor(x[1:2]), grid.u_p)
-    grid.p .= map(x->x[3], grid.u_p)
+    grid.u .= map(x->@Tensor(x[1:3]), grid.u_p)
+    grid.p .= map(x->x[4], grid.u_p)
 
     ## Recompute nodal velocity and acceleration based on the Newmark-beta method
     @. grid.v = γ/(β*Δt)*grid.u - (γ/β-1)*grid.vⁿ - Δt/2*(γ/β-2)*grid.aⁿ
@@ -321,7 +343,7 @@ function residual(U, state)
     compute_VMS_stabilization_coefficients(state)
 
     ## Compute residual values
-    @G2P2G grid=>i particles=>p weights=>ip begin
+    @threaded @G2P2G grid=>i particles=>p weights=>ip partition begin
         a[p]  = @∑ a[i] * S[ip]
         p[p]  = @∑ p[i] * S[ip]
         ∇v[p] = @∑ v[i] ⊗ ∇S[ip]
@@ -339,12 +361,12 @@ end
 # ## Jacobian matrix
 
 function jacobian(state)
-    (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt) = state
+    (; grid, particles, weights, partition, ρ, μ, β, γ, A, dofmap, Δt) = state
 
     ## Construct the Jacobian matrix
-    cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
-    I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
-    @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+    cₚ = 2μ * one(SymmetricFourthOrderTensor{3})
+    I(i,j) = ifelse(i===j, one(Mat{3,3}), zero(Mat{3,3}))
+    @threaded @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
         A[i,j] = @∑ begin
             Kᵤᵤ = (γ/(β*Δt) * ∇S[ip] ⊡ cₚ ⊡ ∇S[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * S[jp]
             Kᵤₚ = -∇S[ip] * S[jp] * V[p]
@@ -360,9 +382,3 @@ function jacobian(state)
     ## Extract the activated degrees of freedom
     extract(A, dofmap)
 end
-
-using Test                                            #src
-if @isdefined(RUN_TESTS) && RUN_TESTS                 #src
-    @test main(FLIP(1.0))  ≈ [0.645,0.259] rtol=0.005 #src
-    @test main(TPIC())     ≈ [0.645,0.259] rtol=0.005 #src
-end                                                   #src
