@@ -2,6 +2,8 @@
 # cpu/gpu #
 ###########
 
+# NOTE: `gpu` always tries to convert Float64 to Float32 (is this really good?)
+
 function Adapt.adapt_storage(::CPUDevice, A::AbstractArray)
     get_device(A) isa CPUDevice ? A : Array(A)
 end
@@ -9,11 +11,26 @@ end
 cpu(A) = A |> CPUDevice()
 gpu(A) = A |> gpu_device()
 
-# directly define `gpu` for `StructArray` since `adapt_structure` is already defined in `StructArrays.jl` package
-function (gpu::GPUDevice)(A::StructArray)
-    named_tuple = map(gpu, StructArrays.components(A))
+###################################
+# Special conversions in Tesserae #
+###################################
+
+# Unlike StructArrays.jl, this also `adapt` each array `to` GPU (no need?)
+function Adapt.adapt_structure(to::GPUDevice, A::StructArray)
+    named_tuple = map(a -> adapt(to, a), StructArrays.components(A))
     StructArray(named_tuple) # always convert to NamedTuple
 end
+
+function Adapt.adapt_structure(to::GPUDevice, x::StepRangeLen{T, R, S, L}) where {T, R, S, L}
+    Tnew = T <: AbstractFloat ? Float32 : T
+    Rnew = (R <: AbstractFloat || R <: Base.TwicePrecision) ? Float32 : R
+    Snew = (S <: AbstractFloat || S <: Base.TwicePrecision) ? Float32 : S
+    StepRangeLen{Tnew, Rnew, Snew, L}(x)
+end
+
+#######################
+# GPU compatibilities #
+#######################
 
 # CartesianMesh
 function Adapt.adapt_structure(to, mesh::CartesianMesh)
