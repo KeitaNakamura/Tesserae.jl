@@ -30,13 +30,13 @@ to_vtk_connectivity(::Hex27) = SVector(1,2,3,4,5,6,7,8,9,12,14,10,17,19,20,18,11
 
 # vtk_grid
 function vtk_particles(vtk, x::AbstractVector{<: Vec}; kwargs...)
-    coords = vtk_format(f32(x |> cpu))
+    coords = vtk_format(f32(x))
     npts = length(x)
     cells = [WriteVTK.MeshCell(WriteVTK.VTKCellTypes.VTK_VERTEX, [i]) for i in 1:npts]
     WriteVTK.vtk_grid(vtk, coords, cells; kwargs...)
 end
 function vtk_mesh(vtk, mesh::CartesianMesh; kwargs...)
-    WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh |> cpu); kwargs...)
+    WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh); kwargs...)
 end
 
 function vtk_mesh(vtk, mesh::UnstructuredMesh; kwargs...)
@@ -52,10 +52,10 @@ end
 
 # add_field_data
 function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractArray{Float64}, name::AbstractString, loc::WriteVTK.AbstractFieldData; kwargs...)
-    WriteVTK.add_field_data(vtk, f32(data |> cpu), name, loc; kwargs...)
+    WriteVTK.add_field_data(vtk, f32(data), name, loc; kwargs...)
 end
 function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractArray{<: Tensor}, name::AbstractString, loc::WriteVTK.AbstractFieldData; kwargs...)
-    WriteVTK.add_field_data(vtk, f32(vtk_format(data |> cpu)), name, loc; kwargs...)
+    WriteVTK.add_field_data(vtk, f32(vtk_format(data)), name, loc; kwargs...)
 end
 vtk_format(A::AbstractArray{<: Tensor}) = _vtk_format(A)
 function _vtk_format(A::AbstractArray{<: Tensor})
