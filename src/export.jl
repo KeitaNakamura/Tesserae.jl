@@ -92,3 +92,24 @@ f32(A::AbstractArray{Float64}) = maparray(Float32, A)
 f32(A::AbstractArray{Float32}) = A
 f32(A::AbstractArray{<: Tensor{<: Any, Float64}}) = maparray(Tensorial.tensortype(Tensorial.Space(eltype(A))){Float32}, A)
 f32(A::AbstractArray{<: Tensor{<: Any, Float32}}) = A
+
+# write ply binary
+function write_ply(name::AbstractString, xs::AbstractArray{<: Vec})
+    file = string(name, ".ply")
+    n = length(xs)
+    open(file, "w") do io
+        println(io, "ply")
+        println(io, "format binary_little_endian 1.0")
+        println(io, "element vertex $n")
+        println(io, "property float x")
+        println(io, "property float y")
+        println(io, "property float z")
+        println(io, "end_header")
+    end
+    open(file, "a") do io
+        for X in xs
+            x, y, z = resize(X, 3)
+            write(io, Float32(x), Float32(y), Float32(z))
+        end
+    end
+end
