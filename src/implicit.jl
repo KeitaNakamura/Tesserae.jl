@@ -39,12 +39,18 @@ julia> dofmap(grid.v)
  12.0
 ```
 """
-struct DofMap{N, I <: AbstractVector{<: CartesianIndex}}
+struct DofMap{N, I <: AbstractVector{<: CartesianIndex}, J <: AbstractVector{<: CartesianIndex}}
     masksize::Dims{N}
     indices::I # (dof, x, y, z)
+    indices4scalar::J # (dof, x, y, z)
 end
 
-DofMap(mask::AbstractArray{Bool}) = DofMap(size(mask), findall(mask))
+function DofMap(mask::AbstractArray{Bool})
+    masksize = size(mask)
+    I = findall(mask)
+    J = map(i -> CartesianIndex(1, Base.tail(Tuple(i))...), I)
+    DofMap(masksize, I, J)
+end
 ndofs(dofmap::DofMap) = length(dofmap.indices)
 
 function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Vec{1}}
@@ -60,9 +66,8 @@ end
 
 function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
     A′ = reshape(A, 1, size(A)...)
-    indices′ = maparray(I->CartesianIndex(1,Base.tail(Tuple(I))...), dofmap.indices)
-    @boundscheck checkbounds(A′, indices′)
-    @inbounds view(A′, indices′)
+    @boundscheck checkbounds(A′, dofmap.indices4scalar)
+    @inbounds view(A′, dofmap.indices4scalar)
 end
 
 """
