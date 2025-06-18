@@ -1,3 +1,5 @@
+using MacroTools
+
 ###############
 # HybridArray #
 ###############
@@ -50,6 +52,13 @@ hybrid(A::AbstractArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A)
 hybrid(A::SpArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
 hybrid(A::StructArray) = StructArray(map(hybrid, StructArrays.components(A)))
 hybrid(mesh::AbstractMesh) = mesh
+
+mutable struct Equation
+    issumeq::Bool
+    lhs::Any
+    rhs::Any
+    op::Symbol
+end
 
 """
     @P2G grid=>i particles=>p mpvalues=>ip [space] begin
@@ -106,37 +115,29 @@ end
     In `@P2G`, `Calculation on grid` part must be placed after
     `Particle-to-grid transfer` part.
 """
-macro P2G(grid_pair, particles_pair, mpvalues_pair, equations)
-    P2G_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+macro P2G(grid_i, particles_p, mpvalues_ip, equations)
+    P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, nothing, equations)
 end
-macro P2G(grid_pair, particles_pair, mpvalues_pair, space, equations)
-    P2G_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, space, equations)
+macro P2G(grid_i, particles_p, mpvalues_ip, space, equations)
+    P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, space, equations)
 end
-macro P2G(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
-    P2G_macro(schedule, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+macro P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, equations)
+    P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, nothing, equations)
 end
-macro P2G(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
-    P2G_macro(schedule, grid_pair, particles_pair, mpvalues_pair, space, equations)
+macro P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, space, equations)
+    P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, space, equations)
 end
 
-function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
-    grid, i = unpair(grid_pair)
-    particles, _ = unpair(particles_pair)
-    mpvalues, _ = unpair(mpvalues_pair)
+function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, mpvalues_ip::Expr, space, equations::Expr)
+    P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(mpvalues_ip), space, split_equations(equations))
+end
 
-    @assert equations.head == :block
-    Base.remove_linenums!(equations)
-    replace_dollar_by_identity!(equations)
-    sumornot = map(ex->issumexpr(ex, i), equations.args)
-    if sort(sumornot; rev=true) != sumornot
-        error("@P2G: Equations without `@∑` must come after those with `@∑`")
-    end
+function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,mp), space, equations::Vector)
+    issum = map(eq -> eq.issumeq, equations)
+    (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
-    sum_equations = equations.args[sumornot]
-    nosum_equations = equations.args[.!sumornot]
-
-    body1 = P2G_sum_macro(schedule, grid_pair, particles_pair, mpvalues_pair, space, sum_equations)
-    body2 = P2G_nosum_macro(schedule, grid_pair, nosum_equations)
+    body1 = P2G_sum_expr(schedule, (grid,i), (particles,p), (mpvalues,mp), space, equations[issum])
+    body2 = P2G_nosum_expr(schedule, (grid,i), equations[.!issum])
 
     quote
         $check_arguments_for_P2G($grid, $particles, $mpvalues, $space)
@@ -145,38 +146,35 @@ function P2G_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair
     end |> esc
 end
 
-function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, sum_equations::Vector)
+function P2G_sum_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), space, sum_equations::Vector)
     isempty(sum_equations) && return Expr(:block)
 
-    grid, i = unpair(grid_pair)
-    particles, p = unpair(particles_pair)
-    mpvalues, ip = unpair(mpvalues_pair)
     @gensym mp gridindices
 
-    pairs = [grid=>i, particles=>p, mp=>ip]
-    vars = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
-    foreach(ex->complete_sumeq_expr!(ex, pairs, vars), sum_equations)
-
-    sum_names = Any[]
-    init_gridprops = Any[]
-    for ex in sum_equations
-        # `lhs` is, for example, `grid.m[i]`
-        lhs = ex.args[1]
-        if Meta.isexpr(ex, :(=))
-            push!(init_gridprops, :(Tesserae.fillzero!($(lhs.args[1]))))
-        end
-        push!(sum_names, lhs.args[1].args[2].value) # extract `m` for `grid.m[i]`
+    maps = [grid=>i, particles=>p, mp=>ip]
+    replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
+    for k in eachindex(sum_equations)
+        eq = sum_equations[k]
+        @assert Meta.isexpr(eq.lhs, :ref)
+        eq.lhs = resolve_refs(eq.lhs, maps)
+        eq.rhs = resolve_refs(eq.rhs, maps; replaced)
     end
 
-    sum_equations = map(eq -> :($add!($(eq.args[1].args...), $(eq.args[2]))), sum_equations)
+    fillzeros = Any[]
+    for k in eachindex(sum_equations)
+        (; lhs, rhs, op) = sum_equations[k]
+        op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
+        op == :(-=) && (rhs = :(-$rhs))
+        sum_equations[k] = :($add!($(lhs.args...), $rhs))
+    end
 
     body = quote
-        $(vars[2]...)
+        $(replaced[2]...)
         $mp = $mpvalues[$p]
         $gridindices = neighboringnodes($mp, $grid)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
-            $(union(vars[1], vars[3])...)
+            $(union(replaced[1], replaced[3])...)
             $(sum_equations...)
         end
     end
@@ -186,7 +184,7 @@ function P2G_sum_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_
     end
     
     quote
-        $(init_gridprops...)
+        $(fillzeros...)
         $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $hybrid($grid), $particles, $mpvalues, $space)
     end
 end
@@ -224,14 +222,22 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, mpvalues, 
     synchronize(backend)
 end
 
-function P2G_nosum_macro(schedule, grid_pair, nosum_equations::Vector)
+function P2G_nosum_expr(schedule, (grid,i), nosum_equations::Vector)
     isempty(nosum_equations) && return Expr(:block)
 
-    grid, i = unpair(grid_pair)
-    foreach(ex->complete_parent_from_index!(ex, [grid=>i]), nosum_equations)
-    foreach(ex->remove_indexing!(ex, [grid=>i]), nosum_equations)
+    maps = [grid=>i]
+    for k in eachindex(nosum_equations)
+        eq = nosum_equations[k]
+        eq.lhs = remove_indexing(resolve_refs(eq.lhs, maps))
+        eq.rhs = remove_indexing(resolve_refs(eq.rhs, maps))
+        nosum_equations[k] = eq
+    end
 
-    Expr(:block, map(ex -> :(@. $ex), nosum_equations)...)
+    map!(nosum_equations, nosum_equations) do eq
+        ex = Expr(eq.op, eq.lhs, eq.rhs)
+        :(@. $ex)
+    end
+    Expr(:block,nosum_equations...)
 end
 
 function check_arguments_for_P2G(grid, particles, mpvalues, space)
@@ -314,36 +320,22 @@ end
     In `@G2P`, `Calculation on particles` part must be placed after
     `Grid-to-particle transfer` part.
 """
-macro G2P(grid_pair, particles_pair, mpvalues_pair, equations)
-    G2P_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, equations)
+macro G2P(grid_i, particles_p, mpvalues_ip, equations)
+    G2P_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, equations)
 end
-macro G2P(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
-    G2P_macro(schedule, grid_pair, particles_pair, mpvalues_pair, equations)
+macro G2P(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, equations)
+    G2P_expr(schedule, grid_i, particles_p, mpvalues_ip, equations)
 end
 
-function G2P_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
-    grid, _ = unpair(grid_pair)
-    particles, p = unpair(particles_pair)
-    mpvalues, _ = unpair(mpvalues_pair)
+function G2P_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, mpvalues_ip::Expr, equations::Expr)
+    G2P_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(mpvalues_ip), split_equations(equations))
+end
 
-    @assert equations.head == :block
-    Base.remove_linenums!(equations)
-    replace_dollar_by_identity!(equations)
-    sumornot = map(ex->issumexpr(ex, p), equations.args)
-    if sort(sumornot; rev=true) != sumornot
-        error("@P2G: Equations without `@∑` must come after those with `@∑`")
-    end
+function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), equations::Vector)
+    issum = map(eq -> eq.issumeq, equations)
+    (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
-    sum_equations = equations.args[sumornot]
-    nosum_equations = equations.args[.!sumornot]
-
-    body1 = G2P_sum_macro(grid_pair, particles_pair, mpvalues_pair, sum_equations)
-    body2 = G2P_nosum_macro(particles_pair, nosum_equations)
-
-    body = quote
-        $body1
-        $body2
-    end
+    body = G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), equations[issum], equations[.!issum])
 
     if !DEBUG
         body = :(@inbounds $body)
@@ -377,139 +369,109 @@ function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, mpvalues) 
     synchronize(backend)
 end
 
-function G2P_sum_macro(grid_pair, particles_pair, mpvalues_pair, sum_equations::Vector)
+function G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vector, nosum_equations::Vector)
     isempty(sum_equations) && return Expr(:block)
 
-    grid, i = unpair(grid_pair)
-    particles, p = unpair(particles_pair)
-    mpvalues, ip = unpair(mpvalues_pair)
     @gensym mp gridindices
 
-    pairs = [grid=>i, particles=>p, mp=>ip]
-    vars = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
-    foreach(ex->complete_sumeq_expr!(ex, pairs, vars), sum_equations)
-
-    particles_vars_declare = []
-    particles_vars_store = []
-    for ex in sum_equations
-        lhs = ex.args[1]
-        name_p = Symbol(lhs.args[1], :_p)
-        push!(particles_vars_declare, :($name_p = zero(eltype($(lhs.args[1])))))
-        push!(particles_vars_store, Expr(ex.head, ex.args[1], name_p))
-        ex.args[1] = name_p
+    maps = [grid=>i, particles=>p, mp=>ip]
+    replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
+    for k in eachindex(sum_equations)
+        eq = sum_equations[k]
+        @assert Meta.isexpr(eq.lhs, :ref)
+        eq.lhs = resolve_refs(eq.lhs, maps)
+        eq.rhs = resolve_refs(eq.rhs, maps; replaced)
     end
 
-    foreach(ex->ex.head=:(+=), sum_equations)
+    inits = []
+    saves = []
+    for k in eachindex(sum_equations)
+        (; lhs, rhs, op) = sum_equations[k]
+        tmp = Symbol(lhs, :_p)
+        push!(inits, :($tmp = zero(eltype($(remove_indexing(lhs))))))
+        push!(saves, Expr(op, lhs, tmp))
+        sum_equations[k] = :($tmp += $rhs)
+    end
+
+    for k in eachindex(nosum_equations)
+        eq = nosum_equations[k]
+        eq.lhs = resolve_refs(eq.lhs, maps)
+        eq.rhs = resolve_refs(eq.rhs, maps)
+        nosum_equations[k] = Expr(eq.op, eq.lhs, eq.rhs)
+    end
 
     quote
-        $(vars[2]...)
-        $(particles_vars_declare...)
+        $(replaced[2]...)
+        $(inits...)
         $mp = $mpvalues[$p]
         $gridindices = neighboringnodes($mp, $grid)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
-            $(union(vars[1], vars[3])...)
+            $(union(replaced[1], replaced[3])...)
             $(sum_equations...)
         end
-        $(particles_vars_store...)
+        $(saves...)
+        $(nosum_equations...)
     end
 end
 
-function G2P_nosum_macro(particles_pair, nosum_equations::Vector)
-    isempty(nosum_equations) && return Expr(:block)
-
-    particles, p = unpair(particles_pair)
-    foreach(ex->complete_parent_from_index!(ex, [particles=>p]), nosum_equations)
-
-    Expr(:block, nosum_equations...)
+function unpair(ex)
+    @assert @capture(ex, lhs_ => rhs_)
+    lhs::Symbol, rhs::Symbol
 end
 
-function unpair(expr::Expr)
-    @assert expr.head==:call && expr.args[1]==:(=>) && isa(expr.args[2],Symbol) && isa(expr.args[3],Symbol)
-    expr.args[2], expr.args[3]
-end
-
-function issumexpr(expr::Expr, inds::Symbol...)
-    if length(expr.args) == 2 && _issumexpr(expr.args[2])
-        @assert (expr.head==:(=) || expr.head==:(+=) || expr.head==:(-=)) && isrefexpr(expr.args[1], inds...)
-    else
-        false
-    end
-    _issumexpr(expr.args[2])
-end
-
-function _issumexpr(expr::Expr)
-    if expr.head==:macrocall
-        @assert length(expr.args)==3 && (expr.args[1]==Symbol("@∑") || expr.args[1]==Symbol("@Σ")) && isa(expr.args[2],LineNumberNode)
-        true
-    else
-        false
-    end
-end
-_issumexpr(x) = false
-
-isrefexpr(expr::Expr, inds::Symbol...) = expr.head==:ref && all(expr.args[2:end] .== inds)
-isrefexpr(x, inds...) = false
-
-function complete_sumeq_expr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector)
-    # must check `iseqexpr` in advance
-    complete_parent_from_index!(expr.args[1], pairs)
-    complete_sumeq_rhs_expr!(expr.args[2], pairs, vars) # rhs
-    expr.args[2] = remove_∑(expr.args[2])
-end
-
-function remove_∑(rhs::Expr)
-    rhs.args[3] # extract only inside of @∑ (i.e., remove @∑)
-end
-
-function complete_parent_from_index!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}})
-    if Meta.isexpr(expr, :ref) && length(expr.args) == 2 # support only single index
-        for p in pairs
-            if p.second == expr.args[2] # same index
-                expr.args[1] = :($(p.first).$(expr.args[1]))
-            end
+function has_sum_macro(expr)
+    has_sum = Ref(false)
+    MacroTools.postwalk(expr) do ex
+        if Meta.isexpr(ex, :macrocall, 2) && (ex.args[1]==Symbol("@∑") || ex.args[1]==Symbol("@Σ"))
+            has_sum[] = true
         end
+        ex
     end
-    for ex in expr.args
-        complete_parent_from_index!(ex, pairs)
-    end
+    has_sum[]
 end
-complete_parent_from_index!(expr, pairs::Vector{Pair{Symbol, Symbol}}) = nothing
 
-function remove_indexing!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}})
-    for i in eachindex(expr.args)
-        ex = expr.args[i]
-        if Meta.isexpr(ex, :ref) && length(ex.args) == 2 # support only single index
-            for p in pairs
-                if p.second == ex.args[2] # same index
-                    expr.args[i] = ex.args[1]
-                end
-            end
-        else
-            remove_indexing!(ex, pairs)
+function split_equations(expr::Expr)::Vector{Any}
+    expr = MacroTools.prewalk(MacroTools.rmlines, expr)
+    replace_dollar_by_identity!(expr)
+    @assert @capture(expr, begin exprs__ end)
+    map(exprs) do ex
+        dict = MacroTools.trymatch(Expr(:op_, :lhs_, :rhs_), ex)
+        dict === nothing && error("wrong expression: $ex")
+        lhs, rhs, op = dict[:lhs], dict[:rhs], dict[:op]
+        if @capture(rhs, @∑ eq_)
+            (op == :(=) || op == :(+=) || op == :(-=)) || error("@∑ is only allowed on the RHS of assignments with `=`, `+=`, or `-=`, got $ex")
+            return Equation(true, lhs, eq, op)
         end
+        has_sum_macro(rhs) && error("@∑ must appear alone as the entire RHS expression, got $ex")
+        Equation(false, lhs, rhs, op)
     end
 end
-remove_indexing!(expr, pairs::Vector{Pair{Symbol, Symbol}}) = nothing
 
-function complete_sumeq_rhs_expr!(expr::Expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector)
-    for i in eachindex(expr.args)
-        ex = expr.args[i]
-        if Meta.isexpr(ex, :ref) && length(ex.args) == 2 # support only single index
-            index = ex.args[2]
-            for j in eachindex(pairs)
-                if pairs[j].second == index
-                    name = Symbol(ex)
-                    push!(vars[j], :($name = $(pairs[j].first).$(ex.args[1])[$(ex.args[2])]))
-                    expr.args[i] = name
+function resolve_refs(expr, maps::Vector{Pair{Symbol, Symbol}}; replaced::Union{Nothing, Vector{Set{Expr}}} = nothing) # maps: [:grid=>:i, :particles=>:p, ...]
+    replaced === nothing || @assert length(maps) == length(replaced)
+    MacroTools.postwalk(expr) do ex
+        if @capture(ex, x_[i_])
+            for (k, (parent, j)) in enumerate(maps)
+                if i == j # same index
+                    resolved = :($parent.$x[$i])
+                    replaced === nothing && return resolved
+                    sym = Symbol(resolved)
+                    push!(replaced[k], :($sym = $resolved))
+                    return sym
                 end
             end
         end
-        # check for recursive indexing
-        complete_sumeq_rhs_expr!(ex, pairs, vars)
+        ex
     end
 end
-complete_sumeq_rhs_expr!(expr, pairs::Vector{Pair{Symbol, Symbol}}, vars::Vector) = nothing
+
+function remove_indexing(expr)
+    MacroTools.postwalk(expr) do ex
+        @capture(ex, x_[i__]) && return x
+        ex
+    end
+end
 
 function replace_dollar_by_identity!(expr::Expr)
     if Meta.isexpr(expr, :$)
