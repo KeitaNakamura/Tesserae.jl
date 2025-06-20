@@ -173,7 +173,7 @@ function residual(U::AbstractVector, state)
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
     geometric(τ) = @einsum (i,j,k,l) -> τ[i,l] * one(τ)[j,k]
-    @G2P grid=>i particles=>p mpvalues=>ip begin
+    @G2P2G grid=>i particles=>p mpvalues=>ip begin
         ## In addition to updating the stress tensor, the stiffness tensor,
         ## which is utilized in the Jacobian-vector product, is also updated.
         ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
@@ -182,8 +182,6 @@ function residual(U::AbstractVector, state)
         ∂τ∂F, τ = gradient(kirchhoff_stress, F, :all)
         τ[p] = τ
         ℂ[p] = ∂τ∂F ⊡ F' - geometric(τ)
-    end
-    @P2G grid=>i particles=>p mpvalues=>ip begin
         f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
     end
 
@@ -200,11 +198,9 @@ function jacobian(U::AbstractVector, state)
     function mul!(JδU, δU)
         dofmap(grid.δu) .= δU
 
-        @G2P grid=>i particles=>p mpvalues=>ip begin
+        @G2P2G grid=>i particles=>p mpvalues=>ip begin
             ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⊡ ΔF⁻¹[p])
             τ[p] = ℂ[p] ⊡₂ ∇u[p]
-        end
-        @P2G grid=>i particles=>p mpvalues=>ip begin
             f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
         end
 
