@@ -272,87 +272,72 @@ end
 where `c` and `V` denote the stiffness (symmetric fourth-order) tensor and the volume, respectively.
 It is recommended to create global stiffness `K` using [`create_sparse_matrix`](@ref).
 """
-macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, equations)
-    P2G_Matrix_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+macro P2G_Matrix(grid_ij, particles_p, mpvalues_ipjp, equations)
+    P2G_Matrix_expr(QuoteNode(:nothing), grid_ij, particles_p, mpvalues_ipjp, nothing, equations)
 end
-macro P2G_Matrix(grid_pair, particles_pair, mpvalues_pair, space, equations)
-    P2G_Matrix_macro(QuoteNode(:nothing), grid_pair, particles_pair, mpvalues_pair, space, equations)
+macro P2G_Matrix(grid_ij, particles_p, mpvalues_ipjp, space, equations)
+    P2G_Matrix_expr(QuoteNode(:nothing), grid_ij, particles_p, mpvalues_ipjp, space, equations)
 end
-macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, equations)
-    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, nothing, equations)
+macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, mpvalues_ipjp, equations)
+    P2G_Matrix_expr(schedule, grid_ij, particles_p, mpvalues_ipjp, nothing, equations)
 end
-macro P2G_Matrix(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
-    P2G_Matrix_macro(schedule, grid_pair, particles_pair, mpvalues_pair, space, equations)
+macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, mpvalues_ipjp, space, equations)
+    P2G_Matrix_expr(schedule, grid_ij, particles_p, mpvalues_ipjp, space, equations)
 end
 
-function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalues_pair, space, equations)
-    grid, (i,j) = unpair2(grid_pair)
-    particles, p = unpair(particles_pair)
-    mpvalues, (ip,jp) = unpair2(mpvalues_pair)
-    @gensym mp gridindices localdofs I J dofs fulldofs
+function P2G_Matrix_expr(schedule, grid_ij, particles_p, mpvalues_ipjp, space, equations)
+    P2G_Matrix_expr(schedule, unpair2(grid_ij), unpair(particles_p), unpair2(mpvalues_ipjp), space, split_equations(equations))
+end
 
-    @assert equations.head == :block
-    Base.remove_linenums!(equations)
-    replace_dollar_by_identity!(equations)
-    sumornot = map(ex->_issumexpr(ex.args[2]), equations.args)
+function P2G_Matrix_expr(schedule::QuoteNode, (grid,(i,j)), (particles,p), (mpvalues,(ip,jp)), space, equations::Vector)
+    @gensym mp gridindices ldofs I J dofs gdofs
 
-    sum_equations = equations.args[sumornot]
-    nosum_equations = equations.args[.!sumornot]
+    @assert all(eq -> eq.issumeq, equations)
 
-    @assert all(map(ex->issumexpr(ex, i, j), sum_equations))
-
-    pairs = [grid=>i, grid=>j, particles=>p, mp=>ip, mp=>jp]
-    vars = [Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}()]
-
-    init_global_matrices = Expr[]
-    global_matrices = Symbol[]
-    create_local_matrices = Expr[]
-    assemble_local_matrices = Expr[]
-    add_local_to_global = Expr[]
-    for ex in sum_equations
-        rhs = remove_∑(ex.args[2])
-        complete_sumeq_rhs_expr!(Meta.quot(rhs), pairs, vars) # rhs
-        lhs = ex.args[1]
-        @assert Meta.isexpr(lhs, :ref)
-        globalname = lhs.args[1]
-        localname = gensym(globalname)
-
-        Meta.isexpr(ex, :(=)) && push!(init_global_matrices, :(Tesserae.fillzero!($globalname)))
-        push!(global_matrices, globalname)
-        push!(create_local_matrices, :($localname = Array{eltype($globalname)}(undef, length($localdofs), length($localdofs))))
-        push!(assemble_local_matrices, :(@inbounds $localname[$I,$J] .= $trySArray($rhs))) # converting `Tensor` to `SArray` is faster for setindex!
-        push!(add_local_to_global, :(Tesserae.add!($globalname, $dofs, $dofs, $localname)))
+    maps = [grid=>i, grid=>j, particles=>p, mp=>ip, mp=>jp]
+    replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}()]
+    for k in eachindex(equations)
+        eq = equations[k]
+        @assert Meta.isexpr(eq.lhs, :ref)
+        eq.rhs = resolve_refs(eq.rhs, maps; replaced)
     end
 
-    grid_sums = Expr[]
-    for ex in nosum_equations
-        lhs = ex.args[1]
-        @assert ex.head == :(+=)
-        @assert Meta.isexpr(lhs, :ref) && all(lhs.args[2:end] .== i) # currently support only `A[i,i] = ...`
-        complete_parent_from_index!(ex.args[2], [grid=>i])
-        globalname = lhs.args[1]
-        push!(grid_sums, :(Tesserae.add!($globalname, $I, $I, $(ex.args[2]))))
+    fillzeros = Any[]
+    gmats = Any[]
+    lmat_init = Any[]
+    lmat_asm = Any[] 
+    lmat2gmat = Any[]
+    for k in eachindex(equations)
+        (; lhs, rhs, op) = equations[k]
+        gmat = remove_indexing(lhs)
+        lmat = gensym(gmat)
+        op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($gmat)))
+        op == :(-=) && (rhs = :(-$rhs))
+        push!(gmats, gmat)
+        push!(lmat_init, :($lmat = Array{eltype($gmat)}(undef, length($ldofs), length($ldofs))))
+        push!(lmat_asm, :(@inbounds $lmat[$I,$J] .= $trySArray($rhs))) # converting `Tensor` to `SArray` is faster for setindex!
+        push!(lmat2gmat, :(Tesserae.add!($gmat, $dofs, $dofs, $lmat)))
     end
 
     body = quote
-        $(vars[3]...)
+        $(replaced[3]...)
         $mp = $mpvalues[$p]
         $gridindices = neighboringnodes($mp, $grid)
-        $localdofs = LinearIndices((size($fulldofs, 1), size($gridindices)...))
-        $(create_local_matrices...)
+        $ldofs = LinearIndices((size($gdofs, 1), size($gridindices)...))
+        $(lmat_init...)
         for $jp in eachindex($gridindices)
             $j = $gridindices[$jp]
-            $(union(vars[2], vars[5])...)
-            $J = vec(view($localdofs,:,$jp))
+            $(union(replaced[2], replaced[5])...)
+            $J = vec(view($ldofs,:,$jp))
             for $ip in eachindex($gridindices)
                 $i = $gridindices[$ip]
-                $(union(vars[1], vars[4])...)
-                $I = vec(view($localdofs,:,$ip))
-                $(assemble_local_matrices...)
+                $(union(replaced[1], replaced[4])...)
+                $I = vec(view($ldofs,:,$ip))
+                $(lmat_asm...)
             end
         end
-        $dofs = collect(vec(view($fulldofs, :, $gridindices)))
-        $(add_local_to_global...)
+        $dofs = collect(vec(view($gdofs, :, $gridindices)))
+        $(lmat2gmat...)
     end
 
     if !DEBUG
@@ -361,20 +346,10 @@ function P2G_Matrix_macro(schedule::QuoteNode, grid_pair, particles_pair, mpvalu
 
     body = quote
         $check_arguments_for_P2G_Matrix($grid, $particles, $mpvalues, $space)
-        $(init_global_matrices...)
-        $fulldofs = LinearIndices((size($(first(global_matrices)),1)÷length($grid), size($grid)...))
-        @assert all(==((length($fulldofs), length($fulldofs))), map(size, ($(global_matrices...),)))
+        $(fillzeros...)
+        $gdofs = LinearIndices((size($(gmats[1]),1)÷length($grid), size($grid)...))
+        @assert all(==((length($gdofs), length($gdofs))), map(size, ($(gmats...),)))
         $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $space)
-    end
-
-    if !isempty(grid_sums)
-        body = quote
-            $body
-            for $i in eachindex($grid)
-                $I = vec(view($fulldofs,:,$i))
-                $(grid_sums...)
-            end
-        end
     end
 
     esc(body)
@@ -385,9 +360,10 @@ function check_arguments_for_P2G_Matrix(grid, particles, mpvalues, space)
     @assert get_device(grid) isa CPUDevice
 end
 
-function unpair2(expr::Expr)
-    @assert expr.head==:call && expr.args[1]==:(=>) && isa(expr.args[2],Symbol) && Meta.isexpr(expr.args[3],:tuple) && length(expr.args[3].args)==2
-    expr.args[2], (expr.args[3].args...,)
+function unpair2(ex::Expr)
+    @assert @capture(ex, lhs_ => (rhs__,))
+    @assert length(rhs) == 2
+    lhs::Symbol, (rhs[1]::Symbol, rhs[2]::Symbol)
 end
 
 @inline trySArray(x::Tensor) = SArray(x)
