@@ -78,6 +78,7 @@ export
 # transfer
     @P2G,
     @G2P,
+    @G2P2G,
 # implicit
     DofMap,
     ndofs,

@@ -132,21 +132,24 @@ function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, mpvalues
     P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(mpvalues_ip), space, split_equations(equations))
 end
 
-function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,mp), space, equations::Vector)
+function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), space, equations::Vector)
     issum = map(eq -> eq.issumeq, equations)
     (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
     code = quote
-        $check_arguments_for_P2G($grid, $particles, $mpvalues, $space)
+        Tesserae.check_arguments_for_P2G($grid, $particles, $mpvalues, $space)
     end
 
     sum_equations = equations[issum]
     if !isempty(sum_equations)
-        pre, body = P2G_sum_expr((grid,i), (particles,p), (mpvalues,mp), sum_equations)
+        pre, body = P2G_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations)
+        if !DEBUG
+            body = :(@inbounds $body)
+        end
         code = quote
             $code
             $pre
-            $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $hybrid($grid), $particles, $mpvalues, $space)
+            Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), Tesserae.hybrid($grid), $particles, $mpvalues, $space)
         end
     end
 
@@ -155,11 +158,13 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,mp), s
         body = P2G_nosum_expr((grid,i), nosum_equations)
         code = quote
             $code
-            $body
+            let
+                $body
+            end
         end
     end
 
-    esc(code)
+    esc(prettify(code; lines=true, alias=false))
 end
 
 function P2G_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vector)
@@ -179,7 +184,7 @@ function P2G_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vec
         (; lhs, rhs, op) = sum_equations[k]
         op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
         op == :(-=) && (rhs = :(-$rhs))
-        sum_equations[k] = :($add!($(lhs.args...), $rhs))
+        sum_equations[k] = :(Tesserae.add!($(lhs.args...), $rhs))
     end
 
     body = quote
@@ -191,10 +196,6 @@ function P2G_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vec
             $(union(replaced[1], replaced[3])...)
             $(sum_equations...)
         end
-    end
-
-    if !DEBUG
-        body = :(@inbounds $body)
     end
     
     Expr(:block, fillzeros...), body
@@ -349,18 +350,21 @@ function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), e
     (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
     code = quote
-        $check_arguments_for_G2P($grid, $particles, $mpvalues)
+        Tesserae.check_arguments_for_G2P($grid, $particles, $mpvalues)
     end
 
     if !isempty(equations)
         body = G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), equations[issum], equations[.!issum])
+        if !DEBUG
+            body = :(@inbounds $body)
+        end
         code = quote
             $code
-            $G2P(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues)
+            Tesserae.G2P(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $mpvalues)
         end
     end
 
-    esc(code)
+    esc(prettify(code; lines=true, alias=false))
 end
 
 # CPU: sequential & multi-threading
@@ -435,11 +439,104 @@ function G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vec
         end
     end
 
-    if !DEBUG
-        code = :(@inbounds $code)
+    code
+end
+
+macro G2P2G(grid_i, particles_p, mpvalues_ip, equations)
+    G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, nothing, equations)
+end
+macro G2P2G(grid_i, particles_p, mpvalues_ip, space, equations)
+    G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, space, equations)
+end
+macro G2P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, equations)
+    G2P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, nothing, equations)
+end
+macro G2P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, space, equations)
+    G2P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, space, equations)
+end
+
+function G2P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, mpvalues_ip::Expr, space, equations::Expr)
+    G2P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(mpvalues_ip), space, split_equations(equations))
+end
+
+function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), space, equations::Vector)
+    equations_g2p_sum = Any[]
+    equations_p2g_sum = Any[]
+    equations_g2p_nosum = Any[]
+    equations_p2g_nosum = Any[]
+    precedence = 1
+    for k in eachindex(equations)
+        eq = equations[k]
+        if eq.issumeq
+            @assert @capture(eq.lhs, A_[index_])
+            if index == p
+                @assert precedence == 1
+                push!(equations_g2p_sum, eq)
+            elseif index == i
+                @assert precedence ≤ 3
+                push!(equations_p2g_sum, eq)
+                precedence = 3
+            else
+                error("@G2P2G: wrong index in LHS equation, $(eq.lhs)")
+            end
+        else
+            if precedence in (1, 2)
+                push!(equations_g2p_nosum, eq)
+                precedence = 2
+            elseif precedence in (3, 4)
+                push!(equations_p2g_nosum, eq)
+                precedence = 4
+            else
+                error("unreachable")
+            end
+        end
     end
 
-    code
+    code = quote
+        Tesserae.check_arguments_for_G2P($grid, $particles, $mpvalues)
+        Tesserae.check_arguments_for_P2G($grid, $particles, $mpvalues, $space)
+    end
+    body = Expr(:block)
+
+    if !isempty(equations_g2p_sum) || !isempty(equations_g2p_nosum)
+        expr = G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), equations_g2p_sum, equations_g2p_nosum)
+        body = quote
+            $body
+            $expr
+        end
+    end
+
+    if !isempty(equations_p2g_sum)
+        pre, expr = P2G_sum_expr((grid,i), (particles,p), (mpvalues,ip), equations_p2g_sum)
+        code = quote
+            $code
+            $pre
+        end
+        body = quote
+            $body
+            $expr
+        end
+    end
+
+    if !DEBUG
+        body = :(@inbounds $body)
+    end
+    code = quote
+        $code
+        Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), Tesserae.hybrid($grid), $particles, $mpvalues, $space)
+    end
+
+    if !isempty(equations_p2g_nosum)
+        body = P2G_nosum_expr((grid,i), equations_p2g_nosum)
+        code = quote
+            $code
+            let
+                $body
+            end
+        end
+    end
+
+    esc(prettify(code; lines=true, alias=false))
 end
 
 ####################
