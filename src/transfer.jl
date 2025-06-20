@@ -136,19 +136,33 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,mp), s
     issum = map(eq -> eq.issumeq, equations)
     (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
-    body1 = P2G_sum_expr(schedule, (grid,i), (particles,p), (mpvalues,mp), space, equations[issum])
-    body2 = P2G_nosum_expr(schedule, (grid,i), equations[.!issum])
-
-    quote
+    code = quote
         $check_arguments_for_P2G($grid, $particles, $mpvalues, $space)
-        $body1
-        $body2
-    end |> esc
+    end
+
+    sum_equations = equations[issum]
+    if !isempty(sum_equations)
+        pre, body = P2G_sum_expr((grid,i), (particles,p), (mpvalues,mp), sum_equations)
+        code = quote
+            $code
+            $pre
+            $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $hybrid($grid), $particles, $mpvalues, $space)
+        end
+    end
+
+    nosum_equations = equations[.!issum]
+    if !isempty(nosum_equations)
+        body = P2G_nosum_expr((grid,i), nosum_equations)
+        code = quote
+            $code
+            $body
+        end
+    end
+
+    esc(code)
 end
 
-function P2G_sum_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), space, sum_equations::Vector)
-    isempty(sum_equations) && return Expr(:block)
-
+function P2G_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vector)
     @gensym mp gridindices
 
     maps = [grid=>i, particles=>p, mp=>ip]
@@ -183,10 +197,7 @@ function P2G_sum_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip
         body = :(@inbounds $body)
     end
     
-    quote
-        $(fillzeros...)
-        $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $hybrid($grid), $particles, $mpvalues, $space)
-    end
+    Expr(:block, fillzeros...), body
 end
 
 # CPU: sequential
@@ -222,9 +233,7 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, mpvalues, 
     synchronize(backend)
 end
 
-function P2G_nosum_expr(schedule, (grid,i), nosum_equations::Vector)
-    isempty(nosum_equations) && return Expr(:block)
-
+function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     maps = [grid=>i]
     for k in eachindex(nosum_equations)
         eq = nosum_equations[k]
@@ -234,10 +243,14 @@ function P2G_nosum_expr(schedule, (grid,i), nosum_equations::Vector)
     end
 
     map!(nosum_equations, nosum_equations) do eq
-        ex = Expr(eq.op, eq.lhs, eq.rhs)
-        :(@. $ex)
+        (; lhs, rhs, op) = eq
+        if @capture(lhs, $grid.x_)
+            :(@. $(Expr(op, lhs, rhs)))
+        else # TODO: avoid intermediate allocation
+            Expr(op, lhs, :(@. $rhs))
+        end
     end
-    Expr(:block,nosum_equations...)
+    Expr(:block, nosum_equations...)
 end
 
 function check_arguments_for_P2G(grid, particles, mpvalues, space)
@@ -335,18 +348,19 @@ function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), e
     issum = map(eq -> eq.issumeq, equations)
     (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
-    body = G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), equations[issum], equations[.!issum])
-
-    if !DEBUG
-        body = :(@inbounds $body)
-    end
-
-    body = quote
+    code = quote
         $check_arguments_for_G2P($grid, $particles, $mpvalues)
-        $G2P(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues)
     end
 
-    esc(body)
+    if !isempty(equations)
+        body = G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), equations[issum], equations[.!issum])
+        code = quote
+            $code
+            $G2P(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues)
+        end
+    end
+
+    esc(code)
 end
 
 # CPU: sequential & multi-threading
@@ -370,50 +384,67 @@ function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, mpvalues) 
 end
 
 function G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vector, nosum_equations::Vector)
-    isempty(sum_equations) && return Expr(:block)
-
     @gensym mp gridindices
 
-    maps = [grid=>i, particles=>p, mp=>ip]
-    replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
-    for k in eachindex(sum_equations)
-        eq = sum_equations[k]
-        @assert Meta.isexpr(eq.lhs, :ref)
-        eq.lhs = resolve_refs(eq.lhs, maps)
-        eq.rhs = resolve_refs(eq.rhs, maps; replaced)
-    end
+    code = Expr(:block)
 
-    inits = []
-    saves = []
-    for k in eachindex(sum_equations)
-        (; lhs, rhs, op) = sum_equations[k]
-        tmp = Symbol(lhs, :_p)
-        push!(inits, :($tmp = zero(eltype($(remove_indexing(lhs))))))
-        push!(saves, Expr(op, lhs, tmp))
-        sum_equations[k] = :($tmp += $rhs)
-    end
-
-    for k in eachindex(nosum_equations)
-        eq = nosum_equations[k]
-        eq.lhs = resolve_refs(eq.lhs, maps)
-        eq.rhs = resolve_refs(eq.rhs, maps)
-        nosum_equations[k] = Expr(eq.op, eq.lhs, eq.rhs)
-    end
-
-    quote
-        $(replaced[2]...)
-        $(inits...)
-        $mp = $mpvalues[$p]
-        $gridindices = neighboringnodes($mp, $grid)
-        for $ip in eachindex($gridindices)
-            $i = $gridindices[$ip]
-            $(union(replaced[1], replaced[3])...)
-            $(sum_equations...)
+    if !isempty(sum_equations)
+        maps = [grid=>i, particles=>p, mp=>ip]
+        replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
+        for k in eachindex(sum_equations)
+            eq = sum_equations[k]
+            @assert Meta.isexpr(eq.lhs, :ref)
+            eq.lhs = resolve_refs(eq.lhs, maps)
+            eq.rhs = resolve_refs(eq.rhs, maps; replaced)
         end
-        $(saves...)
-        $(nosum_equations...)
+
+        inits = []
+        saves = []
+        for k in eachindex(sum_equations)
+            (; lhs, rhs, op) = sum_equations[k]
+            tmp = Symbol(lhs, :_p)
+            push!(inits, :($tmp = zero(eltype($(remove_indexing(lhs))))))
+            push!(saves, Expr(op, lhs, tmp))
+            sum_equations[k] = :($tmp += $rhs)
+        end
+
+        code = quote
+            $(replaced[2]...)
+            $(inits...)
+            $mp = $mpvalues[$p]
+            $gridindices = neighboringnodes($mp, $grid)
+            for $ip in eachindex($gridindices)
+                $i = $gridindices[$ip]
+                $(union(replaced[1], replaced[3])...)
+                $(sum_equations...)
+            end
+            $(saves...)
+        end
     end
+
+    if !isempty(nosum_equations)
+        for k in eachindex(nosum_equations)
+            eq = nosum_equations[k]
+            eq.lhs = resolve_refs(eq.lhs, maps)
+            eq.rhs = resolve_refs(eq.rhs, maps)
+            nosum_equations[k] = Expr(eq.op, eq.lhs, eq.rhs)
+        end
+        code = quote
+            $code
+            $(nosum_equations...)
+        end
+    end
+
+    if !DEBUG
+        code = :(@inbounds $code)
+    end
+
+    code
 end
+
+####################
+# Helper functions #
+####################
 
 function unpair(ex)
     @assert @capture(ex, lhs_ => rhs_)
