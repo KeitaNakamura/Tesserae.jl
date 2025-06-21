@@ -15,7 +15,7 @@ struct KernelCorrection{K <: Kernel, P <: Polynomial} <: Interpolation
     poly::P
 end
 
-KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(Linear()))
+KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(MultiLinear()))
 
 get_kernel(kc::KernelCorrection) = kc.kernel
 get_polynomial(kc::KernelCorrection) = kc.poly
