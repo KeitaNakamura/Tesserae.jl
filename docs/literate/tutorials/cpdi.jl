@@ -4,9 +4,9 @@
 # <img src="https://github.com/user-attachments/assets/86e62b20-e65d-4c23-801c-70795b774b8d" width="210"/>
 # ```
 #
-# | # Particles | # Iterations | Execution time |
-# | ----------- | ------------ | -------------- |
-# | 27k         | 500          | 30 sec         |
+# | # Particles | # Iterations | Execution time (w/o output) |
+# | ----------- | ------------ | --------------------------- |
+# | 27k         | 500          | 15 sec                      |
 #
 # This example employs a convected particle domain interpolation[^1].
 #

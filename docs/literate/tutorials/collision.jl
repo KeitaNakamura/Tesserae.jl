@@ -4,9 +4,9 @@
 # <img src="https://github.com/user-attachments/assets/24cbd50c-7d21-4917-a7e1-12816b561dee" width="600"/>
 # ```
 #
-# | # Particles | # Iterations | Execution time |
-# | ----------- | ------------ | -------------- |
-# | 17k         | 2.9k         | 10 sec         |
+# | # Particles | # Iterations | Execution time (w/o output) |
+# | ----------- | ------------ | --------------------------- |
+# | 17k         | 2.9k         | 5 sec                       |
 #
 # In this example, the following velocity transfer schemes are demonstrated:
 #

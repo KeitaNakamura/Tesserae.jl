@@ -4,9 +4,9 @@
 # <img src="https://github.com/user-attachments/assets/9d9dbb86-87d5-4818-bbbf-ae0983cd3f04" width="800"/>
 # ```
 #
-# | # Particles | # Iterations | Execution time |
-# | ----------- | ------------ | -------------- |
-# | 26k         | 300          | 2 min          |
+# | # Particles | # Iterations | Execution time (w/o output) |
+# | ----------- | ------------ | --------------------------- |
+# | 26k         | 300          | 1 min                       |
 
 using Tesserae
 
@@ -211,5 +211,5 @@ end
 
 using Test                                #src
 if @isdefined(RUN_TESTS) && RUN_TESTS     #src
-    @test main() ≈ [0.7406,0,0] rtol=1e-4 #src
+    @test main() ≈ [0.7416,0,0] rtol=1e-4 #src
 end                                       #src
