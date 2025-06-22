@@ -52,14 +52,14 @@ end
 
 # MPValueArray
 function Adapt.adapt_structure(to, mpvalues::MPValueArray{<: Any, <: Any, <: Any, <: Any, N}) where {N}
-    it = getfield(mpvalues, :it)
+    interp = getfield(mpvalues, :interp)
     prop = map(a -> adapt(to, a), getfield(mpvalues, :prop))
     indices = adapt(to, getfield(mpvalues, :indices))
-    It = typeof(it)
+    Interp = typeof(interp)
     Prop = typeof(prop)
     Indices = typeof(indices)
-    ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
-    MPValueArray{It, Prop, Indices, ElType, N}(it, prop, indices)
+    ElType = Base._return_type(_getindex, Tuple{Interp, Prop, Indices, Int})
+    MPValueArray{Interp, Prop, Indices, ElType, N}(interp, prop, indices)
 end
 function KernelAbstractions.get_backend(mpvalues::MPValueArray)
     prop = getfield(mpvalues, :prop)

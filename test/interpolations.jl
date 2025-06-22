@@ -6,7 +6,7 @@
         for T in (Float32, Float64)
             for kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
                 for extension in (identity, WLS, KernelCorrection)
-                    it = extension(kernel)
+                    interp = extension(kernel)
 
                     function check_mpvalue(mp::Union{MPValue, Tesserae.MPValueArray}, derivative)
                         if derivative isa Order{0}
@@ -41,26 +41,26 @@
                     ###########
                     # MPValue #
                     ###########
-                    mp = @inferred MPValue(T, it, mesh)
-                    @test Tesserae.interpolation(mp) === it
+                    mp = @inferred MPValue(T, interp, mesh)
+                    @test Tesserae.interpolation(mp) === interp
                     @test mp.w isa Array{T}
                     @test mp.∇w isa Array{Vec{dim,T}}
                     @test ndims(mp.w) == dim
                     @test ndims(mp.∇w) == dim
                     @test size(mp.w) == size(mp.∇w)
                     @test typeof(neighboringnodes(mp)) === CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
-                    check_mpvalue((@inferred MPValue(T, it, mesh; derivative=Order(0))), Order(0))
-                    check_mpvalue((@inferred MPValue(T, it, mesh; derivative=Order(1))), Order(1))
-                    check_mpvalue((@inferred MPValue(T, it, mesh; derivative=Order(2))), Order(2))
-                    check_mpvalue((@inferred MPValue(T, it, mesh; derivative=Order(3))), Order(3))
+                    check_mpvalue((@inferred MPValue(T, interp, mesh; derivative=Order(0))), Order(0))
+                    check_mpvalue((@inferred MPValue(T, interp, mesh; derivative=Order(1))), Order(1))
+                    check_mpvalue((@inferred MPValue(T, interp, mesh; derivative=Order(2))), Order(2))
+                    check_mpvalue((@inferred MPValue(T, interp, mesh; derivative=Order(3))), Order(3))
 
                     ################
                     # MPValueArray #
                     ################
                     n = 10
-                    mpvalues = @inferred generate_mpvalues(T, it, mesh, n)
+                    mpvalues = @inferred generate_mpvalues(T, interp, mesh, n)
                     @test size(mpvalues) === (n,)
-                    @test Tesserae.interpolation(mpvalues) === it
+                    @test Tesserae.interpolation(mpvalues) === interp
                     @test mpvalues.w isa Array{T}
                     @test mpvalues.∇w isa Array{Vec{dim,T}}
                     @test ndims(mpvalues.w) == dim+1
@@ -70,7 +70,7 @@
                         typeof(mpvalues[i]) === eltype(mpvalues)
                     end
                     for order in 0:3
-                        mpvalues = @inferred generate_mpvalues(T, it, mesh, n; derivative=Order(order))
+                        mpvalues = @inferred generate_mpvalues(T, interp, mesh, n; derivative=Order(order))
                         check_mpvalue(mpvalues, Order(order))
                         foreach(mp -> check_mpvalue(mp, Order(order)), mpvalues)
                     end
@@ -98,11 +98,11 @@ end # MPValue
         isapprox(mapreduce((j,i) -> X[i]⊗mp.∇w[j], +, CI, indices), I)
     end
 
-    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quadratic()))
+    @testset "$spline" for spline in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quadratic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(it, mesh)
+            mp = MPValue(spline, mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
                 update!(mp, x, mesh)
@@ -114,11 +114,11 @@ end # MPValue
         end
     end
 
-    @testset "$it" for it in (SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()))
+    @testset "$spline" for spline in (SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(it, mesh)
+            mp = MPValue(spline, mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
                 update!(mp, x, mesh)
@@ -131,11 +131,11 @@ end # MPValue
     end
 
     @testset "uGIMP()" begin
-        it = uGIMP()
+        gimp = uGIMP()
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(it, mesh)
+            mp = MPValue(gimp, mesh)
             l = 0.5*spacing(mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
@@ -151,11 +151,11 @@ end # MPValue
     end
 
     @testset "CPDI" begin
-        it = CPDI()
+        cpdi = CPDI()
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(it, mesh)
+            mp = MPValue(cpdi, mesh)
             l = 0.5*spacing(mesh)
             F = one(Mat{dim,dim})
             @test all(1:100) do _
@@ -173,11 +173,11 @@ end # MPValue
     end
 
     @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), BSpline(Quintic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
-        it = Wrapper(kernel)
+        interp = Wrapper(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(it, mesh)
+            mp = MPValue(interp, mesh)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
                 x = rand(Vec{dim})
@@ -193,17 +193,17 @@ end
 @testset "B-spline fast computation" begin
     # check by autodiff
     k = 5
-    @testset "$it" for it in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), BSpline(Quintic()))
+    @testset "$spline" for spline in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), BSpline(Quintic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(-1,2), Val(dim))...)
             xp = rand(Vec{dim})
-            mp = MPValue(it, mesh; derivative=Order(k))
+            mp = MPValue(spline, mesh; derivative=Order(k))
             update!(mp, xp, mesh)
             nodeindices = neighboringnodes(mp)
             for ip in eachindex(nodeindices)
                 i = nodeindices[ip]
-                vals = values(Order(k), it, xp, mesh, i)
+                vals = values(Order(k), spline, xp, mesh, i)
                 for a in 0:k
                     @test values(mp, a+1)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end

@@ -19,31 +19,31 @@ get_polynomial(wls::WLS) = wls.poly
 gridspan(wls::WLS) = gridspan(get_kernel(wls))
 @inline neighboringnodes(wls::WLS, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(wls), pt, mesh)
 
-@inline function update_property!(mp::MPValue, it::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
-    update_property_general!(mp, it, pt, mesh, filter)
+@inline function update_property!(mp::MPValue, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+    update_property_general!(mp, wls, pt, mesh, filter)
 end
 
 # a bit faster implementation for B-splines
-@inline function update_property!(mp::MPValue, it::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline function update_property!(mp::MPValue, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(mp)
     isnearbounds = size(values(mp,1)) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
-        update_property_general!(mp, it, pt, mesh, filter)
+        update_property_general!(mp, wls, pt, mesh, filter)
     else
-        kernel = get_kernel(it)
+        kernel = get_kernel(wls)
         @inbounds for ip in eachindex(indices)
             values(mp,1)[ip] = value(kernel, pt, mesh, indices[ip])
         end
-        update_property_after_moment_matrix!(mp, it, pt, mesh, moment_matrix_inv(kernel, mesh))
+        update_property_after_moment_matrix!(mp, wls, pt, mesh, moment_matrix_inv(kernel, mesh))
     end
 end
 @inline moment_matrix_inv(::BSpline{Quadratic}, mesh::CartesianMesh{dim}) where {dim} = diagm([1; ones(Vec{dim,Int}) * 4/spacing(mesh)^2])
 @inline moment_matrix_inv(::BSpline{Cubic}, mesh::CartesianMesh{dim}) where {dim} = diagm([1; ones(Vec{dim,Int}) * 3/spacing(mesh)^2])
 
-@inline function update_property_general!(mp::MPValue, it::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
+@inline function update_property_general!(mp::MPValue, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
     indices = neighboringnodes(mp)
-    kernel = get_kernel(it)
-    poly = get_polynomial(it)
+    kernel = get_kernel(wls)
+    poly = get_polynomial(wls)
     xₚ = getx(pt)
 
     M = fastsum(eachindex(indices)) do ip
@@ -56,12 +56,12 @@ end
         end
     end
 
-    update_property_after_moment_matrix!(mp, it, pt, mesh, inv(M))
+    update_property_after_moment_matrix!(mp, wls, pt, mesh, inv(M))
 end
 
-@inline function update_property_after_moment_matrix!(mp::MPValue, it::WLS, pt, mesh::CartesianMesh, M⁻¹)
+@inline function update_property_after_moment_matrix!(mp::MPValue, wls::WLS, pt, mesh::CartesianMesh, M⁻¹)
     indices = neighboringnodes(mp)
-    poly = get_polynomial(it)
+    poly = get_polynomial(wls)
     xₚ = getx(pt)
 
     P₀__ = values(derivative_order(mp), poly, zero(xₚ))

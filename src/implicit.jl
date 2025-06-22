@@ -123,15 +123,15 @@ julia> extract(A, dofmap)
   ⋅    ⋅    ⋅    ⋅   0.0  0.0   ⋅   0.0  0.0
 ```
 """
-function create_sparse_matrix(it::Interpolation, mesh::AbstractMesh; ndofs::Int = ndims(mesh))
-    create_sparse_matrix(Float64, it, mesh; ndofs)
+function create_sparse_matrix(interp::Interpolation, mesh::AbstractMesh; ndofs::Int = ndims(mesh))
+    create_sparse_matrix(Float64, interp, mesh; ndofs)
 end
-function create_sparse_matrix(::Type{T}, it::Interpolation, mesh::CartesianMesh{dim}; ndofs::Int = dim) where {T, dim}
+function create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh{dim}; ndofs::Int = dim) where {T, dim}
     dims = size(mesh)
     spy = falses(ndofs, prod(dims), ndofs, prod(dims))
     LI, CI = LinearIndices(dims), CartesianIndices(dims)
     for i in CI
-        unit = (gridspan(it) - 1) * oneunit(i)
+        unit = (gridspan(interp) - 1) * oneunit(i)
         indices = intersect((i-unit):(i+unit), CI)
         for j in indices
             spy[1:ndofs, LI[i], 1:ndofs, LI[j]] .= true

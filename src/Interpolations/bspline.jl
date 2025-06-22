@@ -132,16 +132,16 @@ end
     end
 end
 
-function update_property!(mp::MPValue, it::AbstractBSpline, pt, mesh::CartesianMesh)
+function update_property!(mp::MPValue, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = neighboringnodes(mp)
     isnearbounds = size(values(mp,1)) != size(indices)
     if isnearbounds
         @inbounds for ip in eachindex(indices)
             i = indices[ip]
-            set_values!(mp, ip, values(derivative_order(mp), it, getx(pt), mesh, i))
+            set_values!(mp, ip, values(derivative_order(mp), spline, getx(pt), mesh, i))
         end
     else
-        set_values!(mp, values(derivative_order(mp), it, getx(pt), mesh))
+        set_values!(mp, values(derivative_order(mp), spline, getx(pt), mesh))
     end
 end
 

@@ -101,12 +101,12 @@ function main(transfer = FLIP(1.0))
     @show length(particles)
 
     ## Interpolation
-    it = KernelCorrection(BSpline(Quadratic()))
-    mpvalues = generate_mpvalues(it, grid.X, length(particles); name=Val(:S))
-    mpvalues_cell = generate_mpvalues(it, grid.X, size(grid) .- 1; name=Val(:S))
+    interp = KernelCorrection(BSpline(Quadratic()))
+    mpvalues = generate_mpvalues(interp, grid.X, length(particles); name=Val(:S))
+    mpvalues_cell = generate_mpvalues(interp, grid.X, size(grid) .- 1; name=Val(:S))
 
     ## Sparse matrix
-    A = create_sparse_matrix(it, grid.X; ndofs=3)
+    A = create_sparse_matrix(interp, grid.X; ndofs=3)
 
     ## Output
     outdir = mkpath(joinpath("output", "dam_break"))

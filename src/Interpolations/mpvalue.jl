@@ -3,19 +3,19 @@ abstract type Kernel <: Interpolation end
 
 #=
 To create a new interpolation, following methods need to be implemented.
-* Tesserae.create_property(::Type{Vec{dim, T}}, it::Interpolation; kwargs...) -> NamedTuple
-* Tesserae.initial_neighboringnodes(it::Interpolation, mesh)
-* Tesserae.update!(mp::MPValue, it::Interpolation, pt, mesh)
+* Tesserae.create_property(::Type{Vec{dim, T}}, interp::Interpolation; kwargs...) -> NamedTuple
+* Tesserae.initial_neighboringnodes(interp::Interpolation, mesh)
+* Tesserae.update!(mp::MPValue, interp::Interpolation, pt, mesh)
 =#
 
 initial_neighboringnodes(::Interpolation, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 initial_neighboringnodes(shape::Shape, mesh::UnstructuredMesh) = zero(SVector{nlocalnodes(shape), Int})
 
-propsize(it::Interpolation, ::Val{dim}) where{dim} = nfill(gridspan(it), Val(dim))
+propsize(interp::Interpolation, ::Val{dim}) where{dim} = nfill(gridspan(interp), Val(dim))
 propsize(shape::Shape, ::Val)  = (nlocalnodes(shape),)
-@generated function create_property(::Type{Vec{dim, T}}, it; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
+@generated function create_property(::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
     quote
-        dims = propsize(it, Val(dim))
+        dims = propsize(interp, Val(dim))
         names = @ntuple $(k+1) i -> create_name(Order(i-1), name)
         vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), dims)
         NamedTuple{names}(vals)
@@ -96,22 +96,22 @@ julia> sum(eachindex(nodeindices)) do ip # linear field reproduction
 true
 ```
 """
-struct MPValue{It, Prop <: NamedTuple, Indices <: AbstractArray{<: Any}}
-    it::It
+struct MPValue{Interp, Prop <: NamedTuple, Indices <: AbstractArray{<: Any}}
+    interp::Interp
     prop::Prop
     indices::Indices
 end
 
 # AbstractMesh
-function _MPValue(::Type{T}, it, mesh::AbstractMesh{dim}; kwargs...) where {T, dim}
-    prop = create_property(Vec{dim, T}, it; kwargs...)
-    indices = initial_neighboringnodes(it, mesh)
-    MPValue(it, prop, fill(indices))
+function _MPValue(::Type{T}, interp, mesh::AbstractMesh{dim}; kwargs...) where {T, dim}
+    prop = create_property(Vec{dim, T}, interp; kwargs...)
+    indices = initial_neighboringnodes(interp, mesh)
+    MPValue(interp, prop, fill(indices))
 end
 
 # CartesianMesh
-MPValue(::Type{T}, it::Interpolation, mesh::CartesianMesh; kwargs...) where {T} = _MPValue(T, it, mesh; kwargs...)
-MPValue(it::Interpolation, mesh::CartesianMesh; kwargs...) = _MPValue(Float64, it, mesh; kwargs...)
+MPValue(::Type{T}, interp::Interpolation, mesh::CartesianMesh; kwargs...) where {T} = _MPValue(T, interp, mesh; kwargs...)
+MPValue(interp::Interpolation, mesh::CartesianMesh; kwargs...) = _MPValue(Float64, interp, mesh; kwargs...)
 
 # UnstructuredMesh
 MPValue(::Type{T}, mesh::UnstructuredMesh; kwargs...) where {T} = _MPValue(T, cellshape(mesh), mesh; kwargs...)
@@ -125,8 +125,8 @@ end
     getfield(mp, :prop)[i]
 end
 
-@inline interpolation(mp::MPValue) = getfield(mp, :it)::Interpolation
-@inline cellshape(mp::MPValue) = getfield(mp, :it)::Shape
+@inline interpolation(mp::MPValue) = getfield(mp, :interp)::Interpolation
+@inline cellshape(mp::MPValue) = getfield(mp, :interp)::Shape
 
 @inline neighboringnodes(mp::MPValue) = getfield(mp, :indices)[]
 @inline function neighboringnodes(mp::MPValue, grid::Grid)
@@ -187,7 +187,7 @@ end
 
 function Base.show(io::IO, mp::MPValue)
     print(io, "MPValue: \n")
-    print(io, "  Interpolation: ", getfield(mp, :it), "\n")
+    print(io, "  Interpolation: ", getfield(mp, :interp), "\n")
     print(io, "  Property names: ")
     print(io, join(map(propertynames(mp)) do name
         string(name, "::", typeof(getproperty(mp, name)))
@@ -195,33 +195,33 @@ function Base.show(io::IO, mp::MPValue)
     print(io, "  Neighboring nodes: ", neighboringnodes(mp))
 end
 
-struct MPValueArray{It, Prop <: NamedTuple, Indices, ElType <: MPValue{It}, N} <: AbstractArray{ElType, N}
-    it::It
+struct MPValueArray{Interp, Prop <: NamedTuple, Indices, ElType <: MPValue{Interp}, N} <: AbstractArray{ElType, N}
+    interp::Interp
     prop::Prop
     indices::Indices
 end
 
 # AbstractMesh
-function _generate_mpvalues(::Type{T}, it, mesh::AbstractMesh{dim}, dims::Dims{N}; kwargs...) where {T, dim, N}
-    prop = map(create_property(Vec{dim, T}, it; kwargs...)) do prop
+function _generate_mpvalues(::Type{T}, interp, mesh::AbstractMesh{dim}, dims::Dims{N}; kwargs...) where {T, dim, N}
+    prop = map(create_property(Vec{dim, T}, interp; kwargs...)) do prop
         fill(zero(eltype(prop)), size(prop)..., dims...)
     end
-    indices = map(p->initial_neighboringnodes(it, mesh), CartesianIndices(dims))
-    It = typeof(it)
+    indices = map(p->initial_neighboringnodes(interp, mesh), CartesianIndices(dims))
+    Interp = typeof(interp)
     Prop = typeof(prop)
     Indices = typeof(indices)
-    ElType = Base._return_type(_getindex, Tuple{It, Prop, Indices, Int})
-    MPValueArray{It, Prop, Indices, ElType, N}(it, prop, indices)
+    ElType = Base._return_type(_getindex, Tuple{Interp, Prop, Indices, Int})
+    MPValueArray{Interp, Prop, Indices, ElType, N}(interp, prop, indices)
 end
 
 _todims(x::Tuple{Vararg{Int}}) = x
 _todims(x::Vararg{Int}) = x
 # CartesianMesh
-generate_mpvalues(::Type{T}, it::Interpolation, mesh::CartesianMesh, dims...; kwargs...) where {T} = _generate_mpvalues(T, it, mesh, _todims(dims...); kwargs...)
-generate_mpvalues(it::Interpolation, mesh::CartesianMesh, dims...; kwargs...) = _generate_mpvalues(Float64, it, mesh, _todims(dims...); kwargs...)
+generate_mpvalues(::Type{T}, interp::Interpolation, mesh::CartesianMesh, dims...; kwargs...) where {T} = _generate_mpvalues(T, interp, mesh, _todims(dims...); kwargs...)
+generate_mpvalues(interp::Interpolation, mesh::CartesianMesh, dims...; kwargs...) = _generate_mpvalues(Float64, interp, mesh, _todims(dims...); kwargs...)
 
 # UnstructuredMesh
-generate_mpvalues(::Type{T}, mesh::UnstructuredMesh, dims...; kwargs...) where {T} = _generate_mpvalues(T, it, mesh, _todims(dims...); kwargs...)
+generate_mpvalues(::Type{T}, mesh::UnstructuredMesh, dims...; kwargs...) where {T} = _generate_mpvalues(T, interp, mesh, _todims(dims...); kwargs...)
 generate_mpvalues(mesh::UnstructuredMesh, dims...; kwargs...) = _generate_mpvalues(Float64, cellshape(mesh), mesh, _todims(dims...); kwargs...)
 
 Base.size(x::MPValueArray) = size(getfield(x, :indices))
@@ -231,19 +231,19 @@ Base.propertynames(x::MPValueArray) = propertynames(getfield(x, :prop))
     getproperty(getfield(x, :prop), name)
 end
 
-@inline interpolation(x::MPValueArray) = getfield(x, :it)::Interpolation
-@inline cellshape(x::MPValueArray) = getfield(x, :it)::Shape
+@inline interpolation(x::MPValueArray) = getfield(x, :interp)::Interpolation
+@inline cellshape(x::MPValueArray) = getfield(x, :interp)::Shape
 
 @inline function Base.getindex(x::MPValueArray{<: Any, <: Any, <: Any, <: Any, N}, I::Vararg{Integer, N}) where {N}
     @boundscheck checkbounds(x, I...)
-    @inbounds _getindex(getfield(x, :it), getfield(x, :prop), getfield(x, :indices), I...)
+    @inbounds _getindex(getfield(x, :interp), getfield(x, :prop), getfield(x, :indices), I...)
 end
-@generated function _getindex(it, prop::NamedTuple{names}, indices::AbstractArray{<: Any, N}, I::Vararg{Integer, N}) where {names, N}
+@generated function _getindex(interp, prop::NamedTuple{names}, indices::AbstractArray{<: Any, N}, I::Vararg{Integer, N}) where {names, N}
     exps = [:(viewcol(prop.$name, I...)) for name in names]
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        MPValue(it, NamedTuple{names}(tuple($(exps...))), view(indices, map(:, I, I)...))
+        MPValue(interp, NamedTuple{names}(tuple($(exps...))), view(indices, map(:, I, I)...))
     end
 end
 
@@ -256,14 +256,14 @@ end
 function Base.show(io::IO, mime::MIME"text/plain", mpvalues::MPValueArray)
     mp = first(mpvalues)
     print(io, Base.dims2string(size(mpvalues)), " ", ndims(mpvalues)==1 ? "MPValueVector" : "MPValueArray", ": \n")
-    print(io, "  Interpolation: ", getfield(mpvalues, :it), "\n")
+    print(io, "  Interpolation: ", getfield(mpvalues, :interp), "\n")
     print(io, "  Property names: ", join(propertynames(mp), ", "))
 end
 
 function Base.show(io::IO, mpvalues::MPValueArray)
     mp = first(mpvalues)
     print(io, Base.dims2string(size(mpvalues)), " ", ndims(mpvalues)==1 ? "MPValueVector" : "MPValueArray", ": \n")
-    print(io, "  Interpolation: ", getfield(mpvalues, :it), "\n")
+    print(io, "  Interpolation: ", getfield(mpvalues, :interp), "\n")
     print(io, "  Property names: ", join(propertynames(mp), ", "))
 end
 
@@ -284,21 +284,21 @@ end
 end
 
 function update!(mp::MPValue, pt, mesh::AbstractMesh)
-    it = interpolation(mp)
-    neighboringnodes_storage(mp)[] = neighboringnodes(it, pt, mesh)
-    update_property!(mp, it, pt, mesh)
+    interp = interpolation(mp)
+    neighboringnodes_storage(mp)[] = neighboringnodes(interp, pt, mesh)
+    update_property!(mp, interp, pt, mesh)
     mp
 end
 function update!(mp::MPValue, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @assert size(mesh) == size(filter)
-    it = interpolation(mp)
-    neighboringnodes_storage(mp)[] = neighboringnodes(it, pt, mesh)
-    update_property!(mp, it, pt, mesh, filter)
+    interp = interpolation(mp)
+    neighboringnodes_storage(mp)[] = neighboringnodes(interp, pt, mesh)
+    update_property!(mp, interp, pt, mesh, filter)
     mp
 end
-function update_property!(mp::MPValue, it, pt, mesh::AbstractMesh, filter)
+function update_property!(mp::MPValue, interp, pt, mesh::AbstractMesh, filter)
     @assert filter isa Trues
-    update_property!(mp, it, pt, mesh)
+    update_property!(mp, interp, pt, mesh)
 end
 
 # accelerations

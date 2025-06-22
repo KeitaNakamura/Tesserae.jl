@@ -39,7 +39,7 @@ end
     x
 end
 
-@generated function create_property(::Type{Vec{dim, T}}, it::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
+@generated function create_property(::Type{Vec{dim, T}}, ::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
     w = sym
     ∇w = Symbol(:∇, sym)
     quote

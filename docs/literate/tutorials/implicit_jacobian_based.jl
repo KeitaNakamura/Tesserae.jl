@@ -74,8 +74,8 @@ function main()
 
     ## Interpolation
     ## Use the kernel correction to properly handle the boundary conditions
-    it = KernelCorrection(BSpline(Quadratic()))
-    mpvalues = generate_mpvalues(it, grid.X, length(particles))
+    interp = KernelCorrection(BSpline(Quadratic()))
+    mpvalues = generate_mpvalues(interp, grid.X, length(particles))
 
     ## Neo-Hookean model
     function kirchhoff_stress(F)
@@ -85,7 +85,7 @@ function main()
     end
 
     ## Sparse matrix
-    A = create_sparse_matrix(it, grid.X)
+    A = create_sparse_matrix(interp, grid.X)
 
     ## Outputs
     outdir = mkpath(joinpath("output", "implicit_jacobian_based"))
