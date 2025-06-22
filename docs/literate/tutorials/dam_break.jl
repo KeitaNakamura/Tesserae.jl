@@ -4,9 +4,9 @@
 # <img src="https://github.com/user-attachments/assets/dfc9fb4e-6223-460e-ac34-310363cd6a78" width="600"/>
 # ```
 #
-# | # Particles | # Iterations | Execution time |
-# | ----------- | ------------ | -------------- |
-# | 16k         | 3.5k         | 7 min          |
+# | # Particles | # Iterations | Execution time (w/o output) |
+# | ----------- | ------------ | --------------------------- |
+# | 28k         | 3.5k         | 13 min                      |
 #
 # This example employs stabilized mixed MPM with the variational multiscale method[^1].
 #
@@ -48,7 +48,6 @@ function main(transfer = FLIP(1.0))
         X   :: Vec{2, Float64}
         x   :: Vec{2, Float64}
         m   :: Float64
-        m⁻¹ :: Float64
         v   :: Vec{2, Float64}
         vⁿ  :: Vec{2, Float64}
         mv  :: Vec{2, Float64}
@@ -94,7 +93,7 @@ function main(transfer = FLIP(1.0))
     end
 
     ## Particles
-    particles = generate_particles(ParticleProp, grid.X; alg=PoissonDiskSampling(spacing=1/3))
+    particles = generate_particles(ParticleProp, grid.X; alg=PoissonDiskSampling(spacing=1/4))
     particles.V .= volume(grid.X) / length(particles)
     filter!(pt -> pt.x[1]<1.2 && pt.x[2]<0.6, particles)
     @. particles.m = ρ * particles.V
@@ -103,12 +102,8 @@ function main(transfer = FLIP(1.0))
 
     ## Interpolation
     it = KernelCorrection(BSpline(Quadratic()))
-    mpvalues = map(p -> MPValue(it, grid.X; name=Val(:S)), eachindex(particles))
-    mpvalues_cell = map(CartesianIndices(size(grid).-1)) do cell
-        mp = MPValue(it, grid.X; name=Val(:S))
-        xc = cellcenter(cell, grid.X)
-        update!(mp, xc, grid.X)
-    end
+    mpvalues = generate_mpvalues(it, grid.X, length(particles); name=Val(:S))
+    mpvalues_cell = generate_mpvalues(it, grid.X, size(grid) .- 1; name=Val(:S))
 
     ## Sparse matrix
     A = create_sparse_matrix(it, grid.X; ndofs=3)
@@ -132,12 +127,14 @@ function main(transfer = FLIP(1.0))
             cell = whichcell(particles.x[p], grid.X)
             activenodes[cellnodes(cell)] .= true
         end
-        for p in eachindex(mpvalues, particles)
+        for p in eachindex(particles)
             update!(mpvalues[p], particles.x[p], grid.X, activenodes)
         end
         for cell in CartesianIndices(size(grid) .- 1)
             xc = cellcenter(cell, grid.X)
-            update!(mpvalues_cell[cell], xc, grid.X, activenodes)
+            if all(i->activenodes[i], cellnodes(cell))
+                update!(mpvalues_cell[cell], xc, grid.X, activenodes)
+            end
         end
 
         if transfer isa FLIP
@@ -154,17 +151,15 @@ function main(transfer = FLIP(1.0))
             end
         end
 
-        ## Truncate the negative mass caused by the kernel correction to zero.
-        @. grid.m = max(grid.m, 0)
-
-        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
-        @. grid.vⁿ = grid.mv * grid.m⁻¹
-        @. grid.aⁿ = grid.ma * grid.m⁻¹
+        m_tol = cbrt(eps(eltype(grid.m))) * maximum(grid.m)
+        m_mask = @. !(abs(grid.m) ≤ m_tol)
+        @. grid.vⁿ = grid.mv / grid.m * m_mask
+        @. grid.aⁿ = grid.ma / grid.m * m_mask
 
         ## Update a dof map
         dofmask = trues(3, size(grid)...)
-        for i in eachindex(grid)
-            dofmask[:,i] .= !iszero(grid.m[i])
+        for i in 1:size(dofmask,1)
+            dofmask[i,:,:] = m_mask
         end
         for i in @view eachindex(grid)[[begin,end],:] # Walls
             grid.vⁿ[i] = grid.vⁿ[i] .* (false,true)
@@ -205,7 +200,6 @@ function main(transfer = FLIP(1.0))
         ## Remove particles that accidentally move outside of the mesh
         outside = findall(x->!isinside(x, grid.X), particles.x)
         deleteat!(particles, outside)
-        deleteat!(mpvalues, outside)
 
         t += Δt′
         step += 1
@@ -342,20 +336,16 @@ function residual(U, state)
     @. grid.v = γ/(β*Δt)*grid.u - (γ/β-1)*grid.vⁿ - Δt/2*(γ/β-2)*grid.aⁿ
     @. grid.a = 1/(β*Δt^2)*grid.u - 1/(β*Δt)*grid.vⁿ - (1/2β-1)*grid.aⁿ
 
-    ## Recompute particle properties for residual vector
-    @G2P grid=>i particles=>p mpvalues=>ip begin
+    ## Compute VMS stabilization coefficients based on the current nodal velocity
+    compute_VMS_stabilization_coefficients(state)
+
+    ## Compute residual values
+    @G2P2G grid=>i particles=>p mpvalues=>ip begin
         a[p]  = @∑ a[i] * S[ip]
         p[p]  = @∑ p[i] * S[ip]
         ∇v[p] = @∑ v[i] ⊗ ∇S[ip]
         ∇p[p] = @∑ p[i] * ∇S[ip]
         s[p]  = 2μ * symmetric(∇v[p])
-    end
-
-    ## Compute VMS stabilization coefficients based on the current nodal velocity
-    compute_VMS_stabilization_coefficients(state)
-
-    ## Compute residual values
-    @P2G grid=>i particles=>p mpvalues=>ip begin
         R_mom[i]  = @∑ V[p]*s[p]*∇S[ip] - m[p]*b[p]*S[ip] - V[p]*p[p]*∇S[ip] + τ₂[p]*V[p]*tr(∇v[p])*∇S[ip]
         R_mas[i]  = @∑ V[p]*tr(∇v[p])*S[ip] + τ₁[p]*m[p]*(a[p]-b[p])⋅∇S[ip] + τ₁[p]*V[p]*∇p[p]⋅∇S[ip]
         R_mom[i] += m[i]*a[i]

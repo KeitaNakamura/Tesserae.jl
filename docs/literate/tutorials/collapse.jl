@@ -4,9 +4,9 @@
 # <img src="https://github.com/user-attachments/assets/16a48085-6977-4c6f-b9fa-a9634e73eeef" width="800"/>
 # ```
 #
-# | # Particles | # Iterations | Execution time |
-# | ----------- | ------------ | -------------- |
-# | 19k         | 8k           | 40 sec         |
+# | # Particles | # Iterations | Execution time (w/o output) |
+# | ----------- | ------------ | ----------------------------|
+# | 19k         | 8k           | 20 sec                      |
 #
 # ## Drucker--Prager model
 

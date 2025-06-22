@@ -4,9 +4,9 @@
 # <img src="https://github.com/user-attachments/assets/35e4744f-90ee-475d-bdb7-73f94fb28369" width="300"/>
 # ```
 #
-# | # Particles | # Iterations | Execution time |
-# | ----------- | ------------ | -------------- |
-# | 14k         | 220k         | 7 min          |
+# | # Particles | # Iterations | Execution time (w/o output) |
+# | ----------- | ------------ | ----------------------------|
+# | 14k         | 220k         | 6 min                       |
 #
 
 using Tesserae
