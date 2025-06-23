@@ -5,6 +5,7 @@
 ```@docs
 @P2G
 @G2P
+@G2P2G
 ```
 
 ## Code snippets

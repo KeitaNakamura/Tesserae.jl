@@ -77,7 +77,7 @@ any other name.
     # Particle-to-grid transfer
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
-    f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+    f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
 
     # Calculation on grid
     vⁿ[i] = mv[i] / m[i]
@@ -102,7 +102,7 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         grid.m [i] += mp.w[ip] * particles.m[p]
         grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
-        grid.mv[i] += -particles.V[p] * particles.σ[p] ⋅ mp.∇w[ip]
+        grid.mv[i] += -particles.V[p] * particles.σ[p] * mp.∇w[ip]
     end
 end
 
@@ -298,7 +298,7 @@ any other name.
 
     # Calculation on particle
     Δϵₚ = symmetric(∇v[p]) * Δt
-    F[p]  = (I + ∇v[p]*Δt) ⋅ F[p]
+    F[p]  = (I + ∇v[p]*Δt) * F[p]
     V[p]  = V⁰[p] * det(F[p])
     σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
 
@@ -329,7 +329,7 @@ end
 # Calculation on particle
 for p in eachindex(particles)
     Δϵₚ = symmetric(particles.∇v[p]) * Δt
-    particles.F[p]  = (I + particles.∇v[p]*Δt) ⋅ particles.F[p]
+    particles.F[p]  = (I + particles.∇v[p]*Δt) * particles.F[p]
     particles.V[p]  = particles.V⁰[p] * det(particles.F[p])
     particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
 end
@@ -447,6 +447,31 @@ function G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vec
     code
 end
 
+"""
+    @G2P2G grid=>i particles=>p mpvalues=>ip [partition] begin
+        equations...
+    end
+
+Combined grid-to-particle and particle-to-grid transfer macro.
+
+Allows both [`@G2P`](@ref) (interpolation from grid to particles) and [`@P2G`](@ref) (scattering from particles to grid)
+to be performed in a single loop over particles, avoiding repeated traversals.
+
+# Examples
+```julia
+@G2P2G grid=>i particles=>p mpvalues=>ip begin
+    # G2P
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+
+    # Particle update
+    F[p] = (I + ∇v[p]*Δt) * F[p]
+    σ[p] = cauchy_stress(F[p])
+
+    # P2G
+    f[i] = @∑ -V[p] * σ[p] * ∇w[ip]
+end
+```
+"""
 macro G2P2G(grid_i, particles_p, mpvalues_ip, equations)
     G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, nothing, equations)
 end

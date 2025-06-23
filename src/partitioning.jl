@@ -159,7 +159,30 @@ function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
     vec(map(st -> map(CartesianIndex{dim}, Iterators.product(StepRange.(st, 2, blocksize)...)), starts))
 end
 
+"""
+    ColorPartition(::CartesianMesh)
 
+`ColorPartition` stores partitioning information used by the [`@P2G`](@ref) and [`@G2P2G`](@ref) macros
+to avoid write conflicts during parallel particle-to-grid transfers.
+
+!!! note
+    The [`@threaded`](@ref) macro must be placed before [`@P2G`](@ref) and [`@G2P2G`](@ref) to enable parallel transfer.
+
+# Examples
+```julia
+# Construct ColorPartition
+partition = ColorPartition(mesh)
+
+# Update coloring using current particle positions
+update!(partition, particles.x)
+
+# P2G transfer
+@threaded @P2G grid=>i particles=>p mpvalues=>ip partition begin
+    m[i]  = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+end
+```
+"""
 struct ColorPartition{Strategy <: ColoringStrategy}
     strategy::Strategy
 end
