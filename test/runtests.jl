@@ -4,7 +4,7 @@ using Test
 
 include("utils.jl")
 include("mesh.jl")
-include("blockspace.jl")
+include("partitioning.jl")
 include("sparray.jl")
 
 include("grid.jl")

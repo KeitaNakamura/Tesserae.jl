@@ -61,7 +61,7 @@ mutable struct Equation
 end
 
 """
-    @P2G grid=>i particles=>p mpvalues=>ip [space] begin
+    @P2G grid=>i particles=>p mpvalues=>ip [partition] begin
         equations...
     end
 
@@ -77,7 +77,7 @@ any other name.
     # Particle-to-grid transfer
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
-    f[i]  = @∑ -V[p] * σ[p] ⋅ ∇w[ip]
+    f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
 
     # Calculation on grid
     vⁿ[i] = mv[i] / m[i]
@@ -102,7 +102,7 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         grid.m [i] += mp.w[ip] * particles.m[p]
         grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
-        grid.mv[i] += -particles.V[p] * particles.σ[p] ⋅ mp.∇w[ip]
+        grid.mv[i] += -particles.V[p] * particles.σ[p] * mp.∇w[ip]
     end
 end
 
@@ -118,26 +118,26 @@ end
 macro P2G(grid_i, particles_p, mpvalues_ip, equations)
     P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, nothing, equations)
 end
-macro P2G(grid_i, particles_p, mpvalues_ip, space, equations)
-    P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, space, equations)
+macro P2G(grid_i, particles_p, mpvalues_ip, partition, equations)
+    P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, partition, equations)
 end
 macro P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, equations)
     P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, nothing, equations)
 end
-macro P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, space, equations)
-    P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, space, equations)
+macro P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, partition, equations)
+    P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, partition, equations)
 end
 
-function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, mpvalues_ip::Expr, space, equations::Expr)
-    P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(mpvalues_ip), space, split_equations(equations))
+function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, mpvalues_ip::Expr, partition, equations::Expr)
+    P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(mpvalues_ip), partition, split_equations(equations))
 end
 
-function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), space, equations::Vector)
+function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), partition, equations::Vector)
     issum = map(eq -> eq.issumeq, equations)
     (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
     code = quote
-        Tesserae.check_arguments_for_P2G($grid, $particles, $mpvalues, $space)
+        Tesserae.check_arguments_for_P2G($grid, $particles, $mpvalues, $partition)
     end
 
     sum_equations = equations[issum]
@@ -149,7 +149,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), s
         code = quote
             $code
             $pre
-            Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), Tesserae.hybrid($grid), $particles, $mpvalues, $space)
+            Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), Tesserae.hybrid($grid), $particles, $mpvalues, $partition)
         end
     end
 
@@ -203,18 +203,19 @@ end
 
 # CPU: sequential
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues, ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "@P2G: `BlockSpace` must be given for threaded computation" maxlog=1
+    scheduler == :nothing || @warn "@P2G: `ColorPartition` must be given for threaded computation" maxlog=1
     for p in eachindex(particles)
         @inline f(grid, particles, mpvalues, p)
     end
 end
 
 # CPU: multi-threading
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues, space::BlockSpace) where {scheduler}
-    for blocks in threadsafe_blocks(space)
-        tforeach(blocks, scheduler) do blk
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, mpvalues, partition::ColorPartition) where {scheduler}
+    strat = strategy(partition)
+    for group in colorgroups(strat)
+        tforeach(group, scheduler) do index
             @_inline_meta
-            for p in space[blk]
+            for p in particle_indices_in(strat, index)
                 @inline f(grid, particles, mpvalues, p)
             end
         end
@@ -254,7 +255,7 @@ function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     Expr(:block, nosum_equations...)
 end
 
-function check_arguments_for_P2G(grid, particles, mpvalues, space)
+function check_arguments_for_P2G(grid, particles, mpvalues, partition)
     get_mesh(grid) isa AbstractMesh || error("@P2G: grid must have a mesh")
     eltype(mpvalues) <: MPValue || error("@P2G: invalid `MPValue`s, got type $(typeof(mpvalues))")
     if grid isa SpGrid
@@ -263,9 +264,13 @@ function check_arguments_for_P2G(grid, particles, mpvalues, space)
         end
     end
     @assert length(particles) ≤ length(mpvalues)
-    if space isa BlockSpace
-        @assert blocksize(grid) == size(space)
-        sum(length, space) == 0 && error("@P2G: BlockSpace not activated")
+    if partition isa ColorPartition
+        strat = strategy(partition)
+        if strat isa BlockStrategy
+            @assert blocksize(grid) == blocksize(strat)
+            sum(length(particle_indices_in(strat, blk)) for blk in blockindices(strat)) == 0 &&
+                error("@P2G: No particles assigned to any block in ColorPartition")
+        end
     end
     # check device
     device = get_device(grid)
@@ -293,7 +298,7 @@ any other name.
 
     # Calculation on particle
     Δϵₚ = symmetric(∇v[p]) * Δt
-    F[p]  = (I + ∇v[p]*Δt) ⋅ F[p]
+    F[p]  = (I + ∇v[p]*Δt) * F[p]
     V[p]  = V⁰[p] * det(F[p])
     σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
 
@@ -324,7 +329,7 @@ end
 # Calculation on particle
 for p in eachindex(particles)
     Δϵₚ = symmetric(particles.∇v[p]) * Δt
-    particles.F[p]  = (I + particles.∇v[p]*Δt) ⋅ particles.F[p]
+    particles.F[p]  = (I + particles.∇v[p]*Δt) * particles.F[p]
     particles.V[p]  = particles.V⁰[p] * det(particles.F[p])
     particles.σ[p] += λ*tr(Δϵₚ)*I + 2μ*Δϵₚ # Linear elastic material
 end
@@ -442,24 +447,49 @@ function G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vec
     code
 end
 
+"""
+    @G2P2G grid=>i particles=>p mpvalues=>ip [partition] begin
+        equations...
+    end
+
+Combined grid-to-particle and particle-to-grid transfer macro.
+
+Allows both [`@G2P`](@ref) (interpolation from grid to particles) and [`@P2G`](@ref) (scattering from particles to grid)
+to be performed in a single loop over particles, avoiding repeated traversals.
+
+# Examples
+```julia
+@G2P2G grid=>i particles=>p mpvalues=>ip begin
+    # G2P
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+
+    # Particle update
+    F[p] = (I + ∇v[p]*Δt) * F[p]
+    σ[p] = cauchy_stress(F[p])
+
+    # P2G
+    f[i] = @∑ -V[p] * σ[p] * ∇w[ip]
+end
+```
+"""
 macro G2P2G(grid_i, particles_p, mpvalues_ip, equations)
     G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, nothing, equations)
 end
-macro G2P2G(grid_i, particles_p, mpvalues_ip, space, equations)
-    G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, space, equations)
+macro G2P2G(grid_i, particles_p, mpvalues_ip, partition, equations)
+    G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, mpvalues_ip, partition, equations)
 end
 macro G2P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, equations)
     G2P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, nothing, equations)
 end
-macro G2P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, space, equations)
-    G2P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, space, equations)
+macro G2P2G(schedule::QuoteNode, grid_i, particles_p, mpvalues_ip, partition, equations)
+    G2P2G_expr(schedule, grid_i, particles_p, mpvalues_ip, partition, equations)
 end
 
-function G2P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, mpvalues_ip::Expr, space, equations::Expr)
-    G2P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(mpvalues_ip), space, split_equations(equations))
+function G2P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, mpvalues_ip::Expr, partition, equations::Expr)
+    G2P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(mpvalues_ip), partition, split_equations(equations))
 end
 
-function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), space, equations::Vector)
+function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), partition, equations::Vector)
     equations_g2p_sum = Any[]
     equations_p2g_sum = Any[]
     equations_g2p_nosum = Any[]
@@ -494,7 +524,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip),
 
     code = quote
         Tesserae.check_arguments_for_G2P($grid, $particles, $mpvalues)
-        Tesserae.check_arguments_for_P2G($grid, $particles, $mpvalues, $space)
+        Tesserae.check_arguments_for_P2G($grid, $particles, $mpvalues, $partition)
     end
     body = Expr(:block)
 
@@ -523,7 +553,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip),
     end
     code = quote
         $code
-        Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), Tesserae.hybrid($grid), $particles, $mpvalues, $space)
+        Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), Tesserae.hybrid($grid), $particles, $mpvalues, $partition)
     end
 
     if !isempty(equations_p2g_nosum)

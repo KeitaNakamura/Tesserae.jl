@@ -168,11 +168,42 @@ function _tforeach(f, iter, ::SequentialScheduler)
     foreach(f, iter)
 end
 
-macro threaded(schedule::QuoteNode, expr)
-    threaded_expr(schedule, expr)
+"""
+    @threaded [scheduler] for ...
+    @threaded [scheduler] @P2G ...
+    @threaded @P2G ...
+
+A macro similar to `Threads.@threads`, but also works with
+[`@P2G`](@ref), [`@G2P`](@ref), [`@G2P2G`](@ref), and [`@P2G_Matrix`](@ref) macros for particle-grid transfers.
+
+The optional `scheduler` can be `:static`, `:dynamic`, `:greedy`, or `:nothing`
+(sequential execution). The default is `:dynamic`.
+
+See also [`ColorPartition`](@ref).
+
+!!! note
+    If multi-threading is disabled or only one thread is available,
+    this macro falls back to sequential execution.
+
+# Examples
+```julia
+# Parallel loop
+@threaded :static for i in 1:100
+    println(i)
 end
+
+# Particle-to-grid transfer
+@threaded @P2G grid=>i particles=>p mpvalues=>ip partition begin
+    m[i] += @∑ w[ip] * m[p]
+end
+```
+"""
 macro threaded(expr)
     threaded_expr(QuoteNode(:dynamic), expr)
+end
+
+macro threaded(schedule::QuoteNode, expr)
+    threaded_expr(schedule, expr)
 end
 
 function threaded_expr(schedule::QuoteNode, expr::Expr)

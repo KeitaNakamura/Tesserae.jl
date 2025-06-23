@@ -73,13 +73,14 @@ function update_block_sparsity!(sp::SpIndices, blkspy::AbstractArray{Bool})
     numbering!(sp)
 end
 
-function update_block_sparsity!(spinds::SpIndices, s::BlockSpace)
-    blocksize(spinds) == size(s) || throw(ArgumentError("block size $(blocksize(spinds)) must match"))
+function update_block_sparsity!(spinds::SpIndices, partition::ColorPartition{<: BlockStrategy})
+    bs = strategy(partition)
+    blocksize(spinds) == blocksize(bs) || throw(ArgumentError("block size $(blocksize(spinds)) must match"))
 
     inds = fillzero!(blockindices(spinds))
-    CI = CartesianIndices(s)
+    CI = CartesianIndices(blocksize(bs))
     @inbounds for I in CI
-        if !isempty(s[I])
+        if !isempty(particle_indices_in(bs, I))
             blks = (I - oneunit(I)):(I + oneunit(I))
             inds[blks ∩ CI] .= true
         end

@@ -41,6 +41,7 @@ makedocs(;
             "interpolation.md"
             "transfer.md"
             "implicit_utils.md"
+            "multithreading.md"
             "export.md"
         ]
     ],

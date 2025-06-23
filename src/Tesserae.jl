@@ -31,8 +31,8 @@ export
 # utils
     fillzero!,
     @threaded,
-# BlockSpace
-    BlockSpace,
+# ColorPartition
+    ColorPartition,
 # SpArray
     SpArray,
     update_block_sparsity!,
@@ -101,7 +101,7 @@ include("utils.jl")
 include("shapes.jl")
 
 include("mesh.jl")
-include("blockspace.jl")
+include("partitioning.jl")
 include("sparray.jl")
 
 include("grid.jl")
