@@ -109,23 +109,25 @@ function main()
         vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * h / vmax
 
+        # Update interpolation values
         for p in eachindex(particles, mpvalues)
             update!(mpvalues[p], particles.x[p], grid.x)
         end
 
+        # Particle-to-grid transfer
         @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p])) # Taylor transfer
             fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) * ∇w[ip] + w[ip] * m[p] * b[p]
             fext[i] = @∑ w[ip] * contact_force_normal(x[p], r[p], disk.x)
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            vⁿ[i]  = mv[i] * m⁻¹[i]
+            v[i]   = vⁿ[i] + (fint[i] * m⁻¹[i]) * Δt
+            fext[i] += contact_force_tangent(fext[i], v[i]-$Ref(disk.v), m[i], Δt)
+            v[i]    += (fext[i] * m⁻¹[i]) * Δt
         end
 
-        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
-        @. grid.vⁿ  = grid.mv * grid.m⁻¹
-        @. grid.v   = grid.vⁿ + (grid.fint * grid.m⁻¹) * Δt
-        @. grid.fext += contact_force_tangent(grid.fext, grid.v-$Ref(disk.v), grid.m, Δt)
-        @. grid.v    += (grid.fext * grid.m⁻¹) * Δt
-
+        # Boundary conditions
         for i in eachindex(grid)[[begin,end],:]
             grid.v[i] = grid.v[i] .* (false,true)
         end
@@ -133,6 +135,7 @@ function main()
             grid.v[i] = grid.v[i] .* (false,false)
         end
 
+        # Grid-to-particle transfer
         @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
             v[p]  = @∑ w[ip] * v[i] # PIC transfer
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
@@ -183,4 +186,4 @@ function vonmises_model(σⁿ, ∇u; λ, G, σy)
         σ = dev(σ)
     end
     σ
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dam_break/">« Incompressible fluid flow</a><a class="docs-footer-nextpage" href="../heat/">Heat problem using FEM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.13.0 on <span class="colophon-date" title="Tuesday 24 June 2025 05:05">Tuesday 24 June 2025</span>. Using Julia version 1.11.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dam_break/">« Incompressible fluid flow</a><a class="docs-footer-nextpage" href="../heat/">Heat problem using FEM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.13.0 on <span class="colophon-date" title="Tuesday 24 June 2025 05:45">Tuesday 24 June 2025</span>. Using Julia version 1.11.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
