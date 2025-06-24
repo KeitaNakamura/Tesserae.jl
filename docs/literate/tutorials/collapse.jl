@@ -170,12 +170,10 @@ function main()
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
             f[i]  = @∑ -V[p] * resize(σ[p],(2,2)) * ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            vⁿ[i]  = mv[i] * m⁻¹[i]
+            v[i]   = vⁿ[i] + (f[i] * m⁻¹[i]) * Δt
         end
-
-        ## Update grid velocity
-        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
-        @. grid.vⁿ = grid.mv * grid.m⁻¹
-        @. grid.v  = grid.vⁿ + (grid.f * grid.m⁻¹) * Δt
 
         ## Boundary conditions
         for i in eachindex(grid)[:,begin]

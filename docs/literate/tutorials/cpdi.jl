@@ -97,12 +97,10 @@ function main()
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
             f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip] + w[ip] * m[p] * Vec(0,-g,0)
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            vⁿ[i]  = mv[i] * m⁻¹[i]
+            v[i]   = vⁿ[i]+ (f[i] * m⁻¹[i]) * Δt
         end
-
-        ## Update grid velocity
-        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
-        @. grid.vⁿ = grid.mv * grid.m⁻¹
-        @. grid.v  = grid.vⁿ + (grid.f * grid.m⁻¹) * Δt
 
         ## Boundary conditions
         for i in eachindex(grid)
@@ -117,15 +115,8 @@ function main()
             v[p]  += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p]  = @∑ v[i] ⊗ ∇w[ip]
             x[p]  += @∑ w[ip] * v[i] * Δt
-        end
-
-        ## Update other particle properties
-        for p in eachindex(particles)
-            ∇uₚ = particles.∇v[p] * Δt
-            Fₚ = (I + ∇uₚ) * particles.F[p]
-            σₚ = cauchy_stress(Fₚ)
-            particles.σ[p] = σₚ
-            particles.F[p] = Fₚ
+            F[p] = (I + ∇v[p]*Δt) * F[p]
+            σ[p] = cauchy_stress(F[p])
         end
 
         t += Δt

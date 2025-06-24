@@ -123,23 +123,25 @@ function main()
         vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * h / vmax
 
+        ## Update interpolation values
         for p in eachindex(particles, mpvalues)
             update!(mpvalues[p], particles.x[p], grid.x)
         end
 
+        ## Particle-to-grid transfer
         @P2G grid=>i particles=>p mpvalues=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p])) # Taylor transfer
             fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) * ∇w[ip] + w[ip] * m[p] * b[p]
             fext[i] = @∑ w[ip] * contact_force_normal(x[p], r[p], disk.x)
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            vⁿ[i]  = mv[i] * m⁻¹[i]
+            v[i]   = vⁿ[i] + (fint[i] * m⁻¹[i]) * Δt
+            fext[i] += contact_force_tangent(fext[i], v[i]-$Ref(disk.v), m[i], Δt)
+            v[i]    += (fext[i] * m⁻¹[i]) * Δt
         end
 
-        @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
-        @. grid.vⁿ  = grid.mv * grid.m⁻¹
-        @. grid.v   = grid.vⁿ + (grid.fint * grid.m⁻¹) * Δt
-        @. grid.fext += contact_force_tangent(grid.fext, grid.v-$Ref(disk.v), grid.m, Δt)
-        @. grid.v    += (grid.fext * grid.m⁻¹) * Δt
-
+        ## Boundary conditions
         for i in eachindex(grid)[[begin,end],:]
             grid.v[i] = grid.v[i] .* (false,true)
         end
@@ -147,6 +149,7 @@ function main()
             grid.v[i] = grid.v[i] .* (false,false)
         end
 
+        ## Grid-to-particle transfer
         @G2P grid=>i particles=>p mpvalues=>ip begin
             v[p]  = @∑ w[ip] * v[i] # PIC transfer
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
