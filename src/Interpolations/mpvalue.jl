@@ -296,6 +296,7 @@ function update!(mp::MPValue, pt, mesh::AbstractMesh, filter::AbstractArray{Bool
     update_property!(mp, interp, pt, mesh, filter)
     mp
 end
+update!(mp::MPValue, pt, mesh::AbstractMesh, ::Trues) = update!(mp, pt, mesh)
 function update_property!(mp::MPValue, interp, pt, mesh::AbstractMesh, filter)
     @assert filter isa Trues
     update_property!(mp, interp, pt, mesh)
@@ -308,8 +309,24 @@ end
     update!(mpvalues[p], LazyRow(particles, p), mesh, filter)
 end
 
-function update!(mpvalues::MPValueArray, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray=Trues(size(mesh)))
-    @assert length(mpvalues) == length(particles)
+"""
+    update!(mpvalues, particles, mesh)
+
+Updates each element in `mpvalues` using particle data and the background `mesh`.
+Automatically dispatches to CPU or GPU backend with appropriate parallelization.
+
+This is functionally equivalent to:
+
+```julia
+for p in eachindex(particles)
+    update!(mpvalues[p], LazyRow(particles, p), mesh)
+end
+```
+
+where [`LaxyRow`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
+"""
+function update!(mpvalues::AbstractArray{<: MPValue}, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray=Trues(size(mesh)))
+    @assert length(mpvalues) ≥ length(particles)
 
     # check backend
     backend = get_backend(mpvalues)

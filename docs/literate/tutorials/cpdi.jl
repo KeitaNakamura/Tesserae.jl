@@ -88,9 +88,7 @@ function main()
     Tesserae.@showprogress while t < T
 
         ## Update interpolation values
-        for p in eachindex(particles, mpvalues)
-            update!(mpvalues[p], particles[p], grid.x)
-        end
+        update!(mpvalues, particles, grid.x)
 
         ## Particle-to-grid transfer
         @P2G grid=>i particles=>p mpvalues=>ip begin

@@ -32,6 +32,8 @@ end
 # GPU compatibilities #
 #######################
 
+KernelAbstractions.get_backend(::BitArray) = CPU() # should be implemented in KernelAbstractions.jl
+
 # CartesianMesh
 function Adapt.adapt_structure(to, mesh::CartesianMesh)
     axes = map(a -> adapt(to, a), mesh.axes)

@@ -93,9 +93,7 @@ function main()
 
     ## Precompute linear kernel values
     mpvalues = generate_mpvalues(BSpline(Linear()), grid.X, length(particles))
-    for p in eachindex(particles, mpvalues)
-        update!(mpvalues[p], particles.x[p], grid.X)
-    end
+    update!(mpvalues, particles, grid.X)
 
     ## Outputs
     outdir = mkpath(joinpath("output", "tlmpm_vortex"))

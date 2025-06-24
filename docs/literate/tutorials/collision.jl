@@ -143,9 +143,7 @@ function main(transfer = FLIP(1.0))
         Δt = CFL * h / vmax
 
         ## Update interpolation values
-        for p in eachindex(particles, mpvalues)
-            update!(mpvalues[p], particles.x[p], grid.x)
-        end
+        update!(mpvalues, particles, grid.x)
 
         ## Particle-to-grid transfer
         if transfer isa Union{FLIP, XPIC}
