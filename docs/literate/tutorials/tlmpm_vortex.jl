@@ -128,13 +128,11 @@ function main()
             m[i]    = @∑ w[ip] * m[p]
             mv[i]   = @∑ w[ip] * m[p] * v[p]
             fint[i] = @∑ -V⁰[p] * P[p] * ∇w[ip]
+            fext[i] = m[i] * b[i]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            vⁿ[i]  = mv[i] * m⁻¹[i]
+            v[i]   = vⁿ[i] + ((fint[i] + fext[i]) * m⁻¹[i]) * Δt
         end
-
-        ## Update grid velocity
-        @. grid.m⁻¹  = inv(grid.m) * !iszero(grid.m)
-        @. grid.fext = grid.m * grid.b
-        @. grid.vⁿ   = grid.mv * grid.m⁻¹
-        @. grid.v    = grid.vⁿ + ((grid.fint + grid.fext) * grid.m⁻¹) * Δt
         grid.v[outside_gridinds] .= Ref(zero(eltype(grid.v)))
 
         ## Update particle velocity and position
