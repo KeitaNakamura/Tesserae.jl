@@ -127,9 +127,7 @@ function main(transfer = FLIP(1.0))
             cell = whichcell(particles.x[p], grid.X)
             activenodes[cellnodes(cell)] .= true
         end
-        for p in eachindex(particles)
-            update!(mpvalues[p], particles.x[p], grid.X, activenodes)
-        end
+        update!(mpvalues, particles, grid.X, activenodes)
         for cell in CartesianIndices(size(grid) .- 1)
             xc = cellcenter(cell, grid.X)
             if all(i->activenodes[i], cellnodes(cell))

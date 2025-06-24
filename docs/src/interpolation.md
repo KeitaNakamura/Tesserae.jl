@@ -4,6 +4,10 @@ CollapsedDocStrings = false
 
 # Interpolation
 
+```@docs
+update!(::AbstractArray{<: MPValue}, ::Tesserae.StructArray, ::Tesserae.AbstractMesh, ::AbstractArray)
+```
+
 ## Interpolation types
 
 ```@docs
