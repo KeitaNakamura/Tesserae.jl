@@ -591,7 +591,6 @@ end
 
 function split_equations(expr::Expr)::Vector{Any}
     expr = MacroTools.prewalk(MacroTools.rmlines, expr)
-    replace_dollar_by_identity!(expr)
     @assert @capture(expr, begin exprs__ end)
     map(exprs) do ex
         dict = MacroTools.trymatch(Expr(:op_, :lhs_, :rhs_), ex)
@@ -630,18 +629,6 @@ function remove_indexing(expr)
         ex
     end
 end
-
-function replace_dollar_by_identity!(expr::Expr)
-    if Meta.isexpr(expr, :$)
-        expr.head = :call
-        pushfirst!(expr.args, :identity)
-    end
-    for ex in expr.args
-        replace_dollar_by_identity!(ex)
-    end
-    expr
-end
-replace_dollar_by_identity!(x) = x
 
 function check_arguments_for_G2P(grid, particles, mpvalues)
     get_mesh(grid) isa AbstractMesh || error("@G2P: grid must have a mesh")
