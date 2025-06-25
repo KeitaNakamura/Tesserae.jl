@@ -13,6 +13,7 @@ include("literate.jl")
 makedocs(;
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
+        sidebar_sitename = false,
     ),
     modules = [Tesserae],
     sitename = "Tesserae.jl",
@@ -53,4 +54,5 @@ makedocs(;
 deploydocs(
     repo = "github.com/KeitaNakamura/Tesserae.jl.git",
     devbranch = "main",
+    push_preview = true,
 )

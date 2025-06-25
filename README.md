@@ -1,9 +1,12 @@
-# Tesserae.jl
-
-*A Julia-powered toolkit for material point method*
-
-[![CI](https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml)
-[![codecov](https://codecov.io/gh/KeitaNakamura/Tesserae.jl/graph/badge.svg?token=H5BHWIIBTG)](https://codecov.io/gh/KeitaNakamura/Tesserae.jl)
+<p align="center">
+    <img src="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/src/assets/logo.svg" alt="TESSERAE.jl Logo" width="300" />
+    <br/>
+    <em>A Julia-powered toolkit for material point method</em>
+    <br/>
+    <br/>
+    <a href="https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml"><img src="https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml/badge.svg"/></a>
+    <a href="https://codecov.io/gh/KeitaNakamura/Tesserae.jl"><img src="https://codecov.io/gh/KeitaNakamura/Tesserae.jl/graph/badge.svg?token=H5BHWIIBTG" /></a>
+</p>
 
 Tesserae is a toolkit for implementing the material point method in Julia. It is designed to maintain consistency between mathematical expressions and source code, enabling rapid development. Current features include:
 
