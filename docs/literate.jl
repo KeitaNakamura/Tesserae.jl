@@ -8,6 +8,7 @@ const TUTORIALS = ["collision.jl",
                    "collapse.jl",
                    "dam_break.jl",
                    "rigid_body_contact.jl",
+                   "taylor_impact.jl",
                    "heat.jl"]
 
 for filename in TUTORIALS
