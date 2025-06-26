@@ -164,11 +164,11 @@ end
 """
     ColorPartition(::CartesianMesh)
 
-`ColorPartition` stores partitioning information used by the [`@P2G`](@ref) and [`@G2P2G`](@ref) macros
+`ColorPartition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
 to avoid write conflicts during parallel particle-to-grid transfers.
 
 !!! note
-    The [`@threaded`](@ref) macro must be placed before [`@P2G`](@ref) and [`@G2P2G`](@ref) to enable parallel transfer.
+    The [`@threaded`](@ref) macro must be placed before [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) to enable parallel transfer.
 
 # Examples
 ```julia
