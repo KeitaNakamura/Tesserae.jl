@@ -193,6 +193,14 @@ end
     A
 end
 
+@inline function add!(A::SpArray{T}, i::SpIndex, v::T) where {T}
+    @boundscheck checkbounds(A, i.index)
+    isactive(i) || return A
+    @debug checkbounds(get_data(A), i.spindex)
+    @inbounds get_data(A)[i.spindex] += v
+    A
+end
+
 @inline isactive(A::SpArray, I...) = (@_propagate_inbounds_meta; isactive(get_spinds(A), I...))
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)

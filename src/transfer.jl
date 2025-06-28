@@ -31,8 +31,9 @@ end
     A
 end
 
+@inline add!(A::AbstractArray{T}, i, v::T) where {T} = (@_propagate_inbounds_meta; A[i] += v)
 @inline add!(A::HybridArray{T}, i, v::T) where {T} = (@_propagate_inbounds_meta; _add!(get_device(A), A, i, v))
-@inline _add!(::CPUDevice, A::HybridArray, i, v) = (@_propagate_inbounds_meta; A[i] += v)
+@inline _add!(::CPUDevice, A::HybridArray, i, v) = (@_propagate_inbounds_meta; add!(parent(A), i, v))
 @inline function _add!(::GPUDevice, A::HybridArray, i, v::Number)
     @_propagate_inbounds_meta
     Atomix.@atomic parent(A)[i] += v
@@ -149,7 +150,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip), p
         code = quote
             $code
             $pre
-            Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), Tesserae.hybrid($grid), $particles, $mpvalues, $partition)
+            Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $partition)
         end
     end
 
@@ -231,7 +232,7 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, mpvalues, 
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
     backend = get_backend(device)
     kernel = gpukernel_P2G(backend, 256)
-    kernel(f, grid, particles, mpvalues; ndrange=length(particles))
+    kernel(f, hybrid(grid), particles, mpvalues; ndrange=length(particles))
     synchronize(backend)
 end
 
@@ -553,7 +554,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (mpvalues,ip),
     end
     code = quote
         $code
-        Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), Tesserae.hybrid($grid), $particles, $mpvalues, $partition)
+        Tesserae.P2G(($grid, $particles, $mpvalues, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $partition)
     end
 
     if !isempty(equations_p2g_nosum)
