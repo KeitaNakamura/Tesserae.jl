@@ -84,23 +84,25 @@ function colorgroups(bs::BlockStrategy)
     [filter(I -> !isempty(particle_indices_in(bs, I)), blocks) for blocks in threadsafe_blocks(blocksize(bs))]
 end
 
-function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
-    perm = Vector{Int}(undef, sum(length, ptsinblks))
+function reorder_particles!(particles::AbstractVector, bs::BlockStrategy)
+    reorder_particles!(particles, maparray(i -> particle_indices_in(bs, i), blockindices(bs)))
+end
 
-    count = Threads.Atomic{Int}(1)
-    for blocks in threadsafe_blocks(size(ptsinblks))
-        @threaded for blockindex in blocks
-            particleindices = ptsinblks[blockindex]
-            n = length(particleindices)
-            cnt = Threads.atomic_add!(count, n)
-            rng = cnt:cnt+n-1
-            perm[rng] .= particleindices
-            particleindices .= rng
-        end
+function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
+    ptsinblks = vec(ptsinblks)
+    lens = length.(ptsinblks)
+    offsets = cumsum([0; lens[1:end-1]])
+    perm = Vector{Int}(undef, sum(lens))
+
+    @threaded for blockindex in eachindex(ptsinblks)
+        n = lens[blockindex]
+        rng = offsets[blockindex]+1 : offsets[blockindex]+n
+        perm[rng] .= ptsinblks[blockindex]
     end
 
     # keep missing particles aside
     if length(perm) != length(particles) # some points are missing
+        @warn "reorder_particles!: Some particles are outside of the grid and were not assigned to any block. They will be kept at the end of the array." maxlog=1
         missed = particles[setdiff(eachindex(particles), perm)]
     end
 
@@ -191,3 +193,5 @@ strategy(partition::ColorPartition) = partition.strategy
 
 ColorPartition(mesh::CartesianMesh) = ColorPartition(BlockStrategy(mesh))
 update!(partition::ColorPartition, args...) = update!(strategy(partition), args...)
+
+reorder_particles!(particles::StructVector, partition::ColorPartition{<: BlockStrategy}) = reorder_particles!(particles, strategy(partition))
