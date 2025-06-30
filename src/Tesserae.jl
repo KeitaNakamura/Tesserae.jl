@@ -35,7 +35,7 @@ export
     ColorPartition,
 # SpArray
     SpArray,
-    update_block_sparsity!,
+    update_sparsity!,
 # Mesh
     CartesianMesh,
     volume,

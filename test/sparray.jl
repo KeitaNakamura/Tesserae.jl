@@ -20,7 +20,7 @@ end
     @test !all(Tesserae.isactive, spinds)
     @test !all(i->Tesserae.isactive(spinds,i), eachindex(spinds))
     blkspy = rand(Bool, Tesserae.blocksize(spinds))
-    n = update_block_sparsity!(spinds, blkspy)
+    n = update_sparsity!(spinds, blkspy)
     @test n == count(blkspy) * (2^Tesserae.BLOCK_SIZE_LOG2)^2 # `^2` is for dimension
     @test n == Tesserae.countnnz(spinds)
     inds = zeros(Int, size(spinds))
@@ -44,7 +44,7 @@ end
     @test !all(i->Tesserae.isactive(A,i), eachindex(A))
     @test all(iszero, A)
     blkspy = rand(Bool, Tesserae.blocksize(A))
-    n = update_block_sparsity!(A, blkspy)
+    n = update_sparsity!(A, blkspy)
     @test length(Tesserae.get_data(A)) === n
     @test all(i->(A[i]=rand(); iszero(A[i])), filter(i->!Tesserae.isactive(A,i), eachindex(A)))
     @test all(i->(a=rand(); A[i]=a; A[i]==a), filter(i->Tesserae.isactive(A,i), eachindex(A)))

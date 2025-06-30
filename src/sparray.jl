@@ -67,13 +67,13 @@ function countnnz(sp::SpIndices{dim}) where {dim}
     count(!iszero, sp.blkinds) << (BLOCK_SIZE_LOG2*dim)
 end
 
-function update_block_sparsity!(sp::SpIndices, blkspy::AbstractArray{Bool})
+function update_sparsity!(sp::SpIndices, blkspy::AbstractArray{Bool})
     blocksize(sp) == size(blkspy) || throw(ArgumentError("block size $(blocksize(sp)) must match"))
     blockindices(sp) .= blkspy
     numbering!(sp)
 end
 
-function update_block_sparsity!(spinds::SpIndices, partition::ColorPartition{<: BlockStrategy})
+function update_sparsity!(spinds::SpIndices, partition::ColorPartition{<: BlockStrategy})
     bs = strategy(partition)
     blocksize(spinds) == blocksize(bs) || throw(ArgumentError("block size $(blocksize(spinds)) must match"))
 
@@ -116,7 +116,7 @@ julia> A[1,1] # still zero
 ```
 
 This is because the block where index `(1,1)` is located is not activated yet.
-To activate the block, update sparsity pattern by `update_block_sparsity!(A, spy)`
+To activate the block, update sparsity pattern by `update_sparsity!(A, spy)`
 where `spy` must have `Tesserae.blocksize(A)`.
 
 ```jldoctest sparray
@@ -124,7 +124,7 @@ julia> spy = trues(Tesserae.blocksize(A))
 1×1 BitMatrix:
  1
 
-julia> update_block_sparsity!(A, spy) # returned value indicates the number of allocated elements in `A`.
+julia> update_sparsity!(A, spy) # returned value indicates the number of allocated elements in `A`.
 64
 
 julia> A .= 0;
@@ -205,12 +205,12 @@ end
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
-function update_block_sparsity!(A::SpArray, blkspy)
+function update_sparsity!(A::SpArray, blkspy)
     A.shared_spinds && error("""
     The sparsity pattern is shared among some `SpArray`s. \
-    Perhaps you should use `update_block_sparsity!(grid, blkspy)` instead of applying it to each `SpArray`.
+    Perhaps you should use `update_sparsity!(grid, blkspy)` instead of applying it to each `SpArray`.
     """)
-    n = update_block_sparsity!(get_spinds(A), blkspy)
+    n = update_sparsity!(get_spinds(A), blkspy)
     resize_fillzero_data!(A, n)
     n
 end

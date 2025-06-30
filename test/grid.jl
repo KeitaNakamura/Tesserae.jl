@@ -49,7 +49,7 @@
     # broadcast for SpArray
     grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)
     blkspy = rand(Bool, Tesserae.blocksize(grid))
-    update_block_sparsity!(grid, blkspy)
+    update_sparsity!(grid, blkspy)
     @test all(i->Tesserae.isactive(grid,i), filter(I->blkspy[Tesserae.blocklocal(Tuple(I)...)[1]...]===true, eachindex(grid)))
     grid.m .= rand(size(grid))
     grid.v .= grid.x .* rand(size(grid))
