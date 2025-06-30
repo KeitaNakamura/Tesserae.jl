@@ -224,7 +224,7 @@ function threaded_expr(schedule::QuoteNode, expr::Expr)
     end
 end
 
-const SHOWPROGRESS = Preferences.@load_preference("showprogress_macro", true)
+const SHOWPROGRESS = Preferences.@load_preference("enable_showprogress_macro", true)
 
 """
 ```
