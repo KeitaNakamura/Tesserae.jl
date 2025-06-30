@@ -172,7 +172,7 @@ end # MPValue
         end
     end
 
-    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), BSpline(Quintic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
+    @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Tesserae.Quartic()), BSpline(Tesserae.Quintic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
         interp = Wrapper(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)
@@ -193,7 +193,7 @@ end
 @testset "B-spline fast computation" begin
     # check by autodiff
     k = 5
-    @testset "$spline" for spline in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quartic()), BSpline(Quintic()))
+    @testset "$spline" for spline in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Tesserae.Quartic()), BSpline(Tesserae.Quintic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(-1,2), Val(dim))...)
@@ -335,7 +335,7 @@ end
 @testset "Polynomial" begin
     for T in (Float32, Float64)
         for dim in (1,2,3)
-            for poly in (Polynomial(Linear()), Polynomial(MultiLinear()), Polynomial(Quadratic()), Polynomial(MultiQuadratic()))
+            for poly in (Polynomial(Linear()), Polynomial(MultiLinear()), Polynomial(Quadratic()), Polynomial(Tesserae.MultiQuadratic()))
                 xp = rand(Vec{dim, T})
                 if poly.degree isa Union{Linear, MultiLinear}
                     vals = values(Order(4), poly, xp)
