@@ -269,8 +269,13 @@ function check_arguments_for_P2G(grid, particles, mpvalues, partition)
         strat = strategy(partition)
         if strat isa BlockStrategy
             @assert blocksize(grid) == blocksize(strat)
-            sum(length(particle_indices_in(strat, blk)) for blk in blockindices(strat)) == 0 &&
+            if sum(length(particle_indices_in(strat, blk)) for blk in blockindices(strat)) == 0
                 error("@P2G: No particles assigned to any block in ColorPartition")
+            end
+            interp = interpolation(first(mpvalues))
+            if kernel_support(interp) > (1 << BLOCK_SIZE_LOG2)
+                error("@P2G: Block size for `ColorPartition` is too small for interpolation $interp. Increase `block_size_log2` (default = 2) in LocalPreferences.toml to ensure block size is ≥ kernel support.")
+            end
         end
     end
     # check device

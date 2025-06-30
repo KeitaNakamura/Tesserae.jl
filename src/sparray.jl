@@ -28,13 +28,13 @@ Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()
 
 @inline function _blocklocal(I::Integer...)
     j = I .- 1
-    blk = @. j >> BLOCKFACTOR + 1
-    lcl = @. j & (1<<BLOCKFACTOR - 1) + 1
+    blk = @. j >> BLOCK_SIZE_LOG2 + 1
+    lcl = @. j & (1<<BLOCK_SIZE_LOG2 - 1) + 1
     blk, lcl
 end
 @inline function blocklocal(I::Vararg{Integer, dim}) where {dim}
     blk, lcl = _blocklocal(I...)
-    LI = LinearIndices(nfill(1 << BLOCKFACTOR, Val(dim)))
+    LI = LinearIndices(nfill(1 << BLOCK_SIZE_LOG2, Val(dim)))
     @inbounds blk, LI[lcl...]
 end
 
@@ -42,7 +42,7 @@ end
     @boundscheck checkbounds(sp, I...)
     blk, lcl = blocklocal(I...)
     @inbounds n = blockindices(sp)[blk...]
-    index = (n-1) << (BLOCKFACTOR*dim) + lcl
+    index = (n-1) << (BLOCK_SIZE_LOG2*dim) + lcl
     SpIndex(CartesianIndex(I), ifelse(iszero(n), zero(index), index))
 end
 
@@ -60,11 +60,11 @@ function numbering!(sp::SpIndices{dim}) where {dim}
     @inbounds for i in eachindex(inds)
         inds[i] = iszero(inds[i]) ? 0 : (count += 1)
     end
-    count << (BLOCKFACTOR*dim) # return the number of activated nodes
+    count << (BLOCK_SIZE_LOG2*dim) # return the number of activated nodes
 end
 
 function countnnz(sp::SpIndices{dim}) where {dim}
-    count(!iszero, sp.blkinds) << (BLOCKFACTOR*dim)
+    count(!iszero, sp.blkinds) << (BLOCK_SIZE_LOG2*dim)
 end
 
 function update_block_sparsity!(sp::SpIndices, blkspy::AbstractArray{Bool})

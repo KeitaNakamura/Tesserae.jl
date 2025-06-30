@@ -21,7 +21,7 @@ end
     @test !all(i->Tesserae.isactive(spinds,i), eachindex(spinds))
     blkspy = rand(Bool, Tesserae.blocksize(spinds))
     n = update_block_sparsity!(spinds, blkspy)
-    @test n == count(blkspy) * (2^Tesserae.BLOCKFACTOR)^2 # `^2` is for dimension
+    @test n == count(blkspy) * (2^Tesserae.BLOCK_SIZE_LOG2)^2 # `^2` is for dimension
     @test n == Tesserae.countnnz(spinds)
     inds = zeros(Int, size(spinds))
     for I in CartesianIndices(inds)
@@ -29,7 +29,7 @@ end
         if blkspy[blk...]
             linear_blkindex = LinearIndices(blkspy)[blk...]
             nblks = count(blkspy[1:linear_blkindex])
-            blkunit = (2^Tesserae.BLOCKFACTOR)^2
+            blkunit = (2^Tesserae.BLOCK_SIZE_LOG2)^2
             index = (nblks-1) * blkunit + i
             inds[I] = index
         end

@@ -1,4 +1,4 @@
-const BLOCKFACTOR = unsigned(Preferences.@load_preference("block_factor", 3)) # 2^n
+const BLOCK_SIZE_LOG2 = unsigned(Preferences.@load_preference("block_size_log2", 2)) # 2^n
 
 abstract type ColoringStrategy end
 
@@ -121,14 +121,14 @@ end
 # block operations #
 ####################
 
-blocksize(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCKFACTOR+1
+blocksize(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCK_SIZE_LOG2+1
 blocksize(A::AbstractArray) = blocksize(size(A))
 
 """
     Tesserae.whichblock(x::Vec, mesh::CartesianMesh)
 
 Return block index where `x` locates.
-The unit block size is `2^$BLOCKFACTOR` cells.
+The unit block size is `2^$BLOCK_SIZE_LOG2` cells.
 
 # Examples
 ```jldoctest
@@ -153,7 +153,7 @@ CartesianIndex(2, 1)
 @inline function whichblock(x::Vec, mesh::CartesianMesh)
     I = whichcell(x, mesh)
     I === nothing && return nothing
-    CartesianIndex(@. (I.I-1) >> BLOCKFACTOR + 1)
+    CartesianIndex(@. (I.I-1) >> BLOCK_SIZE_LOG2 + 1)
 end
 
 function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}

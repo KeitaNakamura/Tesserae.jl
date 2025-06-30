@@ -1,5 +1,4 @@
 [Tesserae]
 debug_mode = true
-block_factor = 3
-threaded_macro = true
-showprogress_macro = false
+block_size_log2 = 2
+enable_showprogress_macro = false
