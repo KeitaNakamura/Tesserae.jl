@@ -131,7 +131,7 @@ function create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianM
     spy = falses(ndofs, prod(dims), ndofs, prod(dims))
     LI, CI = LinearIndices(dims), CartesianIndices(dims)
     for i in CI
-        unit = (gridspan(interp) - 1) * oneunit(i)
+        unit = (kernel_support(interp) - 1) * oneunit(i)
         indices = intersect((i-unit):(i+unit), CI)
         for j in indices
             spy[1:ndofs, LI[i], 1:ndofs, LI[j]] .= true

@@ -16,7 +16,7 @@ WLS(k::Kernel) = WLS(k, Polynomial(Linear()))
 
 get_kernel(wls::WLS) = wls.kernel
 get_polynomial(wls::WLS) = wls.poly
-gridspan(wls::WLS) = gridspan(get_kernel(wls))
+kernel_support(wls::WLS) = kernel_support(get_kernel(wls))
 @inline neighboringnodes(wls::WLS, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(wls), pt, mesh)
 
 @inline function update_property!(mp::MPValue, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))

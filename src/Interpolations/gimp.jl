@@ -15,7 +15,7 @@ end
 """
 struct uGIMP <: Kernel end
 
-gridspan(::uGIMP) = 3
+kernel_support(::uGIMP) = 3
 
 @inline function neighboringnodes(::uGIMP, pt, mesh::CartesianMesh)
     h⁻¹ = spacing_inv(mesh)

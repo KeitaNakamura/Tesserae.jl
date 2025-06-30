@@ -11,7 +11,7 @@ To create a new interpolation, following methods need to be implemented.
 initial_neighboringnodes(::Interpolation, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 initial_neighboringnodes(shape::Shape, mesh::UnstructuredMesh) = zero(SVector{nlocalnodes(shape), Int})
 
-propsize(interp::Interpolation, ::Val{dim}) where{dim} = nfill(gridspan(interp), Val(dim))
+propsize(interp::Interpolation, ::Val{dim}) where{dim} = nfill(kernel_support(interp), Val(dim))
 propsize(shape::Shape, ::Val)  = (nlocalnodes(shape),)
 @generated function create_property(::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
     quote

@@ -1,10 +1,10 @@
 abstract type AbstractBSpline{D <: Degree} <: Kernel end
 
-gridspan(::AbstractBSpline{Degree{1}}) = 2
-gridspan(::AbstractBSpline{Degree{2}}) = 3
-gridspan(::AbstractBSpline{Degree{3}}) = 4
-gridspan(::AbstractBSpline{Degree{4}}) = 5
-gridspan(::AbstractBSpline{Degree{5}}) = 6
+kernel_support(::AbstractBSpline{Degree{1}}) = 2
+kernel_support(::AbstractBSpline{Degree{2}}) = 3
+kernel_support(::AbstractBSpline{Degree{3}}) = 4
+kernel_support(::AbstractBSpline{Degree{4}}) = 5
+kernel_support(::AbstractBSpline{Degree{5}}) = 6
 
 @inline function neighboringnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
@@ -12,7 +12,7 @@ gridspan(::AbstractBSpline{Degree{5}}) = 6
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
     offset = _neighboringnodes_offset(eltype(x), spline)
-    r = gridspan(spline) - 1
+    r = kernel_support(spline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
     stop = @. start + r
     imin = Tuple(@. max(start, 1))

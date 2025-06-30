@@ -19,7 +19,7 @@ KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(MultiLinear()))
 
 get_kernel(kc::KernelCorrection) = kc.kernel
 get_polynomial(kc::KernelCorrection) = kc.poly
-gridspan(kc::KernelCorrection) = gridspan(get_kernel(kc))
+kernel_support(kc::KernelCorrection) = kernel_support(get_kernel(kc))
 @inline neighboringnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(kc), pt, mesh)
 
 # general version
