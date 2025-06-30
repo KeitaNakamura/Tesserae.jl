@@ -125,8 +125,6 @@ end
 # threaded macro #
 ##################
 
-const THREADED = Preferences.@load_preference("threaded_macro", true)
-
 abstract type Scheduler end
 struct StaticScheduler     <: Scheduler end
 struct DynamicScheduler    <: Scheduler end
@@ -141,7 +139,7 @@ get_scheduler(::Val{:greedy})  = GreedyScheduler()
 get_scheduler(::Val{:nothing}) = SequentialScheduler()
 
 function tforeach(f, iter, scheduler=DynamicScheduler(); kwargs...)
-    if Threads.nthreads() > 1 && THREADED
+    if Threads.nthreads() > 1
         _tforeach(f, iter, get_scheduler(scheduler); kwargs...)
     else
         foreach(f, iter)
@@ -219,12 +217,8 @@ function threaded_expr(schedule::QuoteNode, expr::Expr)
         end
     elseif Meta.isexpr(expr, :macrocall) &&
            (expr.args[1] in (Symbol("@P2G"), Symbol("@G2P"), Symbol("@G2P2G"), Symbol("@P2G_Matrix")))
-        if THREADED
-            insert!(expr.args, 3, schedule)
-            esc(expr)
-        else
-            esc(expr)
-        end
+        insert!(expr.args, 3, schedule)
+        esc(expr)
     else
         error("wrong usage for @threaded")
     end
