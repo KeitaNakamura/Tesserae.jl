@@ -75,4 +75,39 @@ end
     end
 end
 
+@inline function update_property!(mp::MPValue, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim}
+    if filter isa Trues
+        # For MultiLinear, we can decompose into axis-wise Linear interpolations.
+        # If the problem is 1D, MultiLinear == Linear, so use the direct fast path.
+        wls_1d = WLS(get_kernel(wls), Polynomial(Linear()))
+        if dim == 1
+            update_property!(mp, wls_1d, pt, mesh, filter)
+        else
+            # For dim > 1: decompose into 1D Linear along each axis,
+            # compute axis-wise contribution, then combine by tensor product.
+            vals′ = ntuple(Val(dim)) do d
+                T = eltype(values(mp, 1))
+                mesh′ = axismesh(mesh, d)
+                prop′ = create_property(MArray, Vec{1,T}, wls_1d; derivative=derivative_order(mp), name=Val(propertynames(mp)[1]))
+                indices′ = CartesianIndices((neighboringnodes(mp).indices[d],))
+                mp′ = MPValue(wls_1d, prop′, Scalar(indices′))
+                update_property!(mp′, wls_1d, Vec(getx(pt)[d]), mesh′)
+                # Get scalar value from Vec{1} for each property.
+                map(name -> only.(getproperty(mp′, name).data), propertynames(mp))
+            end
+            # Combine axis-wise results into MultiLinear tensor product.
+            set_values!(mp, _prod_each_dimension(derivative_order(mp), vals′))
+        end
+    else
+        # Fallback for masked cases: use general method.
+        update_property_general!(mp, wls, pt, mesh, filter)
+    end
+end
+@generated function _prod_each_dimension(::Order{k}, vals) where {k}
+    quote
+        @_inline_meta
+        @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals...)
+    end
+end
+
 Base.show(io::IO, wls::WLS) = print(io, WLS, "(", get_kernel(wls), ", ", get_polynomial(wls), ")")

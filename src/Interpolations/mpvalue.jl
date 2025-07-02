@@ -13,11 +13,14 @@ initial_neighboringnodes(shape::Shape, mesh::UnstructuredMesh) = zero(SVector{nl
 
 propsize(interp::Interpolation, ::Val{dim}) where{dim} = nfill(kernel_support(interp), Val(dim))
 propsize(shape::Shape, ::Val)  = (nlocalnodes(shape),)
-@generated function create_property(::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
+function create_property(::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
+    map(Array, create_property(MArray, Vec{dim, T}, interp; derivative, name))
+end
+@generated function create_property(::Type{MArray}, ::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
     quote
         dims = propsize(interp, Val(dim))
         names = @ntuple $(k+1) i -> create_name(Order(i-1), name)
-        vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), dims)
+        vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), MArray{Tuple{dims...}})
         NamedTuple{names}(vals)
     end
 end
