@@ -121,8 +121,9 @@ where `spy` must have `Tesserae.blocksize(A)`.
 
 ```jldoctest sparray
 julia> spy = trues(Tesserae.blocksize(A))
-1×1 BitMatrix:
- 1
+2×2 BitMatrix:
+ 1  1
+ 1  1
 
 julia> update_sparsity!(A, spy) # returned value indicates the number of allocated elements in `A`.
 64

@@ -147,7 +147,7 @@ julia> mesh = CartesianMesh(1, (0,10), (0,10))
  [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
 
 julia> Tesserae.whichblock(Vec(8.5, 1.5), mesh)
-CartesianIndex(2, 1)
+CartesianIndex(3, 1)
 ```
 """
 @inline function whichblock(x::Vec, mesh::CartesianMesh)
