@@ -75,6 +75,8 @@ function extract(mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim
     mesh[indices]
 end
 
+axismesh(mesh::CartesianMesh, d::Integer) = CartesianMesh((mesh.axes[d],), spacing(mesh), spacing_inv(mesh))
+
 @inline function Base.getindex(mesh::CartesianMesh{dim}, i::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(mesh, i...)
     @inbounds Vec(map(getindex, mesh.axes, i))
