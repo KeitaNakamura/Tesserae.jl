@@ -85,22 +85,29 @@ end
         else
             # For dim > 1: decompose into 1D Linear along each axis,
             # compute axis-wise contribution, then combine by tensor product.
+            order = derivative_order(mp)
             vals′ = ntuple(Val(dim)) do d
                 T = eltype(values(mp, 1))
                 mesh′ = axismesh(mesh, d)
-                prop′ = create_property(MArray, Vec{1,T}, wls_1d; derivative=derivative_order(mp), name=Val(propertynames(mp)[1]))
+                prop′ = create_property(MArray, Vec{1,T}, wls_1d; derivative=order, name=Val(propertynames(mp)[1]))
                 indices′ = CartesianIndices((neighboringnodes(mp).indices[d],))
                 mp′ = MPValue(wls_1d, prop′, Scalar(indices′))
                 update_property!(mp′, wls_1d, Vec(getx(pt)[d]), mesh′)
                 # Get scalar value from Vec{1} for each property.
-                map(name -> only.(getproperty(mp′, name).data), propertynames(mp))
+                _extract_scalar_values(order, mp′)
             end
             # Combine axis-wise results into MultiLinear tensor product.
-            set_values!(mp, _prod_each_dimension(derivative_order(mp), vals′))
+            set_values!(mp, _prod_each_dimension(order, vals′))
         end
     else
         # Fallback for masked cases: use general method.
         update_property_general!(mp, wls, pt, mesh, filter)
+    end
+end
+@generated function _extract_scalar_values(::Order{k}, mp) where {k}
+    quote
+        @_inline_meta
+        @ntuple $(k+1) a -> map(only, Tuple(values(mp, a)))
     end
 end
 @generated function _prod_each_dimension(::Order{k}, vals) where {k}
