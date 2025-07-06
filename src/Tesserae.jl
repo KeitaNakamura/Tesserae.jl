@@ -50,6 +50,7 @@ export
     spacing,
 # Particles
     generate_particles,
+    reorder_particles!,
     GridSampling,
     PoissonDiskSampling,
 # interpolations

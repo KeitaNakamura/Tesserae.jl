@@ -186,13 +186,13 @@ See also [`ColorPartition`](@ref).
 # Examples
 ```julia
 # Parallel loop
-@threaded :static for i in 1:100
+@threaded for i in 1:100
     println(i)
 end
 
-# Particle-to-grid transfer
-@threaded @P2G grid=>i particles=>p mpvalues=>ip partition begin
-    m[i] += @∑ w[ip] * m[p]
+# Grid-to-particle transfer
+@threaded @G2P grid=>i particles=>p mpvalues=>ip begin
+    v[p] = @∑ w[ip] * v[i]
 end
 ```
 """
