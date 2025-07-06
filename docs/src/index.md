@@ -9,10 +9,10 @@ Tesserae is a toolkit for implementing the material point method in Julia. It is
 * Grid and particle generation
 * Various interpolation types, including B-splines, GIMP, CPDI, and MLS--MPM
 * Convenient macros for transferring data between grid and particles
-* Multithreading support
+* Multi-threading support
+* GPU support (CUDA and Metal)
 * Exporting VTK files for visualization
 * Unified framework for FEM (experimental)
-* GPU computation with CUDA and Metal (experimental)
 
 ## Installation
 
