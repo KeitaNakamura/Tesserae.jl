@@ -402,9 +402,9 @@ function G2P_sum_expr((grid,i), (particles,p), (mpvalues,ip), sum_equations::Vec
     @gensym mp gridindices
 
     code = Expr(:block)
+    maps = [grid=>i, particles=>p, mp=>ip]
 
     if !isempty(sum_equations)
-        maps = [grid=>i, particles=>p, mp=>ip]
         replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
         for k in eachindex(sum_equations)
             eq = sum_equations[k]
