@@ -283,6 +283,10 @@ end
 # plot!([1, 2, 4, 8, 16],                                 # hide
 #       915.0 ./ [915.0, 477.0, 248.0, 125.0, 66.3],      # hide
 #       label = "Particle computation", marker = "o")     # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       2331.6 ./ [2331.6, 1228.1, 649.5, 342.8, 196.9],  # hide
+#       label = "Total (w/o output)", color = "black",    # hide
+#       marker = "o")                                     # hide
 # plot!([1, 17], [1, 17],                                 # hide
 #       color = "black", linestyle = :dash,               # hide
 #       label = "")                                       # hide
