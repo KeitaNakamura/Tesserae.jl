@@ -149,8 +149,8 @@ end
 function create_sparse_matrix(::Type{T}, meshes::Tuple{Vararg{UnstructuredMesh, N}}; ndofs::NTuple{N, Int}) where {T, N}
     gdofs = generate_dofs(meshes, ndofs)
     ttldofs = sum(length, gdofs)
-    spy = fill(false, ttldofs, ttldofs)
-    @threaded for i in 1:N
+    spy = falses(ttldofs, ttldofs)
+    for i in 1:N
         mesh_i = meshes[i]
         gdofs_i = gdofs[i]
         for c_i in 1:ncells(mesh_i)
