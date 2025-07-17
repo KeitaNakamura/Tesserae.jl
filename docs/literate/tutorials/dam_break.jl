@@ -6,7 +6,7 @@
 #
 # | # Particles | # Iterations | Execution time (w/o output) |
 # | ----------- | ------------ | --------------------------- |
-# | 28k         | 3.5k         | 13 min                      |
+# | 28k         | 3.5k         | 9 min                       |
 #
 # This example employs stabilized mixed MPM with the variational multiscale method[^1].
 #
