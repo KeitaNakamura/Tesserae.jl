@@ -198,21 +198,23 @@ create_sparse_matrix(mesh::UnstructuredMesh{<: Any, dim}; ndofs::Int = dim) wher
 
 Extract the active degrees of freedom of a matrix.
 """
-function extract(S::AbstractMatrix, dofmap_i::DofMap, dofmap_j::DofMap = dofmap_i)
+function extract(S::AbstractMatrix, dofmap_i, dofmap_j = dofmap_i)
     I, J = _indices_for_extract(S, dofmap_i, dofmap_j)
     S[I, J]
 end
-function extract(::typeof(view), S::AbstractMatrix, dofmap_i::DofMap, dofmap_j::DofMap = dofmap_i)
+function extract(::typeof(view), S::AbstractMatrix, dofmap_i, dofmap_j = dofmap_i)
     I, J = _indices_for_extract(S, dofmap_i, dofmap_j)
     view(S, I, J)
 end
-function _indices_for_extract(S::AbstractMatrix, dofmap_i::DofMap, dofmap_j::DofMap)
-    m, n = prod(dofmap_i.masksize), prod(dofmap_j.masksize)
-    @assert size(S) == (m, n)
-    I = view(LinearIndices(dofmap_i.masksize), dofmap_i.indices)
-    J = view(LinearIndices(dofmap_j.masksize), dofmap_j.indices)
+function _indices_for_extract(S::AbstractMatrix, dofmap_i::Union{DofMap, Colon}, dofmap_j::Union{DofMap, Colon})
+    dofmap_i isa DofMap && @assert size(S, 1) == prod(dofmap_i.masksize)
+    dofmap_j isa DofMap && @assert size(S, 2) == prod(dofmap_j.masksize)
+    I = _indices_for_extract(dofmap_i)
+    J = _indices_for_extract(dofmap_j)
     I, J
 end
+_indices_for_extract(dofmap::DofMap) = LinearIndices(dofmap.masksize)[dofmap.indices]
+_indices_for_extract(colon::Colon) = colon
 
 function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
     if issorted(I)
@@ -265,7 +267,7 @@ A typical global stiffness matrix can be assembled as follows:
 
 ```julia
 @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
-    K[i,j] = @∑ ∇w[ip] ⋅ c[p] ⋅ ∇w[jp] * V[p]
+    K[i,j] = @∑ ∇w[ip] ⊡ c[p] ⊡ ∇w[jp] * V[p]
 end
 ```
 
