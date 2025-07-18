@@ -107,19 +107,24 @@ Base.IndexStyle(::Type{<: MapArray}) = IndexCartesian()
     @inbounds A.f(getindex.(A.args, i...)...)
 end
 
-#########
-# Trues #
-#########
+########
+# Fill #
+########
 
-struct Trues{N} <: AbstractArray{Bool, N}
+struct Fill{T, N} <: AbstractArray{T, N}
+    value::T
     dims::Dims{N}
 end
-Base.size(t::Trues) = t.dims
-Base.IndexStyle(::Type{<: Trues}) = IndexLinear()
-@inline function Base.getindex(t::Trues, i::Integer)
-    @boundscheck checkbounds(t, i)
-    true
+Fill(value, dims::Vararg{Int}) = Fill(value, dims)
+Base.size(A::Fill) = A.dims
+Base.IndexStyle(::Type{<: Fill}) = IndexLinear()
+@inline function Base.getindex(A::Fill, i::Integer)
+    @boundscheck checkbounds(A, i)
+    A.value
 end
+
+const Trues{N} = Fill{Bool, N}
+Trues(dims::Tuple) = Fill(true, dims)
 
 ##################
 # threaded macro #
