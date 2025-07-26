@@ -55,8 +55,8 @@ function main()
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
 
-    # Interpolation
-    mpvalues = map(p -&gt; MPValue(BSpline(Linear()), mesh), eachindex(particles))
+    # Interpolation weights
+    weights = map(p -&gt; InterpolationWeight(BSpline(Linear()), mesh), eachindex(particles))
 
     # Create animation by `Plots.@gif`
     Δt = 0.001
@@ -64,10 +64,10 @@ function main()
 
         # Update basis function values
         for p in eachindex(particles)
-            update!(mpvalues[p], particles.x[p], mesh)
+            update!(weights[p], particles.x[p], mesh)
         end
 
-        @P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        @P2G grid=&gt;i particles=&gt;p weights=&gt;ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
             f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
@@ -76,7 +76,7 @@ function main()
         @. grid.vⁿ = grid.mv / grid.m
         @. grid.v  = grid.vⁿ + (grid.f / grid.m) * Δt
 
-        @G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+        @G2P grid=&gt;i particles=&gt;p weights=&gt;ip begin
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += @∑ w[ip] * v[i] * Δt
@@ -205,20 +205,20 @@ end</code></pre></div></div><h3 id="2.-Mesh-and-grid-generation"><a class="docs-
  (x = [0.9125, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
  (x = [0.9375, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
  (x = [0.9625, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])
- (x = [0.9875, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])</code></pre><p>This <code>pts</code> is also a <a href="https://github.com/JuliaArrays/StructArrays.jl"><code>StructArray</code></a>, similar to <code>grid</code>.</p><div class="admonition is-info" id="Info-4622c84a59d37ee2"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-4622c84a59d37ee2" title="Permalink"></a></header><div class="admonition-body"><p>In the <code>generate_particles</code> function, particles are generated across the entire <code>mesh</code> domain. Consequently, any unnecessary particles need to be removed.</p></div></div><h2 id="Basis-function-values"><a class="docs-heading-anchor" href="#Basis-function-values">Basis function values</a><a id="Basis-function-values-1"></a><a class="docs-heading-anchor-permalink" href="#Basis-function-values" title="Permalink"></a></h2><p>In Tesserae, the basis function values are stored in <code>MPValue</code>. For example, <code>MPValue</code> with the linear basis function can be constructed as</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; mp = MPValue(BSpline(Linear()), mesh)</code><code class="nohighlight hljs ansi" style="display:block;">MPValue:
+ (x = [0.9875, 0.9875], m = 0.0, V⁰ = 0.0, v = [0.0, 0.0], ∇v = [0.0 0.0; 0.0 0.0], F = [0.0 0.0; 0.0 0.0], σ = [0.0 0.0; 0.0 0.0])</code></pre><p>This <code>pts</code> is also a <a href="https://github.com/JuliaArrays/StructArrays.jl"><code>StructArray</code></a>, similar to <code>grid</code>.</p><div class="admonition is-info" id="Info-4622c84a59d37ee2"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-4622c84a59d37ee2" title="Permalink"></a></header><div class="admonition-body"><p>In the <code>generate_particles</code> function, particles are generated across the entire <code>mesh</code> domain. Consequently, any unnecessary particles need to be removed.</p></div></div><h2 id="Basis-function-values"><a class="docs-heading-anchor" href="#Basis-function-values">Basis function values</a><a id="Basis-function-values-1"></a><a class="docs-heading-anchor-permalink" href="#Basis-function-values" title="Permalink"></a></h2><p>In Tesserae, the basis function values are stored in <code>InterpolationWeight</code>. For example, <code>InterpolationWeight</code> with the linear basis function can be constructed as</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; iw = InterpolationWeight(BSpline(Linear()), mesh)</code><code class="nohighlight hljs ansi" style="display:block;">InterpolationWeight:
   Interpolation: BSpline(Linear())
   Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
-  Neighboring nodes: CartesianIndices((1:0, 1:0))</code></pre><p>This <code>mp</code> can be updated by passing the particle position to the <code>update!</code> function:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; update!(mp, particles.x[1], mesh)</code><code class="nohighlight hljs ansi" style="display:block;">MPValue:
+  Neighboring nodes: CartesianIndices((1:0, 1:0))</code></pre><p>This <code>iw</code> can be updated by passing the particle position to the <code>update!</code> function:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; update!(iw, particles.x[1], mesh)</code><code class="nohighlight hljs ansi" style="display:block;">InterpolationWeight:
   Interpolation: BSpline(Linear())
   Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
-  Neighboring nodes: CartesianIndices((3:4, 1:2))</code></pre><div class="admonition is-info" id="Info-5933c5ff9b1fd32e"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-5933c5ff9b1fd32e" title="Permalink"></a></header><div class="admonition-body"><p>After updating <code>mp</code>, you can check the partition of unity <span>$\sum_i w_{ip} = 1$</span>:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; sum(mp.w)</code><code class="nohighlight hljs ansi" style="display:block;">1.0</code></pre><p>and the linear field reproduction <span>$\sum_i w_{ip} \bm{x}_i = \bm{x}_p$</span>:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; nodeindices = neighboringnodes(mp)</code><code class="nohighlight hljs ansi" style="display:block;">CartesianIndices((3:4, 1:2))</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; sum(eachindex(nodeindices)) do ip
+  Neighboring nodes: CartesianIndices((3:4, 1:2))</code></pre><div class="admonition is-info" id="Info-60590243f95072f0"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-60590243f95072f0" title="Permalink"></a></header><div class="admonition-body"><p>After updating <code>iw</code>, you can check the partition of unity <span>$\sum_i w_{ip} = 1$</span>:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; sum(iw.w)</code><code class="nohighlight hljs ansi" style="display:block;">1.0</code></pre><p>and the linear field reproduction <span>$\sum_i w_{ip} \bm{x}_i = \bm{x}_p$</span>:</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; nodeindices = neighboringnodes(iw)</code><code class="nohighlight hljs ansi" style="display:block;">CartesianIndices((3:4, 1:2))</code><br/><code class="language-julia-repl hljs" style="display:block;">julia&gt; sum(eachindex(nodeindices)) do ip
            i = nodeindices[ip]
-           mp.w[ip] * mesh[i]
+           iw.w[ip] * mesh[i]
        end</code><code class="nohighlight hljs ansi" style="display:block;">2-element Vec{2, Float64}:
  0.1375
- 0.0125</code></pre></div></div><p>For the sake of performance, it&#39;s best to prepare the same number of <code>MPValue</code>s as there are particles. This means that each particle has its own storage for the basis function values.</p><pre><code class="language-julia hljs">mpvalues = map(p -&gt; MPValue(BSpline(Linear()), mesh), eachindex(particles))</code></pre><div class="admonition is-info" id="Info-66117f72a9040622"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-66117f72a9040622" title="Permalink"></a></header><div class="admonition-body"><p>It is also possible to construct <code>MPValue</code>s with Structure-Of-Arrays (SOA) layout using <code>generate_mpvalues</code>.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; mpvalues = generate_mpvalues(BSpline(Linear()), mesh, length(particles))</code><code class="nohighlight hljs ansi" style="display:block;">416-element MPValueVector:
+ 0.0125</code></pre></div></div><p>For the sake of performance, it&#39;s best to prepare the same number of <code>InterpolationWeight</code>s as there are particles. This means that each particle has its own storage for the basis function values.</p><pre><code class="language-julia hljs">weights = map(p -&gt; InterpolationWeight(BSpline(Linear()), mesh), eachindex(particles))</code></pre><div class="admonition is-info" id="Info-289a7a87b182b889"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-289a7a87b182b889" title="Permalink"></a></header><div class="admonition-body"><p>It is also possible to construct <code>InterpolationWeight</code>s with Structure-Of-Arrays (SOA) layout using <code>generate_interpolation_weights</code>.</p><pre><code class="language-julia-repl hljs" style="display:block;">julia&gt; weights = generate_interpolation_weights(BSpline(Linear()), mesh, length(particles))</code><code class="nohighlight hljs ansi" style="display:block;">416-element InterpolationWeightVector:
   Interpolation: BSpline(Linear())
-  Property names: w, ∇w</code></pre><p>This SoA layout for <code>MPValue</code>s is generally preferred for performance, although it cannot be resized.</p></div></div><h2 id="Transfer-between-grid-and-particles"><a class="docs-heading-anchor" href="#Transfer-between-grid-and-particles">Transfer between grid and particles</a><a id="Transfer-between-grid-and-particles-1"></a><a class="docs-heading-anchor-permalink" href="#Transfer-between-grid-and-particles" title="Permalink"></a></h2><h3 id="Particle-to-grid-transfer"><a class="docs-heading-anchor" href="#Particle-to-grid-transfer">Particle-to-grid transfer</a><a id="Particle-to-grid-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Particle-to-grid-transfer" title="Permalink"></a></h3><p>For the particle-to-grid transfer, the <a href="../../transfer/#Tesserae.@P2G"><code>@P2G</code></a> macro is useful:</p><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+  Property names: w, ∇w</code></pre><p>This SoA layout for <code>InterpolationWeight</code>s is generally preferred for performance, although it cannot be resized.</p></div></div><h2 id="Transfer-between-grid-and-particles"><a class="docs-heading-anchor" href="#Transfer-between-grid-and-particles">Transfer between grid and particles</a><a id="Transfer-between-grid-and-particles-1"></a><a class="docs-heading-anchor-permalink" href="#Transfer-between-grid-and-particles" title="Permalink"></a></h2><h3 id="Particle-to-grid-transfer"><a class="docs-heading-anchor" href="#Particle-to-grid-transfer">Particle-to-grid transfer</a><a id="Particle-to-grid-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Particle-to-grid-transfer" title="Permalink"></a></h3><p>For the particle-to-grid transfer, the <a href="../../transfer/#Tesserae.@P2G"><code>@P2G</code></a> macro is useful:</p><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p weights=&gt;ip begin
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
     f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
@@ -226,31 +226,31 @@ end</code></pre><p>This macro expands to roughly the following code:</p><pre><co
 @. grid.mv = zero(grid.mv)
 @. grid.f  = zero(grid.f)
 for p in eachindex(particles)
-    mp = mpvalues[p]
-    nodeindices = neighboringnodes(mp)
+    iw = weights[p]
+    nodeindices = neighboringnodes(iw)
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        grid.m[i]  += mp.w[ip] * particles.m[p]
-        grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
-        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * mp.∇w[ip]
+        grid.m[i]  += iw.w[ip] * particles.m[p]
+        grid.mv[i] += iw.w[ip] * particles.m[p] * particles.v[p]
+        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * iw.∇w[ip]
     end
-end</code></pre><h3 id="Grid-to-particle-transfer"><a class="docs-heading-anchor" href="#Grid-to-particle-transfer">Grid-to-particle transfer</a><a id="Grid-to-particle-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-to-particle-transfer" title="Permalink"></a></h3><p>Similar to the particle-to-grid transfer, the <a href="../../transfer/#Tesserae.@G2P"><code>@G2P</code></a> macro is provided for grid-to-particle transfer:</p><pre><code class="language-julia hljs">@G2P grid=&gt;i particles=&gt;p mpvalues=&gt;ip begin
+end</code></pre><h3 id="Grid-to-particle-transfer"><a class="docs-heading-anchor" href="#Grid-to-particle-transfer">Grid-to-particle transfer</a><a id="Grid-to-particle-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-to-particle-transfer" title="Permalink"></a></h3><p>Similar to the particle-to-grid transfer, the <a href="../../transfer/#Tesserae.@G2P"><code>@G2P</code></a> macro is provided for grid-to-particle transfer:</p><pre><code class="language-julia hljs">@G2P grid=&gt;i particles=&gt;p weights=&gt;ip begin
     v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
     ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
     x[p] += @∑ w[ip] * v[i] * Δt
 end</code></pre><p>This macro expands to roughly the following code:</p><pre><code class="language-julia hljs">for p in eachindex(particles)
-    mp = mpvalues[p]
-    nodeindices = neighboringnodes(mp)
+    iw = weights[p]
+    nodeindices = neighboringnodes(iw)
     Δvₚ = zero(eltype(particles.v))
     ∇vₚ = zero(eltype(particles.∇v))
     Δxₚ = zero(eltype(particles.x))
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        Δvₚ += mp.w[ip] * (grid.v[i] - grid.vⁿ[i])
-        ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
-        Δxₚ += mp.w[ip] * grid.v[i] * Δt
+        Δvₚ += iw.w[ip] * (grid.v[i] - grid.vⁿ[i])
+        ∇vₚ += grid.v[i] ⊗ iw.∇w[ip]
+        Δxₚ += iw.w[ip] * grid.v[i] * Δt
     end
     particles.v[p] += Δvₚ
     particles.∇v[p] = ∇vₚ
     particles.x[p] += Δxₚ
-end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../collision/">Transfer schemes »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Saturday 26 July 2025 12:37">Saturday 26 July 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../collision/">Transfer schemes »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Saturday 26 July 2025 13:27">Saturday 26 July 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
