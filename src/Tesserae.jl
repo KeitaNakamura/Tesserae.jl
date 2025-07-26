@@ -68,10 +68,10 @@ export
     Interpolation,
     WLS,
     KernelCorrection,
-# MPValue
-    generate_mpvalues,
+# InterpolationWeight
+    generate_interpolation_weights,
     neighboringnodes,
-    MPValue,
+    InterpolationWeight,
     feupdate!,
 # transfer
     @P2G,
@@ -105,7 +105,7 @@ include("sparray.jl")
 include("grid.jl")
 include("particles.jl")
 
-include("Interpolations/mpvalue.jl")
+include("Interpolations/interpolation_weight.jl")
 include("Interpolations/bspline.jl")
 include("Interpolations/gimp.jl")
 include("Interpolations/cpdi.jl")

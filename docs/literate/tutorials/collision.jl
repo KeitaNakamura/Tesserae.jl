@@ -111,8 +111,8 @@ function main(transfer = FLIP(1.0))
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Interpolation
-    mpvalues = generate_mpvalues(BSpline(Quadratic()), grid.x, length(particles))
+    ## Interpolation weights
+    weights = generate_interpolation_weights(BSpline(Quadratic()), grid.x, length(particles))
 
     ## Material model (neo-Hookean)
     function stored_energy(C)
@@ -142,25 +142,25 @@ function main(transfer = FLIP(1.0))
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * h / vmax
 
-        ## Update interpolation values
-        update!(mpvalues, particles, grid.x)
+        ## Update interpolation weights
+        update!(weights, particles, grid.x)
 
         ## Particle-to-grid transfer
         if transfer isa Union{FLIP, XPIC}
-            @P2G grid=>i particles=>p mpvalues=>ip begin
+            @P2G grid=>i particles=>p weights=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * v[p]
                 f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
             end
         elseif transfer isa APIC
             Dₚ⁻¹ = inv(1/4 * h^2 * I)
-            @P2G grid=>i particles=>p mpvalues=>ip begin
+            @P2G grid=>i particles=>p weights=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] * Dₚ⁻¹ * (x[i] - x[p]))
                 f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
             end
         elseif transfer isa TPIC
-            @P2G grid=>i particles=>p mpvalues=>ip begin
+            @P2G grid=>i particles=>p weights=>ip begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p]))
                 f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
@@ -175,20 +175,20 @@ function main(transfer = FLIP(1.0))
         ## Grid-to-particle transfer
         if transfer isa FLIP
             α = transfer.α
-            @G2P grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p weights=>ip begin
                 v[p]  = @∑ w[ip] * ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i])))
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 x[p] += @∑ w[ip] * v[i] * Δt
             end
         elseif transfer isa APIC
-            @G2P grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p weights=>ip begin
                 v[p]  = @∑ w[ip] * v[i]
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 B[p]  = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
                 x[p] += v[p] * Δt
             end
         elseif transfer isa TPIC
-            @G2P grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p weights=>ip begin
                 v[p]  = @∑ w[ip] * v[i]
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 x[p] += v[p] * Δt
@@ -198,15 +198,15 @@ function main(transfer = FLIP(1.0))
             @. grid.vᵣ★ = grid.vⁿ
             @. grid.v★ = zero(grid.v★)
             for r in 2:m
-                @G2P grid=>i particles=>p mpvalues=>ip begin
+                @G2P grid=>i particles=>p weights=>ip begin
                     vᵣ★[p] = @∑ w[ip] * vᵣ★[i]
                 end
-                @P2G grid=>i particles=>p mpvalues=>ip begin
+                @P2G grid=>i particles=>p weights=>ip begin
                     vᵣ★[i] = @∑ (m-r+1)/r * w[ip] * m[p] * vᵣ★[p] * m⁻¹[i]
                     v★[i] += (-1)^r * vᵣ★[i]
                 end
             end
-            @G2P grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p weights=>ip begin
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 a★[p] = @∑ w[ip] * (v[p] + m*(v★[i] - vⁿ[i])) / Δt
                 v[p] += @∑ w[ip] * (v[i] - vⁿ[i])

@@ -65,8 +65,8 @@ function main()
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Interpolation
-    mpvalues = generate_mpvalues(CPDI(), grid.x, length(particles))
+    ## Interpolation weights
+    weights = generate_interpolation_weights(CPDI(), grid.x, length(particles))
 
     ## Material model (neo-Hookean)
     function cauchy_stress(F)
@@ -87,11 +87,11 @@ function main()
 
     Tesserae.@showprogress while t < T
 
-        ## Update interpolation values
-        update!(mpvalues, particles, grid.x)
+        ## Update interpolation weights
+        update!(weights, particles, grid.x)
 
         ## Particle-to-grid transfer
-        @P2G grid=>i particles=>p mpvalues=>ip begin
+        @P2G grid=>i particles=>p weights=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
             f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip] + w[ip] * m[p] * Vec(0,-g,0)
@@ -109,7 +109,7 @@ function main()
         end
 
         ## Grid-to-particle transfer
-        @G2P grid=>i particles=>p mpvalues=>ip begin
+        @G2P grid=>i particles=>p weights=>ip begin
             v[p]  += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p]  = @∑ v[i] ⊗ ∇w[ip]
             x[p]  += @∑ w[ip] * v[i] * Δt

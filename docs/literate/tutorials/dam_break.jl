@@ -100,10 +100,10 @@ function main(transfer = FLIP(1.0))
     @. particles.b = Vec(0,-g)
     @show length(particles)
 
-    ## Interpolation
+    ## Interpolation weights
     interp = KernelCorrection(BSpline(Quadratic()))
-    mpvalues = generate_mpvalues(interp, grid.X, length(particles); name=Val(:S))
-    mpvalues_cell = generate_mpvalues(interp, grid.X, size(grid) .- 1; name=Val(:S))
+    weights = generate_interpolation_weights(interp, grid.X, length(particles); name=Val(:S))
+    weights_cell = generate_interpolation_weights(interp, grid.X, size(grid) .- 1; name=Val(:S))
 
     ## Sparse matrix
     A = create_sparse_matrix(interp, grid.X; ndofs=3)
@@ -127,22 +127,22 @@ function main(transfer = FLIP(1.0))
             cell = whichcell(particles.x[p], grid.X)
             activenodes[cellnodes(cell)] .= true
         end
-        update!(mpvalues, particles, grid.X, activenodes)
+        update!(weights, particles, grid.X, activenodes)
         for cell in CartesianIndices(size(grid) .- 1)
             xc = cellcenter(cell, grid.X)
             if all(i->activenodes[i], cellnodes(cell))
-                update!(mpvalues_cell[cell], xc, grid.X, activenodes)
+                update!(weights_cell[cell], xc, grid.X, activenodes)
             end
         end
 
         if transfer isa FLIP
-            @P2G grid=>i particles=>p mpvalues=>ip begin
+            @P2G grid=>i particles=>p weights=>ip begin
                 m[i]  = @∑ S[ip] * m[p]
                 mv[i] = @∑ S[ip] * m[p] * v[p]
                 ma[i] = @∑ S[ip] * m[p] * a[p]
             end
         elseif transfer isa TPIC
-            @P2G grid=>i particles=>p mpvalues=>ip begin
+            @P2G grid=>i particles=>p weights=>ip begin
                 m[i]  = @∑ S[ip] * m[p]
                 mv[i] = @∑ S[ip] * m[p] * (v[p] + ∇v[p] * (X[i] - x[p]))
                 ma[i] = @∑ S[ip] * m[p] * (a[p] + ∇a[p] * (X[i] - x[p]))
@@ -172,18 +172,18 @@ function main(transfer = FLIP(1.0))
         dofmap = DofMap(dofmask)
 
         ## Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, mpvalues, mpvalues_cell, ρ, μ, β, γ, A, dofmap, Δt)
+        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, Δt)
         Δt′ = variational_multiscale_method(state)
 
         if transfer isa FLIP
             α = transfer.α
-            @G2P grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p weights=>ip begin
                 v[p] = @∑ ((1-α)*v[i] + α*(v[p] + ((1-γ)*a[p] + γ*a[i])*Δt)) * S[ip]
                 a[p] = @∑ a[i] * S[ip]
                 x[p] = @∑ x[i] * S[ip]
             end
         elseif transfer isa TPIC
-            @G2P grid=>i particles=>p mpvalues=>ip begin
+            @G2P grid=>i particles=>p weights=>ip begin
                 v[p] = @∑ v[i] * S[ip]
                 a[p] = @∑ a[i] * S[ip]
                 x[p] = @∑ x[i] * S[ip]
@@ -271,7 +271,7 @@ end
 # ## VMS stabilization coefficients
 
 function compute_VMS_stabilization_coefficients(state)
-    (; grid, particles, mpvalues_cell, ρ, μ, Δt) = state
+    (; grid, particles, weights_cell, ρ, μ, Δt) = state
 
     c₁ = 4.0
     c₂ = 2.0
@@ -279,14 +279,14 @@ function compute_VMS_stabilization_coefficients(state)
     h = sqrt(4*spacing(grid.X)^2/π)
 
     ## In the following computation, `@G2P` is unavailable
-    ## due to the use of `mpvalues_cell`
+    ## due to the use of `weights_cell`
     for p in eachindex(particles)
         v̄ₚ = zero(eltype(particles.v))
-        mp = mpvalues_cell[whichcell(particles.x[p], grid.X)]
-        gridindices = neighboringnodes(mp, grid)
+        iw = weights_cell[whichcell(particles.x[p], grid.X)]
+        gridindices = neighboringnodes(iw, grid)
         for ip in eachindex(gridindices)
             i = gridindices[ip]
-            v̄ₚ += mp.S[ip] * grid.v[i]
+            v̄ₚ += iw.S[ip] * grid.v[i]
         end
         τ₁ = inv(ρ*τdyn/Δt + c₂*ρ*norm(v̄ₚ)/h + c₁*μ/h^2)
         τ₂ = h^2 / (c₁*τ₁)
@@ -298,15 +298,15 @@ end
 # ## δ-correction
 
 function particle_shifting(state)
-    (; grid, particles, mpvalues) = state
+    (; grid, particles, weights) = state
 
-    @P2G grid=>i particles=>p mpvalues=>ip begin
+    @P2G grid=>i particles=>p weights=>ip begin
         Ṽ[i] = @∑ V[p] * S[ip]
         E[i] = max(0, -V[i] + Ṽ[i])
     end
 
     E² = sum(E->E^2, grid.E)
-    @G2P grid=>i particles=>p mpvalues=>ip begin
+    @G2P grid=>i particles=>p weights=>ip begin
         ∇E²[p] = @∑ 2V[p] * E[i] * ∇S[ip]
     end
 
@@ -323,7 +323,7 @@ end
 # ## Residual vector
 
 function residual(U, state)
-    (; grid, particles, mpvalues, μ, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, μ, β, γ, dofmap, Δt) = state
 
     ## Map `U` to grid dispacement and pressure
     dofmap(grid.u_p) .= U
@@ -338,7 +338,7 @@ function residual(U, state)
     compute_VMS_stabilization_coefficients(state)
 
     ## Compute residual values
-    @G2P2G grid=>i particles=>p mpvalues=>ip begin
+    @G2P2G grid=>i particles=>p weights=>ip begin
         a[p]  = @∑ a[i] * S[ip]
         p[p]  = @∑ p[i] * S[ip]
         ∇v[p] = @∑ v[i] ⊗ ∇S[ip]
@@ -356,12 +356,12 @@ end
 # ## Jacobian matrix
 
 function jacobian(state)
-    (; grid, particles, mpvalues, ρ, μ, β, γ, A, dofmap, Δt) = state
+    (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt) = state
 
     ## Construct the Jacobian matrix
     cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
-    @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
+    @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
         A[i,j] = @∑ begin
             Kᵤᵤ = (γ/(β*Δt) * ∇S[ip] ⊡ cₚ ⊡ ∇S[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * S[jp]
             Kᵤₚ = -∇S[ip] * S[jp] * V[p]

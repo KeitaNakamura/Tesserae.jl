@@ -79,7 +79,7 @@ function main()
 
     ## Interpolation
     ## Use the kernel correction to properly handle the boundary conditions
-    mpvalues = generate_mpvalues(KernelCorrection(BSpline(Quadratic())), grid.X, length(particles))
+    weights = generate_interpolation_weights(KernelCorrection(BSpline(Quadratic())), grid.X, length(particles))
 
     ## Neo-Hookean model
     function kirchhoff_stress(F)
@@ -100,11 +100,9 @@ function main()
 
     Tesserae.@showprogress while t < T
 
-        for p in eachindex(particles, mpvalues)
-            update!(mpvalues[p], particles.x[p], grid.X)
-        end
+        update!(weights, particles, grid.X)
 
-        @P2G grid=>i particles=>p mpvalues=>ip begin
+        @P2G grid=>i particles=>p weights=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
             ma[i] = @∑ w[ip] * m[p] * a[p]
@@ -133,14 +131,14 @@ function main()
         dofmap = DofMap(dofmask)
 
         ## Solve the nonlinear equation
-        state = (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt)
+        state = (; grid, particles, weights, kirchhoff_stress, β, γ, dofmap, Δt)
         U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
         compute_residual(U) = residual(U, state)
         compute_jacobian(U) = jacobian(U, state)
         Tesserae.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)->copy!(x,gmres(A,b)[1]))
 
         ## Grid dispacement, velocity and acceleration have been updated during Newton's iterations
-        @G2P grid=>i particles=>p mpvalues=>ip begin
+        @G2P grid=>i particles=>p weights=>ip begin
             v[p] += @∑ w[ip] * ((1-γ)*a[p] + γ*a[i]) * Δt
             a[p]  = @∑ w[ip] * a[i]
             x[p]  = @∑ w[ip] * (X[i] + u[i])
@@ -166,14 +164,14 @@ function main()
 end
 
 function residual(U::AbstractVector, state)
-    (; grid, particles, mpvalues, kirchhoff_stress, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, kirchhoff_stress, β, γ, dofmap, Δt) = state
 
     dofmap(grid.u) .= U
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
     geometric(τ) = @einsum (i,j,k,l) -> τ[i,l] * one(τ)[j,k]
-    @G2P2G grid=>i particles=>p mpvalues=>ip begin
+    @G2P2G grid=>i particles=>p weights=>ip begin
         ## In addition to updating the stress tensor, the stiffness tensor,
         ## which is utilized in the Jacobian-vector product, is also updated.
         ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
@@ -189,7 +187,7 @@ function residual(U::AbstractVector, state)
 end
 
 function jacobian(U::AbstractVector, state)
-    (; grid, particles, mpvalues, β, dofmap, Δt) = state
+    (; grid, particles, weights, β, dofmap, Δt) = state
 
     ## Create a linear map to represent Jacobian-vector product J*δU.
     ## `U` is acutally not used because the stiffness tensor is already calculated
@@ -198,7 +196,7 @@ function jacobian(U::AbstractVector, state)
     function mul!(JδU, δU)
         dofmap(grid.δu) .= δU
 
-        @G2P2G grid=>i particles=>p mpvalues=>ip begin
+        @G2P2G grid=>i particles=>p weights=>ip begin
             ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⊡ ΔF⁻¹[p])
             τ[p] = ℂ[p] ⊡₂ ∇u[p]
             f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])

@@ -138,8 +138,8 @@ function main()
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Interpolation
-    mpvalues = generate_mpvalues(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+    ## Interpolation weights
+    weights = generate_interpolation_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
 
     ## Material model
     model = DruckerPrager(; λ, G, ϕ, ψ)
@@ -160,11 +160,11 @@ function main()
         vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * h / vmax
 
-        ## Update interpolation values
-        update!(mpvalues, particles, grid.x)
+        ## Update interpolation weights
+        update!(weights, particles, grid.x)
 
         ## Particle-to-grid transfer
-        @P2G grid=>i particles=>p mpvalues=>ip begin
+        @P2G grid=>i particles=>p weights=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
             f[i]  = @∑ -V[p] * resize(σ[p],(2,2)) * ∇w[ip] + w[ip] * m[p] * Vec(0,-g)
@@ -187,7 +187,7 @@ function main()
         end
 
         ## Grid-to-particle transfer
-        @G2P grid=>i particles=>p mpvalues=>ip begin
+        @G2P grid=>i particles=>p weights=>ip begin
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += @∑ w[ip] * v[i] * Δt

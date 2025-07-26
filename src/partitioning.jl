@@ -179,7 +179,7 @@ partition = ColorPartition(mesh)
 update!(partition, particles.x)
 
 # P2G transfer
-@threaded @P2G grid=>i particles=>p mpvalues=>ip partition begin
+@threaded @P2G grid=>i particles=>p weights=>ip partition begin
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
 end

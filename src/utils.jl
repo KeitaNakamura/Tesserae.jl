@@ -191,7 +191,7 @@ See also [`ColorPartition`](@ref).
 end
 
 # Grid-to-particle transfer
-@threaded @G2P grid=>i particles=>p mpvalues=>ip begin
+@threaded @G2P grid=>i particles=>p weights=>ip begin
     v[p] = @∑ w[ip] * v[i]
 end
 ```

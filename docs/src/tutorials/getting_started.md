@@ -60,8 +60,8 @@ function main()
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
 
-    # Interpolation
-    mpvalues = map(p -> MPValue(BSpline(Linear()), mesh), eachindex(particles))
+    # Interpolation weights
+    weights = map(p -> InterpolationWeight(BSpline(Linear()), mesh), eachindex(particles))
 
     # Create animation by `Plots.@gif`
     Δt = 0.001
@@ -69,10 +69,10 @@ function main()
 
         # Update basis function values
         for p in eachindex(particles)
-            update!(mpvalues[p], particles.x[p], mesh)
+            update!(weights[p], particles.x[p], mesh)
         end
 
-        @P2G grid=>i particles=>p mpvalues=>ip begin
+        @P2G grid=>i particles=>p weights=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * v[p]
             f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
@@ -81,7 +81,7 @@ function main()
         @. grid.vⁿ = grid.mv / grid.m
         @. grid.v  = grid.vⁿ + (grid.f / grid.m) * Δt
 
-        @G2P grid=>i particles=>p mpvalues=>ip begin
+        @G2P grid=>i particles=>p weights=>ip begin
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += @∑ w[ip] * v[i] * Δt
@@ -226,46 +226,46 @@ nothing                                                              #hide
 
 ## Basis function values
 
-In Tesserae, the basis function values are stored in `MPValue`.
-For example, `MPValue` with the linear basis function can be constructed as
+In Tesserae, the basis function values are stored in `InterpolationWeight`.
+For example, `InterpolationWeight` with the linear basis function can be constructed as
 
 ```@repl stepbystep
-mp = MPValue(BSpline(Linear()), mesh)
+iw = InterpolationWeight(BSpline(Linear()), mesh)
 ```
 
-This `mp` can be updated by passing the particle position to the `update!` function:
+This `iw` can be updated by passing the particle position to the `update!` function:
 
 ```@repl stepbystep
-update!(mp, particles.x[1], mesh)
+update!(iw, particles.x[1], mesh)
 ```
 
 !!! info
-    After updating `mp`, you can check the partition of unity $\sum_i w_{ip} = 1$:
+    After updating `iw`, you can check the partition of unity $\sum_i w_{ip} = 1$:
     ```@repl stepbystep
-    sum(mp.w)
+    sum(iw.w)
     ```
     and the linear field reproduction $\sum_i w_{ip} \bm{x}_i = \bm{x}_p$:
     ```@repl stepbystep
-    nodeindices = neighboringnodes(mp)
+    nodeindices = neighboringnodes(iw)
     sum(eachindex(nodeindices)) do ip
         i = nodeindices[ip]
-        mp.w[ip] * mesh[i]
+        iw.w[ip] * mesh[i]
     end
     ```
 
-For the sake of performance, it's best to prepare the same number of `MPValue`s as there are particles. This means that each particle has its own storage for the basis function values.
+For the sake of performance, it's best to prepare the same number of `InterpolationWeight`s as there are particles. This means that each particle has its own storage for the basis function values.
 
 ```@example stepbystep
-mpvalues = map(p -> MPValue(BSpline(Linear()), mesh), eachindex(particles))
+weights = map(p -> InterpolationWeight(BSpline(Linear()), mesh), eachindex(particles))
 nothing #hide
 ```
 
 !!! info
-    It is also possible to construct `MPValue`s with Structure-Of-Arrays (SOA) layout using `generate_mpvalues`.
+    It is also possible to construct `InterpolationWeight`s with Structure-Of-Arrays (SOA) layout using `generate_interpolation_weights`.
     ```@repl stepbystep
-    mpvalues = generate_mpvalues(BSpline(Linear()), mesh, length(particles))
+    weights = generate_interpolation_weights(BSpline(Linear()), mesh, length(particles))
     ```
-    This SoA layout for `MPValue`s is generally preferred for performance, although it cannot be resized.
+    This SoA layout for `InterpolationWeight`s is generally preferred for performance, although it cannot be resized.
 
 ## Transfer between grid and particles
 
@@ -274,14 +274,14 @@ nothing #hide
 ```@example stepbystep
 Δt = 0.001                                     #hide
 for p in eachindex(particles)                  #hide
-    update!(mpvalues[p], particles.x[p], mesh) #hide
+    update!(weights[p], particles.x[p], mesh) #hide
 end                                            #hide
 ```
 
 For the particle-to-grid transfer, the [`@P2G`](@ref) macro is useful:
 
 ```@example stepbystep
-@P2G grid=>i particles=>p mpvalues=>ip begin
+@P2G grid=>i particles=>p weights=>ip begin
     m[i]  = @∑ w[ip] * m[p]
     mv[i] = @∑ w[ip] * m[p] * v[p]
     f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
@@ -295,13 +295,13 @@ This macro expands to roughly the following code:
 @. grid.mv = zero(grid.mv)
 @. grid.f  = zero(grid.f)
 for p in eachindex(particles)
-    mp = mpvalues[p]
-    nodeindices = neighboringnodes(mp)
+    iw = weights[p]
+    nodeindices = neighboringnodes(iw)
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        grid.m[i]  += mp.w[ip] * particles.m[p]
-        grid.mv[i] += mp.w[ip] * particles.m[p] * particles.v[p]
-        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * mp.∇w[ip]
+        grid.m[i]  += iw.w[ip] * particles.m[p]
+        grid.mv[i] += iw.w[ip] * particles.m[p] * particles.v[p]
+        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * iw.∇w[ip]
     end
 end
 ```
@@ -311,7 +311,7 @@ end
 Similar to the particle-to-grid transfer, the [`@G2P`](@ref) macro is provided for grid-to-particle transfer:
 
 ```@example stepbystep
-@G2P grid=>i particles=>p mpvalues=>ip begin
+@G2P grid=>i particles=>p weights=>ip begin
     v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
     ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
     x[p] += @∑ w[ip] * v[i] * Δt
@@ -322,16 +322,16 @@ This macro expands to roughly the following code:
 
 ```julia
 for p in eachindex(particles)
-    mp = mpvalues[p]
-    nodeindices = neighboringnodes(mp)
+    iw = weights[p]
+    nodeindices = neighboringnodes(iw)
     Δvₚ = zero(eltype(particles.v))
     ∇vₚ = zero(eltype(particles.∇v))
     Δxₚ = zero(eltype(particles.x))
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        Δvₚ += mp.w[ip] * (grid.v[i] - grid.vⁿ[i])
-        ∇vₚ += grid.v[i] ⊗ mp.∇w[ip]
-        Δxₚ += mp.w[ip] * grid.v[i] * Δt
+        Δvₚ += iw.w[ip] * (grid.v[i] - grid.vⁿ[i])
+        ∇vₚ += grid.v[i] ⊗ iw.∇w[ip]
+        Δxₚ += iw.w[ip] * grid.v[i] * Δt
     end
     particles.v[p] += Δvₚ
     particles.∇v[p] = ∇vₚ

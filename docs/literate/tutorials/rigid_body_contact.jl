@@ -106,7 +106,7 @@ function main()
     @show length(particles)
 
     ## Interpolation
-    mpvalues = generate_mpvalues(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+    weights = generate_interpolation_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
 
     ## Output
     outdir = mkpath(joinpath("output", "rigid_body_contact"))
@@ -124,10 +124,10 @@ function main()
         Δt = CFL * h / vmax
 
         ## Update interpolation values
-        update!(mpvalues, particles, grid.x)
+        update!(weights, particles, grid.x)
 
         ## Particle-to-grid transfer
-        @P2G grid=>i particles=>p mpvalues=>ip begin
+        @P2G grid=>i particles=>p weights=>ip begin
             m[i]  = @∑ w[ip] * m[p]
             mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p])) # Taylor transfer
             fint[i] = @∑ -V[p] * resize(σ[p], (2,2)) * ∇w[ip] + w[ip] * m[p] * b[p]
@@ -148,7 +148,7 @@ function main()
         end
 
         ## Grid-to-particle transfer
-        @G2P grid=>i particles=>p mpvalues=>ip begin
+        @G2P grid=>i particles=>p weights=>ip begin
             v[p]  = @∑ w[ip] * v[i] # PIC transfer
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += v[p] * Δt

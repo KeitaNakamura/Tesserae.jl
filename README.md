@@ -49,14 +49,15 @@ function main()
     map!(x -> ifelse(x[1]>0.5, -0.1, 0.1) * ones(V2), pcls.v, pcls.x) # Initial velocity
 
     # Interpolation
-    mps = generate_mpvalues(BSpline(Quadratic()), mesh, length(pcls))
+    wgts = generate_interpolation_weights(BSpline(Quadratic()), mesh, length(pcls))
 
     # Simulation loop
     Plots.@gif for t in 0:Δt:4
-        update!(mps, pcls, mesh) # Update interpolation weights
+        # Update interpolation weights
+        update!(wgts, pcls, mesh)
 
         # Particle-to-grid transfer
-        @P2G grid=>i pcls=>p mps=>ip begin
+        @P2G grid=>i pcls=>p wgts=>ip begin
             m[i]  = @∑ w[ip] * mₚ
             mv[i] = @∑ w[ip] * mₚ * v[p]
             f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
@@ -65,7 +66,7 @@ function main()
         end
 
         # Grid-to-particle transfer
-        @G2P grid=>i pcls=>p mps=>ip begin
+        @G2P grid=>i pcls=>p wgts=>ip begin
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
             ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
             x[p] += @∑ w[ip] * v[i] * Δt

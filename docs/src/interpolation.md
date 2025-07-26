@@ -5,7 +5,7 @@ CollapsedDocStrings = false
 # Interpolation
 
 ```@docs
-update!(::AbstractArray{<: MPValue}, ::Tesserae.StructArray, ::Tesserae.AbstractMesh, ::AbstractArray)
+update!(::AbstractArray{<: InterpolationWeight}, ::Tesserae.StructArray, ::Tesserae.AbstractMesh, ::AbstractArray)
 ```
 
 ## Interpolation types
@@ -19,8 +19,8 @@ WLS
 KernelCorrection
 ```
 
-## Basis function values
+## Interpolation weight
 
 ```@docs
-MPValue
+InterpolationWeight
 ```

@@ -91,9 +91,9 @@ function main()
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Precompute linear kernel values
-    mpvalues = generate_mpvalues(BSpline(Linear()), grid.X, length(particles))
-    update!(mpvalues, particles, grid.X)
+    ## Precompute linear kernel weights
+    weights = generate_interpolation_weights(BSpline(Linear()), grid.X, length(particles))
+    update!(weights, particles, grid.X)
 
     ## Outputs
     outdir = mkpath(joinpath("output", "tlmpm_vortex"))
@@ -122,7 +122,7 @@ function main()
         end
 
         ## Particle-to-grid transfer
-        @P2G grid=>i particles=>p mpvalues=>ip begin
+        @P2G grid=>i particles=>p weights=>ip begin
             m[i]    = @∑ w[ip] * m[p]
             mv[i]   = @∑ w[ip] * m[p] * v[p]
             fint[i] = @∑ -V⁰[p] * P[p] * ∇w[ip]
@@ -134,7 +134,7 @@ function main()
         grid.v[outside_gridinds] .= Ref(zero(eltype(grid.v)))
 
         ## Update particle velocity and position
-        @G2P grid=>i particles=>p mpvalues=>ip begin
+        @G2P grid=>i particles=>p weights=>ip begin
             ṽ[p]  = @∑ w[ip] * v[i]
             ã[p]  = @∑ w[ip] * (v[i] - vⁿ[i]) / Δt
             v[p]  = (1-α)*ṽ[p] + α*(v[p] + ã[p]*Δt)
@@ -142,14 +142,14 @@ function main()
         end
 
         ## Remap updated velocity to grid (MUSL)
-        @P2G grid=>i particles=>p mpvalues=>ip begin
+        @P2G grid=>i particles=>p weights=>ip begin
             mv[i] = @∑ w[ip] * m[p] * v[p]
             v[i]  = mv[i] * m⁻¹[i]
         end
         grid.v[outside_gridinds] .= Ref(zero(eltype(grid.v)))
 
         ## Update stress
-        @G2P grid=>i particles=>p mpvalues=>ip begin
+        @G2P grid=>i particles=>p weights=>ip begin
             F[p] += @∑ Δt * v[i] ⊗ ∇w[ip]
             P[p]  = μ * (F[p] - inv(F[p])') + λ * log(det(F[p])) * inv(F[p])'
         end

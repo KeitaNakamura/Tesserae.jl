@@ -52,14 +52,14 @@ function initial_neighboringnodes(::CPDI, mesh::CartesianMesh{dim}) where {dim}
     PseudoResizedVector{CartesianIndex{dim}}(; maxlength = 2^dim * 2^dim)
 end
 
-function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{1})
+function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{1})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2)
     x₁ = xₚ - r₁
     x₂ = xₚ + r₁
     Vₚ = 2r₁[1]
 
-    indices = neighboringnodes_storage(mp)[]
+    indices = neighboringnodes_storage(iw)[]
     find_neighboringnodes_cpdi!(indices, (x₁, x₂), mesh)
 
     @inbounds for ip in eachindex(indices)
@@ -68,11 +68,11 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{1})
         w₂ = value(BSpline(Linear()), x₂, mesh, i)
         w = (w₁ + w₂) / 2
         ∇w = Vec(w₂ - w₁) / Vₚ
-        set_values!(mp, ip, (w,∇w))
+        set_values!(iw, ip, (w,∇w))
     end
 end
 
-function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{2})
+function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{2})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2,0)
     r₂ = pt.F * Vec(0,pt.l/2)
@@ -82,7 +82,7 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{2})
     x₄ = xₚ - r₁ + r₂
     Vₚ = 4 * abs(r₁ × r₂)
 
-    indices = neighboringnodes_storage(mp)[]
+    indices = neighboringnodes_storage(iw)[]
     find_neighboringnodes_cpdi!(indices, (x₁, x₂, x₃, x₄), mesh)
 
     a = Vec(r₁[2]-r₂[2], r₂[1]-r₁[1])
@@ -95,11 +95,11 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{2})
         w₄ = value(BSpline(Linear()), x₄, mesh, i)
         w = (w₁ + w₂ + w₃ + w₄) / 4
         ∇w = ((w₁-w₃)*a + (w₂-w₄)*b) / Vₚ
-        set_values!(mp, ip, (w,∇w))
+        set_values!(iw, ip, (w,∇w))
     end
 end
 
-function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{3})
+function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{3})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2,0,0)
     r₂ = pt.F * Vec(0,pt.l/2,0)
@@ -114,7 +114,7 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{3})
     x₈ = xₚ - r₁ + r₂ + r₃
     Vₚ = 8 * (r₁ × r₂) ⋅ r₃
 
-    indices = neighboringnodes_storage(mp)[]
+    indices = neighboringnodes_storage(iw)[]
     find_neighboringnodes_cpdi!(indices, (x₁, x₂, x₃, x₄, x₅, x₆, x₇, x₈), mesh)
 
     A = @Mat [r₂[2]*r₃[3]-r₃[2]*r₂[3] r₃[2]*r₁[3]-r₁[2]*r₃[3] r₁[2]*r₂[3]-r₂[2]*r₁[3]
@@ -132,7 +132,7 @@ function update!(mp::MPValue{CPDI}, pt, mesh::CartesianMesh{3})
         w₈ = value(BSpline(Linear()), x₈, mesh, i)
         w = (w₁ + w₂ + w₃ + w₄ + w₅ + w₆ + w₇ + w₈) / 8
         ∇w = A * (w₁*Vec(-1,-1,-1) + w₂*Vec(1,-1,-1) + w₃*Vec(1,1,-1) + w₄*Vec(-1,1,-1) + w₅*Vec(-1,-1,1) + w₆*Vec(1,-1,1) + w₇*Vec(1,1,1) + w₈*Vec(-1,1,1)) / Vₚ
-        set_values!(mp, ip, (w,∇w))
+        set_values!(iw, ip, (w,∇w))
     end
 end
 

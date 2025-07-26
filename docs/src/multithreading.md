@@ -9,7 +9,7 @@ Tesserae.jl provides a [`@threaded`](@ref) macro to enable multi-threading. It b
 To parallelize `@G2P`, simply prefix it with `@threaded`.
 
 ```julia
-@threaded @G2P grid=>i particles=>p mpvalues=>ip begin
+@threaded @G2P grid=>i particles=>p weights=>ip begin
     # your code here
 end
 ```
@@ -21,7 +21,7 @@ For scattering operations, prefix `@P2G` with `@threaded` and use [`ColorPartiti
 ```julia
 partition = ColorPartition(mesh)
 update!(partition, particles.x)
-@threaded @P2G grid=>i particles=>p mpvalues=>ip partition begin
+@threaded @P2G grid=>i particles=>p weights=>ip partition begin
     # your code here
 end
 ```
@@ -34,7 +34,7 @@ To update interpolation values, either use the [`update!`](@ref) function, or si
 
 ```julia
 @threaded for p in eachindex(particles)
-    update!(mpvalues[p], particles.x[p], mesh)
+    update!(weights[p], particles.x[p], mesh)
 end
 ```
 
