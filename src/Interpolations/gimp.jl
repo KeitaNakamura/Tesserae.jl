@@ -54,10 +54,10 @@ end
 
 @inline value(gimp::uGIMP, pt, mesh::CartesianMesh, i) = only(values(Order(0), gimp, pt, mesh, i))
 
-@inline function update_property!(mp::MPValue, gimp::uGIMP, pt, mesh::CartesianMesh)
-    indices = neighboringnodes(mp)
+@inline function update_property!(iw::InterpolationWeight, gimp::uGIMP, pt, mesh::CartesianMesh)
+    indices = neighboringnodes(iw)
     @inbounds @simd for ip in eachindex(indices)
         i = indices[ip]
-        set_values!(mp, ip, values(derivative_order(mp), gimp, pt, mesh, i))
+        set_values!(iw, ip, values(derivative_order(iw), gimp, pt, mesh, i))
     end
 end

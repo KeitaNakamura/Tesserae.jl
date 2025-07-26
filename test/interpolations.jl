@@ -1,4 +1,4 @@
-@testset "MPValue" begin
+@testset "InterpolationWeight" begin
 
 @testset "CartesianMesh" begin
     for dim in (1,2,3)
@@ -8,71 +8,71 @@
                 for extension in (identity, WLS, KernelCorrection)
                     interp = extension(kernel)
 
-                    function check_mpvalue(mp::Union{MPValue, Tesserae.MPValueArray}, derivative)
+                    function check_weight(iw::Union{InterpolationWeight, Tesserae.InterpolationWeightArray}, derivative)
                         if derivative isa Order{0}
-                            @test hasproperty(mp, :w) && mp.w isa AbstractArray{T}
-                            @test !hasproperty(mp, :∇w)
-                            @test !hasproperty(mp, :∇∇w)
-                            @test ndims(mp.w) == ifelse(mp isa MPValue, dim, dim+1)
+                            @test hasproperty(iw, :w) && iw.w isa AbstractArray{T}
+                            @test !hasproperty(iw, :∇w)
+                            @test !hasproperty(iw, :∇∇w)
+                            @test ndims(iw.w) == ifelse(iw isa InterpolationWeight, dim, dim+1)
                         elseif derivative isa Order{1}
-                            @test hasproperty(mp, :w)  && mp.w  isa AbstractArray{T}
-                            @test hasproperty(mp, :∇w) && mp.∇w isa AbstractArray{Vec{dim,T}}
-                            @test !hasproperty(mp, :∇∇w)
-                            @test size(mp.w) == size(mp.∇w)
-                            @test ndims(mp.w) == ndims(mp.∇w) == ifelse(mp isa MPValue, dim, dim+1)
+                            @test hasproperty(iw, :w)  && iw.w  isa AbstractArray{T}
+                            @test hasproperty(iw, :∇w) && iw.∇w isa AbstractArray{Vec{dim,T}}
+                            @test !hasproperty(iw, :∇∇w)
+                            @test size(iw.w) == size(iw.∇w)
+                            @test ndims(iw.w) == ndims(iw.∇w) == ifelse(iw isa InterpolationWeight, dim, dim+1)
                         elseif derivative isa Order{2}
-                            @test hasproperty(mp, :w)   && mp.w   isa AbstractArray{T}
-                            @test hasproperty(mp, :∇w)  && mp.∇w  isa AbstractArray{Vec{dim,T}}
-                            @test hasproperty(mp, :∇²w) && mp.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
-                            @test size(mp.w) == size(mp.∇w) == size(mp.∇²w)
-                            @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇²w) == ifelse(mp isa MPValue, dim, dim+1)
+                            @test hasproperty(iw, :w)   && iw.w   isa AbstractArray{T}
+                            @test hasproperty(iw, :∇w)  && iw.∇w  isa AbstractArray{Vec{dim,T}}
+                            @test hasproperty(iw, :∇²w) && iw.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
+                            @test size(iw.w) == size(iw.∇w) == size(iw.∇²w)
+                            @test ndims(iw.w) == ndims(iw.∇w) == ndims(iw.∇²w) == ifelse(iw isa InterpolationWeight, dim, dim+1)
                         elseif derivative isa Order{3}
-                            @test hasproperty(mp, :w)   && mp.w   isa AbstractArray{T}
-                            @test hasproperty(mp, :∇w)  && mp.∇w  isa AbstractArray{Vec{dim,T}}
-                            @test hasproperty(mp, :∇²w) && mp.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
-                            @test hasproperty(mp, :∇³w) && mp.∇³w isa AbstractArray{<: Tensor{Tuple{@Symmetry{dim,dim,dim}},T}}
-                            @test size(mp.w) == size(mp.∇w) == size(mp.∇²w) == size(mp.∇³w)
-                            @test ndims(mp.w) == ndims(mp.∇w) == ndims(mp.∇²w) == ndims(mp.∇³w) == ifelse(mp isa MPValue, dim, dim+1)
+                            @test hasproperty(iw, :w)   && iw.w   isa AbstractArray{T}
+                            @test hasproperty(iw, :∇w)  && iw.∇w  isa AbstractArray{Vec{dim,T}}
+                            @test hasproperty(iw, :∇²w) && iw.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
+                            @test hasproperty(iw, :∇³w) && iw.∇³w isa AbstractArray{<: Tensor{Tuple{@Symmetry{dim,dim,dim}},T}}
+                            @test size(iw.w) == size(iw.∇w) == size(iw.∇²w) == size(iw.∇³w)
+                            @test ndims(iw.w) == ndims(iw.∇w) == ndims(iw.∇²w) == ndims(iw.∇³w) == ifelse(iw isa InterpolationWeight, dim, dim+1)
                         else
                             error()
                         end
                     end
 
-                    ###########
-                    # MPValue #
-                    ###########
-                    mp = @inferred MPValue(T, interp, mesh)
-                    @test Tesserae.interpolation(mp) === interp
-                    @test mp.w isa Array{T}
-                    @test mp.∇w isa Array{Vec{dim,T}}
-                    @test ndims(mp.w) == dim
-                    @test ndims(mp.∇w) == dim
-                    @test size(mp.w) == size(mp.∇w)
-                    @test typeof(neighboringnodes(mp)) === CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
-                    check_mpvalue((@inferred MPValue(T, interp, mesh; derivative=Order(0))), Order(0))
-                    check_mpvalue((@inferred MPValue(T, interp, mesh; derivative=Order(1))), Order(1))
-                    check_mpvalue((@inferred MPValue(T, interp, mesh; derivative=Order(2))), Order(2))
-                    check_mpvalue((@inferred MPValue(T, interp, mesh; derivative=Order(3))), Order(3))
+                    #######################
+                    # InterpolationWeight #
+                    #######################
+                    iw = @inferred InterpolationWeight(T, interp, mesh)
+                    @test Tesserae.interpolation(iw) === interp
+                    @test iw.w isa Array{T}
+                    @test iw.∇w isa Array{Vec{dim,T}}
+                    @test ndims(iw.w) == dim
+                    @test ndims(iw.∇w) == dim
+                    @test size(iw.w) == size(iw.∇w)
+                    @test typeof(neighboringnodes(iw)) === CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
+                    check_weight((@inferred InterpolationWeight(T, interp, mesh; derivative=Order(0))), Order(0))
+                    check_weight((@inferred InterpolationWeight(T, interp, mesh; derivative=Order(1))), Order(1))
+                    check_weight((@inferred InterpolationWeight(T, interp, mesh; derivative=Order(2))), Order(2))
+                    check_weight((@inferred InterpolationWeight(T, interp, mesh; derivative=Order(3))), Order(3))
 
-                    ################
-                    # MPValueArray #
-                    ################
+                    ############################
+                    # InterpolationWeightArray #
+                    ############################
                     n = 10
-                    mpvalues = @inferred generate_mpvalues(T, interp, mesh, n)
-                    @test size(mpvalues) === (n,)
-                    @test Tesserae.interpolation(mpvalues) === interp
-                    @test mpvalues.w isa Array{T}
-                    @test mpvalues.∇w isa Array{Vec{dim,T}}
-                    @test ndims(mpvalues.w) == dim+1
-                    @test ndims(mpvalues.∇w) == dim+1
-                    @test size(mpvalues.w) === size(mpvalues.∇w)
-                    @test all(eachindex(mpvalues)) do i
-                        typeof(mpvalues[i]) === eltype(mpvalues)
+                    weights = @inferred generate_interpolation_weights(T, interp, mesh, n)
+                    @test size(weights) === (n,)
+                    @test Tesserae.interpolation(weights) === interp
+                    @test weights.w isa Array{T}
+                    @test weights.∇w isa Array{Vec{dim,T}}
+                    @test ndims(weights.w) == dim+1
+                    @test ndims(weights.∇w) == dim+1
+                    @test size(weights.w) === size(weights.∇w)
+                    @test all(eachindex(weights)) do i
+                        typeof(weights[i]) === eltype(weights)
                     end
                     for order in 0:3
-                        mpvalues = @inferred generate_mpvalues(T, interp, mesh, n; derivative=Order(order))
-                        check_mpvalue(mpvalues, Order(order))
-                        foreach(mp -> check_mpvalue(mp, Order(order)), mpvalues)
+                        weights = @inferred generate_interpolation_weights(T, interp, mesh, n; derivative=Order(order))
+                        check_weight(weights, Order(order))
+                        foreach(iw -> check_weight(iw, Order(order)), weights)
                     end
                 end
             end
@@ -80,35 +80,35 @@
     end
 end
 
-end # MPValue
+end # InterpolationWeight
 
 @testset "Interpolations" begin
 
-@testset "Check `update!` for `MPValue`" begin
+@testset "Check `update!` for `InterpolationWeight`" begin
     isapproxzero(x) = x + ones(x) ≈ ones(x)
-    function check_partition_of_unity(mp, x; atol=sqrt(eps(eltype(mp.w))))
-        indices = neighboringnodes(mp)
+    function check_partition_of_unity(iw, x; atol=sqrt(eps(eltype(iw.w))))
+        indices = neighboringnodes(iw)
         CI = CartesianIndices(indices) # local indices
-        isapprox(sum(mp.w[CI]), 1) && isapproxzero(sum(mp.∇w[CI]))
+        isapprox(sum(iw.w[CI]), 1) && isapproxzero(sum(iw.∇w[CI]))
     end
-    function check_linear_field_reproduction(mp, x, X)
-        indices = neighboringnodes(mp)
+    function check_linear_field_reproduction(iw, x, X)
+        indices = neighboringnodes(iw)
         CI = CartesianIndices(indices) # local indices
-        isapprox(mapreduce((j,i) -> X[i]*mp.w[j],  +, CI, indices), x) &&
-        isapprox(mapreduce((j,i) -> X[i]⊗mp.∇w[j], +, CI, indices), I)
+        isapprox(mapreduce((j,i) -> X[i]*iw.w[j],  +, CI, indices), x) &&
+        isapprox(mapreduce((j,i) -> X[i]⊗iw.∇w[j], +, CI, indices), I)
     end
 
     @testset "$spline" for spline in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quadratic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(spline, mesh)
+            iw = InterpolationWeight(spline, mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
-                update!(mp, x, mesh)
-                isnearbounds = size(mp.w) != size(neighboringnodes(mp))
-                PU = check_partition_of_unity(mp, x)
-                LFR = check_linear_field_reproduction(mp, x, mesh)
+                update!(iw, x, mesh)
+                isnearbounds = size(iw.w) != size(neighboringnodes(iw))
+                PU = check_partition_of_unity(iw, x)
+                LFR = check_linear_field_reproduction(iw, x, mesh)
                 isnearbounds ? (!PU && !LFR) : (PU && LFR)
             end
         end
@@ -118,13 +118,13 @@ end # MPValue
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(spline, mesh)
+            iw = InterpolationWeight(spline, mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
-                update!(mp, x, mesh)
-                isnearbounds = size(mp.w) != size(neighboringnodes(mp))
-                PU = check_partition_of_unity(mp, x)
-                LFR = check_linear_field_reproduction(mp, x, mesh)
+                update!(iw, x, mesh)
+                isnearbounds = size(iw.w) != size(neighboringnodes(iw))
+                PU = check_partition_of_unity(iw, x)
+                LFR = check_linear_field_reproduction(iw, x, mesh)
                 isnearbounds ? (PU && !LFR) : (PU && LFR)
             end
         end
@@ -135,14 +135,14 @@ end # MPValue
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(gimp, mesh)
+            iw = InterpolationWeight(gimp, mesh)
             l = 0.5*spacing(mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
-                update!(mp, (;x,l), mesh)
+                update!(iw, (;x,l), mesh)
                 isnearbounds = any(.!(l/2 .< x .< 1-l/2))
-                PU = check_partition_of_unity(mp, x)
-                LFR = check_linear_field_reproduction(mp, x, mesh)
+                PU = check_partition_of_unity(iw, x)
+                LFR = check_linear_field_reproduction(iw, x, mesh)
                 # uGIMP doesn't have pertition of unity when very closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
                 isnearbounds ? (!PU && !LFR) : (PU && LFR)
@@ -155,15 +155,15 @@ end # MPValue
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(cpdi, mesh)
+            iw = InterpolationWeight(cpdi, mesh)
             l = 0.5*spacing(mesh)
             F = one(Mat{dim,dim})
             @test all(1:100) do _
                 x = Vec{dim}(i -> l/2 + rand()*(1-l))
-                update!(mp, (;x,l,F), mesh)
+                update!(iw, (;x,l,F), mesh)
                 # isnearbounds = any(.!(l/2 .< x .< 1-l/2))
-                PU = check_partition_of_unity(mp, x)
-                LFR = check_linear_field_reproduction(mp, x, mesh)
+                PU = check_partition_of_unity(iw, x)
+                LFR = check_linear_field_reproduction(iw, x, mesh)
                 # uGIMP doesn't have pertition of unity when very closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
                 # isnearbounds ? (!PU && !LFR) : (PU && LFR)
@@ -177,13 +177,13 @@ end # MPValue
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            mp = MPValue(interp, mesh)
+            iw = InterpolationWeight(interp, mesh)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
                 x = rand(Vec{dim})
-                update!(mp, (;x,l), mesh)
-                PU = check_partition_of_unity(mp, x)
-                LFR = check_linear_field_reproduction(mp, x, mesh)
+                update!(iw, (;x,l), mesh)
+                PU = check_partition_of_unity(iw, x)
+                LFR = check_linear_field_reproduction(iw, x, mesh)
                 PU && LFR
             end
         end
@@ -198,14 +198,14 @@ end
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(-1,2), Val(dim))...)
             xp = rand(Vec{dim})
-            mp = MPValue(spline, mesh; derivative=Order(k))
-            update!(mp, xp, mesh)
-            nodeindices = neighboringnodes(mp)
+            iw = InterpolationWeight(spline, mesh; derivative=Order(k))
+            update!(iw, xp, mesh)
+            nodeindices = neighboringnodes(iw)
             for ip in eachindex(nodeindices)
                 i = nodeindices[ip]
                 vals = values(Order(k), spline, xp, mesh, i)
                 for a in 0:k
-                    @test values(mp, a+1)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
+                    @test values(iw, a+1)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end
             end
         end
@@ -213,20 +213,20 @@ end
 end
 
 @testset "Positivity in kernel correction" begin
-    function kernelvalue(mp, xp, mesh, i)
-        fillzero!(mp.w)
-        update!(mp, xp, mesh)
-        j = findfirst(==(i), neighboringnodes(mp))
-        j === nothing ? zero(eltype(mp.w)) : mp.w[j]
+    function kernelvalue(iw, xp, mesh, i)
+        fillzero!(iw.w)
+        update!(iw, xp, mesh)
+        j = findfirst(==(i), neighboringnodes(iw))
+        j === nothing ? zero(eltype(iw.w)) : iw.w[j]
     end
     function kernelvalues(mesh::CartesianMesh{dim}, kernel, poly, index::CartesianIndex{dim}) where {dim}
-        mp = MPValue(KernelCorrection(kernel, poly), mesh)
+        iw = InterpolationWeight(KernelCorrection(kernel, poly), mesh)
         L = kernel isa BSpline{Quadratic} ? 1.5 :
             kernel isa BSpline{Cubic}     ? 2.0 : error()
         X = ntuple(i -> range(max(mesh[1][i],index[i]-L-1), min(mesh[end][i],index[i]+L-1)-sqrt(eps(Float64)), step=1/11), Val(dim)) # 1/10 is too coarse for checking
         Z = Array{Float64}(undef, length.(X))
         for i in CartesianIndices(Z)
-            @inbounds Z[i] = kernelvalue(mp, Vec(map(getindex, X, Tuple(i))), mesh, index)
+            @inbounds Z[i] = kernelvalue(iw, Vec(map(getindex, X, Tuple(i))), mesh, index)
         end
         Z
     end

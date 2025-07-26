@@ -58,17 +58,17 @@ nothing #hide
 ```
 
 ```@example transfer
-grid = generate_grid(GridProp, CartesianMesh(1, (0,10), (0,10)))              #hide
-particles = generate_particles(ParticleProp, grid.x)                          #hide
-mpvalues = generate_mpvalues(BSpline(Quadratic()), grid.x, length(particles)) #hide
-for p in eachindex(particles)                                                 #hide
-    update!(mpvalues[p], particles.x[p], grid.x)                              #hide
-end                                                                           #hide
-α = 0.5                                                                       #hide
-Dₚ⁻¹ = inv(1/4 * spacing(grid.x)^2 * I)                                       #hide
-m = 5                                                                         #hide
-Δt = 1.0                                                                      #hide
-nothing                                                                       #hide
+grid = generate_grid(GridProp, CartesianMesh(1, (0,10), (0,10)))                          #hide
+particles = generate_particles(ParticleProp, grid.x)                                      #hide
+weights = generate_interpolation_weights(BSpline(Quadratic()), grid.x, length(particles)) #hide
+for p in eachindex(particles)                                                             #hide
+    update!(weights[p], particles.x[p], grid.x)                                           #hide
+end                                                                                       #hide
+α = 0.5                                                                                   #hide
+Dₚ⁻¹ = inv(1/4 * spacing(grid.x)^2 * I)                                                   #hide
+m = 5                                                                                     #hide
+Δt = 1.0                                                                                  #hide
+nothing                                                                                   #hide
 ```
 
 ### PIC--FLIP mixed transfer
@@ -81,10 +81,10 @@ m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \bm{v}_p^n \\
 ```
 
 ```@example transfer
-@P2G grid=>i particles=>p mpvalues=>ip begin
+@P2G grid=>i particles=>p weights=>ip begin
     mv[i] = @∑ w[ip] * m[p] * v[p]
 end
-@G2P grid=>i particles=>p mpvalues=>ip begin
+@G2P grid=>i particles=>p weights=>ip begin
     v[p] = @∑ w[ip] * ((1-α)*v[i] + α*(v[p] + (v[i]-vⁿ[i])))
 end
 ```
@@ -100,10 +100,10 @@ m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \bm{B}_p^n (\bm{D}_p^n)^
 ```
 
 ```@example transfer
-@P2G grid=>i particles=>p mpvalues=>ip begin
+@P2G grid=>i particles=>p weights=>ip begin
     mv[i] = @∑ w[ip] * m[p] * (v[p] + B[p] * Dₚ⁻¹ * (x[i] - x[p]))
 end
-@G2P grid=>i particles=>p mpvalues=>ip begin
+@G2P grid=>i particles=>p weights=>ip begin
     v[p] = @∑ w[ip] * v[i]
     B[p] = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
 end
@@ -122,10 +122,10 @@ m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \nabla\bm{v}_p^n (\bm{x}
 ```
 
 ```@example transfer
-@P2G grid=>i particles=>p mpvalues=>ip begin
+@P2G grid=>i particles=>p weights=>ip begin
     mv[i] = @∑ w[ip] * m[p] * (v[p] + ∇v[p] * (x[i] - x[p]))
 end
-@G2P grid=>i particles=>p mpvalues=>ip begin
+@G2P grid=>i particles=>p weights=>ip begin
     v[p]  = @∑ w[ip] * v[i]
     ∇v[p] = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
 end
@@ -198,17 +198,17 @@ where
 
 # The recursion process to calculate `v★`
 for r in 2:m
-    @G2P grid=>i particles=>p mpvalues=>ip begin
+    @G2P grid=>i particles=>p weights=>ip begin
         vᵣ★[p] = @∑ w[ip] * vᵣ★[i]
     end
-    @P2G grid=>i particles=>p mpvalues=>ip begin
+    @P2G grid=>i particles=>p weights=>ip begin
         vᵣ★[i] = @∑ (m-r+1)/r * w[ip] * m[p] * vᵣ★[p] / m[i]
         v★[i] += (-1)^r * vᵣ★[i]
     end
 end
 
 # Grid-to-particle transfer in XPIC
-@G2P grid=>i particles=>p mpvalues=>ip begin
+@G2P grid=>i particles=>p weights=>ip begin
     v[p] += @∑ w[ip] * (v[i] - vⁿ[i]) # same as FLIP
     x[p] += @∑ w[ip] * (v[i] + vⁿ[i]) * Δt / 2
     a★[p] = @∑ w[ip] * (v[p] + m*(v★[i] - vⁿ[i])) / Δt

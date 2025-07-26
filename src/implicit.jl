@@ -258,7 +258,7 @@ function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int},
 end
 
 """
-    @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) [space] begin
+    @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) [space] begin
         equations...
     end
 
@@ -266,7 +266,7 @@ Particle-to-grid transfer macro for assembling a global matrix.
 A typical global stiffness matrix can be assembled as follows:
 
 ```julia
-@P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
+@P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
     K[i,j] = @∑ ∇w[ip] ⊡ c[p] ⊡ ∇w[jp] * V[p]
 end
 ```
@@ -274,29 +274,29 @@ end
 where `c` and `V` denote the stiffness (symmetric fourth-order) tensor and the volume, respectively.
 It is recommended to create global stiffness `K` using [`create_sparse_matrix`](@ref).
 """
-macro P2G_Matrix(grid_ij, particles_p, mpvalues_ipjp, equations)
-    P2G_Matrix_expr(QuoteNode(:nothing), grid_ij, particles_p, mpvalues_ipjp, nothing, equations)
+macro P2G_Matrix(grid_ij, particles_p, weights_ipjp, equations)
+    P2G_Matrix_expr(QuoteNode(:nothing), grid_ij, particles_p, weights_ipjp, nothing, equations)
 end
-macro P2G_Matrix(grid_ij, particles_p, mpvalues_ipjp, space, equations)
-    P2G_Matrix_expr(QuoteNode(:nothing), grid_ij, particles_p, mpvalues_ipjp, space, equations)
+macro P2G_Matrix(grid_ij, particles_p, weights_ipjp, space, equations)
+    P2G_Matrix_expr(QuoteNode(:nothing), grid_ij, particles_p, weights_ipjp, space, equations)
 end
-macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, mpvalues_ipjp, equations)
-    P2G_Matrix_expr(schedule, grid_ij, particles_p, mpvalues_ipjp, nothing, equations)
+macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, weights_ipjp, equations)
+    P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, nothing, equations)
 end
-macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, mpvalues_ipjp, space, equations)
-    P2G_Matrix_expr(schedule, grid_ij, particles_p, mpvalues_ipjp, space, equations)
-end
-
-function P2G_Matrix_expr(schedule, grid_ij, particles_p, mpvalues_ipjp, space, equations)
-    P2G_Matrix_expr(schedule, unpair2(grid_ij), unpair(particles_p), unpair2(mpvalues_ipjp), space, split_equations(equations))
+macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, weights_ipjp, space, equations)
+    P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, space, equations)
 end
 
-function P2G_Matrix_expr(schedule::QuoteNode, (grid,(i,j)), (particles,p), (mpvalues,(ip,jp)), space, equations::Vector)
-    @gensym mp gridindices ldofs I J dofs gdofs
+function P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, space, equations)
+    P2G_Matrix_expr(schedule, unpair2(grid_ij), unpair(particles_p), unpair2(weights_ipjp), space, split_equations(equations))
+end
+
+function P2G_Matrix_expr(schedule::QuoteNode, (grid,(i,j)), (particles,p), (weights,(ip,jp)), space, equations::Vector)
+    @gensym iw gridindices ldofs I J dofs gdofs
 
     @assert all(eq -> eq.issumeq, equations)
 
-    maps = [grid=>i, grid=>j, particles=>p, mp=>ip, mp=>jp]
+    maps = [grid=>i, grid=>j, particles=>p, iw=>ip, iw=>jp]
     replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}()]
     for k in eachindex(equations)
         eq = equations[k]
@@ -323,8 +323,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, (grid,(i,j)), (particles,p), (mpva
 
     body = quote
         $(replaced[3]...)
-        $mp = $mpvalues[$p]
-        $gridindices = neighboringnodes($mp, $grid)
+        $iw = $weights[$p]
+        $gridindices = neighboringnodes($iw, $grid)
         $ldofs = LinearIndices((size($gdofs, 1), size($gridindices)...))
         $(lmat_init...)
         for $jp in eachindex($gridindices)
@@ -347,18 +347,18 @@ function P2G_Matrix_expr(schedule::QuoteNode, (grid,(i,j)), (particles,p), (mpva
     end
 
     body = quote
-        $check_arguments_for_P2G_Matrix($grid, $particles, $mpvalues, $space)
+        $check_arguments_for_P2G_Matrix($grid, $particles, $weights, $space)
         $(fillzeros...)
         $gdofs = LinearIndices((size($(gmats[1]),1)÷length($grid), size($grid)...))
         @assert all(==((length($gdofs), length($gdofs))), map(size, ($(gmats...),)))
-        $P2G(($grid, $particles, $mpvalues, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $mpvalues, $space)
+        $P2G(($grid, $particles, $weights, $p) -> $body, $get_device($grid), Val($schedule), $grid, $particles, $weights, $space)
     end
 
     esc(body)
 end
 
-function check_arguments_for_P2G_Matrix(grid, particles, mpvalues, space)
-    check_arguments_for_P2G(grid, particles, mpvalues, space)
+function check_arguments_for_P2G_Matrix(grid, particles, weights, space)
+    check_arguments_for_P2G(grid, particles, weights, space)
     @assert get_device(grid) isa CPUDevice
 end
 

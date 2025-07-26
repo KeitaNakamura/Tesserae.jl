@@ -28,8 +28,8 @@ function main()
     points = generate_particles(PointProp, mesh)
 
     ## Interpolation
-    mpvalues = generate_mpvalues(mesh, size(points); name=Val(:N))
-    feupdate!(mpvalues, mesh; volume=points.V) # Use `feupdate!` instead of `update!`
+    weights = generate_interpolation_weights(mesh, size(points); name=Val(:N))
+    feupdate!(weights, mesh; volume=points.V) # Use `feupdate!` instead of `update!`
 
     ## Global matrix
     ndofs = 1 # Degrees of freedom per node
@@ -42,10 +42,10 @@ function main()
     dofmap = DofMap(dofmask)
 
     ## Construct global vector (on grid) and matrix
-    @P2G grid=>i points=>p mpvalues=>ip begin
+    @P2G grid=>i points=>p weights=>ip begin
         f[i] = @∑ N[ip] * V[p]
     end
-    @P2G_Matrix grid=>(i,j) points=>p mpvalues=>(ip,jp) begin
+    @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
         K[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
     end
 
