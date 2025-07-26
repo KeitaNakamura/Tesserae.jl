@@ -5,18 +5,19 @@
 # ```
 
 using Tesserae
+using LinearAlgebra
 
 function main()
 
-    ## Properties for grid and particles
+    ## Properties for grid and Gauss points
     GridProp = @NamedTuple begin
         x :: Vec{2, Float64} # Coordinate
         u :: Float64         # Temperature
         f :: Float64         # Heat source
     end
-    ParticleProp = @NamedTuple begin
-        x      :: Vec{2, Float64} # Coordinate
-        detJdV :: Float64         # Weighted det(J) for Gauss–Legendre quadrature
+    PointProp = @NamedTuple begin
+        x :: Vec{2, Float64} # Coordinate
+        V :: Float64         # Weighted det(J) for Gauss–Legendre quadrature
     end
 
     ## FEM mesh using UnstructuredMesh
@@ -24,32 +25,32 @@ function main()
     grid = generate_grid(GridProp, mesh)
 
     ## Integration points
-    particles = generate_particles(ParticleProp, mesh)
+    points = generate_particles(PointProp, mesh)
 
     ## Interpolation
-    mpvalues = generate_mpvalues(mesh, size(particles); name=Val(:N))
-    feupdate!(mpvalues, mesh; volume = particles.detJdV) # Use `feupdate!` instead of `update!`
+    mpvalues = generate_mpvalues(mesh, size(points); name=Val(:N))
+    feupdate!(mpvalues, mesh; volume=points.V) # Use `feupdate!` instead of `update!`
 
     ## Global matrix
     ndofs = 1 # Degrees of freedom per node
     K = create_sparse_matrix(mesh; ndofs)
 
-    ## Create dofmap considering boundary conditions
+    ## Create DOF map considering boundary conditions
     dofmask = trues(ndofs, size(grid)...)
     dofmask[1, findall(x -> x[1]==-1 || x[1]==1, mesh)] .= false
     dofmask[1, findall(x -> x[2]==-1 || x[2]==1, mesh)] .= false
     dofmap = DofMap(dofmask)
 
     ## Construct global vector (on grid) and matrix
-    @P2G grid=>i particles=>p mpvalues=>ip begin
-        f[i] = @∑ N[ip] * detJdV[p]
+    @P2G grid=>i points=>p mpvalues=>ip begin
+        f[i] = @∑ N[ip] * V[p]
     end
-    @P2G_Matrix grid=>(i,j) particles=>p mpvalues=>(ip,jp) begin
-        K[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * detJdV[p]
+    @P2G_Matrix grid=>(i,j) points=>p mpvalues=>(ip,jp) begin
+        K[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
     end
 
     ## Solve the equation
-    dofmap(grid.u) .= extract(K, dofmap) \ Array(dofmap(grid.f))
+    dofmap(grid.u) .= Symmetric(extract(K, dofmap)) \ Array(dofmap(grid.f))
 
     ## Output the results
     openvtk("heat", mesh) do vtk
