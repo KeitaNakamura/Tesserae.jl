@@ -6,7 +6,7 @@
 #
 # | # Particles | # Iterations | Execution time (w/o output) |
 # | ----------- | ------------ | --------------------------- |
-# | 28k         | 3.5k         | 9 min                       |
+# | 28k         | 3.5k         | 11 min                      |
 #
 # This example employs stabilized mixed MPM with the variational multiscale method[^1].
 #
@@ -16,6 +16,9 @@
 
 using Tesserae
 using LinearAlgebra
+
+using Krylov: gmres
+using KrylovPreconditioners: ilu
 
 struct FLIP α::Float64 end
 struct TPIC end
@@ -149,7 +152,7 @@ function main(transfer = FLIP(1.0))
             end
         end
 
-        m_tol = cbrt(eps(eltype(grid.m))) * maximum(grid.m)
+        m_tol = sqrt(eps(eltype(grid.m))) * maximum(grid.m)
         m_mask = @. !(abs(grid.m) ≤ m_tol)
         @. grid.vⁿ = grid.mv / grid.m * m_mask
         @. grid.aⁿ = grid.ma / grid.m * m_mask
@@ -173,7 +176,7 @@ function main(transfer = FLIP(1.0))
 
         ## Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
         state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, Δt)
-        Δt′ = variational_multiscale_method(state)
+        variational_multiscale_method(state)
 
         if transfer isa FLIP
             α = transfer.α
@@ -199,7 +202,7 @@ function main(transfer = FLIP(1.0))
         outside = findall(x->!isinside(x, grid.X), particles.x)
         deleteat!(particles, outside)
 
-        t += Δt′
+        t += Δt
         step += 1
 
         ## Write results
@@ -228,44 +231,24 @@ end
 
 function variational_multiscale_method(state)
 
-    ## The simulation might fail occasionally due to regions with very small masses,
-    ## such as splashes[^1]. Therefore, in this script, if Newton's method doesn't converge,
-    ## a smaller time step is applied.
-
     (; grid, dofmap, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
-    k = 1
-    while true
-        ## Reconstruct state using the current time step
-        state = merge(state, (; Δt))
+    ## Compute VMS stabilization coefficients using current grid velocity,
+    ## which is used for Jacobian matrix
+    grid.v .= grid.vⁿ
+    compute_VMS_stabilization_coefficients(state)
 
-        ## Compute VMS stabilization coefficients using current grid velocity,
-        ## which is used for Jacobian matrix
-        grid.v .= grid.vⁿ
-        compute_VMS_stabilization_coefficients(state)
-
-        ## Try computing the Jacobian matrix and performing its LU decomposition.
-        ## In this formulation[^1], the initial Jacobian matrix is used in all Newton's iterations.
-        ## If the computation fails, use a smaller time step.
-        J = lu(jacobian(state); check=false)
-        if issuccess(J)
-            ## Solve nonlinear system
-            U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-            solved = Tesserae.newton!(U, U->residual(U,state), U->J;
-                                      linsolve=(x,A,b)->ldiv!(x,A,b), backtracking=true)
-            solved && break
-        end
-
-        Δt *= k / (k+1) # Δt, Δt/2, Δt/3, ...
-        k += 1
-    end
+    ## Solve nonlinear system using GMRES with incomplete LU preconditioner
+    A = jacobian(state)
+    Pl = ilu(A; τ=Inf)
+    U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
+    linsolve(x, A, b) = copy!(x, gmres(A, b; M=Pl, ldiv=true, itmax=100)[1])
+    Tesserae.newton!(U, U->residual(U,state), U->A;
+                     linsolve, backtracking=true, maxiter=20)
 
     ## Update the positions of grid nodes
     @. grid.x = grid.X + grid.u
-
-    ## Return the acutally applied time step
-    Δt
 end
 
 # ## VMS stabilization coefficients
@@ -350,7 +333,7 @@ function residual(U, state)
     end
 
     ## Map grid values to vector `R`
-    dofmap(map(vcat, grid.R_mom, grid.R_mas))
+    Array(dofmap(map(vcat, grid.R_mom, grid.R_mas)))
 end
 
 # ## Jacobian matrix
