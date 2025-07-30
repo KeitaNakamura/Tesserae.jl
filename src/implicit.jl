@@ -408,34 +408,36 @@ function newton!(
         maxiter::Int=100, atol::Real=zero(eltype(x)), rtol::Real=sqrt(eps(eltype(x))),
         linsolve=(x,A,b)->copyto!(x,A\b), backtracking::Bool=false, verbose::Bool=false)
 
-    compact(val, pad) = rpad(sprint(show, val; context = :compact=>true), pad)
     T = eltype(x)
 
     Fx = F(x)
     fx = f0 = norm(Fx)
     δx = similar(x)
 
-    if backtracking
-        # previous step values
-        x′, Fx′, fx′ = copy(x), copy(Fx), fx
-    end
+    # previous step values
+    x′, Fx′, fx′ = similar(x), similar(Fx), fx
 
     iter = 0
     solved = f0 ≤ atol
     giveup = !isfinite(fx)
 
     if verbose
-        println(" # ≤ ", compact(maxiter,4), "   ‖f‖ ≤ ", compact(atol,11), "   ‖f‖/‖f₀‖ ≤ ", compact(rtol,11))
-        println("---------  ------------------  -----------------------")
-        println(" ", compact(iter,7), "    ", compact(fx,16), "    ", compact(fx/f0,16))
+        newton_print_header(maxiter, atol, rtol)
+        newton_print_row(maxiter, iter, fx, fx/f0)
     end
 
     while !(solved || giveup)
+        @. x′ = x
+        @. Fx′ = Fx
+        fx′ = fx
+
         linsolve(fillzero!(δx), ∇F(x), Fx)
 
-        @. x -= δx
+        @. x = x′ - δx
         Fx = F(x)
         fx = norm(Fx)
+
+        isfinite(fx) || (giveup = true; break)
 
         if backtracking
             α = one(T)
@@ -445,19 +447,30 @@ function newton!(
                 Fx = F(x)
                 fx = norm(Fx)
             end
-            @. x′ = x
-            @. Fx′ = Fx
-            fx′ = fx
         end
 
         solved = fx ≤ max(atol, rtol*f0)
         giveup = ((iter += 1) ≥ maxiter || !isfinite(fx))
 
-        if verbose
-            println(" ", compact(iter,7), "    ", compact(fx,16), "    ", compact(fx/f0,16))
-        end
+        verbose && newton_print_row(maxiter, iter, fx, fx/f0)
+    end
+    verbose && println()
+
+    if giveup
+        @. x = x′
+        F(x)
+        ∇F(x)
     end
 
-    verbose && println()
     solved
+end
+
+function newton_print_header(maxiter, atol, rtol)
+    n = ndigits(maxiter)
+    @printf(" # ≤ %d  f ≤ %-8.2e  f/f₀ ≤ %-8.2e\n", maxiter, atol, rtol)
+    @printf(" %s  %s  %s\n", "─"^(4+n), "─"^12, "─"^15)
+end
+function newton_print_row(maxiter, iter, f, f_f0)
+    n = ndigits(maxiter)
+    @printf(" %s%s  %12.2e  %15.2e\n", " "^4, lpad(iter, n), f, f_f0)
 end

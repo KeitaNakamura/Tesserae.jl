@@ -5,6 +5,7 @@ using Base.Broadcast: Broadcasted, ArrayStyle, DefaultArrayStyle
 using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using SparseArrays
+using Printf
 
 using Reexport
 @reexport using Tensorial
