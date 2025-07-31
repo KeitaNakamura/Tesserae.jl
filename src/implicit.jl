@@ -128,28 +128,34 @@ function create_sparse_matrix(interp::Interpolation, mesh::AbstractMesh; ndofs::
 end
 function create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh{dim}; ndofs::Int = dim) where {T, dim}
     dims = size(mesh)
-    spy = falses(ndofs, prod(dims), ndofs, prod(dims))
+    n = ndofs * prod(dims)
+    I, J = Int[], Int[]
     LI, CI = LinearIndices(dims), CartesianIndices(dims)
     for i in CI
         unit = (kernel_support(interp) - 1) * oneunit(i)
         indices = intersect((i-unit):(i+unit), CI)
+        idofs = (ndofs*(LI[i]-1)+1):(ndofs*LI[i])
         for j in indices
-            spy[1:ndofs, LI[i], 1:ndofs, LI[j]] .= true
+            jdofs = (ndofs*(LI[j]-1)+1):(ndofs*LI[j])
+            append_dofs!(I, J, idofs, jdofs)
         end
     end
-    create_sparse_matrix(T, reshape(spy, ndofs*prod(dims), ndofs*prod(dims)))
+    sparse(I, J, zeros(T, length(I)), n, n)
 end
 
-function create_sparse_matrix(::Type{T}, spy::AbstractMatrix{Bool}) where {T}
-    I = findall(vec(spy))
-    V = zeros(T, length(I))
-    SparseArrays.sparse_sortedlinearindices!(I, V, size(spy)...)
+function append_dofs!(I, J, idofs, jdofs)
+    for i in 1:length(idofs)
+        append!(I, idofs)
+        for _ in 1:length(jdofs)
+            push!(J, jdofs[i])
+        end
+    end
 end
 
 function create_sparse_matrix(::Type{T}, meshes::Tuple{Vararg{UnstructuredMesh, N}}; ndofs::NTuple{N, Int}) where {T, N}
     gdofs = generate_dofs(meshes, ndofs)
     ttldofs = sum(length, gdofs)
-    spy = falses(ttldofs, ttldofs)
+    I, J = Int[], Int[]
     for i in 1:N
         mesh_i = meshes[i]
         gdofs_i = gdofs[i]
@@ -159,7 +165,7 @@ function create_sparse_matrix(::Type{T}, meshes::Tuple{Vararg{UnstructuredMesh, 
             celldofs_i = gdofs_i[:, cellnodes_i]
             for j in 1:N
                 if i == j
-                    spy[celldofs_i, celldofs_i] .= true
+                    append_dofs!(I, J, celldofs_i, celldofs_i)
                 else # check shared cells
                     mesh_j = meshes[j]
                     gdofs_j = gdofs[j]
@@ -168,14 +174,14 @@ function create_sparse_matrix(::Type{T}, meshes::Tuple{Vararg{UnstructuredMesh, 
                         primarycellnodes_j = cellnodes_j[primarynodes_indices(cellshape(mesh_j))]
                         if mesh_i[primarycellnodes_i] ≈ mesh_j[primarycellnodes_j] # TODO: better way because this is very slow
                             celldofs_j = gdofs_j[:, cellnodes_j]
-                            spy[celldofs_i, celldofs_j] .= true
+                            append_dofs!(I, J, celldofs_i, celldofs_j)
                         end
                     end
                 end
             end
         end
     end
-    create_sparse_matrix(T, spy)
+    sparse(I, J, zeros(T, length(I)), ttldofs, ttldofs)
 end
 create_sparse_matrix(meshes::Tuple{Vararg{UnstructuredMesh}}; ndofs::Dims) = create_sparse_matrix(Float64, meshes; ndofs)
 
