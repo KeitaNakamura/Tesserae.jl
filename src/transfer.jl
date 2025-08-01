@@ -580,8 +580,15 @@ end
 ####################
 
 function unpair(ex)
-    @assert @capture(ex, lhs_ => rhs_)
-    lhs::Symbol, rhs::Symbol
+    if @capture(ex, lhs_Symbol => rhs_Symbol)
+        return (lhs, rhs)
+    elseif @capture(ex, lhs_Symbol => (rhs1_Symbol,rhs2_Symbol))
+        return lhs, (rhs1, rhs2)
+    elseif @capture(ex, (lhs1_Symbol,lhs2_Symbol) => (rhs1_Symbol,rhs2_Symbol))
+        return (lhs1, lhs2), (rhs1, rhs2)
+    else
+        error("invalid expression, $ex")
+    end
 end
 
 function has_sum_macro(expr)
