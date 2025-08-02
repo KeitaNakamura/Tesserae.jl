@@ -144,10 +144,10 @@ function create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianM
 end
 
 function append_dofs!(I, J, idofs, jdofs)
-    for i in 1:length(idofs)
+    for j in 1:length(jdofs)
         append!(I, idofs)
-        for _ in 1:length(jdofs)
-            push!(J, jdofs[i])
+        for _ in 1:length(idofs)
+            push!(J, jdofs[j])
         end
     end
 end
