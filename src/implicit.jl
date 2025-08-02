@@ -186,15 +186,12 @@ end
 create_sparse_matrix(meshes::Tuple{Vararg{UnstructuredMesh}}; ndofs::Dims) = create_sparse_matrix(Float64, meshes; ndofs)
 
 function generate_dofs(meshes::Tuple{Vararg{UnstructuredMesh, N}}, ndofs::Tuple{Vararg{Int, N}}) where {N}
-    @assert all(i -> ndofs[i] != 0 || meshes[i] ≈ meshes[i-1], 1:N)
     ttldofs = map(i -> ndofs[i]*length(meshes[i]), 1:N)
     ntuple(Val(N)) do i
-        offset = _get_valid_offset(ttldofs, i)
-        LinearIndices((_get_valid_ndofs(ndofs, i), length(meshes[i]))) .+ offset
+        offset = sum(ttldofs[1:i-1])
+        LinearIndices((ndofs[i], length(meshes[i]))) .+ offset
     end
 end
-_get_valid_ndofs(ndofs, i) = ndofs[i]==0 ? _get_valid_ndofs(ndofs, i-1) : ndofs[i]
-_get_valid_offset(ttldofs, i) = ttldofs[i]==0 ? _get_valid_offset(ttldofs, i-1) : sum(ttldofs[1:i-1])
 
 create_sparse_matrix(::Type{T}, mesh::UnstructuredMesh{<: Any, dim}; ndofs::Int = dim) where {T, dim} = create_sparse_matrix(T, (mesh,); ndofs=(ndofs,))
 create_sparse_matrix(mesh::UnstructuredMesh{<: Any, dim}; ndofs::Int = dim) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
