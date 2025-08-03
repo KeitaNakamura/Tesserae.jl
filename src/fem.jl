@@ -10,9 +10,9 @@ function feupdate!(
         weights::AbstractArray{<: InterpolationWeight{S}}, mesh::UnstructuredMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         volume::Union{Nothing, AbstractArray} = nothing,
-        quadrature::Tuple = (quadpoints(cellshape(mesh)), quadweights(cellshape(mesh))),
+        quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
     ) where {dim, S <: Shape{dim}}
-    qpts, qwts = quadrature
+    qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     @assert length(qpts) == length(qwts)
     @assert size(mesh) == size(nodes)
     @assert size(weights) == (length(qpts), ncells(mesh))
@@ -39,9 +39,9 @@ function feupdate!(
         weights::AbstractArray{<: InterpolationWeight{S}}, mesh::UnstructuredMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         area::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
-        quadrature::Tuple = (quadpoints(cellshape(mesh)), quadweights(cellshape(mesh))),
+        quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
     ) where {S <: Shape, dim}
-    qpts, qwts = quadrature
+    qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     @assert length(qpts) == length(qwts)
     @assert size(mesh) == size(nodes)
     @assert size(weights) == (length(qpts), ncells(mesh))

@@ -11,6 +11,13 @@ nquadpoints(s::Shape) = length(quadpoints(s))
 
 get_dimension(::Shape{dim}) where {dim} = dim
 
+struct QuadratureRule{dim, T, P <: AbstractVector{Vec{dim, T}}, W <: AbstractVector{<: T}}
+    points::P
+    weights::W
+end
+
+quadrature_rule(s::Shape) = QuadratureRule(quadpoints(s), quadweights(s))
+
 ########
 # Line #
 ########
