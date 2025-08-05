@@ -1,6 +1,6 @@
 # Tesserae.jl
 
-*A Julia-powered toolkit for material point method*
+*A Julia toolkit for the material point method*
 
 [![CI](https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/KeitaNakamura/Tesserae.jl/graph/badge.svg?token=H5BHWIIBTG)](https://codecov.io/gh/KeitaNakamura/Tesserae.jl)
@@ -105,7 +105,7 @@ If you find Tesserae.jl useful in your work, I kindly request that you cite it a
 
 ```bibtex
 @software{NakamuraTesserae2024,
-    title = {Tesserae.jl: a {J}ulia-powered toolkit for material point method},
+    title = {Tesserae.jl: a {J}ulia toolkit for the material point method},
    author = {Nakamura, Keita},
       doi = {10.5281/zenodo.13956709},
      year = {2024},

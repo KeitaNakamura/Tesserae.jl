@@ -1,6 +1,6 @@
 # Tesserae.jl
 
-*A Julia-powered toolkit for material point method*
+*A Julia toolkit for the material point method*
 
 ## Introduction
 
