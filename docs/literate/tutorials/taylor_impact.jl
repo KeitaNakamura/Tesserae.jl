@@ -112,7 +112,7 @@ function main()
     @show length(particles)
 
     ## Interpolation
-    mpvalues = generate_mpvalues(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+    weights = generate_interpolation_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
 
     ## Color partitioning for multi-threaded G2P transfer
     if Threads.nthreads() == 1
@@ -142,7 +142,7 @@ function main()
         end
 
         @timeit "Update interpolation" begin
-            update!(mpvalues, particles, grid.x) # Automatically uses multi-threading
+            update!(weights, particles, grid.x) # Automatically uses multi-threading
         end
 
         if partition !== nothing
@@ -152,7 +152,7 @@ function main()
         end
 
         @timeit "P2G transfer" begin
-            @threaded @P2G grid=>i particles=>p mpvalues=>ip partition begin
+            @threaded @P2G grid=>i particles=>p weights=>ip partition begin
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * v[p]
                 f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
@@ -172,7 +172,7 @@ function main()
         end
 
         @timeit "G2P transfer" begin
-            @threaded @G2P grid=>i particles=>p mpvalues=>ip begin
+            @threaded @G2P grid=>i particles=>p weights=>ip begin
                 v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
                 ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
                 x[p] += @∑ w[ip] * v[i] * Δt
