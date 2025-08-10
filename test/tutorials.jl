@@ -54,6 +54,13 @@ module TestRigidBodyContact
     end
 end
 
+module TestTaylorImpact
+    const RUN_TESTS = true
+    cd(tempdir()) do
+        include(joinpath(@__DIR__, "../docs/literate/tutorials/taylor_impact.jl"))
+    end
+end
+
 module TestHeat
     const RUN_TESTS = true
     cd(tempdir()) do
