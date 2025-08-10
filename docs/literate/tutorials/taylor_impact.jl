@@ -62,6 +62,9 @@ function main()
     ## Simulation parameters
     T = 80e-6 # Time span
     CFL = 0.8 # Courant number
+    if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        T = 0.1e-6                        #src
+    end                                   #src
 
     ## Material constants
     E  = 117e9                  # Young's modulus
@@ -129,6 +132,9 @@ function main()
     t = 0.0
     step = 0
     fps = 300e3
+    if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        fps = inv(T)                      #src
+    end                                   #src
     savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
 
     reset_timer!()
@@ -219,6 +225,7 @@ function main()
         end
     end
     print_timer()
+    sum(particles.x) / length(particles) #src
 end
 
 #
@@ -291,3 +298,8 @@ end
 #       color = "black", linestyle = :dash,               # hide
 #       label = "")                                       # hide
 # ```
+
+using Test                                 #src
+if @isdefined(RUN_TESTS) && RUN_TESTS      #src
+    @test main() ≈ [0,0,0.01624] rtol=1e-3 #src
+end                                        #src
