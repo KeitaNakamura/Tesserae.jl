@@ -13,18 +13,23 @@ Tesserae is a toolkit for implementing the material point method in Julia. It is
 * Multi-threading support
 * GPU support (CUDA and Metal)
 * Exporting VTK files for visualization
-* Unified framework for FEM (experimental)
+* Unified framework for FEM
 
 ![Image](https://github.com/user-attachments/assets/62acb8c4-3705-4202-b30c-fff64a690479)
 ![Image](https://github.com/user-attachments/assets/16379e40-9a5c-404c-9543-251e210fb00e)
 ![Image](https://github.com/user-attachments/assets/00bf6683-010d-4093-9cda-a5f772fe5a74)
 ![Image](https://github.com/user-attachments/assets/4fa4dfa2-f1cb-471e-99f1-0aa0783a2f20)
 
-## Documentation
+## Why Tesserae.jl?
 
-[![Stable](https://img.shields.io/badge/docs-latest%20release-blue.svg)](https://KeitaNakamura.github.io/Tesserae.jl/stable)
+Tesserae.jl starts from a simple promise: *you write the equation, we make it fast*. It is not a prepackaged parameter-driven black box — you implement the numerical procedure yourself, while Tesserae.jl minimizes the boilerplate and provides high-performance building blocks. The code stays close to the mathematics, so implementations follow your derivations and remain as clear as well-kept notes. This makes it approachable and easy to follow even for newcomers to MPM, while still offering the flexibility and performance required for advanced research.
 
-A quick example: two soft disks collide, and the animation is saved as a GIF.
+A minimal data model — grid, particles, weights — exposed as plain arrays keeps every quantity visible and easy to reason about. Tensors remain tensors (no Voigt conversions), making constitutive laws read like the original equations; when you need tangents, automatic differentiation provides them. Lightweight macros such as `@P2G` and `@G2P` let you express core operations in a way that mirrors the mathematics. It runs fast even on a laptop, and supports multithreaded CPUs and GPUs with minimal changes. If you want transparency and control without giving up speed, Tesserae.jl turns formulations into working simulations quickly.
+
+*A quick example: two soft disks collide, and the animation is saved as a GIF.*
+
+<details>
+<summary>Click to expand</summary>
 
 ```julia
 using Tesserae
@@ -86,6 +91,12 @@ end
 
 main()
 ```
+
+</details>
+
+## Documentation
+
+[![Stable](https://img.shields.io/badge/docs-latest%20release-blue.svg)](https://KeitaNakamura.github.io/Tesserae.jl/stable)
 
 ## Other MPM packages in Julia
 
