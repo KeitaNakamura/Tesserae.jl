@@ -76,7 +76,7 @@ end
 end
 
 @inline function update_property!(iw::InterpolationWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim}
-    if filter isa Trues
+    if filter isa Trues && get_device(mesh) isa CPUDevice # Fast path is not currently supported on GPU
         # For MultiLinear, we can decompose into axis-wise Linear interpolations.
         # If the problem is 1D, MultiLinear == Linear, so use the direct fast path.
         wls_1d = WLS(get_kernel(wls), Polynomial(Linear()))
