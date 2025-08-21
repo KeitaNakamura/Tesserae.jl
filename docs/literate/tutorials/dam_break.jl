@@ -16,8 +16,10 @@
 
 using Tesserae
 using LinearAlgebra
+using SparseArrays
 
 using Krylov: gmres
+using LinearOperators: LinearOperator
 
 struct FLIP α::Float64 end
 struct TPIC end
@@ -95,7 +97,7 @@ function main(transfer = FLIP(1.0))
     end
 
     ## Particles
-    particles = generate_particles(ParticleProp, grid.X; alg=PoissonDiskSampling(spacing=1/4))
+    particles = generate_particles(ParticleProp, grid.X; alg=GridSampling(spacing=1/4))
     particles.V .= volume(grid.X) / length(particles)
     filter!(pt -> pt.x[1]<1.2 && pt.x[2]<0.6, particles)
     @. particles.m = ρ * particles.V
@@ -110,8 +112,10 @@ function main(transfer = FLIP(1.0))
     ## Sparse matrix
     A = create_sparse_matrix(interp, grid.X; ndofs=3)
 
+    partition = ColorPartition(grid.X)
+
     ## Output
-    outdir = mkpath(joinpath("output", "dam_break"))
+    outdir = mkpath(joinpath(tempdir(), "dam_break"))
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # Create file
 
@@ -136,6 +140,7 @@ function main(transfer = FLIP(1.0))
                 update!(weights_cell[cell], xc, grid.X, activenodes)
             end
         end
+        update!(partition, particles.x)
 
         if transfer isa FLIP
             @P2G grid=>i particles=>p weights=>ip begin
@@ -174,7 +179,7 @@ function main(transfer = FLIP(1.0))
         dofmap = DofMap(dofmask)
 
         ## Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, Δt)
+        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, Δt, partition)
         variational_multiscale_method(state)
 
         if transfer isa FLIP
@@ -197,10 +202,6 @@ function main(transfer = FLIP(1.0))
         ## Particle shifting based on the δ-correction
         particle_shifting(state)
 
-        ## Remove particles that accidentally move outside of the mesh
-        outside = findall(x->!isinside(x, grid.X), particles.x)
-        deleteat!(particles, outside)
-
         t += Δt
         step += 1
 
@@ -220,7 +221,12 @@ function main(transfer = FLIP(1.0))
                     pvd[t] = vtm
                 end
             end
+            reorder_particles!(particles, partition)
         end
+
+        ## Remove particles that accidentally move outside of the mesh
+        outside = findall(x->!isinside(x, grid.X), particles.x)
+        deleteat!(particles, outside)
     end
     # sum(particles.p) / length(particles) #src
     sum(particles.x) / length(particles) #src
@@ -239,11 +245,12 @@ function variational_multiscale_method(state)
     compute_VMS_stabilization_coefficients(state)
 
     ## Solve nonlinear system using GMRES with incomplete LU preconditioner
-    A = jacobian(state)
-    P⁻¹ = Diagonal([iszero(A[i,i]) ? 1 : inv(abs(A[i,i])) for i in 1:size(A,1)]) # Jacobi preconditioner
+    Aᵀ = sparse(jacobian(state)')
+    opA = LinearOperator(Float64, size(Aᵀ)..., false, false, (y, v) -> threaded_mul!(y, Aᵀ, v))
+    P⁻¹ = Diagonal([iszero(Aᵀ[i,i]) ? 1 : inv(abs(Aᵀ[i,i])) for i in 1:size(Aᵀ,1)]) # Jacobi preconditioner
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
     linsolve(x, A, b) = copy!(x, gmres(A, b; M=P⁻¹, itmax=100)[1])
-    Tesserae.newton!(U, U->residual(U,state), U->A;
+    Tesserae.newton!(U, U->residual(U,state), U->opA;
                      linsolve, backtracking=true, maxiter=20)
 
     ## Update the positions of grid nodes
@@ -305,7 +312,7 @@ end
 # ## Residual vector
 
 function residual(U, state)
-    (; grid, particles, weights, μ, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, μ, β, γ, dofmap, Δt, partition) = state
 
     ## Map `U` to grid dispacement and pressure
     dofmap(grid.u_p) .= U
@@ -320,7 +327,7 @@ function residual(U, state)
     compute_VMS_stabilization_coefficients(state)
 
     ## Compute residual values
-    @G2P2G grid=>i particles=>p weights=>ip begin
+    @threaded @G2P2G grid=>i particles=>p weights=>ip partition begin
         a[p]  = @∑ a[i] * S[ip]
         p[p]  = @∑ p[i] * S[ip]
         ∇v[p] = @∑ v[i] ⊗ ∇S[ip]
@@ -338,12 +345,12 @@ end
 # ## Jacobian matrix
 
 function jacobian(state)
-    (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt) = state
+    (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt, partition) = state
 
     ## Construct the Jacobian matrix
     cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
-    @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+    @threaded @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
         A[i,j] = @∑ begin
             Kᵤᵤ = (γ/(β*Δt) * ∇S[ip] ⊡ cₚ ⊡ ∇S[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * S[jp]
             Kᵤₚ = -∇S[ip] * S[jp] * V[p]
@@ -358,6 +365,18 @@ function jacobian(state)
 
     ## Extract the activated degrees of freedom
     extract(A, dofmap)
+end
+
+function threaded_mul!(y::Vector{T}, A::SparseMatrixCSC{T}, x::Vector{T}) where T <: Number
+    A.m == A.n || error("A is not a square matrix!")
+    @threaded for i = 1 : A.n
+        tmp = zero(T)
+        @inbounds for j = A.colptr[i] : (A.colptr[i+1] - 1)
+            tmp += A.nzval[j] * x[A.rowval[j]]
+        end
+        @inbounds y[i] = tmp
+    end
+    return y
 end
 
 using Test                                            #src
