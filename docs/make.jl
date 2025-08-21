@@ -53,4 +53,5 @@ makedocs(;
 deploydocs(
     repo = "github.com/KeitaNakamura/Tesserae.jl.git",
     devbranch = "main",
+    push_preview = true,
 )

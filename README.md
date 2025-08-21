@@ -1,11 +1,17 @@
-# Tesserae.jl
+<h1 align="center">
+    <img src="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/src/assets/logo.svg" alt="Tesserae.jl Logo" width="140" />
+    <br/>
+    Tesserae.jl
+</h1>
+<p align="center">
+    <em>A Julia toolkit for the material point method</em>
+    <br/>
+    <br/>
+    <a href="https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml"><img src="https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml/badge.svg"/></a>
+    <a href="https://codecov.io/gh/KeitaNakamura/Tesserae.jl"><img src="https://codecov.io/gh/KeitaNakamura/Tesserae.jl/graph/badge.svg?token=H5BHWIIBTG" /></a>
+</p>
 
-*A Julia toolkit for the material point method*
-
-[![CI](https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/KeitaNakamura/Tesserae.jl/actions/workflows/CI.yml)
-[![codecov](https://codecov.io/gh/KeitaNakamura/Tesserae.jl/graph/badge.svg?token=H5BHWIIBTG)](https://codecov.io/gh/KeitaNakamura/Tesserae.jl)
-
-Tesserae is a toolkit for implementing the material point method in Julia. It is designed to maintain consistency between mathematical expressions and source code, enabling rapid development. Current features include:
+Tesserae.jl is a toolkit for implementing the material point method in Julia. It is designed to maintain consistency between mathematical expressions and source code, enabling rapid development. Current features include:
 
 * Grid and particle generation
 * Various interpolation types, including B-splines, GIMP, CPDI, and MLS-MPM
@@ -13,7 +19,7 @@ Tesserae is a toolkit for implementing the material point method in Julia. It is
 * Multi-threading support
 * GPU support (CUDA and Metal)
 * Exporting VTK files for visualization
-* Unified framework for FEM
+* Unified framework for FEM (experimental)
 
 ![Image](https://github.com/user-attachments/assets/62acb8c4-3705-4202-b30c-fff64a690479)
 ![Image](https://github.com/user-attachments/assets/16379e40-9a5c-404c-9543-251e210fb00e)
