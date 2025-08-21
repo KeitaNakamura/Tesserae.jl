@@ -18,6 +18,8 @@ using Tesserae
 using LinearAlgebra
 
 using Krylov: gmres
+using LinearOperators: LinearOperator
+import AlgebraicMultigrid as AMG
 
 struct FLIP α::Float64 end
 struct TPIC end
@@ -157,24 +159,28 @@ function main(transfer = FLIP(1.0))
         @. grid.aⁿ = grid.ma / grid.m * m_mask
 
         ## Update a dof map
-        dofmask = trues(3, size(grid)...)
-        for i in 1:size(dofmask,1)
-            dofmask[i,:,:] = m_mask
+        dofmask_u = falses(3, size(grid)...)
+        dofmask_p = falses(3, size(grid)...)
+        for i in 1:2
+            dofmask_u[i,:,:] = m_mask
         end
+        dofmask_p[3,:,:] = m_mask
         for i in @view eachindex(grid)[[begin,end],:] # Walls
             grid.vⁿ[i] = grid.vⁿ[i] .* (false,true)
             grid.aⁿ[i] = grid.aⁿ[i] .* (false,true)
-            dofmask[1,i] = false
+            dofmask_u[1,i] = false
         end
         for i in @view eachindex(grid)[:,begin] # Floor
             grid.vⁿ[i] = grid.vⁿ[i] .* (true,false)
             grid.aⁿ[i] = grid.aⁿ[i] .* (true,false)
-            dofmask[2,i] = false
+            dofmask_u[2,i] = false
         end
-        dofmap = DofMap(dofmask)
+        dofmap_u = DofMap(dofmask_u)
+        dofmap_p = DofMap(dofmask_p)
+        dofmap = DofMap(dofmask_u .| dofmask_p)
 
         ## Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, Δt)
+        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, dofmap_u, dofmap_p, Δt)
         variational_multiscale_method(state)
 
         if transfer isa FLIP
@@ -230,7 +236,7 @@ end
 
 function variational_multiscale_method(state)
 
-    (; grid, dofmap, Δt) = state
+    (; grid, dofmap, dofmap_u, dofmap_p, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
     ## Compute VMS stabilization coefficients using current grid velocity,
@@ -239,12 +245,36 @@ function variational_multiscale_method(state)
     compute_VMS_stabilization_coefficients(state)
 
     ## Solve nonlinear system using GMRES with incomplete LU preconditioner
-    A = jacobian(state)
-    P⁻¹ = Diagonal([iszero(A[i,i]) ? 1 : inv(abs(A[i,i])) for i in 1:size(A,1)]) # Jacobi preconditioner
+    K = jacobian(state)
+
+    ## Extract the activated degrees of freedom
+    A = extract(K, dofmap, dofmap)
+    Aᵤᵤ = extract(K, dofmap_u, dofmap_u) # dispacement-dispacement
+    Aᵤₚ = extract(K, dofmap_u, dofmap_p) # dispacement-pressure
+    Aₚᵤ = extract(K, dofmap_p, dofmap_u) # pressure-dispacement
+    Aₚₚ = extract(K, dofmap_p, dofmap_p) # pressure-pressure
+
+    ## Reindex DOFs relative to the extracted `A` (not the full `K`).
+    dofs_u = indexin(dofs(dofmap_u), dofs(dofmap))
+    dofs_p = indexin(dofs(dofmap_p), dofs(dofmap))
+
+    ## Build block preconditioner (approximate Schur complement form)
+    ## - Pᵤ: dispacement block preconditioner from Aᵤᵤ
+    ## - Pₚ: pressure block preconditioner from approximate Schur complement
+    Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ))
+    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aₚₚ - Aₚᵤ * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ))
+
+    ## Define operator of block preconditioner
+    P⁻¹ = LinearOperator(Float64, size(A)..., false, false, (y, r) -> begin
+        yᵤ = view(y, dofs_u); yₚ = view(y, dofs_p)
+        rᵤ = view(r, dofs_u); rₚ = view(r, dofs_p)
+        yᵤ .= Pᵤ \ rᵤ
+        yₚ .= Pₚ \ (rₚ - (Aₚᵤ * Array(yᵤ)))
+    end)
+
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
     linsolve(x, A, b) = copy!(x, gmres(A, b; M=P⁻¹, itmax=100)[1])
-    Tesserae.newton!(U, U->residual(U,state), U->A;
-                     linsolve, backtracking=true, maxiter=20)
+    Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, maxiter=20, backtracking=true)
 
     ## Update the positions of grid nodes
     @. grid.x = grid.X + grid.u
@@ -356,8 +386,7 @@ function jacobian(state)
         end
     end
 
-    ## Extract the activated degrees of freedom
-    extract(A, dofmap)
+    A
 end
 
 using Test                                            #src
