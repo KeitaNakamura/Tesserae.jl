@@ -430,7 +430,7 @@ function newton!(
     δx = similar(x)
 
     # previous step values
-    x′, Fx′, fx′ = similar(x), similar(Fx), fx
+    x_prev, Fx_prev, fx_prev = similar(x), similar(Fx), fx
 
     iter = 0
     solved = f0 ≤ atol
@@ -442,28 +442,28 @@ function newton!(
     end
 
     while !(solved || giveup)
-        @. x′ = x
-        @. Fx′ = Fx
-        fx′ = fx
+        @. x_prev = x
+        @. Fx_prev = Fx
+        fx_prev = fx
 
         linsolve(fillzero!(δx), ∇F(x), Fx)
 
-        @. x = x′ - δx
-        Fx = F(x)
-        fx = norm(Fx)
-
-        isfinite(fx) || (giveup = true; break)
-
         if backtracking
-            α = one(T)
-            while fx ≥ fx′
-                α = α^2 * fx′ / 2(fx + α*fx′ - fx′)
-                @. x = x′ - α * δx
+            ϕ0 = fx_prev * fx_prev / 2
+            ϕ′0 = -fx_prev * fx_prev
+            α, ok = newton_backtracking(one(T), ϕ0, ϕ′0) do α
+                @. x = x_prev - α * δx # update `x`
                 Fx = F(x)
                 fx = norm(Fx)
+                fx * fx / 2
             end
+            ok || (giveup = true; break)
+        else
+            @. x = x_prev - δx
+            Fx = F(x)
         end
 
+        fx = norm(Fx)
         solved = fx ≤ max(atol, rtol*f0)
         giveup = ((iter += 1) ≥ maxiter || !isfinite(fx))
 
@@ -472,7 +472,7 @@ function newton!(
     verbose && println()
 
     if giveup
-        @. x = x′
+        @. x = x_prev
         F(x)
         ∇F(x)
     end
@@ -488,4 +488,55 @@ end
 function newton_print_row(maxiter, iter, f, f_f0)
     n = ndigits(maxiter)
     @printf(" %s%s  %12.2e  %15.2e\n", " "^4, lpad(iter, n), f, f_f0)
+end
+
+function newton_backtracking(ϕ, α::T, ϕ0::T, ϕ′0::T; c::T = T(1e-4), ρ_hi::T = T(0.5), ρ_lo::T = T(0.1), maxiter::Int=1000) where {T <: Real}
+    @assert 0 < ρ_lo < ρ_hi < 1
+    converged = false
+    ϕα = ϕ(α)
+    α_prev, ϕα_prev = α, ϕα
+    for step in 1:maxiter
+        ϕα ≤ ϕ0 + c*α*ϕ′0 && (converged = true; break)
+
+        α_new = step == 1 ? quad_step(α, ϕα, ϕ0, ϕ′0, ρ_hi, ρ_lo) :
+                            cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+        α_new = clamp(α_new, α*ρ_lo, α*ρ_hi)
+        α_prev, ϕα_prev = α, ϕα
+        α = α_new
+        ϕα = ϕ(α)
+
+        abs(α) < eps(T)^T(2/3) && break
+    end
+    α, converged
+end
+
+function quad_step(α, ϕα, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+    den = 2(ϕα - α*ϕ′0 - ϕ0)
+    if isfinite(den) && den > 0
+        return -α^2 * ϕ′0 / den
+    else
+        return ρ_lo * α
+    end
+end
+
+function cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+    den = α_prev^2 * α^2 * (α - α_prev)
+    if isfinite(den) && !iszero(den)
+        sα = ϕα - ϕ0 - ϕ′0*α
+        sα_prev = ϕα_prev - ϕ0 - ϕ′0*α_prev
+        a = ( α_prev^2 * sα - α^2 * sα_prev) / den
+        b = (-α_prev^3 * sα + α^3 * sα_prev) / den
+
+        !(isfinite(a) && isfinite(b)) && return ρ_lo * α
+
+        # quadratic
+        if abs(a) ≤ eps(typeof(a)) && !iszero(b)
+            return -ϕ′0 / 2b
+        end
+
+        # cubic
+        d = b^2 - 3a*ϕ′0
+        d ≥ 0 && return (-b + sqrt(d)) / 3a
+    end
+    ρ_lo * α
 end
