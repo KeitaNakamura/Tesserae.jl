@@ -303,7 +303,6 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}()]
     for k in eachindex(equations)
         eq = equations[k]
-        @assert Meta.isexpr(eq.lhs, :ref)
         eq.rhs = resolve_refs(eq.rhs, maps; replaced)
     end
 
@@ -314,7 +313,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     lmat2gmat = Any[]
     for k in eachindex(equations)
         (; lhs, rhs, op) = equations[k]
-        gmat = remove_indexing(lhs)
+        @capture(lhs, gmat_[gi_,gj_]) || error("@P2G_Matrix: Invalid global matrix expression, got `$lhs`")
+        (gi == i && gj == j) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]`, got `$lhs`")
         lmat = gensym(gmat)
         op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($gmat)))
         op == :(-=) && (rhs = :(-$rhs))
