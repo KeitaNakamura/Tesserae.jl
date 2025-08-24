@@ -12,6 +12,8 @@ include("grid.jl")
 include("interpolations.jl")
 include("shapes.jl")
 
+include("implicit.jl")
+
 include("export.jl")
 
 include("tutorials.jl")
