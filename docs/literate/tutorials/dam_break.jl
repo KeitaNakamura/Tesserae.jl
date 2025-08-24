@@ -240,9 +240,9 @@ function variational_multiscale_method(state)
 
     ## Solve nonlinear system using GMRES with incomplete LU preconditioner
     A = jacobian(state)
-    Pl = Diagonal([iszero(A[i,i]) ? 1 : inv(abs(A[i,i])) for i in 1:size(A,1)]) # Jacobi preconditioner
+    P⁻¹ = Diagonal([iszero(A[i,i]) ? 1 : inv(abs(A[i,i])) for i in 1:size(A,1)]) # Jacobi preconditioner
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-    linsolve(x, A, b) = copy!(x, gmres(A, b; M=Pl, itmax=100)[1])
+    linsolve(x, A, b) = copy!(x, gmres(A, b; M=P⁻¹, itmax=100)[1])
     Tesserae.newton!(U, U->residual(U,state), U->A;
                      linsolve, backtracking=true, maxiter=20)
 
