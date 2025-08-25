@@ -212,12 +212,12 @@ end
 function _indices_for_extract(S::AbstractMatrix, dofmap_i::Union{DofMap, Colon}, dofmap_j::Union{DofMap, Colon})
     dofmap_i isa DofMap && @assert size(S, 1) == prod(dofmap_i.masksize)
     dofmap_j isa DofMap && @assert size(S, 2) == prod(dofmap_j.masksize)
-    I = _indices_for_extract(dofmap_i)
-    J = _indices_for_extract(dofmap_j)
+    I = dofindices(dofmap_i)
+    J = dofindices(dofmap_j)
     I, J
 end
-_indices_for_extract(dofmap::DofMap) = LinearIndices(dofmap.masksize)[dofmap.indices]
-_indices_for_extract(colon::Colon) = colon
+dofindices(dofmap::DofMap) = LinearIndices(dofmap.masksize)[dofmap.indices]
+dofindices(colon::Colon) = colon
 
 function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
     if issorted(I)
