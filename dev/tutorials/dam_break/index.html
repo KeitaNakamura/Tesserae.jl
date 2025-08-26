@@ -3,6 +3,8 @@
 using LinearAlgebra
 
 using Krylov: gmres
+using LinearOperators: LinearOperator
+import AlgebraicMultigrid as AMG
 
 struct FLIP α::Float64 end
 struct TPIC end
@@ -139,24 +141,28 @@ function main(transfer = FLIP(1.0))
         @. grid.aⁿ = grid.ma / grid.m * m_mask
 
         # Update a dof map
-        dofmask = trues(3, size(grid)...)
-        for i in 1:size(dofmask,1)
-            dofmask[i,:,:] = m_mask
+        dofmask_u = falses(3, size(grid)...)
+        dofmask_p = falses(3, size(grid)...)
+        for i in 1:2
+            dofmask_u[i,:,:] = m_mask
         end
+        dofmask_p[3,:,:] = m_mask
         for i in @view eachindex(grid)[[begin,end],:] # Walls
             grid.vⁿ[i] = grid.vⁿ[i] .* (false,true)
             grid.aⁿ[i] = grid.aⁿ[i] .* (false,true)
-            dofmask[1,i] = false
+            dofmask_u[1,i] = false
         end
         for i in @view eachindex(grid)[:,begin] # Floor
             grid.vⁿ[i] = grid.vⁿ[i] .* (true,false)
             grid.aⁿ[i] = grid.aⁿ[i] .* (true,false)
-            dofmask[2,i] = false
+            dofmask_u[2,i] = false
         end
-        dofmap = DofMap(dofmask)
+        dofmap_u = DofMap(dofmask_u)
+        dofmap_p = DofMap(dofmask_p)
+        dofmap = DofMap(dofmask_u .| dofmask_p)
 
         # Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, Δt)
+        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, dofmap_u, dofmap_p, Δt)
         variational_multiscale_method(state)
 
         if transfer isa FLIP
@@ -206,7 +212,7 @@ function main(transfer = FLIP(1.0))
     end
 end</code></pre><h2 id="Variational-multiscale-method"><a class="docs-heading-anchor" href="#Variational-multiscale-method">Variational multiscale method</a><a id="Variational-multiscale-method-1"></a><a class="docs-heading-anchor-permalink" href="#Variational-multiscale-method" title="Permalink"></a></h2><pre><code class="language-julia hljs">function variational_multiscale_method(state)
 
-    (; grid, dofmap, Δt) = state
+    (; grid, dofmap, dofmap_u, dofmap_p, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
     # Compute VMS stabilization coefficients using current grid velocity,
@@ -215,12 +221,36 @@ end</code></pre><h2 id="Variational-multiscale-method"><a class="docs-heading-an
     compute_VMS_stabilization_coefficients(state)
 
     # Solve nonlinear system using GMRES with incomplete LU preconditioner
-    A = jacobian(state)
-    P⁻¹ = Diagonal([iszero(A[i,i]) ? 1 : inv(abs(A[i,i])) for i in 1:size(A,1)]) # Jacobi preconditioner
+    K = jacobian(state)
+
+    # Extract the activated degrees of freedom
+    A = extract(K, dofmap, dofmap)
+    Aᵤᵤ = extract(K, dofmap_u, dofmap_u) # dispacement-dispacement
+    Aᵤₚ = extract(K, dofmap_u, dofmap_p) # dispacement-pressure
+    Aₚᵤ = extract(K, dofmap_p, dofmap_u) # pressure-dispacement
+    Aₚₚ = extract(K, dofmap_p, dofmap_p) # pressure-pressure
+
+    # Reindex DOFs relative to the extracted `A` (not the full `K`).
+    dofs_u = indexin(dofs(dofmap_u), dofs(dofmap))
+    dofs_p = indexin(dofs(dofmap_p), dofs(dofmap))
+
+    # Build block preconditioner (approximate Schur complement form)
+    # - Pᵤ: dispacement block preconditioner from Aᵤᵤ
+    # - Pₚ: pressure block preconditioner from approximate Schur complement
+    Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ))
+    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aₚₚ - Aₚᵤ * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ))
+
+    # Define operator of block preconditioner
+    P⁻¹ = LinearOperator(Float64, size(A)..., false, false, (y, r) -&gt; begin
+        yᵤ = view(y, dofs_u); yₚ = view(y, dofs_p)
+        rᵤ = view(r, dofs_u); rₚ = view(r, dofs_p)
+        yᵤ .= Pᵤ \ rᵤ
+        yₚ .= Pₚ \ (rₚ - (Aₚᵤ * Array(yᵤ)))
+    end)
+
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
     linsolve(x, A, b) = copy!(x, gmres(A, b; M=P⁻¹, itmax=100)[1])
-    Tesserae.newton!(U, U-&gt;residual(U,state), U-&gt;A;
-                     linsolve, backtracking=true, maxiter=20)
+    Tesserae.newton!(U, U-&gt;residual(U,state), U-&gt;A; linsolve, maxiter=20, backtracking=true)
 
     # Update the positions of grid nodes
     @. grid.x = grid.X + grid.u
@@ -316,6 +346,5 @@ end</code></pre><h2 id="Jacobian-matrix"><a class="docs-heading-anchor" href="#J
         end
     end
 
-    # Extract the activated degrees of freedom
-    extract(A, dofmap)
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../collapse/">« Elasto-plastic large deformation</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Tuesday 26 August 2025 05:08">Tuesday 26 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+    A
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../collapse/">« Elasto-plastic large deformation</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Tuesday 26 August 2025 10:19">Tuesday 26 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
