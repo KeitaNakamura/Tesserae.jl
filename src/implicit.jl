@@ -471,18 +471,18 @@ function newton!(
         if backtracking
             ϕ0 = fx_prev * fx_prev / 2
             ϕ′0 = -fx_prev * fx_prev
-            α, ok = newton_backtracking(one(T), ϕ0, ϕ′0) do α
+            _, ok = newton_backtracking(one(T), ϕ0, ϕ′0) do α
                 @. x = x_prev - α * δx # update `x`
-                Fx = F(x)
-                fx = norm(Fx)
-                fx * fx / 2
+                Fx .= F(x) # update Fx in backtracking process
+                y = norm(Fx)
+                y * y / 2
             end
             ok || (giveup = true; break)
         else
             @. x = x_prev - δx
-            Fx = F(x)
         end
 
+        Fx .= F(x)
         fx = norm(Fx)
         solved = fx ≤ max(atol, rtol*f0)
         giveup = ((iter += 1) ≥ maxiter || !isfinite(fx))
