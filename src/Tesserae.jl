@@ -84,6 +84,7 @@ export
 # implicit
     DofMap,
     ndofs,
+    dofs,
     create_sparse_matrix,
     @P2G_Matrix,
 # VTK
