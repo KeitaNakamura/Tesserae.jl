@@ -22,6 +22,9 @@ import Random
 import Preferences
 import ProgressMeter
 
+# multithreading
+using TaskLocalValues
+
 # GPU
 using GPUArraysCore
 using KernelAbstractions

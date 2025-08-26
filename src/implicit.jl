@@ -318,8 +318,12 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         lmat = gensym(gmat)
         op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($gmat)))
         op == :(-=) && (rhs = :(-$rhs))
+        lmat_dims = Symbol(lmat, :dims)
         push!(gmats, gmat)
-        push!(lmat_init, :($lmat = Array{eltype($gmat)}(undef, length($ldofs_i), length($ldofs_j))))
+        push!(lmat_init, quote
+            $lmat_dims = length($ldofs_i), length($ldofs_j)
+            $lmat = get!(()->Array{eltype($gmat)}(undef, $lmat_dims), $(Symbol(gmat,:dict))[], $lmat_dims)
+        end)
         push!(lmat_asm, :(@inbounds $lmat[$I,$J] .= $trySArray($rhs))) # converting `Tensor` to `SArray` is faster for setindex!
         push!(lmat2gmat, :(Tesserae.add!($gmat, $dofs_i, $dofs_j, $lmat)))
     end
@@ -350,14 +354,30 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         body = :(@inbounds $body)
     end
 
+    # cache for local matrices
+    arraydicts = Any[]
+    for gmat in gmats
+        arraydict = Symbol(gmat, :dict)
+        Tarraydict = Symbol(:T, arraydict)
+        ex = quote
+            $Tarraydict = Dict{Tuple{Int,Int}, Matrix{eltype($gmat)}}
+            $arraydict = $TaskLocalValue{$Tarraydict}(() -> $Tarraydict())
+            $arraydict[] # initialize
+        end
+        push!(arraydicts, ex)
+    end
+
     body = quote
-        $check_arguments_for_P2G_Matrix($grid_i, $particles, $weights_i, $partition)
-        $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
-        $(fillzeros...)
-        $gdofs_i = LinearIndices((size($(gmats[1]),1)÷length($grid_i), size($grid_i)...))
-        $gdofs_j = LinearIndices((size($(gmats[1]),2)÷length($grid_j), size($grid_j)...))
-        @assert all(==((length($gdofs_i), length($gdofs_j))), map(size, ($(gmats...),)))
-        $P2G((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $p) -> $body, $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
+        let
+            $(arraydicts...)
+            $check_arguments_for_P2G_Matrix($grid_i, $particles, $weights_i, $partition)
+            $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
+            $(fillzeros...)
+            $gdofs_i = LinearIndices((size($(gmats[1]),1)÷length($grid_i), size($grid_i)...))
+            $gdofs_j = LinearIndices((size($(gmats[1]),2)÷length($grid_j), size($grid_j)...))
+            @assert all(==((length($gdofs_i), length($gdofs_j))), map(size, ($(gmats...),)))
+            $P2G((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $p) -> $body, $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
+        end
     end
 
     esc(body)
@@ -365,8 +385,8 @@ end
 
 @inline _get_neighboringnodes(iw_i, grid_i, iw_j, grid_j, ::Val{true}) = (@_propagate_inbounds_meta; (neighboringnodes(iw_i, grid_i), neighboringnodes(iw_j, grid_j)))
 @inline _get_neighboringnodes(iw_i, grid_i, iw_j, grid_j, ::Val{false}) = (@_propagate_inbounds_meta; inds=neighboringnodes(iw_i, grid_i); (inds, inds))
-@inline _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j, ::Val{true}) = (@_propagate_inbounds_meta; (collect(vec(view(gdofs_i, :, gridindices_i))), collect(vec(view(gdofs_j, :, gridindices_j)))))
-@inline _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j, ::Val{false}) = (@_propagate_inbounds_meta; dofs=collect(vec(view(gdofs_j, :, gridindices_j))); (dofs, dofs))
+@inline _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j, ::Val{true}) = (@_propagate_inbounds_meta; (vec(gdofs_i[:, gridindices_i]), vec(gdofs_j[:, gridindices_j])))
+@inline _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j, ::Val{false}) = (@_propagate_inbounds_meta; dofs=vec(gdofs_j[:, gridindices_j]); (dofs, dofs))
 
 function unpair2(ex::Expr)
     if @capture(ex, lhs_Symbol => (rhs1_Symbol, rhs2_Symbol))
