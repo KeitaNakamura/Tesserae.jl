@@ -16,6 +16,7 @@
 
 using Tesserae
 using LinearAlgebra
+using SparseArrays
 
 using Krylov: gmres
 using LinearOperators: LinearOperator
@@ -113,6 +114,8 @@ function main(transfer = FLIP(1.0))
     ## Sparse matrix
     A = create_sparse_matrix(interp, grid.X; ndofs=3)
 
+    partition = ColorPartition(grid.X)
+
     ## Output
     outdir = mkpath(joinpath(tempdir(), "dam_break"))
     pvdfile = joinpath(outdir, "paraview")
@@ -139,6 +142,7 @@ function main(transfer = FLIP(1.0))
                 update!(weights_cell[cell], xc, grid.X, activenodes)
             end
         end
+        update!(partition, particles.x)
 
         if transfer isa FLIP
             @P2G grid=>i particles=>p weights=>ip begin
@@ -181,7 +185,7 @@ function main(transfer = FLIP(1.0))
         dofmap = DofMap(dofmask_u .| dofmask_p)
 
         ## Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, dofmap_u, dofmap_p, Δt)
+        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, dofmap_u, dofmap_p, Δt, partition)
         variational_multiscale_method(state)
 
         if transfer isa FLIP
@@ -204,10 +208,6 @@ function main(transfer = FLIP(1.0))
         ## Particle shifting based on the δ-correction
         particle_shifting(state)
 
-        ## Remove particles that accidentally move outside of the mesh
-        outside = findall(x->!isinside(x, grid.X), particles.x)
-        deleteat!(particles, outside)
-
         t += Δt
         step += 1
 
@@ -227,7 +227,12 @@ function main(transfer = FLIP(1.0))
                     pvd[t] = vtm
                 end
             end
+            reorder_particles!(particles, partition)
         end
+
+        ## Remove particles that accidentally move outside of the mesh
+        outside = findall(x->!isinside(x, grid.X), particles.x)
+        deleteat!(particles, outside)
     end
     # sum(particles.p) / length(particles) #src
     sum(particles.x) / length(particles) #src
@@ -255,6 +260,10 @@ function variational_multiscale_method(state)
     Aₚᵤ = extract(K, dofmap_p, dofmap_u) # pressure-dispacement
     Aₚₚ = extract(K, dofmap_p, dofmap_p) # pressure-pressure
 
+    ## For multithreading
+    Aᵀ = sparse(A')
+    opA = LinearOperator(Float64, size(Aᵀ)..., false, false, (y, v) -> threaded_mul!(y, Aᵀ, v))
+
     ## Reindex DOFs relative to the extracted `A` (not the full `K`).
     dofs_u = indexin(dofs(dofmap_u), dofs(dofmap))
     dofs_p = indexin(dofs(dofmap_p), dofs(dofmap))
@@ -262,6 +271,8 @@ function variational_multiscale_method(state)
     ## Build block preconditioner (approximate Schur complement form)
     ## - Pᵤ: dispacement block preconditioner from Aᵤᵤ
     ## - Pₚ: pressure block preconditioner from approximate Schur complement
+    xᵤ = zeros(size(Aᵤᵤ, 1))
+    xₚ = zeros(size(Aₚₚ, 1))
     function coarse_solver(A)
         F = cholesky(Symmetric(A); check=false)
         !issuccess(F) && (F = qr(A))
@@ -274,8 +285,8 @@ function variational_multiscale_method(state)
     for (j,c) in enumerate(comps)
         B[c,j] .= 1 / sqrt(length(c))
     end
-    Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ; coarse_solver, max_coarse=10000))
-    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(S̃; B, coarse_solver, max_coarse=10000))
+    Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ; presmoother=ThreadedJacobi(xᵤ), postsmoother=ThreadedJacobi(xᵤ), coarse_solver, max_coarse=10000))
+    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(S̃; B, presmoother=ThreadedJacobi(xₚ), postsmoother=ThreadedJacobi(xₚ), coarse_solver, max_coarse=10000))
 
     ## Define operator of block preconditioner
     P⁻¹ = LinearOperator(Float64, size(A)..., false, false, (y, r) -> begin
@@ -287,7 +298,7 @@ function variational_multiscale_method(state)
 
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
     linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹, verbose=10)[1])
-    Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, verbose=true, backtracking=true)
+    Tesserae.newton!(U, U->residual(U,state), U->opA; linsolve, maxiter=20, verbose=true, backtracking=true)
 
     ## Update the positions of grid nodes
     @. grid.x = grid.X + grid.u
@@ -348,7 +359,7 @@ end
 # ## Residual vector
 
 function residual(U, state)
-    (; grid, particles, weights, μ, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, μ, β, γ, dofmap, Δt, partition) = state
 
     ## Map `U` to grid dispacement and pressure
     dofmap(grid.u_p) .= U
@@ -363,7 +374,7 @@ function residual(U, state)
     compute_VMS_stabilization_coefficients(state)
 
     ## Compute residual values
-    @G2P2G grid=>i particles=>p weights=>ip begin
+    @threaded @G2P2G grid=>i particles=>p weights=>ip partition begin
         a[p]  = @∑ a[i] * S[ip]
         p[p]  = @∑ p[i] * S[ip]
         ∇v[p] = @∑ v[i] ⊗ ∇S[ip]
@@ -381,12 +392,12 @@ end
 # ## Jacobian matrix
 
 function jacobian(state)
-    (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt) = state
+    (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt, partition) = state
 
     ## Construct the Jacobian matrix
     cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
     I(i,j) = ifelse(i===j, one(Mat{2,2}), zero(Mat{2,2}))
-    @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+    @threaded @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
         A[i,j] = @∑ begin
             Kᵤᵤ = (γ/(β*Δt) * ∇S[ip] ⊡ cₚ ⊡ ∇S[jp]) * V[p] + 1/(β*Δt^2) * I(i,j) * m[p] * S[jp]
             Kᵤₚ = -∇S[ip] * S[jp] * V[p]
@@ -400,6 +411,81 @@ function jacobian(state)
     end
 
     A
+end
+
+function threaded_mul!(y::Vector{T}, A::SparseMatrixCSC{T}, x::Vector{T}) where T <: Number
+    @threaded for i = 1 : A.n
+        tmp = zero(T)
+        @inbounds for j = A.colptr[i] : (A.colptr[i+1] - 1)
+            tmp += A.nzval[j] * x[A.rowval[j]]
+        end
+        @inbounds y[i] = tmp
+    end
+    return y
+end
+function threaded_mul!(y::Vector{T}, A::Adjoint{T, <: SparseMatrixCSC{T}}, x::Vector{T}) where T <: Number
+    threaded_mul!(y, parent(A), x)
+end
+
+struct ThreadedMatrix{T, M <: AbstractMatrix{T}} <: AbstractMatrix{T}
+    data::M
+end
+Base.size(M::ThreadedMatrix) = size(M.data)
+LinearAlgebra.mul!(Y::AbstractVector, A::ThreadedMatrix, B::AbstractVector) = threaded_mul!(Y, A.data, B)
+
+function threaded_amg(ml)
+    levels = [AMG.Level(ThreadedMatrix(l.A), l.P, ThreadedMatrix(l.R)) for l in ml.levels]
+    AMG.MultiLevel(
+        levels,
+        ThreadedMatrix(ml.final_A),
+        ml.coarse_solver,
+        ml.presmoother,
+        ml.postsmoother,
+        ml.workspace,
+    )
+end
+
+struct ThreadedJacobi{T,TX}
+    ω::T
+    temp::TX
+    iter::Int
+end
+ThreadedJacobi(ω, x::TX; iter=1) where {T, TX<:AbstractArray{T}} = ThreadedJacobi{T,TX}(ω, similar(x), iter)
+ThreadedJacobi(x::TX, ω=0.5; iter=1) where {T, TX<:AbstractArray{T}} = ThreadedJacobi{T,TX}(ω, similar(x), iter)
+
+(jacobi::ThreadedJacobi)(A::ThreadedMatrix, x, b) = jacobi(A.data, x, b)
+function (jacobi::ThreadedJacobi)(A, x, b)
+
+    ω = jacobi.ω
+    one = Base.one(eltype(A))
+    temp = jacobi.temp
+    z = zero(eltype(A))
+
+    for k in 1:jacobi.iter
+        for col = 1:size(x, 2)
+            for i = 1:size(A, 1)
+                @inbounds temp[i, col] = x[i, col]
+            end
+
+            @threaded for i = 1:size(A, 1)
+                @inbounds begin
+                    rsum = z
+                    diag = z
+
+                    for j in nzrange(A, i)
+                        row = A.rowval[j]
+                        val = A.nzval[j]
+
+                        diag = ifelse(row == i, val, diag)
+                        rsum += ifelse(row == i, z, val * temp[row, col])
+                    end
+
+                    xcand = (one - ω) * temp[i, col] + ω * ((b[i, col] - rsum) / diag)
+                    x[i, col] = ifelse(diag == 0, x[i, col], xcand)
+                end
+            end
+        end
+    end
 end
 
 using Test                                            #src
