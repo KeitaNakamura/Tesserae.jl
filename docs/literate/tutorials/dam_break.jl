@@ -6,7 +6,7 @@
 #
 # | # Particles | # Iterations | Execution time (w/o output) |
 # | ----------- | ------------ | --------------------------- |
-# | 28k         | 3.5k         | 11 min                      |
+# | 28k         | 3.5k         | 12 min                      |
 #
 # This example employs stabilized mixed MPM with the variational multiscale method[^1].
 #
@@ -262,7 +262,7 @@ function variational_multiscale_method(state)
     ## - Pᵤ: dispacement block preconditioner from Aᵤᵤ
     ## - Pₚ: pressure block preconditioner from approximate Schur complement
     Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ))
-    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aₚₚ - Aₚᵤ * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ))
+    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aₚₚ - Diagonal(Aₚᵤ * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ)))
 
     ## Define operator of block preconditioner
     P⁻¹ = LinearOperator(Float64, size(A)..., false, false, (y, r) -> begin
@@ -273,7 +273,7 @@ function variational_multiscale_method(state)
     end)
 
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-    linsolve(x, A, b) = copy!(x, gmres(A, b; M=P⁻¹, itmax=100)[1])
+    linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹, itmax=100)[1])
     Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, maxiter=20, backtracking=true)
 
     ## Update the positions of grid nodes
