@@ -154,7 +154,7 @@ function main(transfer = FLIP(1.0))
         end
 
         m_tol = sqrt(eps(eltype(grid.m))) * maximum(grid.m)
-        m_mask = @. !(abs(grid.m) ≤ m_tol)
+        m_mask = @. !(grid.m ≤ m_tol)
         @. grid.vⁿ = grid.mv / grid.m * m_mask
         @. grid.aⁿ = grid.ma / grid.m * m_mask
 
@@ -236,7 +236,7 @@ end
 
 function variational_multiscale_method(state)
 
-    (; grid, dofmap, dofmap_u, dofmap_p, Δt) = state
+    (; grid, dofmap, dofmap_u, dofmap_p, β, γ, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
     ## Compute VMS stabilization coefficients using current grid velocity,
@@ -261,8 +261,11 @@ function variational_multiscale_method(state)
     ## Build block preconditioner (approximate Schur complement form)
     ## - Pᵤ: dispacement block preconditioner from Aᵤᵤ
     ## - Pₚ: pressure block preconditioner from approximate Schur complement
+    α = -γ/(β*Δt)
+    nₚₚ = size(Aₚₚ, 1)
+    Iϵ = sqrt(eps(Float64)) * tr(Aₚₚ) / nₚₚ * Diagonal(ones(nₚₚ))
     Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ))
-    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aₚₚ - Diagonal(Aₚᵤ * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ)))
+    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aₚₚ - (α*Aᵤₚ') * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ + Iϵ))
 
     ## Define operator of block preconditioner
     P⁻¹ = LinearOperator(Float64, size(A)..., false, false, (y, r) -> begin
@@ -273,7 +276,7 @@ function variational_multiscale_method(state)
     end)
 
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-    linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹, itmax=100)[1])
+    linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹)[1])
     Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, maxiter=20, backtracking=true)
 
     ## Update the positions of grid nodes
