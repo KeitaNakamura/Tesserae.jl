@@ -20,6 +20,7 @@ using LinearAlgebra
 using Krylov: gmres
 using LinearOperators: LinearOperator
 import AlgebraicMultigrid as AMG
+using Graphs: SimpleGraph, connected_components
 
 struct FLIP α::Float64 end
 struct TPIC end
@@ -113,7 +114,7 @@ function main(transfer = FLIP(1.0))
     A = create_sparse_matrix(interp, grid.X; ndofs=3)
 
     ## Output
-    outdir = mkpath(joinpath("output", "dam_break"))
+    outdir = mkpath(joinpath(tempdir(), "dam_break"))
     pvdfile = joinpath(outdir, "paraview")
     closepvd(openpvd(pvdfile)) # Create file
 
@@ -236,7 +237,7 @@ end
 
 function variational_multiscale_method(state)
 
-    (; grid, dofmap, dofmap_u, dofmap_p, Δt) = state
+    (; grid, dofmap, dofmap_u, dofmap_p, β, γ, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
     ## Compute VMS stabilization coefficients using current grid velocity,
@@ -261,20 +262,32 @@ function variational_multiscale_method(state)
     ## Build block preconditioner (approximate Schur complement form)
     ## - Pᵤ: dispacement block preconditioner from Aᵤᵤ
     ## - Pₚ: pressure block preconditioner from approximate Schur complement
-    Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ))
-    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aₚₚ - Diagonal(Aₚᵤ * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ)))
+    function coarse_solver(A)
+        F = cholesky(Symmetric(A); check=false)
+        !issuccess(F) && (F = qr(A))
+        (x, b) -> copy!(x, F \ b)
+    end
+    δI = cbrt(eps(Float64)) * tr(Aₚₚ) / size(Aₚₚ, 1) * I
+    S̃ = Aₚₚ - (-γ/(β*Δt)*Aᵤₚ') * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ + δI
+    comps = connected_components(SimpleGraph(Symmetric(S̃)))
+    B = zeros(size(S̃,1), length(comps))
+    for (j,c) in enumerate(comps)
+        B[c,j] .= 1 / sqrt(length(c))
+    end
+    Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ; coarse_solver, max_coarse=10000))
+    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(S̃; B, coarse_solver, max_coarse=10000))
 
     ## Define operator of block preconditioner
     P⁻¹ = LinearOperator(Float64, size(A)..., false, false, (y, r) -> begin
         yᵤ = view(y, dofs_u); yₚ = view(y, dofs_p)
         rᵤ = view(r, dofs_u); rₚ = view(r, dofs_p)
-        yᵤ .= Pᵤ \ rᵤ
+        yᵤ .= Pᵤ \ Array(rᵤ)
         yₚ .= Pₚ \ (rₚ - (Aₚᵤ * Array(yᵤ)))
     end)
 
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-    linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹, itmax=100)[1])
-    Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, maxiter=20, backtracking=true)
+    linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹, verbose=10)[1])
+    Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, verbose=true, backtracking=true)
 
     ## Update the positions of grid nodes
     @. grid.x = grid.X + grid.u
