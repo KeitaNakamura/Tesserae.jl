@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Heat problem using FEM · Tesserae.jl</title><meta name="title" content="Heat problem using FEM · Tesserae.jl"/><meta property="og:title" content="Heat problem using FEM · Tesserae.jl"/><meta property="twitter:title" content="Heat problem using FEM · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Tesserae.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started/">Getting started</a></li><li><a class="tocitem" href="../collision/">Transfer schemes</a></li><li><a class="tocitem" href="../cpdi/">CPDI</a></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox"/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../implicit/">Implicit formulation</a></li><li><a class="tocitem" href="../implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../dam_break/">Incompressible fluid flow</a></li><li><a class="tocitem" href="../rigid_body_contact/">Frictional contact with rigid body</a></li><li><a class="tocitem" href="../taylor_impact/">Multi-threading simualtion</a></li><li><input class="collapse-toggle" id="menuitem-2-10" type="checkbox" checked/><label class="tocitem" for="menuitem-2-10"><span class="docs-label">FEM (experimental)</span><i class="docs-chevron"></i></label><ul class="collapsed"><li class="is-active"><a class="tocitem" href>Heat problem using FEM</a></li></ul></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../mesh/">Mesh</a></li><li><a class="tocitem" href="../../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../../interpolation/">Interpolation</a></li><li><a class="tocitem" href="../../transfer/">Transfer between grid and particles</a></li><li><a class="tocitem" href="../../implicit_utils/">Functionalities for implicit methods</a></li><li><a class="tocitem" href="../../multithreading/">Multi-threading</a></li><li><a class="tocitem" href="../../export/">Export</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li><a class="is-disabled">FEM (experimental)</a></li><li class="is-active"><a href>Heat problem using FEM</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Heat problem using FEM</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/literate/tutorials/heat.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Heat-problem-using-FEM"><a class="docs-heading-anchor" href="#Heat-problem-using-FEM">Heat problem using FEM</a><a id="Heat-problem-using-FEM-1"></a><a class="docs-heading-anchor-permalink" href="#Heat-problem-using-FEM" title="Permalink"></a></h1><img src="https://github.com/user-attachments/assets/74a9fad8-da97-4ce6-8217-838fe96660ac" width="400"/><pre><code class="language-julia hljs">using Tesserae
+using LinearAlgebra
+
+function main()
+
+    # Properties for grid and Gauss points
+    GridProp = @NamedTuple begin
+        x :: Vec{2, Float64} # Coordinate
+        u :: Float64         # Temperature
+        f :: Float64         # Heat source
+    end
+    PointProp = @NamedTuple begin
+        x :: Vec{2, Float64} # Coordinate
+        V :: Float64         # Weighted det(J) for Gauss–Legendre quadrature
+    end
+
+    # FEM mesh using UnstructuredMesh
+    mesh = UnstructuredMesh(CartesianMesh(0.1, (-1,1), (-1,1)))
+    grid = generate_grid(GridProp, mesh)
+
+    # Integration points
+    points = generate_particles(PointProp, mesh)
+
+    # Interpolation
+    weights = generate_interpolation_weights(mesh, size(points); name=Val(:N))
+    feupdate!(weights, mesh; volume=points.V) # Use `feupdate!` instead of `update!`
+
+    # Global matrix
+    ndofs = 1 # Degrees of freedom per node
+    K = create_sparse_matrix(mesh; ndofs)
+
+    # Create DOF map considering boundary conditions
+    dofmask = trues(ndofs, size(grid)...)
+    dofmask[1, findall(x -&gt; x[1]==-1 || x[1]==1, mesh)] .= false
+    dofmask[1, findall(x -&gt; x[2]==-1 || x[2]==1, mesh)] .= false
+    dofmap = DofMap(dofmask)
+
+    # Construct global vector (on grid) and matrix
+    @P2G grid=&gt;i points=&gt;p weights=&gt;ip begin
+        f[i] = @∑ N[ip] * V[p]
+    end
+    @P2G_Matrix grid=&gt;(i,j) points=&gt;p weights=&gt;(ip,jp) begin
+        K[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
+    end
+
+    # Solve the equation
+    dofmap(grid.u) .= Symmetric(extract(K, dofmap)) \ Array(dofmap(grid.f))
+
+    # Output the results
+    openvtk(&quot;heat&quot;, mesh) do vtk
+        vtk[&quot;Temperature&quot;] = grid.u
+    end
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../taylor_impact/">« Multi-threading simualtion</a><a class="docs-footer-nextpage" href="../../mesh/">Mesh »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Tuesday 7 October 2025 13:02">Tuesday 7 October 2025</span>. Using Julia version 1.11.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
