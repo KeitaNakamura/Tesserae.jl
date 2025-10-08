@@ -6,7 +6,7 @@
 #
 # | # Particles | # Iterations | Execution time (w/o output) |
 # | ----------- | ------------ | --------------------------- |
-# | 28k         | 3.5k         | 12 min                      |
+# | 28k         | 3.5k         | 10 min                      |
 #
 # This example employs stabilized mixed MPM with the variational multiscale method[^1].
 #
@@ -153,8 +153,8 @@ function main(transfer = FLIP(1.0))
             end
         end
 
-        m_tol = sqrt(eps(eltype(grid.m))) * maximum(grid.m)
-        m_mask = @. !(abs(grid.m) ≤ m_tol)
+        m_tol = 1e-4 * sum(grid.m) / count(!iszero, grid.m)
+        m_mask = @. !(grid.m ≤ m_tol)
         @. grid.vⁿ = grid.mv / grid.m * m_mask
         @. grid.aⁿ = grid.ma / grid.m * m_mask
 
@@ -236,15 +236,13 @@ end
 
 function variational_multiscale_method(state)
 
-    (; grid, dofmap, dofmap_u, dofmap_p, Δt) = state
+    (; grid, dofmap, dofmap_u, dofmap_p, β, γ, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
     ## Compute VMS stabilization coefficients using current grid velocity,
     ## which is used for Jacobian matrix
     grid.v .= grid.vⁿ
     compute_VMS_stabilization_coefficients(state)
-
-    ## Solve nonlinear system using GMRES with incomplete LU preconditioner
     K = jacobian(state)
 
     ## Extract the activated degrees of freedom
@@ -261,20 +259,23 @@ function variational_multiscale_method(state)
     ## Build block preconditioner (approximate Schur complement form)
     ## - Pᵤ: dispacement block preconditioner from Aᵤᵤ
     ## - Pₚ: pressure block preconditioner from approximate Schur complement
+    S̃ = Aₚₚ - (-γ/(β*Δt)*Aᵤₚ') * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ
+    S̃ += 1e-4 * tr(S̃) / size(S̃,1) * I
     Pᵤ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aᵤᵤ))
-    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(Aₚₚ - Diagonal(Aₚᵤ * inv(Diagonal(Aᵤᵤ)) * Aᵤₚ)))
+    Pₚ = AMG.aspreconditioner(AMG.smoothed_aggregation(S̃))
 
     ## Define operator of block preconditioner
     P⁻¹ = LinearOperator(Float64, size(A)..., false, false, (y, r) -> begin
         yᵤ = view(y, dofs_u); yₚ = view(y, dofs_p)
         rᵤ = view(r, dofs_u); rₚ = view(r, dofs_p)
-        yᵤ .= Pᵤ \ rᵤ
+        yᵤ .= Pᵤ \ Array(rᵤ)
         yₚ .= Pₚ \ (rₚ - (Aₚᵤ * Array(yᵤ)))
     end)
 
+    ## Solve nonlinear system using GMRES
     U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
-    linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹, itmax=100)[1])
-    Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, maxiter=20, backtracking=true)
+    linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹)[1])
+    Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, backtracking=true)
 
     ## Update the positions of grid nodes
     @. grid.x = grid.X + grid.u
