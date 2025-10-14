@@ -15,35 +15,31 @@ struct KernelCorrection{K <: Kernel, P <: Polynomial} <: Interpolation
     poly::P
 end
 
-KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(MultiLinear()))
+KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(AdaptiveLinear()))
 
 get_kernel(kc::KernelCorrection) = kc.kernel
 get_polynomial(kc::KernelCorrection) = kc.poly
 kernel_support(kc::KernelCorrection) = kernel_support(get_kernel(kc))
 @inline neighboringnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(kc), pt, mesh)
 
-# general version
 @inline function update_property!(iw::InterpolationWeight, kc::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(iw)
     isnearbounds = size(values(iw,1)) != size(indices) || !alltrue(filter, indices)
     if isnearbounds
         update_property!(iw, WLS(get_kernel(kc), get_polynomial(kc)), pt, mesh, filter)
     else
-        @inbounds @simd for ip in eachindex(indices)
-            i = indices[ip]
-            set_values!(iw, ip, values(derivative_order(iw), get_kernel(kc), pt, mesh, i))
-        end
+        update_property!(iw, get_kernel(kc), pt, mesh)
     end
 end
 
-# fast version for B-spline kernels
-@inline function update_property!(iw::InterpolationWeight, kc::KernelCorrection{<: AbstractBSpline}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline function update_property!(iw::InterpolationWeight, kc::KernelCorrection{<: Kernel, Polynomial{AdaptiveLinear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(iw)
-    isnearbounds = size(values(iw,1)) != size(indices) || !alltrue(filter, indices)
-    if isnearbounds
-        update_property!(iw, WLS(get_kernel(kc), get_polynomial(kc)), pt, mesh, filter)
+    if size(values(iw,1)) != size(indices)
+        update_property!(iw, WLS(get_kernel(kc), Polynomial(MultiLinear())), pt, mesh, filter)
+    elseif !alltrue(filter, indices)
+        update_property!(iw, WLS(get_kernel(kc), Polynomial(Linear())), pt, mesh, filter)
     else
-        set_values!(iw, values(derivative_order(iw), get_kernel(kc), getx(pt), mesh))
+        update_property!(iw, get_kernel(kc), pt, mesh)
     end
 end
 

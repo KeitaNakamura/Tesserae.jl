@@ -1,7 +1,8 @@
 struct MultiLinear end
 struct MultiQuadratic end
+struct AdaptiveLinear end
 
-struct Polynomial{D <: Union{Degree, MultiLinear, MultiQuadratic}}
+struct Polynomial{D <: Union{Degree, MultiLinear, MultiQuadratic, AdaptiveLinear}}
     degree::D
 end
 Base.show(io::IO, poly::Polynomial) = print(io, Polynomial, "(", poly.degree, ")")
