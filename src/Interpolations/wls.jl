@@ -64,14 +64,14 @@ end
     poly = get_polynomial(wls)
     xₚ = getx(pt)
 
-    P₀__ = values(derivative_order(iw), poly, zero(xₚ))
+    P₀s = values(derivative_order(iw), poly, zero(xₚ))
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]
         w = values(iw,1)[ip]
         P = value(poly, xᵢ - xₚ)
         wq = w * (M⁻¹ * P)
-        set_values!(iw, ip, map(P₀->wq⊡P₀, P₀__))
+        set_values!(iw, ip, map(P₀->wq⊡P₀, P₀s))
     end
 end
 
@@ -86,18 +86,18 @@ end
             # For dim > 1: decompose into 1D Linear along each axis,
             # compute axis-wise contribution, then combine by tensor product.
             order = derivative_order(iw)
-            vals′ = ntuple(Val(dim)) do d
+            vals_1ds = ntuple(Val(dim)) do d
                 T = eltype(values(iw, 1))
-                mesh′ = axismesh(mesh, d)
-                prop′ = create_property(MArray, Vec{1,T}, wls_1d; derivative=order, name=Val(propertynames(iw)[1]))
-                indices′ = CartesianIndices((neighboringnodes(iw).indices[d],))
-                iw′ = InterpolationWeight(wls_1d, prop′, Scalar(indices′))
-                update_property!(iw′, wls_1d, Vec(getx(pt)[d]), mesh′)
+                mesh_1d = axismesh(mesh, d)
+                prop_1d = create_property(MArray, Vec{1,T}, wls_1d; derivative=order, name=Val(propertynames(iw)[1]))
+                indices_1d = CartesianIndices((neighboringnodes(iw).indices[d],))
+                iw_1d = InterpolationWeight(wls_1d, prop_1d, Scalar(indices_1d))
+                update_property!(iw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d)
                 # Get scalar value from Vec{1} for each property.
-                _extract_scalar_values(order, iw′)
+                _extract_scalar_values(order, iw_1d)
             end
             # Combine axis-wise results into MultiLinear tensor product.
-            set_values!(iw, _prod_each_dimension(order, vals′))
+            set_values!(iw, _prod_each_dimension(order, vals_1ds))
         end
     else
         # Fallback for masked cases: use general method.
