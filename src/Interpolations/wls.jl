@@ -89,9 +89,9 @@ end
             vals′ = ntuple(Val(dim)) do d
                 T = eltype(values(iw, 1))
                 mesh′ = axismesh(mesh, d)
-                prop′ = create_property(MArray, Vec{1,T}, wls_1d; derivative=order, name=Val(propertynames(iw)[1]))
+                prop′ = create_property(MArray, @NamedTuple{}, Vec{1,T}, wls_1d; derivative=order, name=Val(propertynames(iw)[1]))
                 indices′ = CartesianIndices((neighboringnodes(iw).indices[d],))
-                iw′ = InterpolationWeight(wls_1d, prop′, Scalar(indices′))
+                iw′ = InterpolationWeight(wls_1d, derivative_order(iw), prop′, Scalar(indices′))
                 update_property!(iw′, wls_1d, Vec(getx(pt)[d]), mesh′)
                 # Get scalar value from Vec{1} for each property.
                 _extract_scalar_values(order, iw′)

@@ -13,16 +13,24 @@ initial_neighboringnodes(shape::Shape, mesh::UnstructuredMesh) = zero(SVector{nl
 
 propsize(interp::Interpolation, ::Val{dim}) where{dim} = nfill(kernel_support(interp), Val(dim))
 propsize(shape::Shape, ::Val)  = (nlocalnodes(shape),)
-function create_property(::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
-    map(Array, create_property(MArray, Vec{dim, T}, interp; derivative, name))
+
+function create_property(extra::Type, ::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
+    map(Array, create_property(MArray, extra, Vec{dim, T}, interp; derivative, name))
 end
-@generated function create_property(::Type{MArray}, ::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
+@generated function create_property(::Type{MArray}, extra::Type, ::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
     quote
         dims = propsize(interp, Val(dim))
         names = @ntuple $(k+1) i -> create_name(Order(i-1), name)
         vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), MArray{Tuple{dims...}})
-        NamedTuple{names}(vals)
+        merge(NamedTuple{names}(vals), create_extra_property(MArray, extra, dims))
     end
+end
+
+function create_extra_property(extra::Type, dims)
+    map(Array, create_extra_property(MArray, extra, dims))
+end
+function create_extra_property(::Type{MArray}, extra::Type{NT}, dims) where {NT}
+    NamedTuple{fieldnames(NT)}(fill.(zero.(fieldtypes(NT)), MArray{Tuple{dims...}}))
 end
 
 create_elval(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
@@ -99,26 +107,31 @@ julia> sum(eachindex(nodeindices)) do ip # linear field reproduction
 true
 ```
 """
-struct InterpolationWeight{Interp, Prop <: NamedTuple, Indices <: AbstractArray{<: Any}}
+struct InterpolationWeight{Interp, k, Prop <: NamedTuple, Indices <: AbstractArray{<: Any}}
     interp::Interp
+    deriv::Order{k}
     prop::Prop
     indices::Indices
 end
 
 # AbstractMesh
-function _InterpolationWeight(::Type{T}, interp, mesh::AbstractMesh{dim}; kwargs...) where {T, dim}
-    prop = create_property(Vec{dim, T}, interp; kwargs...)
+function _InterpolationWeight(extra::Type, ::Type{T}, interp, mesh::AbstractMesh{dim}, args...; derivative::Order=Order(1), kwargs...) where {T <: AbstractFloat, dim}
+    prop = create_property(extra, Vec{dim, T}, interp, args...; derivative, kwargs...)
     indices = initial_neighboringnodes(interp, mesh)
-    InterpolationWeight(interp, prop, fill(indices))
+    InterpolationWeight(interp, derivative, prop, fill(indices))
 end
 
 # CartesianMesh
-InterpolationWeight(::Type{T}, interp::Interpolation, mesh::CartesianMesh; kwargs...) where {T} = _InterpolationWeight(T, interp, mesh; kwargs...)
-InterpolationWeight(interp::Interpolation, mesh::CartesianMesh; kwargs...) = _InterpolationWeight(Float64, interp, mesh; kwargs...)
+InterpolationWeight(extra::Type, ::Type{T}, interp::Interpolation, mesh::CartesianMesh, args...; kwargs...) where {T <: AbstractFloat} = _InterpolationWeight(extra, T, interp, mesh, args...; kwargs...)
+InterpolationWeight(extra::Type, interp::Interpolation, mesh::CartesianMesh, args...; kwargs...) = _InterpolationWeight(extra, Float64, interp, mesh, args...; kwargs...)
+InterpolationWeight(::Type{T}, interp::Interpolation, mesh::CartesianMesh, args...; kwargs...) where {T <: AbstractFloat} = _InterpolationWeight(@NamedTuple{}, T, interp, mesh, args...; kwargs...)
+InterpolationWeight(interp::Interpolation, mesh::CartesianMesh, args...; kwargs...) = _InterpolationWeight(@NamedTuple{}, Float64, interp, mesh, args...; kwargs...)
 
 # UnstructuredMesh
-InterpolationWeight(::Type{T}, mesh::UnstructuredMesh; kwargs...) where {T} = _InterpolationWeight(T, cellshape(mesh), mesh; kwargs...)
-InterpolationWeight(mesh::UnstructuredMesh; kwargs...) = InterpolationWeight(Float64, mesh; kwargs...)
+InterpolationWeight(extra::Type, ::Type{T}, mesh::UnstructuredMesh; kwargs...) where {T <: AbstractFloat} = _InterpolationWeight(extra, T, cellshape(mesh), mesh, args...; kwargs...)
+InterpolationWeight(extra::Type, mesh::UnstructuredMesh; kwargs...) = _InterpolationWeight(extra, Float64, cellshape(mesh), mesh, args...; kwargs...)
+InterpolationWeight(::Type{T}, mesh::UnstructuredMesh; kwargs...) where {T <: AbstractFloat} = _InterpolationWeight(@NamedTuple{}, T, cellshape(mesh), mesh, args...; kwargs...)
+InterpolationWeight(mesh::UnstructuredMesh; kwargs...) = InterpolationWeight(@NamedTuple{}, Float64, mesh, args...; kwargs...)
 
 Base.propertynames(iw::InterpolationWeight) = propertynames(getfield(iw, :prop))
 @inline function Base.getproperty(iw::InterpolationWeight, name::Symbol)
@@ -160,14 +173,9 @@ end
 
 @inline function derivative_order(iw::InterpolationWeight)
     @debug check_weight_prop(iw)
-    k = length(propertynames(iw)) - 1
-    Order(k)
+    getfield(iw, :deriv)
 end
-@inline function check_weight_prop(iw::InterpolationWeight)
-    k = length(propertynames(iw)) - 1
-    _check_weight_prop(iw, Val(k))
-end
-@generated function _check_weight_prop(iw::InterpolationWeight, ::Val{k}) where {k}
+@generated function check_weight_prop(iw::InterpolationWeight{<:Any, k}) where {k}
     quote
         @_inline_meta
         @assert @nall $(k+1) i -> create_name(Order(i-1), Val(propertynames(iw)[1])) === propertynames(iw)[i]
@@ -198,34 +206,39 @@ function Base.show(io::IO, iw::InterpolationWeight)
     print(io, "  Neighboring nodes: ", neighboringnodes(iw))
 end
 
-struct InterpolationWeightArray{Interp, Prop <: NamedTuple, Indices, ElType <: InterpolationWeight{Interp}, N} <: AbstractArray{ElType, N}
+struct InterpolationWeightArray{Interp, k, Prop <: NamedTuple, Indices, ElType <: InterpolationWeight{Interp}, N} <: AbstractArray{ElType, N}
     interp::Interp
+    deriv::Order{k}
     prop::Prop
     indices::Indices
 end
 
 # AbstractMesh
-function _generate_weights(::Type{T}, interp, mesh::AbstractMesh{dim}, dims::Dims{N}; kwargs...) where {T, dim, N}
-    prop = map(create_property(Vec{dim, T}, interp; kwargs...)) do prop
+function _generate_weights(extra::Type, ::Type{T}, interp, mesh::AbstractMesh{dim}, dims::Dims{N}; derivative::Order{k}=Order(1), kwargs...) where {T <: AbstractFloat, dim, N, k}
+    prop = map(create_property(extra, Vec{dim, T}, interp; derivative, kwargs...)) do prop
         fill(zero(eltype(prop)), size(prop)..., dims...)
     end
     indices = map(p->initial_neighboringnodes(interp, mesh), CartesianIndices(dims))
     Interp = typeof(interp)
     Prop = typeof(prop)
     Indices = typeof(indices)
-    ElType = Base._return_type(_getindex, Tuple{Interp, Prop, Indices, Int})
-    InterpolationWeightArray{Interp, Prop, Indices, ElType, N}(interp, prop, indices)
+    ElType = Base._return_type(_getindex, Tuple{Interp, Order{k}, Prop, Indices, Int})
+    InterpolationWeightArray{Interp, k, Prop, Indices, ElType, N}(interp, derivative, prop, indices)
 end
 
 _todims(x::Tuple{Vararg{Int}}) = x
 _todims(x::Vararg{Int}) = x
 # CartesianMesh
-generate_interpolation_weights(::Type{T}, interp::Interpolation, mesh::CartesianMesh, dims...; kwargs...) where {T} = _generate_weights(T, interp, mesh, _todims(dims...); kwargs...)
-generate_interpolation_weights(interp::Interpolation, mesh::CartesianMesh, dims...; kwargs...) = _generate_weights(Float64, interp, mesh, _todims(dims...); kwargs...)
+generate_interpolation_weights(extra::Type, ::Type{T}, interp::Interpolation, mesh::CartesianMesh, dims...; kwargs...) where {T <: AbstractFloat} = _generate_weights(extra, T, interp, mesh, _todims(dims...); kwargs...)
+generate_interpolation_weights(extra::Type, interp::Interpolation, mesh::CartesianMesh, dims...; kwargs...) = _generate_weights(extra, Float64, interp, mesh, _todims(dims...); kwargs...)
+generate_interpolation_weights(::Type{T}, interp::Interpolation, mesh::CartesianMesh, dims...; kwargs...) where {T <: AbstractFloat} = _generate_weights(@NamedTuple{}, T, interp, mesh, _todims(dims...); kwargs...)
+generate_interpolation_weights(interp::Interpolation, mesh::CartesianMesh, dims...; kwargs...) = _generate_weights(@NamedTuple{}, Float64, interp, mesh, _todims(dims...); kwargs...)
 
 # UnstructuredMesh
-generate_interpolation_weights(::Type{T}, mesh::UnstructuredMesh, dims...; kwargs...) where {T} = _generate_weights(T, interp, mesh, _todims(dims...); kwargs...)
-generate_interpolation_weights(mesh::UnstructuredMesh, dims...; kwargs...) = _generate_weights(Float64, cellshape(mesh), mesh, _todims(dims...); kwargs...)
+generate_interpolation_weights(extra::Type, ::Type{T}, mesh::UnstructuredMesh, dims...; kwargs...) where {T <: AbstractFloat} = _generate_weights(extra, T, interp, mesh, _todims(dims...); kwargs...)
+generate_interpolation_weights(extra::Type, mesh::UnstructuredMesh, dims...; kwargs...) = _generate_weights(extra, Float64, interp, mesh, _todims(dims...); kwargs...)
+generate_interpolation_weights(::Type{T}, mesh::UnstructuredMesh, dims...; kwargs...) where {T <: AbstractFloat} = _generate_weights(@NamedTuple{}, T, interp, mesh, _todims(dims...); kwargs...)
+generate_interpolation_weights(mesh::UnstructuredMesh, dims...; kwargs...) = _generate_weights(@NamedTuple{}, Float64, cellshape(mesh), mesh, _todims(dims...); kwargs...)
 
 Base.size(x::InterpolationWeightArray) = size(getfield(x, :indices))
 
@@ -237,16 +250,16 @@ end
 @inline interpolation(x::InterpolationWeightArray) = getfield(x, :interp)::Interpolation
 @inline cellshape(x::InterpolationWeightArray) = getfield(x, :interp)::Shape
 
-@inline function Base.getindex(x::InterpolationWeightArray{<: Any, <: Any, <: Any, <: Any, N}, I::Vararg{Integer, N}) where {N}
+@inline function Base.getindex(x::InterpolationWeightArray{<:Any, <:Any, <:Any, <:Any, <:Any, N}, I::Vararg{Integer, N}) where {N}
     @boundscheck checkbounds(x, I...)
-    @inbounds _getindex(getfield(x, :interp), getfield(x, :prop), getfield(x, :indices), I...)
+    @inbounds _getindex(getfield(x, :interp), getfield(x, :deriv), getfield(x, :prop), getfield(x, :indices), I...)
 end
-@generated function _getindex(interp, prop::NamedTuple{names}, indices::AbstractArray{<: Any, N}, I::Vararg{Integer, N}) where {names, N}
+@generated function _getindex(interp, deriv::Order, prop::NamedTuple{names}, indices::AbstractArray{<: Any, N}, I::Vararg{Integer, N}) where {names, N}
     exps = [:(viewcol(prop.$name, I...)) for name in names]
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        InterpolationWeight(interp, NamedTuple{names}(tuple($(exps...))), view(indices, map(:, I, I)...))
+        InterpolationWeight(interp, deriv, NamedTuple{names}(tuple($(exps...))), view(indices, map(:, I, I)...))
     end
 end
 

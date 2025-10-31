@@ -28,12 +28,12 @@ Base.size(x::CPDINeighboringNodes) = (x.len,)
     @inbounds x.indices[i]
 end
 
-@generated function create_property(::Type{Vec{dim, T}}, ::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
+@generated function create_property(extra::Type, ::Type{Vec{dim, T}}, ::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
     w = sym
     ∇w = Symbol(:∇, sym)
     quote
         len = 2^dim * 2^dim # maximum length
-        (; $w=fill(zero(T), len), $∇w=fill(zero(Vec{dim, T}), len))
+        merge((; $w=fill(zero(T), len), $∇w=fill(zero(Vec{dim, T}), len)), create_extra_property(extra, len))
     end
 end
 
