@@ -34,10 +34,10 @@ end
 
 @inline function update_property!(iw::InterpolationWeight, kc::KernelCorrection{<: Kernel, Polynomial{AdaptiveLinear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(iw)
-    if size(values(iw,1)) != size(indices)
-        update_property!(iw, WLS(get_kernel(kc), Polynomial(MultiLinear())), pt, mesh, filter)
-    elseif !alltrue(filter, indices)
+    if !alltrue(filter, indices)
         update_property!(iw, WLS(get_kernel(kc), Polynomial(Linear())), pt, mesh, filter)
+    elseif size(values(iw,1)) != size(indices)
+        update_property!(iw, WLS(get_kernel(kc), Polynomial(MultiLinear())), pt, mesh, filter)
     else
         update_property!(iw, get_kernel(kc), pt, mesh)
     end
