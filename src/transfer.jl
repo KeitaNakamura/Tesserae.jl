@@ -135,7 +135,7 @@ end
 
 function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, equations::Vector)
     issum = map(eq -> eq.issumeq, equations)
-    (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
+    (!allequal(issum) && !issorted(issum; rev=true)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
     code = quote
         Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
@@ -358,7 +358,7 @@ end
 
 function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), equations::Vector)
     issum = map(eq -> eq.issumeq, equations)
-    (!allequal(issum) && issorted(issum)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
+    (!allequal(issum) && !issorted(issum; rev=true)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
 
     code = quote
         Tesserae.check_arguments_for_G2P($grid, $particles, $weights)
