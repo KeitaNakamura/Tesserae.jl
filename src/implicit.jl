@@ -234,17 +234,14 @@ function _add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int
     vals = nonzeros(A)
     @inbounds for j in eachindex(J)
         i = 1
-        nzrng_i = 1
-        nzrng = nzrange(A, J[j])
-        while nzrng_i in eachindex(nzrng) && i in eachindex(I)
-            k = nzrng[nzrng_i]
+        for k in nzrange(A, J[j])
             row = rows[k] # row candidate
             i′ = perm[i]
             if I[i′] == row
                 vals[k] += K[i′,j]
                 i += 1
+                i > length(I) && break
             end
-            nzrng_i += 1
         end
         if i ≤ length(I) # some indices are not activated in sparse matrix `A`
             error("wrong sparsity pattern")
