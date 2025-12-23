@@ -12,23 +12,22 @@ struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: ColoringStrategy
 end
 
 function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
-    dims = blocksize(mesh)
-    nparticles_chunks = [zeros(Int, dims) for _ in 1:Threads.nthreads()]
+    blkdims = nblocks(mesh)
+    nparticles_chunks = [zeros(Int, blkdims) for _ in 1:Threads.nthreads()]
     particleindices = Int[]
-    stops = zeros(Int, dims)
+    stops = zeros(Int, blkdims)
     BlockStrategy{dim, typeof(mesh)}(mesh, particleindices, stops, nparticles_chunks, Int[], Int[])
 end
 
-blocksize(bs::BlockStrategy) = size(bs.stops)
-blockindices(bs::BlockStrategy) = LinearIndices(blocksize(bs))
+nblocks(bs::BlockStrategy) = size(bs.stops)
 
 @inline function particle_indices_in(bs::BlockStrategy, blk::Integer)
-    @boundscheck checkbounds(LinearIndices(blocksize(bs)), blk)
+    @boundscheck checkbounds(LinearIndices(nblocks(bs)), blk)
     @inbounds _particle_indices_in(bs.particleindices, bs.stops, blk)
 end
 @inline function particle_indices_in(bs::BlockStrategy, blk::CartesianIndex)
-    @boundscheck checkbounds(CartesianIndices(blocksize(bs)), blk)
-    @inbounds particle_indices_in(bs, LinearIndices(blocksize(bs))[blk])
+    @boundscheck checkbounds(CartesianIndices(nblocks(bs)), blk)
+    @inbounds particle_indices_in(bs, LinearIndices(nblocks(bs))[blk])
 end
 @inline function _particle_indices_in(particleindices, stops, blk::Integer)
     @_propagate_inbounds_meta
@@ -49,7 +48,7 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
 
     @threaded for chunk_id in 1:nchunks
         @inbounds for p in chunks[chunk_id]
-            blk = sub2ind(blocksize(bs), whichblock(xₚ[p], bs.mesh))
+            blk = sub2ind(nblocks(bs), whichblock(xₚ[p], bs.mesh))
             bs.blockindices[p] = blk
             if !iszero(blk)
                 bs.localindices[p] = (bs.nparticles_chunks[chunk_id][blk] += 1)
@@ -81,11 +80,11 @@ end
 @inline sub2ind(::Dims, ::Nothing)::Int = 0
 
 function colorgroups(bs::BlockStrategy)
-    [filter(I -> !isempty(particle_indices_in(bs, I)), blocks) for blocks in threadsafe_blocks(blocksize(bs))]
+    [filter(I -> !isempty(particle_indices_in(bs, I)), blocks) for blocks in threadsafe_blocks(nblocks(bs))]
 end
 
 function reorder_particles!(particles::AbstractVector, bs::BlockStrategy)
-    reorder_particles!(particles, maparray(i -> particle_indices_in(bs, i), blockindices(bs)))
+    reorder_particles!(particles, maparray(i -> particle_indices_in(bs, i), LinearIndices(nblocks(bs))))
 end
 
 function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
@@ -121,8 +120,22 @@ end
 # block operations #
 ####################
 
-blocksize(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCK_SIZE_LOG2+1
-blocksize(A::AbstractArray) = blocksize(size(A))
+nblocks(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCK_SIZE_LOG2+1
+nblocks(A::AbstractArray) = nblocks(size(A))
+
+@inline function _nodes_in_block(blk::CartesianIndex{dim}) where {dim}
+    ranges = ntuple(d -> begin
+        i0 = ((blk[d] - 1) << BLOCK_SIZE_LOG2) + 1
+        i1 = ( blk[d]      << BLOCK_SIZE_LOG2) + 1
+        i0:i1
+    end, Val(dim))
+    CartesianIndices(ranges)
+end
+@inline function nodes_in_block(blk::CartesianIndex{dim}, gridsize::Dims{dim}) where {dim}
+    nodes = _nodes_in_block(blk) ∩ CartesianIndices(gridsize)
+    isempty(nodes) && throw(BoundsError(CartesianIndices(nblocks(gridsize)), Tuple(blk)))
+    nodes
+end
 
 """
     Tesserae.whichblock(x::Vec, mesh::CartesianMesh)
@@ -156,9 +169,9 @@ CartesianIndex(3, 1)
     CartesianIndex(@. (I.I-1) >> BLOCK_SIZE_LOG2 + 1)
 end
 
-function threadsafe_blocks(blocksize::NTuple{dim, Int}) where {dim}
+function threadsafe_blocks(nblocks::NTuple{dim, Int}) where {dim}
     starts = collect(Iterators.product(ntuple(i->1:2, Val(dim))...))
-    vec(map(st -> map(CartesianIndex{dim}, Iterators.product(StepRange.(st, 2, blocksize)...)), starts))
+    vec(map(st -> map(CartesianIndex{dim}, Iterators.product(StepRange.(st, 2, nblocks)...)), starts))
 end
 
 """

@@ -16,10 +16,10 @@ end
     spinds = Tesserae.SpIndices(12,20)
     @test IndexStyle(spinds) === IndexCartesian()
     @test size(spinds) === (12,20)
-    @test Tesserae.blocksize(spinds) === Tesserae.blocksize((12,20))
+    @test Tesserae.nblocks(spinds) === Tesserae.nblocks((12,20))
     @test !all(Tesserae.isactive, spinds)
     @test !all(i->Tesserae.isactive(spinds,i), eachindex(spinds))
-    blkspy = rand(Bool, Tesserae.blocksize(spinds))
+    blkspy = rand(Bool, Tesserae.nblocks(spinds))
     n = update_sparsity!(spinds, blkspy)
     @test n == count(blkspy) * (2^Tesserae.BLOCK_SIZE_LOG2)^2 # `^2` is for dimension
     @test n == Tesserae.countnnz(spinds)
@@ -43,7 +43,7 @@ end
     @test size(A) === (12,20)
     @test !all(i->Tesserae.isactive(A,i), eachindex(A))
     @test all(iszero, A)
-    blkspy = rand(Bool, Tesserae.blocksize(A))
+    blkspy = rand(Bool, Tesserae.nblocks(A))
     n = update_sparsity!(A, blkspy)
     @test length(Tesserae.get_data(A)) === n
     @test all(i->(A[i]=rand(); iszero(A[i])), filter(i->!Tesserae.isactive(A,i), eachindex(A)))
