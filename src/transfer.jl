@@ -268,8 +268,8 @@ function check_arguments_for_P2G(grid, particles, weights, partition)
     if partition isa ColorPartition
         strat = strategy(partition)
         if strat isa BlockStrategy
-            @assert blocksize(grid) == blocksize(strat)
-            if sum(length(particle_indices_in(strat, blk)) for blk in blockindices(strat)) == 0
+            @assert nblocks(grid) == nblocks(strat)
+            if sum(length(particle_indices_in(strat, blk)) for blk in LinearIndices(nblocks(strat))) == 0
                 error("@P2G: No particles assigned to any block in ColorPartition")
             end
             interp = interpolation(first(weights))

@@ -17,14 +17,14 @@ struct SpIndices{dim} <: AbstractArray{SpIndex{CartesianIndex{dim}}, dim}
     blkinds::Array{Int, dim}
 end
 
-SpIndices(dims::Tuple{Vararg{Int}}) = SpIndices(dims, fill(0, blocksize(dims)))
+SpIndices(dims::Tuple{Vararg{Int}}) = SpIndices(dims, fill(0, nblocks(dims)))
 SpIndices(dims::Int...) = SpIndices(dims)
 
 Base.size(sp::SpIndices) = sp.dims
 Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()
 
 @inline blockindices(sp::SpIndices) = sp.blkinds
-@inline blocksize(sp::SpIndices) = size(blockindices(sp))
+@inline nblocks(sp::SpIndices) = size(blockindices(sp))
 
 @inline function _blocklocal(I::Integer...)
     j = I .- 1
@@ -49,7 +49,7 @@ end
 @inline function isactive(sp::SpIndices{dim}, I::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(sp, I...)
     blkinds = blockindices(sp)
-    @inbounds !iszero(blkinds[blocksize(I)...])
+    @inbounds !iszero(blkinds[nblocks(I)...])
 end
 @inline isactive(sp::SpIndices, I::CartesianIndex) = (@_propagate_inbounds_meta; isactive(sp, Tuple(I)...))
 
@@ -68,17 +68,17 @@ function countnnz(sp::SpIndices{dim}) where {dim}
 end
 
 function update_sparsity!(sp::SpIndices, blkspy::AbstractArray{Bool})
-    blocksize(sp) == size(blkspy) || throw(ArgumentError("block size $(blocksize(sp)) must match"))
+    nblocks(sp) == size(blkspy) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
     blockindices(sp) .= blkspy
     numbering!(sp)
 end
 
 function update_sparsity!(spinds::SpIndices, partition::ColorPartition{<: BlockStrategy})
     bs = strategy(partition)
-    blocksize(spinds) == blocksize(bs) || throw(ArgumentError("block size $(blocksize(spinds)) must match"))
+    nblocks(spinds) == nblocks(bs) || throw(ArgumentError("blocks per dimension $(nblocks(spinds)) must match"))
 
     inds = fillzero!(blockindices(spinds))
-    CI = CartesianIndices(blocksize(bs))
+    CI = CartesianIndices(nblocks(bs))
     @inbounds for I in CI
         if !isempty(particle_indices_in(bs, I))
             blks = (I - oneunit(I)):(I + oneunit(I))
@@ -117,10 +117,10 @@ julia> A[1,1] # still zero
 
 This is because the block where index `(1,1)` is located is not activated yet.
 To activate the block, update sparsity pattern by `update_sparsity!(A, spy)`
-where `spy` must have `Tesserae.blocksize(A)`.
+where `spy` must have `Tesserae.nblocks(A)`.
 
 ```jldoctest sparray
-julia> spy = trues(Tesserae.blocksize(A))
+julia> spy = trues(Tesserae.nblocks(A))
 2×2 BitMatrix:
  1  1
  1  1
