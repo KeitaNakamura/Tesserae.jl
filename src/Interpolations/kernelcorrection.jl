@@ -24,8 +24,8 @@ kernel_support(kc::KernelCorrection) = kernel_support(get_kernel(kc))
 
 @inline function update_property!(iw::InterpolationWeight, kc::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(iw)
-    isnearbounds = size(values(iw,1)) != size(indices) || !alltrue(filter, indices)
-    if isnearbounds
+    is_support_truncated = size(values(iw,1)) != size(indices) || !alltrue(filter, indices)
+    if is_support_truncated
         update_property!(iw, WLS(get_kernel(kc), get_polynomial(kc)), pt, mesh, filter)
     else
         update_property!(iw, get_kernel(kc), pt, mesh)

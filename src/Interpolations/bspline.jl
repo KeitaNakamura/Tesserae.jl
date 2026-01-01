@@ -134,8 +134,8 @@ end
 
 function update_property!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = neighboringnodes(iw)
-    isnearbounds = size(values(iw,1)) != size(indices)
-    if isnearbounds
+    is_support_truncated = size(values(iw,1)) != size(indices)
+    if is_support_truncated
         @inbounds for ip in eachindex(indices)
             i = indices[ip]
             set_values!(iw, ip, values(derivative_order(iw), spline, getx(pt), mesh, i))

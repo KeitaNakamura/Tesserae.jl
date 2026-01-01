@@ -26,8 +26,8 @@ end
 # a bit faster implementation for B-splines
 @inline function update_property!(iw::InterpolationWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
     indices = neighboringnodes(iw)
-    isnearbounds = size(values(iw,1)) != size(indices) || !alltrue(filter, indices)
-    if isnearbounds
+    is_support_truncated = size(values(iw,1)) != size(indices) || !alltrue(filter, indices)
+    if is_support_truncated
         update_property_general!(iw, wls, pt, mesh, filter)
     else
         kernel = get_kernel(wls)

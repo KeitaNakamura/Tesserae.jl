@@ -106,10 +106,10 @@ end # InterpolationWeight
             @test all(1:100) do _
                 x = rand(Vec{dim})
                 update!(iw, x, mesh)
-                isnearbounds = size(iw.w) != size(neighboringnodes(iw))
+                is_support_truncated = size(iw.w) != size(neighboringnodes(iw))
                 PU = check_partition_of_unity(iw, x)
                 LFR = check_linear_field_reproduction(iw, x, mesh)
-                isnearbounds ? (!PU && !LFR) : (PU && LFR)
+                is_support_truncated ? (!PU && !LFR) : (PU && LFR)
             end
         end
     end
@@ -122,10 +122,10 @@ end # InterpolationWeight
             @test all(1:100) do _
                 x = rand(Vec{dim})
                 update!(iw, x, mesh)
-                isnearbounds = size(iw.w) != size(neighboringnodes(iw))
+                is_support_truncated = size(iw.w) != size(neighboringnodes(iw))
                 PU = check_partition_of_unity(iw, x)
                 LFR = check_linear_field_reproduction(iw, x, mesh)
-                isnearbounds ? (PU && !LFR) : (PU && LFR)
+                is_support_truncated ? (PU && !LFR) : (PU && LFR)
             end
         end
     end
@@ -140,12 +140,12 @@ end # InterpolationWeight
             @test all(1:100) do _
                 x = rand(Vec{dim})
                 update!(iw, (;x,l), mesh)
-                isnearbounds = any(.!(l/2 .< x .< 1-l/2))
+                is_support_truncated = any(.!(l/2 .< x .< 1-l/2))
                 PU = check_partition_of_unity(iw, x)
                 LFR = check_linear_field_reproduction(iw, x, mesh)
                 # uGIMP doesn't have pertition of unity when very closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
-                isnearbounds ? (!PU && !LFR) : (PU && LFR)
+                is_support_truncated ? (!PU && !LFR) : (PU && LFR)
             end
         end
     end
@@ -161,12 +161,12 @@ end # InterpolationWeight
             @test all(1:100) do _
                 x = Vec{dim}(i -> l/2 + rand()*(1-l))
                 update!(iw, (;x,l,F), mesh)
-                # isnearbounds = any(.!(l/2 .< x .< 1-l/2))
+                # is_support_truncated = any(.!(l/2 .< x .< 1-l/2))
                 PU = check_partition_of_unity(iw, x)
                 LFR = check_linear_field_reproduction(iw, x, mesh)
                 # uGIMP doesn't have pertition of unity when very closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
-                # isnearbounds ? (!PU && !LFR) : (PU && LFR)
+                # is_support_truncated ? (!PU && !LFR) : (PU && LFR)
                 PU && LFR
             end
         end
