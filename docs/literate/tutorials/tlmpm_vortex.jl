@@ -81,7 +81,7 @@ function main()
     outside_gridinds = findall(!isinside, grid.X)
 
     ## Particles
-    particles = generate_particles(ParticleProp, grid.X; alg=GridSampling(spacing=1))
+    particles = generate_particles(ParticleProp, grid.X; alg=GridSampling(subdiv=1))
     particles.V⁰ .= volume(grid.X) / length(particles)
 
     filter!(pt->isinside(pt.x), particles)

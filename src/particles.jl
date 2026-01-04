@@ -1,20 +1,84 @@
 abstract type SamplingAlgorithm end
 
 """
-    GridSampling(spacing = 1/2)
+    GridSampling(; subdiv = 2, density = 1)
 
-The generated particles are aligned with the grid using uniform spacing.
-Setting `spacing = 1/η` will produce `η^dim` particles per cell, where `dim` is the problem dimension.
+Generate uniformly spaced particles aligned with the background grid.
+The particle spacing is set by the integer subdivision factor `subdiv`:
+
+- `l = h / subdiv`, where `h = spacing(mesh)` is the grid cell size.
+
+The per-cell particle count is controlled by `subdiv` and the discrete multiplier `density`:
+- `density ∈ (1, 2, 4)`
+- Particles per cell: `density * subdiv^dim`, where `dim` is the problem dimension.
+
+# Interpretation
+- `subdiv` refines the spacing (smaller `l`).
+- `density` increases the number of particles per cell by a factor of 1×, 2×, or 4×
+  while keeping the same spacing `l` (it adds additional offset copies of the same uniform grid).
+
+# Limitation
+- `density = 4` is defined only for `dim = 2` or `dim = 3`.
 """
-@kwdef struct GridSampling{T} <: SamplingAlgorithm
-    spacing :: T = 1/2
+@kwdef struct GridSampling <: SamplingAlgorithm
+    subdiv  :: Int = 2 # for all axes
+    density :: Int = 1 # (1,2,4)
+    spacing :: Float64 = 0.0
 end
 
 function generate_points(alg::GridSampling, mesh::CartesianMesh{dim, T}) where {dim, T}
-    l = T(alg.spacing) * spacing(mesh)
-    domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
-    axis((xmin,xmax)) = (xmin+l/2):l:(xmax)
-    vec(CartesianMesh(axis.(domain)...))
+    if alg.spacing != 0
+        η = inv(alg.spacing)
+        subdiv = round(Int, η)
+        subdiv ≈ η || error("`GridSampling(spacing=...)` has changed. Use `GridSampling(; subdiv=..., density=...)` instead.")
+        @warn "`GridSampling(spacing=...)` has changed. Interpreting `spacing=$(alg.spacing)` as `GridSampling(; subdiv=$subdiv, density=1)`."
+        alg = GridSampling(; subdiv)
+    end
+    @assert alg.subdiv ≥ 1
+    @assert alg.density in (1,2,4) "density must be 1, 2, or 4"
+
+    V = Vec{dim, T}
+    O = zero(V)
+
+    shifts = if alg.density == 1
+        [O]
+    elseif alg.density == 2
+        [O, O .+ T(0.5)]
+    else
+        if dim == 3
+            [V(0,   0,   0),
+             V(0,   0.5, 0.5),
+             V(0.5, 0,   0.5),
+             V(0.5, 0.5, 0)]
+        elseif dim == 2
+            [V(0,   0),
+             V(0.5, 0),
+             V(0,   0.5),
+             V(0.5, 0.5)]
+        else
+            error("density=4 is only defined for dim=2 or dim=3")
+        end
+    end
+
+    m = alg.subdiv
+    h = spacing(mesh)
+    xmin = get_xmin(mesh)
+    ncell = size(mesh) .- 1
+
+    q = O .+ ifelse(alg.density == 1, T(0.5), T(0.25))
+    pts = Vec{dim, T}[]
+    sizehint!(pts, prod(ncell) * alg.density * m^dim)
+    for I in CartesianIndices(ncell)
+        x0 = xmin + h*Vec(Tuple(I).-1)
+        for s in shifts
+            for J in CartesianIndices(nfill(m, Val(dim)))
+                x = x0 + (h/m)*(Vec(Tuple(J).-1) + q + s)
+                push!(pts, x)
+            end
+        end
+    end
+
+    pts
 end
 
 struct CellSampling{V <: Union{AbstractVector{<: Vec}, Tuple{Vararg{Vec}}}} <: SamplingAlgorithm
@@ -41,7 +105,7 @@ end
     PoissonDiskSampling(spacing = 1/2, rng = Random.default_rng())
 
 The particles are generated based on the Poisson disk sampling.
-The `spacing` parameter is used to produce a similar number of particles as are generated with [`GridSampling`](@ref).
+The `spacing` parameter is used to produce a similar number of particles as are generated with [`GridSampling(subdiv = inv(spacing), density = 1)`](@ref).
 """
 @kwdef struct PoissonDiskSampling{T, RNG} <: SamplingAlgorithm
     spacing        :: T    = 1/2
