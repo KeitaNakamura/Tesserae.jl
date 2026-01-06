@@ -41,12 +41,12 @@
     ## outside
     @test (@inferred neighboringnodes(Vec(-0.1,3.05), 3, mesh)) === CartesianIndices((1:0,1:0))
 
-    # whichcell
-    @test Tesserae.whichcell(Vec(0.1,0.1), mesh) === CartesianIndex(1,1)
-    @test Tesserae.whichcell(Vec(2.3,1.1), mesh) === CartesianIndex(12,6)
+    # findcell
+    @test findcell(Vec(0.1,0.1), mesh) === CartesianIndex(1,1)
+    @test findcell(Vec(2.3,1.1), mesh) === CartesianIndex(12,6)
     ## exactly on the node
-    @test Tesserae.whichcell(Vec(0.0,0.0), mesh) === CartesianIndex(1,1)
-    @test Tesserae.whichcell(Vec(3.0,4.0), mesh) === nothing
+    @test findcell(Vec(0.0,0.0), mesh) === CartesianIndex(1,1)
+    @test findcell(Vec(3.0,4.0), mesh) === nothing
 end
 
 @testset "UnstructuredMesh" begin

@@ -164,7 +164,7 @@ CartesianIndex(3, 1)
 ```
 """
 @inline function whichblock(x::Vec, mesh::CartesianMesh)
-    I = whichcell(x, mesh)
+    I = findcell(x, mesh)
     I === nothing && return nothing
     CartesianIndex(@. (I.I-1) >> BLOCK_SIZE_LOG2 + 1)
 end

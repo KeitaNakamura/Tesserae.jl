@@ -11,5 +11,5 @@ spacing
 volume
 extract(::CartesianMesh{dim}, ::Vararg{Tuple{Real, Real}, dim}) where {dim}
 isinside
-whichcell
+findcell
 ```

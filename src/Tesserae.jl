@@ -44,7 +44,7 @@ export
     CartesianMesh,
     volume,
     isinside,
-    whichcell,
+    findcell,
     extract,
     UnstructuredMesh,
 # Grid
@@ -124,7 +124,7 @@ include("transfer.jl")
 include("implicit.jl")
 
 include("export.jl")
-
 include("gpu.jl")
+include("deprecated.jl")
 
 end # module Tesserae

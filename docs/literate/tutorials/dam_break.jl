@@ -128,7 +128,7 @@ function main(transfer = FLIP(1.0))
         ## where the particles are located
         activenodes = falses(size(grid))
         for p in eachindex(particles)
-            cell = whichcell(particles.x[p], grid.X)
+            cell = findcell(particles.x[p], grid.X)
             activenodes[cellnodes(cell)] .= true
         end
         update!(weights, particles, grid.X, activenodes)
@@ -295,7 +295,7 @@ function compute_VMS_stabilization_coefficients(state)
     ## due to the use of `weights_cell`
     for p in eachindex(particles)
         v̄ₚ = zero(eltype(particles.v))
-        iw = weights_cell[whichcell(particles.x[p], grid.X)]
+        iw = weights_cell[findcell(particles.x[p], grid.X)]
         gridindices = neighboringnodes(iw, grid)
         for ip in eachindex(gridindices)
             i = gridindices[ip]
