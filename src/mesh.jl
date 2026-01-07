@@ -109,7 +109,7 @@ Check if `x` is inside the `mesh`.
     isinside(ξ, size(mesh))
 end
 @inline function isinside(ξ::NTuple{dim}, dims::Dims{dim}) where {dim}
-    !isnothing(_whichcell(ξ, dims))
+    !isnothing(_findcell(ξ, dims))
 end
 
 """
@@ -150,7 +150,7 @@ end
 @inline EmptyCartesianIndices(::Val{dim}) where {dim} = CartesianIndices(nfill(1:0, Val(dim)))
 
 """
-    whichcell(x::Vec, mesh::CartesianMesh)
+    findcell(x::Vec, mesh::CartesianMesh)
 
 Return the cell index where `x` is located.
 
@@ -165,16 +165,16 @@ julia> mesh = CartesianMesh(1, (0,5), (0,5))
  [4.0, 0.0]  [4.0, 1.0]  [4.0, 2.0]  [4.0, 3.0]  [4.0, 4.0]  [4.0, 5.0]
  [5.0, 0.0]  [5.0, 1.0]  [5.0, 2.0]  [5.0, 3.0]  [5.0, 4.0]  [5.0, 5.0]
 
-julia> whichcell(Vec(1.5, 1.5), mesh)
+julia> findcell(Vec(1.5, 1.5), mesh)
 CartesianIndex(2, 2)
 ```
 """
-@inline function whichcell(x::Vec, mesh::CartesianMesh{dim, T}) where {dim, T}
+@inline function findcell(x::Vec, mesh::CartesianMesh{dim, T}) where {dim, T}
     ξ = Tuple(normalize(x, mesh))
-    _whichcell(ξ, size(mesh))
+    _findcell(ξ, size(mesh))
 end
 
-@generated function _whichcell(ξ::NTuple{dim, T}, gridsize::Dims{dim}) where {dim, T}
+@generated function _findcell(ξ::NTuple{dim, T}, gridsize::Dims{dim}) where {dim, T}
     quote
         @_inline_meta
         index = map(floor, ξ)
