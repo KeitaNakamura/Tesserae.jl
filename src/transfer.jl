@@ -175,7 +175,8 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
     for k in eachindex(sum_equations)
         eq = sum_equations[k]
-        @assert Meta.isexpr(eq.lhs, :ref)
+        @capture(eq.lhs, name_Symbol[idx_]) || error("@P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
+        idx == i || error("@P2G: invalid LHS index in `@∑` equation: $(eq.lhs) (must be [$i])")
         eq.lhs = resolve_refs(eq.lhs, maps)
         eq.rhs = resolve_refs(eq.rhs, maps; replaced)
     end
@@ -408,7 +409,8 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
         for k in eachindex(sum_equations)
             eq = sum_equations[k]
-            @assert Meta.isexpr(eq.lhs, :ref)
+            @capture(eq.lhs, x_[idx_]) || error("@P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
+            idx == p || error("@P2G: invalid LHS index in `@∑` equation: $(eq.lhs) (must be [$p])")
             eq.lhs = resolve_refs(eq.lhs, maps)
             eq.rhs = resolve_refs(eq.rhs, maps; replaced)
         end
