@@ -90,28 +90,46 @@ end
 function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
     ptsinblks = vec(ptsinblks)
     lens = length.(ptsinblks)
-    offsets = cumsum([0; lens[1:end-1]])
-    perm = Vector{Int}(undef, sum(lens))
+    nₚ = length(particles)
+    nₚ_assigned = sum(lens)
 
+    (firstindex(particles) == 1 && lastindex(particles) == nₚ) || throw(ArgumentError("reorder_particles!: particles must be 1-based indexed (`Vector`-like)."))
+    nₚ_assigned > nₚ && error("reorder_particles!: The block assignment contains more particle IDs than exist (assigned=$nₚ_assigned, total=$nₚ).")
+
+    offsets = cumsum([0; lens[1:end-1]])
+    perm = Vector{Int}(undef, nₚ)
     @threaded for blockindex in eachindex(ptsinblks)
         n = lens[blockindex]
         rng = offsets[blockindex]+1 : offsets[blockindex]+n
         perm[rng] .= ptsinblks[blockindex]
     end
 
+    seen = falses(nₚ)
+    for i in 1:nₚ_assigned
+        p = perm[i]
+        1 ≤ p ≤ nₚ || error("reorder_particles!: particle ID $p is out of range (valid: 1:$nₚ).")
+        @inbounds begin
+            seen[p] && error("reorder_particles!: particle $p is duplicated in the block assignment.")
+            seen[p] = true
+        end
+    end
+
     # keep missing particles aside
-    if length(perm) != length(particles) # some points are missing
+    if nₚ_assigned != nₚ
         @warn "reorder_particles!: Some particles are outside of the grid and were not assigned to any block. They will be kept at the end of the array." maxlog=1
-        missed = particles[setdiff(eachindex(particles), perm)]
+        k = nₚ_assigned
+        @inbounds for p in 1:nₚ
+            if !seen[p]
+                k += 1
+                perm[k] = p
+            end
+        end
+        @assert k == nₚ # check just in case
     end
 
     # reorder particles
-    @inbounds copyto!(particles, 1, particles[perm], 1, length(perm))
-
-    # assign missing particles to the end part of `particles`
-    if length(perm) != length(particles)
-        @inbounds particles[length(perm)+1:end] .= missed
-    end
+    particles_copied = @inbounds particles[perm] # checked in `seen`
+    copyto!(particles, 1, particles_copied, 1, nₚ)
 
     particles
 end
