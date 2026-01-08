@@ -44,7 +44,8 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
     foreach(fillzero!, bs.nparticles_chunks)
 
     nchunks = length(bs.nparticles_chunks)
-    chunks = collect(Iterators.partition(1:n, max(1, n÷nchunks+1)))
+    chunksize = max(1, cld(n, nchunks))
+    chunks = [((i-1)*chunksize + 1) : min(i*chunksize, n) for i in 1:nchunks]
 
     @threaded for chunk_id in 1:nchunks
         @inbounds for p in chunks[chunk_id]
