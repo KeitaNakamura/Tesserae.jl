@@ -52,6 +52,7 @@ end
 @inline _value1d(::Order, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((0,0,0))
 @generated function values1d(::Order{k}, spline::AbstractBSpline{Quadratic}, x::Real) where {k}
     quote
+        @_inline_meta
         T = typeof(x)
         x′ = fract(x - T(0.5))
         ξ = @. x′ - T((-0.5,0.5,1.5))
