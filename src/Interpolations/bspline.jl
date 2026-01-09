@@ -127,9 +127,11 @@ end
         xmin = get_xmin(mesh)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - xmin) * h⁻¹
-        vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals1d...)
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
+        vals1d = @ntuple $dim d -> begin
+            v = values1d(order, spline, ξ[d])
+            @ntuple $(k+1) i -> v[i] .* h⁻¹^(i-1)
+        end
+        @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals1d...)
     end
 end
 
@@ -200,9 +202,11 @@ end
         x = getx(pt)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
-        vals1d = @ntuple $dim d -> values(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
+        vals1d = @ntuple $dim d -> begin
+            v = values(order, spline, ξ[d])
+            @ntuple $(k+1) i -> v[i] .* h⁻¹^(i-1)
+        end
+        @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
     end
 end
 
@@ -268,9 +272,11 @@ end
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
         pos = node_position(mesh, i)
-        vals1d = @ntuple $dim d -> values(order, spline, ξ[d], pos[d])
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
+        vals1d = @ntuple $dim d -> begin
+            v = values(order, spline, ξ[d], pos[d])
+            @ntuple $(k+1) i -> v[i] .* h⁻¹^(i-1)
+        end
+        @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
     end
 end
 
