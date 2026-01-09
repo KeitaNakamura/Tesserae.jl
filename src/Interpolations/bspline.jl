@@ -121,16 +121,33 @@ end
     end
 end
 
-@generated function Base.values(order::Order{k}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh{dim}) where {k, dim}
+@generated function _values(order::Order{k}, vals1d::NTuple{dim, NTuple{l, NTuple{L, T}}}, h⁻¹) where {k, l, L, T, dim}
     quote
         @_inline_meta
-        xmin = get_xmin(mesh)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - xmin) * h⁻¹
-        vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals1d...)
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
+        vals1d′ = @ntuple $dim d -> begin
+            @ntuple $(k+1) j -> begin
+                @ntuple $L i -> vals1d[d][j][i] * h⁻¹^(j-1)
+            end
+        end
+        @ntuple $(k+1) j -> prod_each_dimension(Order(j-1), vals1d′...)
     end
+end
+@generated function _values(order::Order{k}, vals1d::NTuple{dim, NTuple{l, T}}, h⁻¹) where {k, l, T, dim}
+    quote
+        @_inline_meta
+        vals1d′ = @ntuple $dim d -> begin
+            @ntuple $(k+1) j -> vals1d[d][j] * h⁻¹^(j-1)
+        end
+        @ntuple $(k+1) j -> only(prod_each_dimension(Order(j-1), vals1d′...))
+    end
+end
+
+@inline function Base.values(order::Order{k}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh{dim}) where {k, dim}
+    xmin = get_xmin(mesh)
+    h⁻¹ = spacing_inv(mesh)
+    ξ = (x - xmin) * h⁻¹
+    vals1d = ntuple(d -> values1d(order, spline, ξ[d]), Val(dim))
+    _values(order, vals1d, h⁻¹)
 end
 
 function update_property!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
@@ -194,16 +211,12 @@ end
     ∂ⁿ{k,:all}(ξ -> value(spline, ξ), ξ)
 end
 
-@generated function Base.values(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
-    quote
-        @_inline_meta
-        x = getx(pt)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - mesh[i]) * h⁻¹
-        vals1d = @ntuple $dim d -> values(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
+@inline function Base.values(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+    x = getx(pt)
+    h⁻¹ = spacing_inv(mesh)
+    ξ = (x - mesh[i]) * h⁻¹
+    vals1d = ntuple(d -> values(order, spline, ξ[d]), Val(dim))
+    _values(order, vals1d, h⁻¹)
 end
 
 """
@@ -261,17 +274,13 @@ end
     ∂ⁿ{k,:all}(ξ -> value(spline, ξ, pos), ξ)
 end
 
-@generated function Base.values(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
-    quote
-        @_inline_meta
-        x = getx(pt)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - mesh[i]) * h⁻¹
-        pos = node_position(mesh, i)
-        vals1d = @ntuple $dim d -> values(order, spline, ξ[d], pos[d])
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
+@inline function Base.values(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+    x = getx(pt)
+    h⁻¹ = spacing_inv(mesh)
+    ξ = (x - mesh[i]) * h⁻¹
+    pos = node_position(mesh, i)
+    vals1d = ntuple(d -> values(order, spline, ξ[d], pos[d]), Val(dim))
+    _values(order, vals1d, h⁻¹)
 end
 
 @inline function node_position(ax::AbstractVector, i::Int)

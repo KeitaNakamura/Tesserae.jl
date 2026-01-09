@@ -34,7 +34,7 @@ Return the spacing of the mesh.
 spacing(mesh::CartesianMesh) = mesh.h
 spacing_inv(mesh::CartesianMesh) = mesh.h_inv
 
-@inline get_xmin(x::CartesianMesh{dim}) where {dim} = @inbounds x[oneunit(CartesianIndex{dim})]
+@inline get_xmin(x::CartesianMesh{dim}) where {dim} = @inbounds x[nfill(1, Val(dim))...]
 @inline get_xmax(x::CartesianMesh{dim}) where {dim} = @inbounds x[size(x)...]
 
 """
@@ -77,9 +77,12 @@ end
 
 axismesh(mesh::CartesianMesh, d::Integer) = CartesianMesh((mesh.axes[d],), spacing(mesh), spacing_inv(mesh))
 
-@inline function Base.getindex(mesh::CartesianMesh{dim}, i::Vararg{Integer, dim}) where {dim}
-    @boundscheck checkbounds(mesh, i...)
-    @inbounds Vec(map(getindex, mesh.axes, i))
+@generated function Base.getindex(mesh::CartesianMesh{dim, T}, I::Vararg{Integer, dim}) where {dim, T}
+    quote
+        @_inline_meta
+        @boundscheck checkbounds(mesh, I...)
+        @inbounds Vec{dim, T}(@ntuple $dim j -> mesh.axes[j][I[j]])
+    end
 end
 @inline function Base.getindex(mesh::CartesianMesh{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
     @boundscheck checkbounds(mesh, ranges...)
