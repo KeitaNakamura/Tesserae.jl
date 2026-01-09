@@ -32,41 +32,41 @@ end
 # `x` must be normalized by `h`
 
 # linear
-@inline _value(::Order{0}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = @. muladd($V((-1,1)), ξ, $V((1,1)))
-@inline _value(::Order{1}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((-1,1))
-@inline _value(::Order, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((0,0))
-@generated function values′(::Order{k}, spline::AbstractBSpline{Linear}, x::Real) where {k}
+@inline _value1d(::Order{0}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = @. muladd($V((-1,1)), ξ, $V((1,1)))
+@inline _value1d(::Order{1}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((-1,1))
+@inline _value1d(::Order, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((0,0))
+@generated function values1d(::Order{k}, spline::AbstractBSpline{Linear}, x::Real) where {k}
     quote
         @_inline_meta
         T = typeof(x)
         x′ = fract(x)
         ξ = @. x′ - T((0,1))
-        @ntuple $(k+1) a -> _value(Order(a-1), spline, (ξ,))
+        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,))
     end
 end
 
 # quadratic
-@inline _value(::Order{0}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = @. muladd($V((0.5,-1.0,0.5)), ξ², muladd($V((-1.5,0.0,1.5)), ξ, $V((1.125,0.75,1.125))))
-@inline _value(::Order{1}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = @. muladd($V((1.0,-2.0,1.0)), ξ, $V((-1.5,0.0,1.5)))
-@inline _value(::Order{2}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((1.0,-2.0,1.0))
-@inline _value(::Order, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((0,0,0))
-@generated function values′(::Order{k}, spline::AbstractBSpline{Quadratic}, x::Real) where {k}
+@inline _value1d(::Order{0}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = @. muladd($V((0.5,-1.0,0.5)), ξ², muladd($V((-1.5,0.0,1.5)), ξ, $V((1.125,0.75,1.125))))
+@inline _value1d(::Order{1}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = @. muladd($V((1.0,-2.0,1.0)), ξ, $V((-1.5,0.0,1.5)))
+@inline _value1d(::Order{2}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((1.0,-2.0,1.0))
+@inline _value1d(::Order, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((0,0,0))
+@generated function values1d(::Order{k}, spline::AbstractBSpline{Quadratic}, x::Real) where {k}
     quote
         T = typeof(x)
         x′ = fract(x - T(0.5))
         ξ = @. x′ - T((-0.5,0.5,1.5))
         ξ² = @. ξ * ξ
-        @ntuple $(k+1) a -> _value(Order(a-1), spline, (ξ,ξ²))
+        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,ξ²))
     end
 end
 
 # cubic
-@inline _value(::Order{0}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-1/6,0.5,-0.5,1/6)), ξ³, muladd($V((1,-1,-1,1)), ξ², muladd($V((-2,0,0,2)), ξ, $V((4/3,2/3,2/3,4/3)))))
-@inline _value(::Order{1}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-0.5,1.5,-1.5,0.5)), ξ², muladd($V((2,-2,-2,2)), ξ, $V((-2,0,0,2))))
-@inline _value(::Order{2}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-1,3,-3,1)), ξ, $V((2,-2,-2,2)))
-@inline _value(::Order{3}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((-1,3,-3,1))
-@inline _value(::Order, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((0,0,0,0))
-@generated function values′(::Order{k}, spline::AbstractBSpline{Cubic}, x::Real) where {k}
+@inline _value1d(::Order{0}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-1/6,0.5,-0.5,1/6)), ξ³, muladd($V((1,-1,-1,1)), ξ², muladd($V((-2,0,0,2)), ξ, $V((4/3,2/3,2/3,4/3)))))
+@inline _value1d(::Order{1}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-0.5,1.5,-1.5,0.5)), ξ², muladd($V((2,-2,-2,2)), ξ, $V((-2,0,0,2))))
+@inline _value1d(::Order{2}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-1,3,-3,1)), ξ, $V((2,-2,-2,2)))
+@inline _value1d(::Order{3}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((-1,3,-3,1))
+@inline _value1d(::Order, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((0,0,0,0))
+@generated function values1d(::Order{k}, spline::AbstractBSpline{Cubic}, x::Real) where {k}
     quote
         @_inline_meta
         T = typeof(x)
@@ -74,18 +74,18 @@ end
         ξ = @. x′ - T((-1,0,1,2))
         ξ² = @. ξ * ξ
         ξ³ = @. ξ² * ξ
-        @ntuple $(k+1) a -> _value(Order(a-1), spline, (ξ,ξ²,ξ³))
+        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,ξ²,ξ³))
     end
 end
 
 # quartic
-@inline _value(::Order{0}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/24,-1/6,1/4,-1/6,1/24)), ξ⁴, muladd($V((-5/12,5/6,0,-5/6,5/12)), ξ³, muladd($V((25/16,-5/4,-5/8,-5/4,25/16)), ξ², muladd($V((-125/48,5/24,0,-5/24,125/48)), ξ, $V((625/384,55/96,115/192,55/96,625/384))))))
-@inline _value(::Order{1}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/6,-2/3,1,-2/3,1/6)), ξ³, muladd($V((-5/4,5/2,0,-5/2,5/4)), ξ², muladd($V((25/8,-5/2,-5/4,-5/2,25/8)), ξ, $V((-125/48,5/24,0,-5/24,125/48)))))
-@inline _value(::Order{2}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/2,-2,3,-2,1/2)), ξ², muladd($V((-5/2,5,0,-5,5/2)), ξ, $V((25/8,-5/2,-5/4,-5/2,25/8))))
-@inline _value(::Order{3}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1,-4,6,-4,1)), ξ, $V((-5/2,5,0,-5,5/2)))
-@inline _value(::Order{4}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((1,-4,6,-4,1))
-@inline _value(::Order, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((0,0,0,0,0))
-@generated function values′(::Order{k}, spline::AbstractBSpline{Quartic}, x::Real) where {k}
+@inline _value1d(::Order{0}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/24,-1/6,1/4,-1/6,1/24)), ξ⁴, muladd($V((-5/12,5/6,0,-5/6,5/12)), ξ³, muladd($V((25/16,-5/4,-5/8,-5/4,25/16)), ξ², muladd($V((-125/48,5/24,0,-5/24,125/48)), ξ, $V((625/384,55/96,115/192,55/96,625/384))))))
+@inline _value1d(::Order{1}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/6,-2/3,1,-2/3,1/6)), ξ³, muladd($V((-5/4,5/2,0,-5/2,5/4)), ξ², muladd($V((25/8,-5/2,-5/4,-5/2,25/8)), ξ, $V((-125/48,5/24,0,-5/24,125/48)))))
+@inline _value1d(::Order{2}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/2,-2,3,-2,1/2)), ξ², muladd($V((-5/2,5,0,-5,5/2)), ξ, $V((25/8,-5/2,-5/4,-5/2,25/8))))
+@inline _value1d(::Order{3}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1,-4,6,-4,1)), ξ, $V((-5/2,5,0,-5,5/2)))
+@inline _value1d(::Order{4}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((1,-4,6,-4,1))
+@inline _value1d(::Order, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((0,0,0,0,0))
+@generated function values1d(::Order{k}, spline::AbstractBSpline{Quartic}, x::Real) where {k}
     quote
         @_inline_meta
         T = typeof(x)
@@ -94,19 +94,19 @@ end
         ξ² = @. ξ * ξ
         ξ³ = @. ξ² * ξ
         ξ⁴ = @. ξ² * ξ²
-        @ntuple $(k+1) a -> _value(Order(a-1), spline, (ξ,ξ²,ξ³,ξ⁴))
+        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,ξ²,ξ³,ξ⁴))
     end
 end
 
 # quintic
-@inline _value(::Order{0}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/120,1/24,-1/12,1/12,-1/24,1/120)), ξ⁵, muladd($V((1/8,-3/8,1/4,1/4,-3/8,1/8)), ξ⁴, muladd($V((-3/4,5/4,0,0,-5/4,3/4)), ξ³, muladd($V((9/4,-7/4,-1/2,-1/2,-7/4,9/4)), ξ², muladd($V((-27/8,5/8,0,0,-5/8,27/8)), ξ, $V((81/40,17/40,11/20,11/20,17/40,81/40)))))))
-@inline _value(::Order{1}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/24,5/24,-5/12,5/12,-5/24,1/24)), ξ⁴, muladd($V((1/2,-3/2,1,1,-3/2,1/2)), ξ³, muladd($V((-9/4,15/4,0,0,-15/4,9/4)), ξ², muladd($V((9/2,-7/2,-1,-1,-7/2,9/2)), ξ, $V((-27/8,5/8,0,0,-5/8,27/8))))))
-@inline _value(::Order{2}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/6,5/6,-5/3,5/3,-5/6,1/6)), ξ³, muladd($V((3/2,-9/2,3,3,-9/2,3/2)), ξ², muladd($V((-9/2,15/2,0,0,-15/2,9/2)), ξ, $V((9/2,-7/2,-1,-1,-7/2,9/2)))))
-@inline _value(::Order{3}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/2,5/2,-5,5,-5/2,1/2)), ξ², muladd($V((3,-9,6,6,-9,3)), ξ, $V((-9/2,15/2,0,0,-15/2,9/2))))
-@inline _value(::Order{4}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1,5,-10,10,-5,1)), ξ, $V((3,-9,6,6,-9,3)))
-@inline _value(::Order{5}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((-1,5,-10,10,-5,1))
-@inline _value(::Order, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((0,0,0,0,0,0))
-@generated function values′(::Order{k}, spline::AbstractBSpline{Quintic}, x::Real) where {k}
+@inline _value1d(::Order{0}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/120,1/24,-1/12,1/12,-1/24,1/120)), ξ⁵, muladd($V((1/8,-3/8,1/4,1/4,-3/8,1/8)), ξ⁴, muladd($V((-3/4,5/4,0,0,-5/4,3/4)), ξ³, muladd($V((9/4,-7/4,-1/2,-1/2,-7/4,9/4)), ξ², muladd($V((-27/8,5/8,0,0,-5/8,27/8)), ξ, $V((81/40,17/40,11/20,11/20,17/40,81/40)))))))
+@inline _value1d(::Order{1}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/24,5/24,-5/12,5/12,-5/24,1/24)), ξ⁴, muladd($V((1/2,-3/2,1,1,-3/2,1/2)), ξ³, muladd($V((-9/4,15/4,0,0,-15/4,9/4)), ξ², muladd($V((9/2,-7/2,-1,-1,-7/2,9/2)), ξ, $V((-27/8,5/8,0,0,-5/8,27/8))))))
+@inline _value1d(::Order{2}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/6,5/6,-5/3,5/3,-5/6,1/6)), ξ³, muladd($V((3/2,-9/2,3,3,-9/2,3/2)), ξ², muladd($V((-9/2,15/2,0,0,-15/2,9/2)), ξ, $V((9/2,-7/2,-1,-1,-7/2,9/2)))))
+@inline _value1d(::Order{3}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/2,5/2,-5,5,-5/2,1/2)), ξ², muladd($V((3,-9,6,6,-9,3)), ξ, $V((-9/2,15/2,0,0,-15/2,9/2))))
+@inline _value1d(::Order{4}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1,5,-10,10,-5,1)), ξ, $V((3,-9,6,6,-9,3)))
+@inline _value1d(::Order{5}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((-1,5,-10,10,-5,1))
+@inline _value1d(::Order, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((0,0,0,0,0,0))
+@generated function values1d(::Order{k}, spline::AbstractBSpline{Quintic}, x::Real) where {k}
     quote
         @_inline_meta
         T = typeof(x)
@@ -116,7 +116,7 @@ end
         ξ³ = @. ξ² * ξ
         ξ⁴ = @. ξ² * ξ²
         ξ⁵ = @. ξ² * ξ³
-        @ntuple $(k+1) a -> _value(Order(a-1), spline, (ξ,ξ²,ξ³,ξ⁴,ξ⁵))
+        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,ξ²,ξ³,ξ⁴,ξ⁵))
     end
 end
 
@@ -126,8 +126,8 @@ end
         xmin = get_xmin(mesh)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - xmin) * h⁻¹
-        vals′ = @ntuple $dim d -> values′(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals′...)
+        vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
+        vals = @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals1d...)
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
 end
@@ -199,8 +199,8 @@ end
         x = getx(pt)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
-        vals′ = @ntuple $dim d -> values(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals′...))
+        vals1d = @ntuple $dim d -> values(order, spline, ξ[d])
+        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
 end
@@ -267,8 +267,8 @@ end
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
         pos = node_position(mesh, i)
-        vals′ = @ntuple $dim d -> values(order, spline, ξ[d], pos[d])
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals′...))
+        vals1d = @ntuple $dim d -> values(order, spline, ξ[d], pos[d])
+        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
 end
