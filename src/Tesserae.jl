@@ -23,6 +23,7 @@ import Preferences
 import ProgressMeter
 
 # multithreading
+using Graphs
 using TaskLocalValues
 
 # GPU

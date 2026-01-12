@@ -16,6 +16,23 @@
         end
         @test map(blk -> Tesserae.particle_indices_in(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks
     end
+    @testset "CellStrategy" begin
+        mesh = UnstructuredMesh(CartesianMesh(0.2, (0,3), (0,4)))
+        strat = Tesserae.strategy(ColorPartition(mesh))
+        groups = strat.colorgroups
+        @test all(!isempty, groups)
+        for group in groups
+            for i in 1:length(group)-1, j in i+1:length(group)
+                cell1, cell2 = group[i], group[j]
+                nodes1 = Tesserae.cellnodeindices(mesh, cell1)
+                nodes2 = Tesserae.cellnodeindices(mesh, cell2)
+                @test isempty(intersect(Set(nodes1), Set(nodes2)))
+            end
+        end
+        allcells = reduce(vcat, groups)
+        @test length(allcells) == Tesserae.ncells(mesh)
+        @test sort(allcells) == collect(1:Tesserae.ncells(mesh))
+    end
     @testset "Utilities" begin
         @test Tesserae.nodes_in_block(CartesianIndex(1,1), (20,20)) === CartesianIndices((1:5,1:5))
         @test Tesserae.nodes_in_block(CartesianIndex(2,3), (20,20)) === CartesianIndices((5:9,9:13))
