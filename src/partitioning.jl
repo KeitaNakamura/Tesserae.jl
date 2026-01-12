@@ -332,3 +332,4 @@ ColorPartition(mesh::UnstructuredMesh) = ColorPartition(CellStrategy(mesh))
 update!(partition::ColorPartition, args...) = update!(strategy(partition), args...)
 
 reorder_particles!(particles::StructVector, partition::ColorPartition{<: BlockStrategy}) = reorder_particles!(particles, strategy(partition))
+reorder_particles!(particles::StructArray{<: Any, 2}, partition::ColorPartition{<: CellStrategy}) = reorder_particles!(particles, strategy(partition))
