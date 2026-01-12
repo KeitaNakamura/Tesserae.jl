@@ -193,8 +193,53 @@ function threadsafe_blocks(nblocks::NTuple{dim, Int}) where {dim}
     vec(map(st -> map(CartesianIndex{dim}, Iterators.product(StepRange.(st, 2, nblocks)...)), starts))
 end
 
+struct CellStrategy <: ColoringStrategy
+    colorgroups::Vector{Vector{Int}}
+end
+
+colorgroups(cs::CellStrategy) = cs.colorgroups
+
+function CellStrategy(mesh::UnstructuredMesh)
+    g = _cell_conflict_graph(mesh)
+
+    coloring = Graphs.degree_greedy_color(g)
+
+    groups = [Int[] for _ in 1:coloring.num_colors]
+    @inbounds for cell in 1:ncells(mesh)
+        push!(groups[coloring.colors[cell]], cell)
+    end
+
+    CellStrategy(groups)
+end
+
+function _cell_conflict_graph(mesh::UnstructuredMesh)
+    nc = ncells(mesh)
+    nn = length(mesh)
+    graph = SimpleGraph(nc)
+
+    node2cells = [Int[] for _ in 1:nn]
+    @inbounds for cell in 1:nc
+        for i in cellnodeindices(mesh, cell)
+            push!(node2cells[i], cell)
+        end
+    end
+
+    for cells in node2cells
+        m = length(cells)
+        @inbounds for i in 1:m-1
+            cell = cells[i]
+            for j in i+1:m
+                add_edge!(graph, cell, cells[j])
+            end
+        end
+    end
+
+    graph
+end
+
 """
     ColorPartition(::CartesianMesh)
+    ColorPartition(::UnstructuredMesh)
 
 `ColorPartition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
 to avoid write conflicts during parallel particle-to-grid transfers.
@@ -208,7 +253,7 @@ to avoid write conflicts during parallel particle-to-grid transfers.
 partition = ColorPartition(mesh)
 
 # Update coloring using current particle positions
-update!(partition, particles.x)
+update!(partition, particles.x) # Required for `CartesianMesh`; not needed for `UnstructuredMesh` (FEM).
 
 # P2G transfer
 @threaded @P2G grid=>i particles=>p weights=>ip partition begin
@@ -224,6 +269,7 @@ end
 strategy(partition::ColorPartition) = partition.strategy
 
 ColorPartition(mesh::CartesianMesh) = ColorPartition(BlockStrategy(mesh))
+ColorPartition(mesh::UnstructuredMesh) = ColorPartition(CellStrategy(mesh))
 update!(partition::ColorPartition, args...) = update!(strategy(partition), args...)
 
 reorder_particles!(particles::StructVector, partition::ColorPartition{<: BlockStrategy}) = reorder_particles!(particles, strategy(partition))

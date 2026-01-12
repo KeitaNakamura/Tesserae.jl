@@ -206,19 +206,31 @@ end
 # CPU: sequential
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
     scheduler == :nothing || @warn "@P2G: `ColorPartition` must be given for threaded computation" maxlog=1
+
     for p in eachindex(particles)
         @inline f(grid, particles, weights, p)
     end
 end
 
 # CPU: multi-threading
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ColorPartition) where {scheduler}
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ColorPartition{<: BlockStrategy}) where {scheduler}
     strat = strategy(partition)
     for group in colorgroups(strat)
-        tforeach(group, scheduler) do index
+        tforeach(group, scheduler) do blk
             @_inline_meta
-            for p in particle_indices_in(strat, index)
+            for p in particle_indices_in(strat, blk)
                 @inline f(grid, particles, weights, p)
+            end
+        end
+    end
+end
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ColorPartition{<: CellStrategy}) where {scheduler}
+    strat = strategy(partition)
+    for group in colorgroups(strat)
+        tforeach(group, scheduler) do cell
+            @_inline_meta
+            for p in 1:size(particles, 1)
+                @inline f(grid, particles, weights, CartesianIndex(p, cell))
             end
         end
     end
