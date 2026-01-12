@@ -250,6 +250,52 @@ function _cell_conflict_graph(mesh::UnstructuredMesh)
     graph
 end
 
+function reorder_particles!(particles::AbstractMatrix, cs::CellStrategy)
+    groups = cs.colorgroups
+    nc = size(particles, 2)
+
+    lens = length.(groups)
+    n_assigned = sum(lens)
+    n_assigned == nc || error("reorder_particles!: number of cells mismatch (assigned=$n_assigned, ncells=$nc)")
+
+    # build perm: newcol i <- oldcol perm[i]
+    offsets = cumsum([0; lens[1:end-1]])
+    perm = Vector{Int}(undef, nc)
+
+    @threaded for gi in eachindex(groups)
+        n = lens[gi]
+        rng = offsets[gi] + 1 : offsets[gi] + n
+        perm[rng] .= groups[gi]
+    end
+
+    # validate perm is a permutation of 1:nc
+    seen = falses(nc)
+    @inbounds for i in 1:nc
+        c = perm[i]
+        1 ≤ c ≤ nc || error("reorder_particles!: cell ID $c is out of range (valid: 1:$nc).")
+        seen[c] && error("reorder_particles!: cell $c is duplicated in the color groups.")
+        seen[c] = true
+    end
+
+    # reorder columns (cells)
+    copied = @inbounds particles[:, perm]
+    copyto!(particles, copied)
+
+    # sync colorgroups to new cell IDs: make each group a contiguous range
+    start = 1
+    @inbounds for gi in eachindex(groups)
+        n = lens[gi]
+        g = groups[gi]
+        resize!(g, n)
+        for j in 1:n
+            g[j] = start + j - 1
+        end
+        start += n
+    end
+
+    particles
+end
+
 """
     ColorPartition(::CartesianMesh)
     ColorPartition(::UnstructuredMesh)

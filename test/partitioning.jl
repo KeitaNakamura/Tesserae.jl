@@ -49,6 +49,25 @@
         allcells = reduce(vcat, groups)
         @test length(allcells) == Tesserae.ncells(mesh)
         @test sort(allcells) == collect(1:Tesserae.ncells(mesh))
+
+        # reorder_particles!
+        nrow = 3
+        ncells = 6
+        particles = [100*j + i for i in 1:nrow, j in 1:ncells]
+        particles_old = copy(particles)
+
+        groups = [Int[2, 5], Int[1, 4, 6], Int[3]]
+        cs = Tesserae.CellStrategy(deepcopy(groups))
+        perm = vcat(groups...)
+        reorder_particles!(particles, cs)
+        @test particles == particles_old[:, perm]
+        lens = length.(groups)
+        start = 1
+        for (gi, len) in pairs(lens)
+            @test cs.colorgroups[gi] == collect(start:start+len-1)
+            start += len
+        end
+        @test sort(vcat(cs.colorgroups...)) == collect(1:ncells)
     end
     @testset "Utilities" begin
         @test Tesserae.nodes_in_block(CartesianIndex(1,1), (20,20)) === CartesianIndices((1:5,1:5))
