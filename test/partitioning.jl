@@ -5,6 +5,10 @@
         filter!(xₚ) do (x,y)
             (x-1.5)^2 + (y-2)^2 < 1
         end
+
+        Random.seed!(1234)
+        shuffle!(xₚ)
+
         bs = (@inferred Tesserae.BlockStrategy(mesh))
         @test Tesserae.nblocks(bs) === Tesserae.nblocks(mesh)
         @test all(blk -> isempty(Tesserae.particle_indices_in(bs, blk)), LinearIndices(Tesserae.nblocks(bs)))
@@ -15,6 +19,19 @@
             I === nothing || push!(ptsinblks[I], p)
         end
         @test map(blk -> Tesserae.particle_indices_in(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks
+
+        # check reorder_particles
+        reorder_particles!(xₚ, bs)
+
+        n_assigned = bs.stops[end]
+        @test bs.particleindices[1:n_assigned] == collect(1:n_assigned)
+
+        ptsinblks_after = map(_->Int[], CartesianIndices(Tesserae.nblocks(mesh)))
+        for p in eachindex(xₚ)
+            I = Tesserae.whichblock(xₚ[p], mesh)
+            I === nothing || push!(ptsinblks_after[I], p)
+        end
+        @test map(blk -> Tesserae.particle_indices_in(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks_after
     end
     @testset "CellStrategy" begin
         mesh = UnstructuredMesh(CartesianMesh(0.2, (0,3), (0,4)))

@@ -85,10 +85,23 @@ function colorgroups(bs::BlockStrategy)
 end
 
 function reorder_particles!(particles::AbstractVector, bs::BlockStrategy)
-    reorder_particles!(particles, maparray(i -> particle_indices_in(bs, i), LinearIndices(nblocks(bs))))
+    # NOTE: Only `particleindices` is synced; `blockindices/localindices` are untouched.
+    perm = _reorder_particles!(particles, maparray(i -> particle_indices_in(bs, i), LinearIndices(nblocks(bs))))
+    invp = invperm(perm)
+    n_assigned = bs.stops[end]
+    @inbounds for k in 1:n_assigned
+        p_old = bs.particleindices[k]
+        bs.particleindices[k] = invp[p_old]
+    end
+    particles
 end
 
 function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
+    _reorder_particles!(particles, ptsinblks)
+    particles
+end
+
+function _reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
     ptsinblks = vec(ptsinblks)
     lens = length.(ptsinblks)
     nₚ = length(particles)
@@ -132,7 +145,7 @@ function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{
     particles_copied = @inbounds particles[perm] # checked in `seen`
     copyto!(particles, 1, particles_copied, 1, nₚ)
 
-    particles
+    perm
 end
 
 ####################
