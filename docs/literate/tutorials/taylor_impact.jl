@@ -102,6 +102,9 @@ function main()
 
     ## Background grid
     grid = generate_grid(GridProp, CartesianMesh(R/12, (-3R,3R), (-3R,3R), (0,L+0.1L)))
+    if @isdefined(RUN_TESTS) && RUN_TESTS                                                  #src
+        grid = generate_grid(GridProp, CartesianMesh(R/6, (-3R,3R), (-3R,3R), (0,L+0.1L))) #src
+    end                                                                                    #src
 
     ## Particles
     block = extract(grid.x, (-R,R), (-R,R), (0,L))
@@ -301,5 +304,5 @@ end
 
 using Test                                 #src
 if @isdefined(RUN_TESTS) && RUN_TESTS      #src
-    @test main() ≈ [0,0,0.01624] rtol=1e-3 #src
+    @test main() ≈ [0,0,0.01622] rtol=1e-3 #src
 end                                        #src
