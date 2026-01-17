@@ -77,13 +77,19 @@ end
 
 axismesh(mesh::CartesianMesh, d::Integer) = CartesianMesh((mesh.axes[d],), spacing(mesh), spacing_inv(mesh))
 
-@inline function Base.getindex(mesh::CartesianMesh{dim}, i::Vararg{Integer, dim}) where {dim}
-    @boundscheck checkbounds(mesh, i...)
-    @inbounds Vec(map(getindex, mesh.axes, i))
+@generated function Base.getindex(mesh::CartesianMesh{dim}, I::Vararg{Integer, dim}) where {dim}
+    quote
+        @_inline_meta
+        @boundscheck checkbounds(mesh, I...)
+        @inbounds Vec(@ntuple $dim d -> mesh.axes[d][I[d]])
+    end
 end
-@inline function Base.getindex(mesh::CartesianMesh{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
-    @boundscheck checkbounds(mesh, ranges...)
-    @inbounds CartesianMesh(map(getindex, mesh.axes, ranges), spacing(mesh), spacing_inv(mesh))
+@generated function Base.getindex(mesh::CartesianMesh{dim}, ranges::Vararg{AbstractUnitRange{Int}, dim}) where {dim}
+    quote
+        @_inline_meta
+        @boundscheck checkbounds(mesh, ranges...)
+        @inbounds CartesianMesh((@ntuple $dim d -> mesh.axes[d][ranges[d]]), spacing(mesh), spacing_inv(mesh))
+    end
 end
 @inline function Base.getindex(mesh::CartesianMesh, indices::CartesianIndices)
     @_propagate_inbounds_meta
