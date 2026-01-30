@@ -149,21 +149,23 @@ end
 # Modify the following funcitons for custom multi-threading. For now, just use Threads.@threads.
 function _tforeach(f, iter, ::StaticScheduler)
     Threads.@threads :static for i in iter
-        f(i)
+        @inline f(i)
     end
 end
 function _tforeach(f, iter, ::DynamicScheduler)
     Threads.@threads :dynamic for i in iter
-        f(i)
+        @inline f(i)
     end
 end
 function _tforeach(f, iter, ::GreedyScheduler)
     Threads.@threads :greedy for i in iter
-        f(i)
+        @inline f(i)
     end
 end
 function _tforeach(f, iter, ::SequentialScheduler)
-    foreach(f, iter)
+    for i in iter
+        @inline f(i)
+    end
 end
 
 """
