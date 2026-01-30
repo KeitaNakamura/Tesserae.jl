@@ -286,21 +286,21 @@ end
     true
 end
 
-function update!(iw::InterpolationWeight, pt, mesh::AbstractMesh)
+@inline function update!(iw::InterpolationWeight, pt, mesh::AbstractMesh)
     interp = interpolation(iw)
     neighboringnodes_storage(iw)[] = neighboringnodes(interp, pt, mesh)
     update_property!(iw, interp, pt, mesh)
     iw
 end
-function update!(iw::InterpolationWeight, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
+@inline function update!(iw::InterpolationWeight, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @assert size(mesh) == size(filter)
     interp = interpolation(iw)
     neighboringnodes_storage(iw)[] = neighboringnodes(interp, pt, mesh)
     update_property!(iw, interp, pt, mesh, filter)
     iw
 end
-update!(iw::InterpolationWeight, pt, mesh::AbstractMesh, ::Trues) = update!(iw, pt, mesh)
-function update_property!(iw::InterpolationWeight, interp, pt, mesh::AbstractMesh, filter)
+@inline update!(iw::InterpolationWeight, pt, mesh::AbstractMesh, ::Trues) = update!(iw, pt, mesh)
+@inline function update_property!(iw::InterpolationWeight, interp, pt, mesh::AbstractMesh, filter)
     @assert filter isa Trues
     update_property!(iw, interp, pt, mesh)
 end

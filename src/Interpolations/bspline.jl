@@ -133,7 +133,7 @@ end
     end
 end
 
-function update_property!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+@inline function update_property!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = neighboringnodes(iw)
     is_support_truncated = size(values(iw,1)) != size(indices)
     if is_support_truncated
