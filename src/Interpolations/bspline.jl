@@ -37,7 +37,6 @@ end
 @inline _value1d(::Order, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((0,0))
 @generated function values1d(::Order{k}, spline::AbstractBSpline{Linear}, x::Real) where {k}
     quote
-        @_inline_meta
         T = typeof(x)
         x′ = fract(x)
         ξ = @. x′ - T((0,1))
@@ -52,7 +51,6 @@ end
 @inline _value1d(::Order, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((0,0,0))
 @generated function values1d(::Order{k}, spline::AbstractBSpline{Quadratic}, x::Real) where {k}
     quote
-        @_inline_meta
         T = typeof(x)
         x′ = fract(x - T(0.5))
         ξ = @. x′ - T((-0.5,0.5,1.5))
@@ -69,7 +67,6 @@ end
 @inline _value1d(::Order, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((0,0,0,0))
 @generated function values1d(::Order{k}, spline::AbstractBSpline{Cubic}, x::Real) where {k}
     quote
-        @_inline_meta
         T = typeof(x)
         x′ = fract(x)
         ξ = @. x′ - T((-1,0,1,2))
@@ -88,7 +85,6 @@ end
 @inline _value1d(::Order, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((0,0,0,0,0))
 @generated function values1d(::Order{k}, spline::AbstractBSpline{Quartic}, x::Real) where {k}
     quote
-        @_inline_meta
         T = typeof(x)
         x′ = fract(x - T(0.5))
         ξ = @. x′ - T((-1.5,-0.5,0.5,1.5,2.5))
@@ -109,7 +105,6 @@ end
 @inline _value1d(::Order, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((0,0,0,0,0,0))
 @generated function values1d(::Order{k}, spline::AbstractBSpline{Quintic}, x::Real) where {k}
     quote
-        @_inline_meta
         T = typeof(x)
         x′ = fract(x)
         ξ = @. x′ - T((-2,-1,0,1,2,3))
@@ -137,13 +132,21 @@ end
     indices = neighboringnodes(iw)
     is_support_truncated = size(values(iw,1)) != size(indices)
     if is_support_truncated
-        @inbounds for ip in eachindex(indices)
-            i = indices[ip]
-            set_values!(iw, ip, values(derivative_order(iw), spline, getx(pt), mesh, i))
-        end
+        update_property_truncated!(iw, spline, pt, mesh)
     else
-        set_values!(iw, values(derivative_order(iw), spline, getx(pt), mesh))
+        update_property_full!(iw, spline, pt, mesh)
     end
+end
+
+function update_property_truncated!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh)
+    indices = neighboringnodes(iw)
+    @inbounds for ip in eachindex(indices)
+        i = indices[ip]
+        set_values!(iw, ip, values(derivative_order(iw), spline, getx(pt), mesh, i))
+    end
+end
+@inline function update_property_full!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh)
+    set_values!(iw, values(derivative_order(iw), spline, getx(pt), mesh))
 end
 
 """

@@ -56,7 +56,7 @@ end
 
 @inline function update_property!(iw::InterpolationWeight, gimp::uGIMP, pt, mesh::CartesianMesh)
     indices = neighboringnodes(iw)
-    @inbounds @simd for ip in eachindex(indices)
+    @inbounds for ip in eachindex(indices)
         i = indices[ip]
         set_values!(iw, ip, values(derivative_order(iw), gimp, pt, mesh, i))
     end
