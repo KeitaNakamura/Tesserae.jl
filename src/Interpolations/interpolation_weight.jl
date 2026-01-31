@@ -14,13 +14,17 @@ initial_neighboringnodes(shape::Shape, mesh::UnstructuredMesh) = zero(SVector{nl
 propsize(interp::Interpolation, ::Val{dim}) where{dim} = nfill(kernel_support(interp), Val(dim))
 propsize(shape::Shape, ::Val)  = (nlocalnodes(shape),)
 function create_property(::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
-    map(Array, create_property(MArray, Vec{dim, T}, interp; derivative, name))
+    arrdims = propsize(interp, Val(dim))
+    map(Array, create_property(Val(arrdims), Vec{dim, T}, interp; derivative, name))
 end
-@generated function create_property(::Type{MArray}, ::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {dim, T, k}
+@generated function create_property(::Val{arrdims}, ::Type{Vec{dim, T}}, interp; derivative::Order{k}=Order(1), name::Val=Val(:w)) where {arrdims, dim, T, k}
     quote
-        dims = propsize(interp, Val(dim))
         names = @ntuple $(k+1) i -> create_name(Order(i-1), name)
-        vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), MArray{Tuple{dims...}})
+        vals = @ntuple $(k+1) i -> begin
+            val = zero(create_elval(Vec{dim, T}, Order(i-1)))
+            MArrayType = MArray{Tuple{arrdims...}, typeof(val)}
+            fill(val, MArrayType)
+        end
         NamedTuple{names}(vals)
     end
 end
@@ -39,11 +43,8 @@ create_name(::Order{7}, ::Val{name}) where {name} = Symbol(:∇⁷, name)
 create_name(::Order{8}, ::Val{name}) where {name} = Symbol(:∇⁸, name)
 create_name(::Order{9}, ::Val{name}) where {name} = Symbol(:∇⁹, name)
 
-@generated function prod_each_dimension(::Order{0}, vals::Vararg{Tuple, dim}) where {dim}
-    quote
-        @_inline_meta
-        tuple_otimes(@ntuple $dim d -> vals[d][1])
-    end
+@inline function prod_each_dimension(::Order{0}, vals::Vararg{Tuple, dim}) where {dim}
+    tuple_otimes(ntuple(d -> vals[d][1], Val(dim)))
 end
 @generated function prod_each_dimension(::Order{k}, vals::Vararg{Tuple, dim}) where {k, dim}
     if k == 1
@@ -127,6 +128,8 @@ end
 @inline function Base.values(iw::InterpolationWeight, i::Int)
     getfield(iw, :prop)[i]
 end
+
+@inline scalartype(iw::InterpolationWeight) = eltype(values(iw, 1))
 
 @inline interpolation(iw::InterpolationWeight) = getfield(iw, :interp)::Interpolation
 @inline cellshape(iw::InterpolationWeight) = getfield(iw, :interp)::Shape
@@ -276,7 +279,7 @@ end
 
 @inline function alltrue(A::AbstractArray{Bool}, indices::CartesianIndices)
     @debug checkbounds(A, indices)
-    @inbounds @simd for i in indices
+    @inbounds for i in indices
         A[i] || return false
     end
     true
