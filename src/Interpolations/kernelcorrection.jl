@@ -26,10 +26,17 @@ kernel_support(kc::KernelCorrection) = kernel_support(get_kernel(kc))
     indices = neighboringnodes(iw)
     is_support_truncated = size(values(iw,1)) != size(indices) || !alltrue(filter, indices)
     if is_support_truncated
-        update_property!(iw, WLS(get_kernel(kc), get_polynomial(kc)), pt, mesh, filter)
+        update_property_truncated!(iw, kc, pt, mesh, filter)
     else
-        update_property!(iw, get_kernel(kc), pt, mesh)
+        update_property_full!(iw, kc, pt, mesh)
     end
+end
+
+function update_property_truncated!(iw::InterpolationWeight, kc::KernelCorrection, pt, mesh, filter)
+    update_property!(iw, WLS(get_kernel(kc), get_polynomial(kc)), pt, mesh, filter)
+end
+@inline function update_property_full!(iw::InterpolationWeight, kc::KernelCorrection, pt, mesh)
+    update_property!(iw, get_kernel(kc), pt, mesh)
 end
 
 Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", get_kernel(kc), ", ", get_polynomial(kc), ")")
