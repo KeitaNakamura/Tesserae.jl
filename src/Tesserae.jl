@@ -97,7 +97,8 @@ export
     closepvd,
 # GPU
     cpu,
-    gpu
+    gpu,
+    gpu_preserve
 
 include("devices.jl")
 include("utils.jl")
