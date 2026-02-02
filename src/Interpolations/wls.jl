@@ -75,8 +75,8 @@ end
     end
 end
 
-@inline function update_property!(iw::InterpolationWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim}
-    if filter isa Trues && get_device(mesh) isa CPUDevice # Fast path is not currently supported on GPU
+function update_property!(iw::InterpolationWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim}
+    if filter isa Trues
         # For MultiLinear, we can decompose into axis-wise Linear interpolations.
         # If the problem is 1D, MultiLinear == Linear, so use the direct fast path.
         wls_1d = WLS(get_kernel(wls), Polynomial(Linear()))
@@ -85,30 +85,29 @@ end
         else
             # For dim > 1: decompose into 1D Linear along each axis,
             # compute axis-wise contribution, then combine by tensor product.
+            T = scalartype(iw)
             order = derivative_order(iw)
-            vals′ = ntuple(Val(dim)) do d
-                T = eltype(values(iw, 1))
-                mesh′ = axismesh(mesh, d)
-                prop′ = create_property(MArray, Vec{1,T}, wls_1d; derivative=order, name=Val(propertynames(iw)[1]))
-                indices′ = CartesianIndices((neighboringnodes(iw).indices[d],))
-                iw′ = InterpolationWeight(wls_1d, prop′, Scalar(indices′))
-                update_property!(iw′, wls_1d, Vec(getx(pt)[d]), mesh′)
+            vals_axes = ntuple(Val(dim)) do d
+                mesh_1d = axismesh(mesh, d)
+                prop_1d = create_property(MArray, Vec{1,T}, wls_1d; derivative=order)
+                indices_1d = CartesianIndices((neighboringnodes(iw).indices[d],))
+                iw_1d = InterpolationWeight(wls_1d, prop_1d, Scalar(indices_1d))
+                # Must be inlined: creates/updates a small StaticArray (MVector/MArray) on the GPU.
+                # If not inlined, the temporary may escape and trigger dynamic allocation (gpu_gc_pool_alloc).
+                update_property_general!(iw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
                 # Get scalar value from Vec{1} for each property.
-                _extract_scalar_values(order, iw′)
+                _extract_scalar_values(order, iw_1d)
             end
             # Combine axis-wise results into MultiLinear tensor product.
-            set_values!(iw, _prod_each_dimension(order, vals′))
+            set_values!(iw, _prod_each_dimension(order, vals_axes))
         end
     else
         # Fallback for masked cases: use general method.
         update_property_general!(iw, wls, pt, mesh, filter)
     end
 end
-@generated function _extract_scalar_values(::Order{k}, iw) where {k}
-    quote
-        @_inline_meta
-        @ntuple $(k+1) a -> map(only, Tuple(values(iw, a)))
-    end
+@inline function _extract_scalar_values(::Order{k}, iw) where {k}
+    ntuple(a -> map(only, Tuple(values(iw, a))), Val(k+1))
 end
 @generated function _prod_each_dimension(::Order{k}, vals) where {k}
     quote
