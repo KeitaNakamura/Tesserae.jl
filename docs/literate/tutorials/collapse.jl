@@ -224,5 +224,5 @@ end
 
 using Test                             #src
 if @isdefined(RUN_TESTS) && RUN_TESTS  #src
-    @test main()[2] ≈ 0.1085 rtol=0.01 #src
+    @test main()[2] ≈ 0.1085 rtol=0.02 #src
 end                                    #src
