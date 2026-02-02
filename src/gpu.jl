@@ -9,7 +9,8 @@ function Adapt.adapt_storage(::CPUDevice, A::AbstractArray)
 end
 
 cpu(A) = A |> CPUDevice()
-gpu(A) = A |> gpu_device()
+gpu(A) = A |> gpu_device(CastFloat32)
+gpu_preserve(A) = A |> gpu_device(PreserveEltype)
 
 ###################################
 # Special conversions in Tesserae #
@@ -21,7 +22,7 @@ function Adapt.adapt_structure(to::GPUDevice, A::StructArray)
     StructArray(named_tuple) # always convert to NamedTuple
 end
 
-function Adapt.adapt_structure(to::GPUDevice, x::StepRangeLen{T, R, S, L}) where {T, R, S, L}
+function Adapt.adapt_structure(to::GPUDevice{CastFloat32}, x::StepRangeLen{T, R, S, L}) where {T, R, S, L}
     Tnew = T <: AbstractFloat ? Float32 : T
     Rnew = (R <: AbstractFloat || R <: Base.TwicePrecision) ? Float32 : R
     Snew = (S <: AbstractFloat || S <: Base.TwicePrecision) ? Float32 : S
