@@ -1,6 +1,6 @@
 name = "Tesserae"
 uuid = "fd374396-9d9c-4d88-9aa5-37a7f6105aca"
-version = "0.4.11"
+version = "0.4.12"
 authors = ["Keita Nakamura <keita.nakamura.1109@gmail.com>"]
 
 [deps]
