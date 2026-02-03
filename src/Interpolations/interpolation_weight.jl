@@ -338,7 +338,7 @@ function update!(weights::AbstractArray{<: InterpolationWeight}, particles::Stru
             @inbounds update!(weights[p], LazyRow(particles, p), mesh, filter)
         end
     else
-        kernel = gpukernel_update_weight(backend, 256)
+        kernel = gpukernel_update_weight(backend)
         kernel(weights, particles, mesh, filter; ndrange=length(particles))
         synchronize(backend)
     end
