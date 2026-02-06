@@ -5,7 +5,7 @@ fillzero!(x::AbstractMesh) = x
 """
     CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...)
 
-Construct `CartesianMesh` with the spacing `h`.
+Construct a uniform Cartesian mesh with scalar spacing `h` (same in all directions).
 
 # Examples
 ```jldoctest
