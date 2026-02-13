@@ -142,7 +142,7 @@ function tforeach(f, iter, scheduler=DynamicScheduler(); kwargs...)
     if Threads.nthreads() > 1
         _tforeach(f, iter, get_scheduler(scheduler); kwargs...)
     else
-        foreach(f, iter)
+        _tforeach(f, iter, SequentialScheduler(); kwargs...)
     end
 end
 
