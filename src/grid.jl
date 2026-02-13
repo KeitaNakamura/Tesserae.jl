@@ -2,7 +2,7 @@
 # Grid #
 ########
 
-const Grid{N, T, NT <: NamedTuple{<: Any, <: Tuple{AbstractMesh, Vararg{AbstractArray}}}, I} = StructArray{T, N, NT, I}
+const Grid{dim, T, N, NT <: NamedTuple{<: Any, <: Tuple{AbstractMesh{dim}, Vararg{AbstractArray}}}, I} = StructArray{T, N, NT, I}
 
 get_mesh(grid::Grid) = getx(grid)
 
@@ -10,7 +10,7 @@ get_mesh(grid::Grid) = getx(grid)
 # SpGrid #
 ##########
 
-const SpGrid{N, T, NT <: NamedTuple{<: Any, <: Tuple{CartesianMesh, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
+const SpGrid{dim, T, N, NT <: NamedTuple{<: Any, <: Tuple{CartesianMesh{dim}, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
 
 function check_gridproperty(::Type{GridProp}, ::Type{Vec{dim, T}}) where {GridProp, dim, T}
     V = fieldtype(GridProp, 1)
