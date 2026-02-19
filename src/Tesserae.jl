@@ -130,4 +130,6 @@ include("export.jl")
 include("gpu.jl")
 include("deprecated.jl")
 
+include("Stencil/Stencil.jl")
+
 end # module Tesserae
