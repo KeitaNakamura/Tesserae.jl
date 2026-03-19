@@ -28,18 +28,28 @@ to_vtk_connectivity(::Hex8)  = SVector(1,2,3,4,5,6,7,8)
 to_vtk_connectivity(::Hex20) = SVector(1,2,3,4,5,6,7,8,9,12,14,10,17,19,20,18,11,13,15,16)
 to_vtk_connectivity(::Hex27) = SVector(1,2,3,4,5,6,7,8,9,12,14,10,17,19,20,18,11,13,15,16,23,24,22,25,21,26,27)
 
+struct Polyline{V <: AbstractVector{<: Vec}}
+    vertices::V
+end
+
 # vtk_grid
-function vtk_particles(vtk, x::AbstractVector{<: Vec}; kwargs...)
+function _vtk_grid(vtk, x::Polyline; kwargs...)
+    coords = vtk_format(f32(x.vertices))
+    cells = [WriteVTK.MeshCell(WriteVTK.VTKCellTypes.VTK_POLY_LINE, 1:length(x.vertices))]
+    WriteVTK.vtk_grid(vtk, coords, cells; kwargs...)
+end
+
+function _vtk_grid(vtk, x::AbstractVector{<: Vec}; kwargs...)
     coords = vtk_format(f32(x))
     npts = length(x)
     cells = [WriteVTK.MeshCell(WriteVTK.VTKCellTypes.VTK_VERTEX, [i]) for i in 1:npts]
     WriteVTK.vtk_grid(vtk, coords, cells; kwargs...)
 end
-function vtk_mesh(vtk, mesh::CartesianMesh; kwargs...)
+function _vtk_grid(vtk, mesh::CartesianMesh; kwargs...)
     WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh); kwargs...)
 end
 
-function vtk_mesh(vtk, mesh::UnstructuredMesh; kwargs...)
+function _vtk_grid(vtk, mesh::UnstructuredMesh; kwargs...)
     shape = cellshape(mesh)
     cells = WriteVTK.MeshCell[]
     celltype = to_vtk_celltype(shape)
@@ -69,8 +79,7 @@ function _vtk_format(A::AbstractArray{<: SymmetricSecondOrderTensor{3, T}}) wher
 end
 
 # open/close
-openvtk(vtk, mesh::AbstractMesh; kwargs...) = vtk_mesh(vtk, mesh; kwargs...)
-openvtk(vtk, particles::AbstractVector{<:Vec}; kwargs...) = vtk_particles(vtk, particles; kwargs...)
+openvtk(vtk, x; kwargs...) = _vtk_grid(vtk, x; kwargs...)
 function openvtk(f::Function, args...; kwargs...)
     vtk = openvtk(args...; kwargs...)
     local outfiles
