@@ -61,6 +61,7 @@ export
 # interpolations
     update!,
     Order,
+    Constant,
     Linear,
     Quadratic,
     Cubic,
