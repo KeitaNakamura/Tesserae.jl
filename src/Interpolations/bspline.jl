@@ -1,5 +1,6 @@
 abstract type AbstractBSpline{D <: Degree} <: Kernel end
 
+kernel_support(::AbstractBSpline{Degree{0}}) = 1
 kernel_support(::AbstractBSpline{Degree{1}}) = 2
 kernel_support(::AbstractBSpline{Degree{2}}) = 3
 kernel_support(::AbstractBSpline{Degree{3}}) = 4
@@ -19,6 +20,7 @@ kernel_support(::AbstractBSpline{Degree{5}}) = 6
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
+@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{0}}) where {T} = T(-0.5)
 @inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{1}}) where {T} = T(0.0)
 @inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{2}}) where {T} = T(0.5)
 @inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{3}}) where {T} = T(1.0)
@@ -30,6 +32,18 @@ end
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
 # `x` must be normalized by `h`
+
+# constant
+@inline _value1d(::Order{0}, ::AbstractBSpline{Constant}, (ξ,)::Tuple{V}) where {V} = V((1,))
+@inline _value1d(::Order,    ::AbstractBSpline{Constant}, (ξ,)::Tuple{V}) where {V} = V((0,))
+@generated function values1d(::Order{k}, spline::AbstractBSpline{Constant}, x::Real) where {k}
+    quote
+        T  = typeof(x)
+        x′ = fract(x - T(0.5))
+        ξ  = (x′ - T(0.5),)
+        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,))
+    end
+end
 
 # linear
 @inline _value1d(::Order{0}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = @. muladd($V((-1,1)), ξ, $V((1,1)))
@@ -166,6 +180,10 @@ struct BSpline{D} <: AbstractBSpline{D}
 end
 Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
 
+@inline function value(::BSpline{Constant}, ξ::Real)
+    ξ = abs(ξ)
+    ξ < 0.5 ? one(ξ) : zero(ξ)
+end
 @inline function value(::BSpline{Linear}, ξ::Real)
     ξ = abs(ξ)
     ξ < 1 ? 1 - ξ : zero(ξ)
@@ -226,6 +244,9 @@ Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", splin
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
 # International journal for numerical methods in engineering, 76(6), 922-948.
+function value(::SteffenBSpline{Constant}, ξ::Real, pos::Int)
+    value(BSpline(Constant()), ξ)
+end
 function value(::SteffenBSpline{Linear}, ξ::Real, pos::Int)
     value(BSpline(Linear()), ξ)
 end

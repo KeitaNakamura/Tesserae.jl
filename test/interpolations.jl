@@ -98,7 +98,7 @@ end # InterpolationWeight
         isapprox(mapreduce((j,i) -> X[i]⊗iw.∇w[j], +, CI, indices), I)
     end
 
-    @testset "$spline" for spline in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quadratic()))
+    @testset "$spline" for spline in (BSpline(Constant()), BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quadratic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
@@ -109,7 +109,11 @@ end # InterpolationWeight
                 is_support_truncated = size(iw.w) != size(neighboringnodes(iw))
                 PU = check_partition_of_unity(iw, x)
                 LFR = check_linear_field_reproduction(iw, x, mesh)
-                is_support_truncated ? (!PU && !LFR) : (PU && LFR)
+                if spline isa BSpline{Constant}
+                    PU && !LFR
+                else
+                    is_support_truncated ? (!PU && !LFR) : (PU && LFR)
+                end
             end
         end
     end
