@@ -50,12 +50,21 @@ function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
     CartesianMesh(axes, h, inv(h))
 end
 
-function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}) where {T, dim}
+function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}; pad::Int = 0) where {T, dim}
     @assert all(x->x[1]<x[2], minmax)
-    axes = map(lims->Vector{T}(range(lims...; step=h)), minmax)
+
+    axes = map(minmax) do lims
+        ax = range(lims...; step=h)
+        pad == 0 && return Vector{T}(ax)
+
+        start = first(ax) - pad*h
+        n  = length(ax) + 2*pad
+        Vector{T}(range(start; step=h, length=n))
+    end
+
     CartesianMesh(axes, T(h), T(inv(h)))
 end
-CartesianMesh(h::Real, minmax::Tuple{Real, Real}...) = CartesianMesh(Float64, h, minmax...)
+CartesianMesh(h::Real, minmax::Tuple{Real, Real}...; kwargs...) = CartesianMesh(Float64, h, minmax...; kwargs...)
 
 """
     extract(mesh::CartesianMesh, (xmin, xmax), (ymin, ymax)...)
