@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VTKFile type="Collection" version="1.0" byte_order="LittleEndian" compressor="vtkZLibDataCompressor">
+  <Collection>
+    <DataSet timestep="0.0" part="0" file="Simulation1.vtm"/>
+    <DataSet timestep="0.5" part="0" file="Simulation2.vtm"/>
+    <DataSet timestep="1.0" part="0" file="Simulation3.vtm"/>
+    <DataSet timestep="1.5" part="0" file="Simulation4.vtm"/>
+    <DataSet timestep="2.0" part="0" file="Simulation5.vtm"/>
+    <DataSet timestep="2.5" part="0" file="Simulation6.vtm"/>
+    <DataSet timestep="3.0" part="0" file="Simulation7.vtm"/>
+    <DataSet timestep="3.5" part="0" file="Simulation8.vtm"/>
+    <DataSet timestep="4.0" part="0" file="Simulation9.vtm"/>
+    <DataSet timestep="4.5" part="0" file="Simulation10.vtm"/>
+    <DataSet timestep="5.0" part="0" file="Simulation11.vtm"/>
+    <DataSet timestep="5.5" part="0" file="Simulation12.vtm"/>
+    <DataSet timestep="6.0" part="0" file="Simulation13.vtm"/>
+    <DataSet timestep="6.5" part="0" file="Simulation14.vtm"/>
+    <DataSet timestep="7.0" part="0" file="Simulation15.vtm"/>
+    <DataSet timestep="7.5" part="0" file="Simulation16.vtm"/>
+    <DataSet timestep="8.0" part="0" file="Simulation17.vtm"/>
+    <DataSet timestep="8.5" part="0" file="Simulation18.vtm"/>
+    <DataSet timestep="9.0" part="0" file="Simulation19.vtm"/>
+    <DataSet timestep="9.5" part="0" file="Simulation20.vtm"/>
+    <DataSet timestep="10.0" part="0" file="Simulation21.vtm"/>
+  </Collection>
+</VTKFile>
