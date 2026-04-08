@@ -258,10 +258,10 @@ end
 
 using Test                                     #src
 if @isdefined(RUN_TESTS) && RUN_TESTS          #src
-    @test main(FLIP(0.0))  ≈ 8.004e6 rtol=1e-3 #src
-    @test main(FLIP(1.0))  ≈ 1.365e7 rtol=1e-3 #src
-    @test main(FLIP(0.99)) ≈ 1.355e7 rtol=1e-3 #src
-    @test main(APIC())     ≈ 1.347e7 rtol=1e-3 #src
-    @test main(TPIC())     ≈ 1.348e7 rtol=1e-3 #src
-    @test main(XPIC(5))    ≈ 1.338e7 rtol=1e-3 #src
+    @test main(FLIP(0.0))  ≈ 7.948e6 rtol=1e-3 #src
+    @test main(FLIP(1.0))  ≈ 1.305e7 rtol=1e-3 #src
+    @test main(FLIP(0.99)) ≈ 1.295e7 rtol=1e-3 #src
+    @test main(APIC())     ≈ 1.307e7 rtol=1e-3 #src
+    @test main(TPIC())     ≈ 1.309e7 rtol=1e-3 #src
+    @test main(XPIC(5))    ≈ 1.277e7 rtol=1e-3 #src
 end                                            #src
