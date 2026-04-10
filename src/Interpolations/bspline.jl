@@ -212,7 +212,7 @@ end
 end
 
 @inline function Base.values(::Order{k}, spline::BSpline, ξ::Real) where {k}
-    ∂ⁿ{k,:all}(ξ -> value(spline, ξ), ξ)
+    reverse(∂{k}(ξ -> value(spline, ξ), ξ, :all))
 end
 
 @generated function Base.values(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
@@ -282,7 +282,7 @@ function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
 end
 
 @inline function Base.values(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
-    ∂ⁿ{k,:all}(ξ -> value(spline, ξ, pos), ξ)
+    reverse(∂{k}(ξ -> value(spline, ξ, pos), ξ, :all))
 end
 
 @generated function Base.values(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}

@@ -36,7 +36,7 @@ end
 end
 
 @inline function Base.values(::Order{k}, gimp::uGIMP, ξ::Real, l::Real) where {k}
-    ∂ⁿ{k,:all}(ξ -> value(gimp, ξ, l), ξ)
+    reverse(∂{k}(ξ -> value(gimp, ξ, l), ξ, :all))
 end
 
 @generated function Base.values(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}

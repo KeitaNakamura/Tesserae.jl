@@ -14,7 +14,7 @@ Base.show(io::IO, poly::Polynomial) = print(io, Polynomial, "(", poly.degree, ")
     end
 end
 
-@inline Base.values(::Order{k}, p::Polynomial{<: Union{Quadratic, MultiQuadratic}}, x::Vec) where {k} = ∂ⁿ{k,:all}(x->value(p,x), x)
+@inline Base.values(::Order{k}, p::Polynomial{<: Union{Quadratic, MultiQuadratic}}, x::Vec) where {k} = reverse(∂{k}(x->value(p,x), x, :all))
 
 @inline _value(::Order{0}, ::Polynomial{Linear}, x::Vec) = vcat(one(eltype(x)), x)
 @inline _value(::Order{1}, ::Polynomial{Linear}, x::Vec{dim, T}) where {dim, T} = vcat(zero(Mat{1, dim, T}), one(Mat{dim, dim, T}))

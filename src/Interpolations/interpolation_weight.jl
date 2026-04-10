@@ -57,7 +57,7 @@ end
     end
     quote
         @_inline_meta
-        v = $(Expr(:tuple, v[Tensorial.tensorindices_tuple(TT)]...))
+        v = $(Expr(:tuple, v[Tensorial.independent_to_component_map(TT)]...))
         map($TT, map(tuple_otimes, v)...)
     end
 end

@@ -9,7 +9,6 @@ using Printf
 
 using Reexport
 @reexport using Tensorial
-using Tensorial: ∂ⁿ
 
 using StaticArrays
 using StructArrays
