@@ -388,21 +388,27 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         push!(arraydicts, ex)
     end
 
+    if transposed_lhs
+        gdofs_init = quote
+            $gdofs_i = LinearIndices((size($(gmats[1]),2)÷length($grid_i), size($grid_i)...))
+            $gdofs_j = LinearIndices((size($(gmats[1]),1)÷length($grid_j), size($grid_j)...))
+            @assert all(==((length($gdofs_j), length($gdofs_i))), map(size, ($(gmats...),)))
+        end
+    else
+        gdofs_init = quote
+            $gdofs_i = LinearIndices((size($(gmats[1]),1)÷length($grid_i), size($grid_i)...))
+            $gdofs_j = LinearIndices((size($(gmats[1]),2)÷length($grid_j), size($grid_j)...))
+            @assert all(==((length($gdofs_i), length($gdofs_j))), map(size, ($(gmats...),)))
+        end
+    end
+
     body = quote
         let
             $(arraydicts...)
             $check_arguments_for_P2G_Matrix($grid_i, $particles, $weights_i, $partition)
             $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
             $(fillzeros...)
-            if $transposed_lhs
-                $gdofs_i = LinearIndices((size($(gmats[1]),2)÷length($grid_i), size($grid_i)...))
-                $gdofs_j = LinearIndices((size($(gmats[1]),1)÷length($grid_j), size($grid_j)...))
-                @assert all(==((length($gdofs_j), length($gdofs_i))), map(size, ($(gmats...),)))
-            else
-                $gdofs_i = LinearIndices((size($(gmats[1]),1)÷length($grid_i), size($grid_i)...))
-                $gdofs_j = LinearIndices((size($(gmats[1]),2)÷length($grid_j), size($grid_j)...))
-                @assert all(==((length($gdofs_i), length($gdofs_j))), map(size, ($(gmats...),)))
-            end
+            $gdofs_init
             $P2G((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $p) -> $body, $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
         end
     end
