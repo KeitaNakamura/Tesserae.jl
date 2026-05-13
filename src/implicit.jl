@@ -123,31 +123,52 @@ julia> extract(A, dofmap)
   ⋅    ⋅    ⋅    ⋅   0.0  0.0   ⋅   0.0  0.0
 ```
 """
-function create_sparse_matrix(interp::Interpolation, mesh::AbstractMesh; ndofs::Int = ndims(mesh))
-    create_sparse_matrix(Float64, interp, mesh; ndofs)
+function create_sparse_matrix(interp::Interpolation, mesh::AbstractMesh; ndofs = ndims(mesh))
+    _create_sparse_matrix(Float64, interp, mesh, ndofs)
 end
-function create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh{dim}; ndofs::Int = dim) where {T, dim}
+
+function create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh; ndofs = ndims(mesh)) where {T}
+    _create_sparse_matrix(T, interp, mesh, ndofs)
+end
+
+function _create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh{dim}, ndofs::Int) where {T, dim}
+    _create_sparse_matrix(T, interp, mesh, (ndofs, ndofs))
+end
+
+function _create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh{dim}, ndofs::Tuple{Int,Int}) where {T, dim}
+    row_ndofs, col_ndofs = ndofs
+
     dims = size(mesh)
-    n = ndofs * prod(dims)
+    nrows = row_ndofs * prod(dims)
+    ncols = col_ndofs * prod(dims)
+
     I, J = Int[], Int[]
     LI, CI = LinearIndices(dims), CartesianIndices(dims)
+
+    function gendofs(node_id, ndofs)
+        first = ndofs * (node_id - 1) + 1
+        last  = ndofs * node_id
+        first:last
+    end
+
     for i in CI
         unit = (kernel_support(interp) - 1) * oneunit(i)
         indices = intersect((i-unit):(i+unit), CI)
-        idofs = (ndofs*(LI[i]-1)+1):(ndofs*LI[i])
+        idofs = gendofs(LI[i], row_ndofs)
         for j in indices
-            jdofs = (ndofs*(LI[j]-1)+1):(ndofs*LI[j])
+            jdofs = gendofs(LI[j], col_ndofs)
             append_dofs!(I, J, idofs, jdofs)
         end
     end
-    sparse(I, J, zeros(T, length(I)), n, n)
+
+    sparse(I, J, zeros(T, length(I)), nrows, ncols)
 end
 
 function append_dofs!(I, J, idofs, jdofs)
-    for j in 1:length(jdofs)
+    for jdof in jdofs
         append!(I, idofs)
-        for _ in 1:length(idofs)
-            push!(J, jdofs[j])
+        for _ in idofs
+            push!(J, jdof)
         end
     end
 end
@@ -298,10 +319,19 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     lmat_init = Any[]
     lmat_asm = Any[] 
     lmat2gmat = Any[]
+    transposed_lhs = false
     for k in eachindex(equations)
         (; lhs, rhs, op) = equations[k]
         @capture(lhs, gmat_[gi_,gj_]) || error("@P2G_Matrix: Invalid global matrix expression, got `$lhs`")
         ((gi == i && gj == j) || (gi == j && gj == i)) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
+
+        is_transposed_lhs = gi == j && gj == i
+        if k == firstindex(equations)
+            transposed_lhs = is_transposed_lhs
+        elseif transposed_lhs != is_transposed_lhs
+            error("@P2G_Matrix: mixed `$gmat[$i,$j]` and `$gmat[$j,$i]` forms are not supported in one block")
+        end
+
         lmat = gensym(gmat)
         op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($gmat)))
         op == :(-=) && (rhs = :(-$rhs))
@@ -337,7 +367,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
                 $(lmat_asm...)
             end
         end
-        $dofs_i, $dofs_j = $_get_dofs($gdofs_i, $gridindices_i, $gdofs_j, $gridindices_j, Val($coupling))
+        $dofs_i, $dofs_j = $_get_dofs($gdofs_i, $gridindices_i, $gdofs_j, $gridindices_j)
         $(lmat2gmat...)
     end
 
@@ -364,9 +394,15 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
             $check_arguments_for_P2G_Matrix($grid_i, $particles, $weights_i, $partition)
             $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
             $(fillzeros...)
-            $gdofs_i = LinearIndices((size($(gmats[1]),1)÷length($grid_i), size($grid_i)...))
-            $gdofs_j = LinearIndices((size($(gmats[1]),2)÷length($grid_j), size($grid_j)...))
-            @assert all(==((length($gdofs_i), length($gdofs_j))), map(size, ($(gmats...),)))
+            if $transposed_lhs
+                $gdofs_i = LinearIndices((size($(gmats[1]),2)÷length($grid_i), size($grid_i)...))
+                $gdofs_j = LinearIndices((size($(gmats[1]),1)÷length($grid_j), size($grid_j)...))
+                @assert all(==((length($gdofs_j), length($gdofs_i))), map(size, ($(gmats...),)))
+            else
+                $gdofs_i = LinearIndices((size($(gmats[1]),1)÷length($grid_i), size($grid_i)...))
+                $gdofs_j = LinearIndices((size($(gmats[1]),2)÷length($grid_j), size($grid_j)...))
+                @assert all(==((length($gdofs_i), length($gdofs_j))), map(size, ($(gmats...),)))
+            end
             $P2G((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $p) -> $body, $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
         end
     end
@@ -376,8 +412,15 @@ end
 
 @inline _get_neighboringnodes(iw_i, grid_i, iw_j, grid_j, ::Val{true}) = (@_propagate_inbounds_meta; (neighboringnodes(iw_i, grid_i), neighboringnodes(iw_j, grid_j)))
 @inline _get_neighboringnodes(iw_i, grid_i, iw_j, grid_j, ::Val{false}) = (@_propagate_inbounds_meta; inds=neighboringnodes(iw_i, grid_i); (inds, inds))
-@inline _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j, ::Val{true}) = (@_propagate_inbounds_meta; (vec(gdofs_i[:, gridindices_i]), vec(gdofs_j[:, gridindices_j])))
-@inline _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j, ::Val{false}) = (@_propagate_inbounds_meta; dofs=vec(gdofs_j[:, gridindices_j]); (dofs, dofs))
+@inline function _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j)
+    @_propagate_inbounds_meta
+    if size(gdofs_i, 1) == size(gdofs_j, 1) && gridindices_i === gridindices_j
+        dofs = vec(gdofs_i[:, gridindices_i])
+        return dofs, dofs
+    else
+        return vec(gdofs_i[:, gridindices_i]), vec(gdofs_j[:, gridindices_j])
+    end
+end
 
 function unpair2(ex::Expr)
     if @capture(ex, lhs_Symbol => (rhs1_Symbol, rhs2_Symbol))
