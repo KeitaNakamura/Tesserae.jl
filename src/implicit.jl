@@ -305,10 +305,11 @@ end
 function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particles,p), ((weights_i,weights_j),(ip,jp)), partition, equations::Vector)
     @gensym grid_i′ grid_j′ weights_i′ weights_j′ iw_i iw_j gridindices_i gridindices_j ldofs_i ldofs_j I J dofs_i dofs_j gdofs_i gdofs_j
 
-    @assert all(eq -> eq.issumeq, equations)
+    isempty(equations) && error("@P2G_Matrix: at least one equation is required")
+    all(eq -> eq.issumeq, equations) || error("@P2G_Matrix: all equations must use `@∑`")
 
     maps = [grid_i′=>i, grid_j′=>j, particles=>p, iw_i=>ip, iw_j=>jp]
-    replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}(), Set{Expr}()]
+    replaced = replacement_groups(length(maps))
     for k in eachindex(equations)
         eq = equations[k]
         eq.rhs = resolve_refs(eq.rhs, maps; replaced)
@@ -317,13 +318,14 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     fillzeros = Any[]
     gmats = Any[]
     lmat_init = Any[]
-    lmat_asm = Any[] 
+    lmat_asm = Any[]
     lmat2gmat = Any[]
     transposed_lhs = false
     for k in eachindex(equations)
         (; lhs, rhs, op) = equations[k]
         @capture(lhs, gmat_[gi_,gj_]) || error("@P2G_Matrix: Invalid global matrix expression, got `$lhs`")
         ((gi == i && gj == j) || (gi == j && gj == i)) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
+        gmat in gmats && error("@P2G_Matrix: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
 
         is_transposed_lhs = gi == j && gj == i
         if k == firstindex(equations)
@@ -358,11 +360,11 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         $(lmat_init...)
         for $jp in eachindex($gridindices_j)
             $j = $gridindices_j[$jp]
-            $(union(replaced[2], replaced[5])...)
+            $(replacements(replaced, 2, 5)...)
             $J = vec(view($ldofs_j,:,$jp))
             for $ip in eachindex($gridindices_i)
                 $i = $gridindices_i[$ip]
-                $(union(replaced[1], replaced[4])...)
+                $(replacements(replaced, 1, 4)...)
                 $I = vec(view($ldofs_i,:,$ip))
                 $(lmat_asm...)
             end
