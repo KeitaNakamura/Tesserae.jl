@@ -117,8 +117,8 @@ function main()
     particles.v .= Ref([0,0,-227]) # Set initial velocity
     @show length(particles)
 
-    ## Interpolation
-    weights = generate_interpolation_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+    ## Basis weights
+    weights = generate_basis_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
 
     ## Color partitioning for multi-threaded G2P transfer
     if Threads.nthreads() == 1
@@ -150,7 +150,7 @@ function main()
             Δt::Float64 = CFL * spacing(grid.x) / maximum(particles.c)
         end
 
-        @timeit "Update interpolation" begin
+        @timeit "Update basis weights" begin
             update!(weights, particles, grid.x) # Automatically uses multi-threading
         end
 
@@ -266,7 +266,7 @@ end
 # Write results                   25    79.2s   18.8%   3.17s   7.08GiB   33.5%   290MiB
 # G2P transfer                 1.83k    35.7s    8.5%  19.5ms   12.8MiB    0.1%  7.14KiB
 # P2G transfer                 1.83k    33.2s    7.9%  18.1ms   1.94GiB    9.2%  1.09MiB
-# Update interpolation         1.83k    26.9s    6.4%  14.7ms   16.4MiB    0.1%  9.20KiB
+# Update basis weights         1.83k    26.9s    6.4%  14.7ms   16.4MiB    0.1%  9.20KiB
 # Grid computation             1.83k    9.53s    2.3%  5.21ms     0.00B    0.0%    0.00B
 # Update timestep              1.83k    3.24s    0.8%  1.77ms   10.9MiB    0.1%  6.11KiB
 # Reorder particles               25    1.81s    0.4%  72.5ms   11.8GiB   55.7%   482MiB
@@ -283,7 +283,7 @@ end
 #      xlims = (0,18), ylims = (0,18), palette = :RdBu_4) # hide
 # plot!([1, 2, 4, 8, 16],                                 # hide
 #       93.5 ./ [93.5, 46.8, 25.6, 14.7, 8.05],           # hide
-#       label = "Update interpolation", marker = "o")     # hide
+#       label = "Update basis weights", marker = "o")     # hide
 # plot!([1, 2, 4, 8, 16],                                 # hide
 #       108.0 ./ [108.0, 59.7, 31.9, 18.1, 12.6],         # hide
 #       label = "P2G transfer", marker = "o")             # hide

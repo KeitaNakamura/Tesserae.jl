@@ -132,13 +132,13 @@ This expands to roughly the following code:
 
 # Particle-to-grid transfer
 for p in eachindex(particles)
-    iw = weights[p]
-    nodeindices = neighboringnodes(iw)
+    bw = weights[p]
+    nodeindices = supportnodes(bw)
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        grid.m [i] += iw.w[ip] * particles.m[p]
-        grid.mv[i] += iw.w[ip] * particles.m[p] * particles.v[p]
-        grid.mv[i] += -particles.V[p] * particles.σ[p] * iw.∇w[ip]
+        grid.m [i] += bw.w[ip] * particles.m[p]
+        grid.mv[i] += bw.w[ip] * particles.m[p] * particles.v[p]
+        grid.mv[i] += -particles.V[p] * particles.σ[p] * bw.∇w[ip]
     end
 end
 
@@ -203,9 +203,9 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
 end
 
 function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
-    @gensym iw gridindices
+    @gensym bw gridindices
 
-    maps = [grid=>i, particles=>p, iw=>ip]
+    maps = [grid=>i, particles=>p, bw=>ip]
     replaced = replacement_groups(length(maps))
     for k in eachindex(sum_equations)
         eq = sum_equations[k]
@@ -225,8 +225,8 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
 
     body = quote
         $(replaced[2]...)
-        $iw = $weights[$p]
-        $gridindices = neighboringnodes($iw, $grid)
+        $bw = $weights[$p]
+        $gridindices = supportnodes($bw, $grid)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $(replacements(replaced, 1, 3)...)
@@ -303,7 +303,7 @@ end
 
 function check_arguments_for_P2G(grid, particles, weights, partition)
     get_mesh(grid) isa AbstractMesh || error("@P2G: grid must have a mesh")
-    eltype(weights) <: InterpolationWeight || error("@P2G: invalid `InterpolationWeight`s, got type $(typeof(weights))")
+    eltype(weights) <: BasisWeight || error("@P2G: invalid `BasisWeight`s, got type $(typeof(weights))")
     if grid isa SpGrid
         if length(propertynames(grid)) > 1
             isempty(get_data(getproperty(grid, 2))) && error("@P2G: SpGrid indices not activated")
@@ -317,9 +317,9 @@ function check_arguments_for_P2G(grid, particles, weights, partition)
             if sum(length(particle_indices_in(strat, blk)) for blk in LinearIndices(nblocks(strat))) == 0
                 error("@P2G: No particles assigned to any block in ColorPartition")
             end
-            interp = interpolation(first(weights))
-            if kernel_support(interp) > (1 << BLOCK_SIZE_LOG2)
-                error("@P2G: Block size for `ColorPartition` is too small for interpolation $interp. Increase `block_size_log2` (default = 2) in LocalPreferences.toml to ensure block size is ≥ kernel support.")
+            b = basis(first(weights))
+            if kernel_support(b) > (1 << BLOCK_SIZE_LOG2)
+                error("@P2G: Block size for `ColorPartition` is too small for basis $b. Increase `block_size_log2` (default = 2) in LocalPreferences.toml to ensure block size is ≥ kernel support.")
             end
         end
     end
@@ -361,16 +361,16 @@ This expands to roughly the following code:
 ```julia
 # Grid-to-particle transfer
 for p in eachindex(particles)
-    iw = weights[p]
-    nodeindices = neighboringnodes(iw)
+    bw = weights[p]
+    nodeindices = supportnodes(bw)
     Δvₚ = zero(eltype(particles.v))
     ∇vₚ = zero(eltype(particles.∇v))
     Δxₚ = zero(eltype(particles.x))
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        Δvₚ += iw.w[ip] * (grid.vⁿ[i] - grid.v[i])
-        ∇vₚ += grid.v[i] ⊗ iw.∇w[ip]
-        Δxₚ += iw.w[ip] * grid.v[i] * Δt
+        Δvₚ += bw.w[ip] * (grid.vⁿ[i] - grid.v[i])
+        ∇vₚ += grid.v[i] ⊗ bw.∇w[ip]
+        Δxₚ += bw.w[ip] * grid.v[i] * Δt
     end
     particles.v[p] += Δvₚ
     particles.∇v[p] = ∇vₚ
@@ -443,10 +443,10 @@ function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) w
 end
 
 function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector)
-    @gensym iw gridindices
+    @gensym bw gridindices
 
     code = Expr(:block)
-    maps = [grid=>i, particles=>p, iw=>ip]
+    maps = [grid=>i, particles=>p, bw=>ip]
 
     if !isempty(sum_equations)
         replaced = replacement_groups(length(maps))
@@ -471,8 +471,8 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         code = quote
             $(replaced[2]...)
             $(inits...)
-            $iw = $weights[$p]
-            $gridindices = neighboringnodes($iw, $grid)
+            $bw = $weights[$p]
+            $gridindices = supportnodes($bw, $grid)
             for $ip in eachindex($gridindices)
                 $i = $gridindices[$ip]
                 $(replacements(replaced, 1, 3)...)
@@ -690,7 +690,7 @@ end
 
 function check_arguments_for_G2P(grid, particles, weights)
     get_mesh(grid) isa AbstractMesh || error("@G2P: grid must have a mesh")
-    eltype(weights) <: InterpolationWeight || error("@G2P: invalid `InterpolationWeight`s, got type $(typeof(weights))")
+    eltype(weights) <: BasisWeight || error("@G2P: invalid `BasisWeight`s, got type $(typeof(weights))")
     if grid isa SpGrid
         if length(propertynames(grid)) > 1
             isempty(get_data(getproperty(grid, 2))) && error("@G2P: SpGrid indices not activated")

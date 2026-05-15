@@ -57,7 +57,7 @@ export
     reorder_particles!,
     GridSampling,
     PoissonDiskSampling,
-# interpolations
+# basis functions
     update!,
     Order,
     Constant,
@@ -70,12 +70,18 @@ export
     SteffenBSpline,
     uGIMP,
     CPDI,
+    Basis,
     Interpolation,
     WLS,
     KernelCorrection,
-# InterpolationWeight
+# BasisWeight
+    generate_basis_weights,
     generate_interpolation_weights,
     neighboringnodes,
+    supportnodes,
+    basis,
+    BasisWeight,
+    BasisWeightArray,
     InterpolationWeight,
     feupdate!,
 # transfer
@@ -112,13 +118,13 @@ include("sparray.jl")
 include("grid.jl")
 include("particles.jl")
 
-include("Interpolations/interpolation_weight.jl")
-include("Interpolations/bspline.jl")
-include("Interpolations/gimp.jl")
-include("Interpolations/cpdi.jl")
-include("Interpolations/polynomials.jl")
-include("Interpolations/wls.jl")
-include("Interpolations/kernelcorrection.jl")
+include("Basis/basis_weight.jl")
+include("Basis/bspline.jl")
+include("Basis/gimp.jl")
+include("Basis/cpdi.jl")
+include("Basis/polynomials.jl")
+include("Basis/wls.jl")
+include("Basis/kernelcorrection.jl")
 
 include("fem.jl")
 

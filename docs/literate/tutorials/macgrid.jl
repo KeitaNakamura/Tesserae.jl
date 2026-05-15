@@ -67,9 +67,9 @@ function main()
     @. particles.m = ρ * particles.V
     @show length(particles)
 
-    ## Interpolation weights
-    cellweight = generate_interpolation_weights(BSpline(Constant()), cells.x, length(particles))
-    faceweights = map(grid -> generate_interpolation_weights(BSpline(Linear()), grid.x, length(particles); derivative=Order(1)), facegrids)
+    ## Basis weights
+    cellweight = generate_basis_weights(BSpline(Constant()), cells.x, length(particles))
+    faceweights = map(grid -> generate_basis_weights(BSpline(Linear()), grid.x, length(particles); derivative=Order(1)), facegrids)
 
     ## Output
     outdir = mkpath(joinpath("output", "macgrid"))

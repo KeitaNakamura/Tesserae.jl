@@ -60,7 +60,7 @@ nothing #hide
 ```@example transfer
 grid = generate_grid(GridProp, CartesianMesh(1, (0,10), (0,10)))                          #hide
 particles = generate_particles(ParticleProp, grid.x)                                      #hide
-weights = generate_interpolation_weights(BSpline(Quadratic()), grid.x, length(particles)) #hide
+weights = generate_basis_weights(BSpline(Quadratic()), grid.x, length(particles)) #hide
 for p in eachindex(particles)                                                             #hide
     update!(weights[p], particles.x[p], grid.x)                                           #hide
 end                                                                                       #hide

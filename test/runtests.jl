@@ -9,7 +9,7 @@ include("sparray.jl")
 
 include("grid.jl")
 
-include("interpolations.jl")
+include("basis.jl")
 include("shapes.jl")
 
 include("implicit.jl")

@@ -7,7 +7,7 @@ end
 end
 
 function feupdate!(
-        weights::AbstractArray{<: InterpolationWeight{S}}, mesh::UnstructuredMesh{S, dim},
+        weights::AbstractArray{<: BasisWeight{S}}, mesh::UnstructuredMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         volume::Union{Nothing, AbstractArray} = nothing,
         quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
@@ -25,7 +25,7 @@ function feupdate!(
             N, dNdξ = valgrads[p]
             J = sum(x .⊗ dNdξ)
             set_values!(weights[p,c], (N, dNdξ .⊡ Ref(inv(J))))
-            neighboringnodes_storage(weights[p,c])[] = indices
+            supportnodes_storage(weights[p,c])[] = indices
             if volume !== nothing
                 volume[p,c] = qwts[p] * det(J)
             end
@@ -36,7 +36,7 @@ end
 _get_normal(J::Mat{3,2}) = J[:,1] × J[:,2]
 _get_normal(J::Mat{2,1}) = Vec(J[2,1], -J[1,1])
 function feupdate!(
-        weights::AbstractArray{<: InterpolationWeight{S}}, mesh::UnstructuredMesh{S, dim},
+        weights::AbstractArray{<: BasisWeight{S}}, mesh::UnstructuredMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         area::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
         quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
@@ -57,7 +57,7 @@ function feupdate!(
             n = _get_normal(J)
             n_norm = norm(n)
             set_values!(weights[p,c], (N,))
-            neighboringnodes_storage(weights[p,c])[] = indices
+            supportnodes_storage(weights[p,c])[] = indices
             if area !== nothing
                 area[p,c] = qwts[p] * n_norm
             end

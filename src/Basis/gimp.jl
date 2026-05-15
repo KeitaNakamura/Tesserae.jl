@@ -17,7 +17,7 @@ struct uGIMP <: Kernel end
 
 kernel_support(::uGIMP) = 3
 
-@inline function neighboringnodes(::uGIMP, pt, mesh::CartesianMesh)
+@inline function supportnodes(::uGIMP, pt, mesh::CartesianMesh)
     h⁻¹ = spacing_inv(mesh)
     neighboringnodes(getx(pt), 1+pt.l*h⁻¹, mesh)
 end
@@ -54,10 +54,10 @@ end
 
 @inline value(gimp::uGIMP, pt, mesh::CartesianMesh, i) = only(values(Order(0), gimp, pt, mesh, i))
 
-@inline function update_property!(iw::InterpolationWeight, gimp::uGIMP, pt, mesh::CartesianMesh)
-    indices = neighboringnodes(iw)
+@inline function update_property!(bw::BasisWeight, gimp::uGIMP, pt, mesh::CartesianMesh)
+    indices = supportnodes(bw)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        set_values!(iw, ip, values(derivative_order(iw), gimp, pt, mesh, i))
+        set_values!(bw, ip, values(derivative_order(bw), gimp, pt, mesh, i))
     end
 end

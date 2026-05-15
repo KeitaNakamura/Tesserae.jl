@@ -7,12 +7,12 @@ kernel_support(::AbstractBSpline{Degree{3}}) = 4
 kernel_support(::AbstractBSpline{Degree{4}}) = 5
 kernel_support(::AbstractBSpline{Degree{5}}) = 6
 
-@inline function neighboringnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
+@inline function supportnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
-    offset = _neighboringnodes_offset(eltype(x), spline)
+    offset = _supportnodes_offset(eltype(x), spline)
     r = kernel_support(spline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
     stop = @. start + r
@@ -20,12 +20,12 @@ kernel_support(::AbstractBSpline{Degree{5}}) = 6
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
-@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{0}}) where {T} = T(-0.5)
-@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{1}}) where {T} = T(0.0)
-@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{2}}) where {T} = T(0.5)
-@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{3}}) where {T} = T(1.0)
-@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{4}}) where {T} = T(1.5)
-@inline _neighboringnodes_offset(::Type{T}, ::AbstractBSpline{Degree{5}}) where {T} = T(2.0)
+@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{0}}) where {T} = T(-0.5)
+@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{1}}) where {T} = T(0.0)
+@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{2}}) where {T} = T(0.5)
+@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{3}}) where {T} = T(1.0)
+@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{4}}) where {T} = T(1.5)
+@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{5}}) where {T} = T(2.0)
 
 @inline value(spline::AbstractBSpline, pt, mesh::CartesianMesh, i) = only(values(Order(0), spline, pt, mesh, i))
 
@@ -142,25 +142,24 @@ end
     end
 end
 
-@inline function update_property!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
-    indices = neighboringnodes(iw)
-    is_support_truncated = size(values(iw,1)) != size(indices)
-    if is_support_truncated
-        update_property_truncated!(iw, spline, pt, mesh)
+@inline function update_property!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+    indices = supportnodes(bw)
+    if has_full_support(bw, indices)
+        update_property_full!(bw, spline, pt, mesh)
     else
-        update_property_full!(iw, spline, pt, mesh)
+        update_property_truncated!(bw, spline, pt, mesh)
     end
 end
 
-function update_property_truncated!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh)
-    indices = neighboringnodes(iw)
+function update_property_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
+    indices = supportnodes(bw)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        set_values!(iw, ip, values(derivative_order(iw), spline, getx(pt), mesh, i))
+        set_values!(bw, ip, values(derivative_order(bw), spline, getx(pt), mesh, i))
     end
 end
-@inline function update_property_full!(iw::InterpolationWeight, spline::AbstractBSpline, pt, mesh)
-    set_values!(iw, values(derivative_order(iw), spline, getx(pt), mesh))
+@inline function update_property_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
+    set_values!(bw, values(derivative_order(bw), spline, getx(pt), mesh))
 end
 
 """

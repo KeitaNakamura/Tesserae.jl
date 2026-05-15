@@ -104,13 +104,13 @@ function main(transfer = FLIP(1.0))
     @. particles.b = Vec(0,-g)
     @show length(particles)
 
-    ## Interpolation weights
-    interp = KernelCorrection(BSpline(Quadratic()))
-    weights = generate_interpolation_weights(interp, grid.X, length(particles); name=Val(:S))
-    weights_cell = generate_interpolation_weights(interp, grid.X, size(grid) .- 1; name=Val(:S))
+    ## Basis weights
+    basis = KernelCorrection(BSpline(Quadratic()))
+    weights = generate_basis_weights(basis, grid.X, length(particles); name=Val(:S))
+    weights_cell = generate_basis_weights(basis, grid.X, size(grid) .- 1; name=Val(:S))
 
     ## Sparse matrix
-    A = create_sparse_matrix(interp, grid.X; ndofs=3)
+    A = create_sparse_matrix(basis, grid.X; ndofs=3)
 
     ## Output
     outdir = mkpath(joinpath("output", "dam_break"))
@@ -124,7 +124,7 @@ function main(transfer = FLIP(1.0))
 
     Tesserae.@showprogress while t < T
 
-        ## Update interpolation values based on the nodes of active cells
+        ## Update basis weights based on the nodes of active cells
         ## where the particles are located
         activenodes = falses(size(grid))
         for p in eachindex(particles)
@@ -295,11 +295,11 @@ function compute_VMS_stabilization_coefficients(state)
     ## due to the use of `weights_cell`
     for p in eachindex(particles)
         v̄ₚ = zero(eltype(particles.v))
-        iw = weights_cell[findcell(particles.x[p], grid.X)]
-        gridindices = neighboringnodes(iw, grid)
+        bw = weights_cell[findcell(particles.x[p], grid.X)]
+        gridindices = supportnodes(bw, grid)
         for ip in eachindex(gridindices)
             i = gridindices[ip]
-            v̄ₚ += iw.S[ip] * grid.v[i]
+            v̄ₚ += bw.S[ip] * grid.v[i]
         end
         τ₁ = inv(ρ*τdyn/Δt + c₂*ρ*norm(v̄ₚ)/h + c₁*μ/h^2)
         τ₂ = h^2 / (c₁*τ₁)

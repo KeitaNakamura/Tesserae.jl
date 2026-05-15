@@ -138,8 +138,8 @@ function main()
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Interpolation weights
-    weights = generate_interpolation_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+    ## Basis weights
+    weights = generate_basis_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
 
     ## Material model
     model = DruckerPrager(; λ, G, ϕ, ψ)
@@ -160,7 +160,7 @@ function main()
         vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * h / vmax
 
-        ## Update interpolation weights
+        ## Update basis weights
         update!(weights, particles, grid.x)
 
         ## Particle-to-grid transfer

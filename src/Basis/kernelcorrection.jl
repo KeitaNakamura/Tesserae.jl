@@ -10,7 +10,7 @@ See also [`SteffenBSpline`](@ref).
 
 [^KC]: [Nakamura, K., Matsumura, S., & Mizutani, T. (2023). Taylor particle-in-cell transfer and kernel correction for material point method. *Computer Methods in Applied Mechanics and Engineering*, 403, 115720.](https://doi.org/10.1016/j.cma.2022.115720)
 """
-struct KernelCorrection{K <: Kernel, P <: Polynomial} <: Interpolation
+struct KernelCorrection{K <: Kernel, P <: Polynomial} <: Basis
     kernel::K
     poly::P
 end
@@ -20,23 +20,22 @@ KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(MultiLinear()))
 get_kernel(kc::KernelCorrection) = kc.kernel
 get_polynomial(kc::KernelCorrection) = kc.poly
 kernel_support(kc::KernelCorrection) = kernel_support(get_kernel(kc))
-@inline neighboringnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = neighboringnodes(get_kernel(kc), pt, mesh)
+@inline supportnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = supportnodes(get_kernel(kc), pt, mesh)
 
-@inline function update_property!(iw::InterpolationWeight, kc::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
-    indices = neighboringnodes(iw)
-    is_support_truncated = size(values(iw,1)) != size(indices) || !alltrue(filter, indices)
-    if is_support_truncated
-        update_property_truncated!(iw, kc, pt, mesh, filter)
+@inline function update_property!(bw::BasisWeight, kc::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+    indices = supportnodes(bw)
+    if has_full_support(bw, indices, filter)
+        update_property_full!(bw, kc, pt, mesh)
     else
-        update_property_full!(iw, kc, pt, mesh)
+        update_property_truncated!(bw, kc, pt, mesh, filter)
     end
 end
 
-function update_property_truncated!(iw::InterpolationWeight, kc::KernelCorrection, pt, mesh, filter)
-    update_property!(iw, WLS(get_kernel(kc), get_polynomial(kc)), pt, mesh, filter)
+function update_property_truncated!(bw::BasisWeight, kc::KernelCorrection, pt, mesh, filter)
+    update_property!(bw, WLS(get_kernel(kc), get_polynomial(kc)), pt, mesh, filter)
 end
-@inline function update_property_full!(iw::InterpolationWeight, kc::KernelCorrection, pt, mesh)
-    update_property!(iw, get_kernel(kc), pt, mesh)
+@inline function update_property_full!(bw::BasisWeight, kc::KernelCorrection, pt, mesh)
+    update_property!(bw, get_kernel(kc), pt, mesh)
 end
 
 Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", get_kernel(kc), ", ", get_polynomial(kc), ")")

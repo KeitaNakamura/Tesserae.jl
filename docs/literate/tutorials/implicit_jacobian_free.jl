@@ -77,9 +77,9 @@ function main()
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Interpolation
+    ## Basis weights
     ## Use the kernel correction to properly handle the boundary conditions
-    weights = generate_interpolation_weights(KernelCorrection(BSpline(Quadratic())), grid.X, length(particles))
+    weights = generate_basis_weights(KernelCorrection(BSpline(Quadratic())), grid.X, length(particles))
 
     ## Neo-Hookean model
     function kirchhoff_stress(F)

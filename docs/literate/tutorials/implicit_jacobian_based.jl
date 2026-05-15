@@ -72,10 +72,10 @@ function main()
     corner_p = argmin(p -> norm(particles.x[p] - Vec(4,0)), eachindex(particles)) #src
     corner_0 = particles.x[corner_p] + η*h/2*Vec(1,-1)                            #src
 
-    ## Interpolation
+    ## Basis weights
     ## Use the kernel correction to properly handle the boundary conditions
-    interp = KernelCorrection(BSpline(Quadratic()))
-    weights = generate_interpolation_weights(interp, grid.X, length(particles))
+    basis = KernelCorrection(BSpline(Quadratic()))
+    weights = generate_basis_weights(basis, grid.X, length(particles))
 
     ## Neo-Hookean model
     function kirchhoff_stress(F)
@@ -85,7 +85,7 @@ function main()
     end
 
     ## Sparse matrix
-    A = create_sparse_matrix(interp, grid.X)
+    A = create_sparse_matrix(basis, grid.X)
 
     ## Outputs
     outdir = mkpath(joinpath("output", "implicit_jacobian_based"))

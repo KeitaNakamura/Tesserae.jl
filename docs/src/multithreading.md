@@ -28,9 +28,9 @@ end
 
 Same applies to `@G2P2G` and `@P2G_Matrix`.
 
-### Updating interpolation values
+### Updating basis weights
 
-To update interpolation values, either use the [`update!`](@ref) function, or simply:
+To update basis weights, either use the [`update!`](@ref) function, or simply:
 
 ```julia
 @threaded for p in eachindex(particles)
