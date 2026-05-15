@@ -105,8 +105,8 @@ function main()
     end
     @show length(particles)
 
-    ## Interpolation
-    weights = generate_interpolation_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+    ## Basis weights
+    weights = generate_basis_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
 
     ## Output
     outdir = mkpath(joinpath("output", "rigid_body_contact"))
@@ -123,7 +123,7 @@ function main()
         vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * h / vmax
 
-        ## Update interpolation values
+        ## Update basis weights
         update!(weights, particles, grid.x)
 
         ## Particle-to-grid transfer

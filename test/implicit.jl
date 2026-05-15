@@ -1,16 +1,16 @@
 @testset "P2G_Matrix" begin
-    interp = BSpline(Quadratic())
+    basis = BSpline(Quadratic())
     mesh = CartesianMesh(1, (0,10), (0,20))
 
     grid = generate_grid(@NamedTuple{x::Vec{2,Float64}}, mesh)
     particles = generate_particles(@NamedTuple{x::Vec{2,Float64}}, mesh)
 
-    weights = generate_interpolation_weights(interp, mesh, length(particles))
+    weights = generate_basis_weights(basis, mesh, length(particles))
     update!(weights, particles, mesh)
 
     @testset "square matrix" begin
-        A = create_sparse_matrix(interp, mesh)
-        B = create_sparse_matrix(interp, mesh)
+        A = create_sparse_matrix(basis, mesh)
+        B = create_sparse_matrix(basis, mesh)
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             A[i,j] = @∑ w[ip] * sum(∇w[jp])
         end
@@ -22,10 +22,10 @@
         @test A ≈ B
     end
     @testset "multiple matrices" begin
-        A = create_sparse_matrix(interp, mesh)
-        B = create_sparse_matrix(interp, mesh)
-        Aref = create_sparse_matrix(interp, mesh)
-        Bref = create_sparse_matrix(interp, mesh)
+        A = create_sparse_matrix(basis, mesh)
+        B = create_sparse_matrix(basis, mesh)
+        Aref = create_sparse_matrix(basis, mesh)
+        Bref = create_sparse_matrix(basis, mesh)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             A[i,j] = @∑ w[ip] * w[jp]
@@ -54,8 +54,8 @@
     @testset "rectangular blocks" begin
         n = length(grid)
 
-        Aup = create_sparse_matrix(interp, mesh; ndofs=(2, 1))
-        Bpu = create_sparse_matrix(interp, mesh; ndofs=(1, 2))
+        Aup = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        Bpu = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
 
         @test size(Aup) == (2n, n)
         @test size(Bpu) == (n, 2n)

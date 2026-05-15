@@ -39,7 +39,7 @@ makedocs(;
         "Manual" => [
             "mesh.md"
             "generation.md"
-            "interpolation.md"
+            "basis.md"
             "transfer.md"
             "implicit_utils.md"
             "multithreading.md"

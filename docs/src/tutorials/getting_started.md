@@ -60,8 +60,8 @@ function main()
     @. particles.m = ρ⁰ * particles.V⁰
     @. particles.F = one(particles.F)
 
-    # Interpolation weights
-    weights = map(p -> InterpolationWeight(BSpline(Linear()), mesh), eachindex(particles))
+    # Basis weights
+    weights = map(p -> BasisWeight(BSpline(Linear()), mesh), eachindex(particles))
 
     # Create animation by `Plots.@gif`
     Δt = 0.001
@@ -226,46 +226,46 @@ nothing                                                              #hide
 
 ## Basis function values
 
-In Tesserae, the basis function values are stored in `InterpolationWeight`.
-For example, `InterpolationWeight` with the linear basis function can be constructed as
+In Tesserae, the basis function values are stored in `BasisWeight`.
+For example, `BasisWeight` with the linear basis function can be constructed as
 
 ```@repl stepbystep
-iw = InterpolationWeight(BSpline(Linear()), mesh)
+bw = BasisWeight(BSpline(Linear()), mesh)
 ```
 
-This `iw` can be updated by passing the particle position to the `update!` function:
+This `bw` can be updated by passing the particle position to the `update!` function:
 
 ```@repl stepbystep
-update!(iw, particles.x[1], mesh)
+update!(bw, particles.x[1], mesh)
 ```
 
 !!! info
-    After updating `iw`, you can check the partition of unity $\sum_i w_{ip} = 1$:
+    After updating `bw`, you can check the partition of unity $\sum_i w_{ip} = 1$:
     ```@repl stepbystep
-    sum(iw.w)
+    sum(bw.w)
     ```
     and the linear field reproduction $\sum_i w_{ip} \bm{x}_i = \bm{x}_p$:
     ```@repl stepbystep
-    nodeindices = neighboringnodes(iw)
+    nodeindices = supportnodes(bw)
     sum(eachindex(nodeindices)) do ip
         i = nodeindices[ip]
-        iw.w[ip] * mesh[i]
+        bw.w[ip] * mesh[i]
     end
     ```
 
-For the sake of performance, it's best to prepare the same number of `InterpolationWeight`s as there are particles. This means that each particle has its own storage for the basis function values.
+For the sake of performance, it's best to prepare the same number of `BasisWeight`s as there are particles. This means that each particle has its own storage for the basis function values.
 
 ```@example stepbystep
-weights = map(p -> InterpolationWeight(BSpline(Linear()), mesh), eachindex(particles))
+weights = map(p -> BasisWeight(BSpline(Linear()), mesh), eachindex(particles))
 nothing #hide
 ```
 
 !!! info
-    It is also possible to construct `InterpolationWeight`s with Structure-Of-Arrays (SOA) layout using `generate_interpolation_weights`.
+    It is also possible to construct `BasisWeight`s with Structure-Of-Arrays (SOA) layout using `generate_basis_weights`.
     ```@repl stepbystep
-    weights = generate_interpolation_weights(BSpline(Linear()), mesh, length(particles))
+    weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))
     ```
-    This SoA layout for `InterpolationWeight`s is generally preferred for performance, although it cannot be resized.
+    This SoA layout for `BasisWeight`s is generally preferred for performance, although it cannot be resized.
 
 ## Transfer between grid and particles
 
@@ -295,13 +295,13 @@ This macro expands to roughly the following code:
 @. grid.mv = zero(grid.mv)
 @. grid.f  = zero(grid.f)
 for p in eachindex(particles)
-    iw = weights[p]
-    nodeindices = neighboringnodes(iw)
+    bw = weights[p]
+    nodeindices = supportnodes(bw)
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        grid.m[i]  += iw.w[ip] * particles.m[p]
-        grid.mv[i] += iw.w[ip] * particles.m[p] * particles.v[p]
-        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * iw.∇w[ip]
+        grid.m[i]  += bw.w[ip] * particles.m[p]
+        grid.mv[i] += bw.w[ip] * particles.m[p] * particles.v[p]
+        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * bw.∇w[ip]
     end
 end
 ```
@@ -322,16 +322,16 @@ This macro expands to roughly the following code:
 
 ```julia
 for p in eachindex(particles)
-    iw = weights[p]
-    nodeindices = neighboringnodes(iw)
+    bw = weights[p]
+    nodeindices = supportnodes(bw)
     Δvₚ = zero(eltype(particles.v))
     ∇vₚ = zero(eltype(particles.∇v))
     Δxₚ = zero(eltype(particles.x))
     for ip in eachindex(nodeindices)
         i = nodeindices[ip]
-        Δvₚ += iw.w[ip] * (grid.v[i] - grid.vⁿ[i])
-        ∇vₚ += grid.v[i] ⊗ iw.∇w[ip]
-        Δxₚ += iw.w[ip] * grid.v[i] * Δt
+        Δvₚ += bw.w[ip] * (grid.v[i] - grid.vⁿ[i])
+        ∇vₚ += grid.v[i] ⊗ bw.∇w[ip]
+        Δxₚ += bw.w[ip] * grid.v[i] * Δt
     end
     particles.v[p] += Δvₚ
     particles.∇v[p] = ∇vₚ

@@ -111,8 +111,8 @@ function main(transfer = FLIP(1.0))
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Interpolation weights
-    weights = generate_interpolation_weights(BSpline(Quadratic()), grid.x, length(particles))
+    ## Basis weights
+    weights = generate_basis_weights(BSpline(Quadratic()), grid.x, length(particles))
 
     ## Material model (neo-Hookean)
     function stored_energy(C)
@@ -142,7 +142,7 @@ function main(transfer = FLIP(1.0))
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v))
         Δt = CFL * h / vmax
 
-        ## Update interpolation weights
+        ## Update basis weights
         update!(weights, particles, grid.x)
 
         ## Particle-to-grid transfer

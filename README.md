@@ -14,7 +14,7 @@
 Tesserae.jl is a toolkit for implementing the material point method in Julia. It is designed to maintain consistency between mathematical expressions and source code, enabling rapid development. Current features include:
 
 * Grid and particle generation
-* Various interpolation types, including B-splines, GIMP, CPDI, and MLS-MPM
+* Various basis functions, including B-splines, GIMP, CPDI, and MLS-MPM
 * Convenient macros for transferring data between grid and particles
 * Multi-threading support
 * GPU support (CUDA and Metal)
@@ -59,12 +59,12 @@ function main()
     @. pcls.V = V⁰ₚ; @. pcls.F = one(pcls.F)
     map!(x -> ifelse(x[1]>0.5, -0.1, 0.1) * ones(V2), pcls.v, pcls.x) # Initial velocity
 
-    # Interpolation
-    wgts = generate_interpolation_weights(BSpline(Quadratic()), mesh, length(pcls))
+    # Basis weights
+    wgts = generate_basis_weights(BSpline(Quadratic()), mesh, length(pcls))
 
     # Simulation loop
     Plots.@gif for t in 0:Δt:4
-        # Update interpolation weights
+        # Update basis weights
         update!(wgts, pcls, mesh)
 
         # Particle-to-grid transfer

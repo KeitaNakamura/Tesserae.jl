@@ -1,4 +1,4 @@
-@testset "InterpolationWeight" begin
+@testset "BasisWeight" begin
 
 @testset "CartesianMesh" begin
     for dim in (1,2,3)
@@ -6,61 +6,61 @@
         for T in (Float32, Float64)
             for kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
                 for extension in (identity, WLS, KernelCorrection)
-                    interp = extension(kernel)
+                    basis = extension(kernel)
 
-                    function check_weight(iw::Union{InterpolationWeight, Tesserae.InterpolationWeightArray}, derivative)
+                    function check_weight(bw::Union{BasisWeight, Tesserae.BasisWeightArray}, derivative)
                         if derivative isa Order{0}
-                            @test hasproperty(iw, :w) && iw.w isa AbstractArray{T}
-                            @test !hasproperty(iw, :∇w)
-                            @test !hasproperty(iw, :∇∇w)
-                            @test ndims(iw.w) == ifelse(iw isa InterpolationWeight, dim, dim+1)
+                            @test hasproperty(bw, :w) && bw.w isa AbstractArray{T}
+                            @test !hasproperty(bw, :∇w)
+                            @test !hasproperty(bw, :∇∇w)
+                            @test ndims(bw.w) == ifelse(bw isa BasisWeight, dim, dim+1)
                         elseif derivative isa Order{1}
-                            @test hasproperty(iw, :w)  && iw.w  isa AbstractArray{T}
-                            @test hasproperty(iw, :∇w) && iw.∇w isa AbstractArray{Vec{dim,T}}
-                            @test !hasproperty(iw, :∇∇w)
-                            @test size(iw.w) == size(iw.∇w)
-                            @test ndims(iw.w) == ndims(iw.∇w) == ifelse(iw isa InterpolationWeight, dim, dim+1)
+                            @test hasproperty(bw, :w)  && bw.w  isa AbstractArray{T}
+                            @test hasproperty(bw, :∇w) && bw.∇w isa AbstractArray{Vec{dim,T}}
+                            @test !hasproperty(bw, :∇∇w)
+                            @test size(bw.w) == size(bw.∇w)
+                            @test ndims(bw.w) == ndims(bw.∇w) == ifelse(bw isa BasisWeight, dim, dim+1)
                         elseif derivative isa Order{2}
-                            @test hasproperty(iw, :w)   && iw.w   isa AbstractArray{T}
-                            @test hasproperty(iw, :∇w)  && iw.∇w  isa AbstractArray{Vec{dim,T}}
-                            @test hasproperty(iw, :∇²w) && iw.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
-                            @test size(iw.w) == size(iw.∇w) == size(iw.∇²w)
-                            @test ndims(iw.w) == ndims(iw.∇w) == ndims(iw.∇²w) == ifelse(iw isa InterpolationWeight, dim, dim+1)
+                            @test hasproperty(bw, :w)   && bw.w   isa AbstractArray{T}
+                            @test hasproperty(bw, :∇w)  && bw.∇w  isa AbstractArray{Vec{dim,T}}
+                            @test hasproperty(bw, :∇²w) && bw.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
+                            @test size(bw.w) == size(bw.∇w) == size(bw.∇²w)
+                            @test ndims(bw.w) == ndims(bw.∇w) == ndims(bw.∇²w) == ifelse(bw isa BasisWeight, dim, dim+1)
                         elseif derivative isa Order{3}
-                            @test hasproperty(iw, :w)   && iw.w   isa AbstractArray{T}
-                            @test hasproperty(iw, :∇w)  && iw.∇w  isa AbstractArray{Vec{dim,T}}
-                            @test hasproperty(iw, :∇²w) && iw.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
-                            @test hasproperty(iw, :∇³w) && iw.∇³w isa AbstractArray{<: Tensor{Tuple{@Symmetry{dim,dim,dim}},T}}
-                            @test size(iw.w) == size(iw.∇w) == size(iw.∇²w) == size(iw.∇³w)
-                            @test ndims(iw.w) == ndims(iw.∇w) == ndims(iw.∇²w) == ndims(iw.∇³w) == ifelse(iw isa InterpolationWeight, dim, dim+1)
+                            @test hasproperty(bw, :w)   && bw.w   isa AbstractArray{T}
+                            @test hasproperty(bw, :∇w)  && bw.∇w  isa AbstractArray{Vec{dim,T}}
+                            @test hasproperty(bw, :∇²w) && bw.∇²w isa AbstractArray{<: SymmetricSecondOrderTensor{dim,T}}
+                            @test hasproperty(bw, :∇³w) && bw.∇³w isa AbstractArray{<: Tensor{Tuple{@Symmetry{dim,dim,dim}},T}}
+                            @test size(bw.w) == size(bw.∇w) == size(bw.∇²w) == size(bw.∇³w)
+                            @test ndims(bw.w) == ndims(bw.∇w) == ndims(bw.∇²w) == ndims(bw.∇³w) == ifelse(bw isa BasisWeight, dim, dim+1)
                         else
                             error()
                         end
                     end
 
                     #######################
-                    # InterpolationWeight #
+                    # BasisWeight #
                     #######################
-                    iw = @inferred InterpolationWeight(T, interp, mesh)
-                    @test Tesserae.interpolation(iw) === interp
-                    @test iw.w isa Array{T}
-                    @test iw.∇w isa Array{Vec{dim,T}}
-                    @test ndims(iw.w) == dim
-                    @test ndims(iw.∇w) == dim
-                    @test size(iw.w) == size(iw.∇w)
-                    @test typeof(neighboringnodes(iw)) === CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
-                    check_weight((@inferred InterpolationWeight(T, interp, mesh; derivative=Order(0))), Order(0))
-                    check_weight((@inferred InterpolationWeight(T, interp, mesh; derivative=Order(1))), Order(1))
-                    check_weight((@inferred InterpolationWeight(T, interp, mesh; derivative=Order(2))), Order(2))
-                    check_weight((@inferred InterpolationWeight(T, interp, mesh; derivative=Order(3))), Order(3))
+                    bw = @inferred BasisWeight(T, basis, mesh)
+                    @test Tesserae.basis(bw) === basis
+                    @test bw.w isa Array{T}
+                    @test bw.∇w isa Array{Vec{dim,T}}
+                    @test ndims(bw.w) == dim
+                    @test ndims(bw.∇w) == dim
+                    @test size(bw.w) == size(bw.∇w)
+                    @test typeof(supportnodes(bw)) === CartesianIndices{dim, NTuple{dim, UnitRange{Int}}}
+                    check_weight((@inferred BasisWeight(T, basis, mesh; derivative=Order(0))), Order(0))
+                    check_weight((@inferred BasisWeight(T, basis, mesh; derivative=Order(1))), Order(1))
+                    check_weight((@inferred BasisWeight(T, basis, mesh; derivative=Order(2))), Order(2))
+                    check_weight((@inferred BasisWeight(T, basis, mesh; derivative=Order(3))), Order(3))
 
                     ############################
-                    # InterpolationWeightArray #
+                    # BasisWeightArray #
                     ############################
                     n = 10
-                    weights = @inferred generate_interpolation_weights(T, interp, mesh, n)
+                    weights = @inferred generate_basis_weights(T, basis, mesh, n)
                     @test size(weights) === (n,)
-                    @test Tesserae.interpolation(weights) === interp
+                    @test Tesserae.basis(weights) === basis
                     @test weights.w isa Array{T}
                     @test weights.∇w isa Array{Vec{dim,T}}
                     @test ndims(weights.w) == dim+1
@@ -70,9 +70,9 @@
                         typeof(weights[i]) === eltype(weights)
                     end
                     for order in 0:3
-                        weights = @inferred generate_interpolation_weights(T, interp, mesh, n; derivative=Order(order))
+                        weights = @inferred generate_basis_weights(T, basis, mesh, n; derivative=Order(order))
                         check_weight(weights, Order(order))
-                        foreach(iw -> check_weight(iw, Order(order)), weights)
+                        foreach(bw -> check_weight(bw, Order(order)), weights)
                     end
                 end
             end
@@ -80,35 +80,35 @@
     end
 end
 
-end # InterpolationWeight
+end # BasisWeight
 
-@testset "Interpolations" begin
+@testset "Basis functions" begin
 
-@testset "Check `update!` for `InterpolationWeight`" begin
+@testset "Check `update!` for `BasisWeight`" begin
     isapproxzero(x) = x + ones(x) ≈ ones(x)
-    function check_partition_of_unity(iw, x; atol=sqrt(eps(eltype(iw.w))))
-        indices = neighboringnodes(iw)
+    function check_partition_of_unity(bw, x; atol=sqrt(eps(eltype(bw.w))))
+        indices = supportnodes(bw)
         CI = CartesianIndices(indices) # local indices
-        isapprox(sum(iw.w[CI]), 1) && isapproxzero(sum(iw.∇w[CI]))
+        isapprox(sum(bw.w[CI]), 1) && isapproxzero(sum(bw.∇w[CI]))
     end
-    function check_linear_field_reproduction(iw, x, X)
-        indices = neighboringnodes(iw)
+    function check_linear_field_reproduction(bw, x, X)
+        indices = supportnodes(bw)
         CI = CartesianIndices(indices) # local indices
-        isapprox(mapreduce((j,i) -> X[i]*iw.w[j],  +, CI, indices), x) &&
-        isapprox(mapreduce((j,i) -> X[i]⊗iw.∇w[j], +, CI, indices), I)
+        isapprox(mapreduce((j,i) -> X[i]*bw.w[j],  +, CI, indices), x) &&
+        isapprox(mapreduce((j,i) -> X[i]⊗bw.∇w[j], +, CI, indices), I)
     end
 
     @testset "$spline" for spline in (BSpline(Constant()), BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Quadratic()))
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            iw = InterpolationWeight(spline, mesh)
+            bw = BasisWeight(spline, mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
-                update!(iw, x, mesh)
-                is_support_truncated = size(iw.w) != size(neighboringnodes(iw))
-                PU = check_partition_of_unity(iw, x)
-                LFR = check_linear_field_reproduction(iw, x, mesh)
+                update!(bw, x, mesh)
+                is_support_truncated = size(bw.w) != size(supportnodes(bw))
+                PU = check_partition_of_unity(bw, x)
+                LFR = check_linear_field_reproduction(bw, x, mesh)
                 if spline isa BSpline{Constant}
                     PU && !LFR
                 else
@@ -122,13 +122,13 @@ end # InterpolationWeight
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            iw = InterpolationWeight(spline, mesh)
+            bw = BasisWeight(spline, mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
-                update!(iw, x, mesh)
-                is_support_truncated = size(iw.w) != size(neighboringnodes(iw))
-                PU = check_partition_of_unity(iw, x)
-                LFR = check_linear_field_reproduction(iw, x, mesh)
+                update!(bw, x, mesh)
+                is_support_truncated = size(bw.w) != size(supportnodes(bw))
+                PU = check_partition_of_unity(bw, x)
+                LFR = check_linear_field_reproduction(bw, x, mesh)
                 is_support_truncated ? (PU && !LFR) : (PU && LFR)
             end
         end
@@ -139,14 +139,14 @@ end # InterpolationWeight
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            iw = InterpolationWeight(gimp, mesh)
+            bw = BasisWeight(gimp, mesh)
             l = 0.5*spacing(mesh)
             @test all(1:100) do _
                 x = rand(Vec{dim})
-                update!(iw, (;x,l), mesh)
+                update!(bw, (;x,l), mesh)
                 is_support_truncated = any(.!(l/2 .< x .< 1-l/2))
-                PU = check_partition_of_unity(iw, x)
-                LFR = check_linear_field_reproduction(iw, x, mesh)
+                PU = check_partition_of_unity(bw, x)
+                LFR = check_linear_field_reproduction(bw, x, mesh)
                 # uGIMP doesn't have pertition of unity when very closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
                 is_support_truncated ? (!PU && !LFR) : (PU && LFR)
@@ -159,15 +159,15 @@ end # InterpolationWeight
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            iw = InterpolationWeight(cpdi, mesh)
+            bw = BasisWeight(cpdi, mesh)
             l = 0.5*spacing(mesh)
             F = one(Mat{dim,dim})
             @test all(1:100) do _
                 x = Vec{dim}(i -> l/2 + rand()*(1-l))
-                update!(iw, (;x,l,F), mesh)
+                update!(bw, (;x,l,F), mesh)
                 # is_support_truncated = any(.!(l/2 .< x .< 1-l/2))
-                PU = check_partition_of_unity(iw, x)
-                LFR = check_linear_field_reproduction(iw, x, mesh)
+                PU = check_partition_of_unity(bw, x)
+                LFR = check_linear_field_reproduction(bw, x, mesh)
                 # uGIMP doesn't have pertition of unity when very closed to boundaries
                 # if we follow eq.40 in Bardenhagen (2004)
                 # is_support_truncated ? (!PU && !LFR) : (PU && LFR)
@@ -177,17 +177,17 @@ end # InterpolationWeight
     end
 
     @testset "$(Wrapper(kernel))" for Wrapper in (WLS, KernelCorrection), kernel in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Tesserae.Quartic()), BSpline(Tesserae.Quintic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()), uGIMP())
-        interp = Wrapper(kernel)
+        basis = Wrapper(kernel)
         for dim in (1,2,3)
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            iw = InterpolationWeight(interp, mesh)
+            bw = BasisWeight(basis, mesh)
             l = 0.5*spacing(mesh) / 2
             @test all(1:100) do _
                 x = rand(Vec{dim})
-                update!(iw, (;x,l), mesh)
-                PU = check_partition_of_unity(iw, x)
-                LFR = check_linear_field_reproduction(iw, x, mesh)
+                update!(bw, (;x,l), mesh)
+                PU = check_partition_of_unity(bw, x)
+                LFR = check_linear_field_reproduction(bw, x, mesh)
                 PU && LFR
             end
         end
@@ -202,14 +202,14 @@ end
             Random.seed!(1234)
             mesh = CartesianMesh(0.1, ntuple(i->(-1,2), Val(dim))...)
             xp = rand(Vec{dim})
-            iw = InterpolationWeight(spline, mesh; derivative=Order(k))
-            update!(iw, xp, mesh)
-            nodeindices = neighboringnodes(iw)
+            bw = BasisWeight(spline, mesh; derivative=Order(k))
+            update!(bw, xp, mesh)
+            nodeindices = supportnodes(bw)
             for ip in eachindex(nodeindices)
                 i = nodeindices[ip]
                 vals = values(Order(k), spline, xp, mesh, i)
                 for a in 0:k
-                    @test values(iw, a+1)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
+                    @test values(bw, a+1)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end
             end
         end
@@ -217,20 +217,20 @@ end
 end
 
 @testset "Positivity in kernel correction" begin
-    function kernelvalue(iw, xp, mesh, i)
-        fillzero!(iw.w)
-        update!(iw, xp, mesh)
-        j = findfirst(==(i), neighboringnodes(iw))
-        j === nothing ? zero(eltype(iw.w)) : iw.w[j]
+    function kernelvalue(bw, xp, mesh, i)
+        fillzero!(bw.w)
+        update!(bw, xp, mesh)
+        j = findfirst(==(i), supportnodes(bw))
+        j === nothing ? zero(eltype(bw.w)) : bw.w[j]
     end
     function kernelvalues(mesh::CartesianMesh{dim}, kernel, poly, index::CartesianIndex{dim}) where {dim}
-        iw = InterpolationWeight(KernelCorrection(kernel, poly), mesh)
+        bw = BasisWeight(KernelCorrection(kernel, poly), mesh)
         L = kernel isa BSpline{Quadratic} ? 1.5 :
             kernel isa BSpline{Cubic}     ? 2.0 : error()
         X = ntuple(i -> range(max(mesh[1][i],index[i]-L-1), min(mesh[end][i],index[i]+L-1)-sqrt(eps(Float64)), step=1/11), Val(dim)) # 1/10 is too coarse for checking
         Z = Array{Float64}(undef, length.(X))
         for i in CartesianIndices(Z)
-            @inbounds Z[i] = kernelvalue(iw, Vec(map(getindex, X, Tuple(i))), mesh, index)
+            @inbounds Z[i] = kernelvalue(bw, Vec(map(getindex, X, Tuple(i))), mesh, index)
         end
         Z
     end
@@ -359,4 +359,4 @@ end
     end
 end
 
-end # "Interpolations"
+end # "Basis functions"

@@ -92,7 +92,7 @@ function main()
     @show length(particles)
 
     ## Precompute linear kernel weights
-    weights = generate_interpolation_weights(BSpline(Linear()), grid.X, length(particles))
+    weights = generate_basis_weights(BSpline(Linear()), grid.X, length(particles))
     update!(weights, particles, grid.X)
 
     ## Outputs

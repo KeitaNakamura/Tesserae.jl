@@ -69,7 +69,7 @@ end
             detJdV :: Float64
         end
         particles = generate_particles(ParticleProp, mesh)
-        weights = generate_interpolation_weights(mesh, size(particles))
+        weights = generate_basis_weights(mesh, size(particles))
         feupdate!(weights, mesh; volume = particles.detJdV)
         sum(particles.detJdV)
     end
@@ -98,7 +98,7 @@ end
         end
         mesh_face = Tesserae.extract_face(mesh_body, 1:length(mesh_body))
         particles = generate_particles(ParticleProp, mesh_face)
-        weights = generate_interpolation_weights(mesh_face, size(particles))
+        weights = generate_basis_weights(mesh_face, size(particles))
         feupdate!(weights, mesh_face; normal = particles.n, area = particles.detJdA)
         sum(particles.detJdA)
     end

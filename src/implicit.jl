@@ -71,7 +71,7 @@ function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
 end
 
 """
-    create_sparse_matrix(interpolation, mesh; ndofs = ndims(mesh))
+    create_sparse_matrix(basis, mesh; ndofs = ndims(mesh))
 
 Create a sparse matrix.
 Since the created matrix accounts for all nodes in the mesh,
@@ -123,19 +123,19 @@ julia> extract(A, dofmap)
   ⋅    ⋅    ⋅    ⋅   0.0  0.0   ⋅   0.0  0.0
 ```
 """
-function create_sparse_matrix(interp::Interpolation, mesh::AbstractMesh; ndofs = ndims(mesh))
-    _create_sparse_matrix(Float64, interp, mesh, ndofs)
+function create_sparse_matrix(basis::Basis, mesh::AbstractMesh; ndofs = ndims(mesh))
+    _create_sparse_matrix(Float64, basis, mesh, ndofs)
 end
 
-function create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh; ndofs = ndims(mesh)) where {T}
-    _create_sparse_matrix(T, interp, mesh, ndofs)
+function create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh; ndofs = ndims(mesh)) where {T}
+    _create_sparse_matrix(T, basis, mesh, ndofs)
 end
 
-function _create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh{dim}, ndofs::Int) where {T, dim}
-    _create_sparse_matrix(T, interp, mesh, (ndofs, ndofs))
+function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}, ndofs::Int) where {T, dim}
+    _create_sparse_matrix(T, basis, mesh, (ndofs, ndofs))
 end
 
-function _create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::CartesianMesh{dim}, ndofs::Tuple{Int,Int}) where {T, dim}
+function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}, ndofs::Tuple{Int,Int}) where {T, dim}
     row_ndofs, col_ndofs = ndofs
 
     dims = size(mesh)
@@ -152,7 +152,7 @@ function _create_sparse_matrix(::Type{T}, interp::Interpolation, mesh::Cartesian
     end
 
     for i in CI
-        unit = (kernel_support(interp) - 1) * oneunit(i)
+        unit = (kernel_support(basis) - 1) * oneunit(i)
         indices = intersect((i-unit):(i+unit), CI)
         idofs = gendofs(LI[i], row_ndofs)
         for j in indices
@@ -303,12 +303,12 @@ function P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, partition
 end
 
 function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particles,p), ((weights_i,weights_j),(ip,jp)), partition, equations::Vector)
-    @gensym grid_i′ grid_j′ weights_i′ weights_j′ iw_i iw_j gridindices_i gridindices_j ldofs_i ldofs_j I J dofs_i dofs_j gdofs_i gdofs_j
+    @gensym grid_i′ grid_j′ weights_i′ weights_j′ bw_i bw_j gridindices_i gridindices_j ldofs_i ldofs_j I J dofs_i dofs_j gdofs_i gdofs_j
 
     isempty(equations) && error("@P2G_Matrix: at least one equation is required")
     all(eq -> eq.issumeq, equations) || error("@P2G_Matrix: all equations must use `@∑`")
 
-    maps = [grid_i′=>i, grid_j′=>j, particles=>p, iw_i=>ip, iw_j=>jp]
+    maps = [grid_i′=>i, grid_j′=>j, particles=>p, bw_i=>ip, bw_j=>jp]
     replaced = replacement_groups(length(maps))
     for k in eachindex(equations)
         eq = equations[k]
@@ -354,8 +354,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     coupling = grid_i != grid_j
     body = quote
         $(replaced[3]...)
-        $iw_i, $iw_j = $weights_i′[$p], $weights_j′[$p]
-        $gridindices_i, $gridindices_j = $_get_neighboringnodes($iw_i, $grid_i′, $iw_j, $grid_j′, Val($coupling))
+        $bw_i, $bw_j = $weights_i′[$p], $weights_j′[$p]
+        $gridindices_i, $gridindices_j = $_get_supportnodes($bw_i, $grid_i′, $bw_j, $grid_j′, Val($coupling))
         $ldofs_i, $ldofs_j = LinearIndices((size($gdofs_i, 1), size($gridindices_i)...)), LinearIndices((size($gdofs_j, 1), size($gridindices_j)...))
         $(lmat_init...)
         for $jp in eachindex($gridindices_j)
@@ -418,8 +418,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     esc(body)
 end
 
-@inline _get_neighboringnodes(iw_i, grid_i, iw_j, grid_j, ::Val{true}) = (@_propagate_inbounds_meta; (neighboringnodes(iw_i, grid_i), neighboringnodes(iw_j, grid_j)))
-@inline _get_neighboringnodes(iw_i, grid_i, iw_j, grid_j, ::Val{false}) = (@_propagate_inbounds_meta; inds=neighboringnodes(iw_i, grid_i); (inds, inds))
+@inline _get_supportnodes(bw_i, grid_i, bw_j, grid_j, ::Val{true}) = (@_propagate_inbounds_meta; (supportnodes(bw_i, grid_i), supportnodes(bw_j, grid_j)))
+@inline _get_supportnodes(bw_i, grid_i, bw_j, grid_j, ::Val{false}) = (@_propagate_inbounds_meta; inds=supportnodes(bw_i, grid_i); (inds, inds))
 @inline function _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j)
     @_propagate_inbounds_meta
     if size(gdofs_i, 1) == size(gdofs_j, 1) && gridindices_i === gridindices_j

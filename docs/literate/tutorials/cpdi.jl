@@ -65,8 +65,8 @@ function main()
     @. particles.F = one(particles.F)
     @show length(particles)
 
-    ## Interpolation weights
-    weights = generate_interpolation_weights(CPDI(), grid.x, length(particles))
+    ## Basis weights
+    weights = generate_basis_weights(CPDI(), grid.x, length(particles))
 
     ## Material model (neo-Hookean)
     function cauchy_stress(F)
@@ -87,7 +87,7 @@ function main()
 
     Tesserae.@showprogress while t < T
 
-        ## Update interpolation weights
+        ## Update basis weights
         update!(weights, particles, grid.x)
 
         ## Particle-to-grid transfer

@@ -18,12 +18,12 @@ end
 """
 struct CPDI <: Kernel end
 
-struct CPDINeighboringNodes{T, V <: AbstractVector{T}} <: AbstractVector{T}
+struct CPDISupportNodes{T, V <: AbstractVector{T}} <: AbstractVector{T}
     indices::V
     len::Int
 end
-Base.size(x::CPDINeighboringNodes) = (x.len,)
-@inline function Base.getindex(x::CPDINeighboringNodes, i::Int)
+Base.size(x::CPDISupportNodes) = (x.len,)
+@inline function Base.getindex(x::CPDISupportNodes, i::Int)
     @boundscheck checkbounds(x, i)
     @inbounds x.indices[i]
 end
@@ -37,21 +37,21 @@ end
     end
 end
 
-function initial_neighboringnodes(::CPDI, mesh::CartesianMesh{dim}) where {dim}
+function initial_supportnodes(::CPDI, mesh::CartesianMesh{dim}) where {dim}
     maxlength = 2^dim * 2^dim
     indices = zero(SVector{maxlength, CartesianIndex{dim}})
-    CPDINeighboringNodes(indices, 0)
+    CPDISupportNodes(indices, 0)
 end
 
-function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{1})
+function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{1})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2)
     x₁ = xₚ - r₁
     x₂ = xₚ + r₁
     Vₚ = 2r₁[1]
 
-    indices = find_neighboringnodes_cpdi(Val(4), (x₁, x₂), mesh)
-    neighboringnodes_storage(iw)[] = indices
+    indices = find_supportnodes_cpdi(Val(4), (x₁, x₂), mesh)
+    supportnodes_storage(bw)[] = indices
 
     spline = BSpline(Linear())
     @inbounds for ip in eachindex(indices)
@@ -60,11 +60,11 @@ function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{1})
         w₂ = value(spline, x₂, mesh, i)
         w = (w₁ + w₂) / 2
         ∇w = Vec(w₂ - w₁) / Vₚ
-        set_values!(iw, ip, (w,∇w))
+        set_values!(bw, ip, (w,∇w))
     end
 end
 
-function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{2})
+function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2,0)
     r₂ = pt.F * Vec(0,pt.l/2)
@@ -74,8 +74,8 @@ function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{2})
     x₄ = xₚ - r₁ + r₂
     Vₚ = 4 * abs(r₁ × r₂)
 
-    indices = find_neighboringnodes_cpdi(Val(16), (x₁, x₂, x₃, x₄), mesh)
-    neighboringnodes_storage(iw)[] = indices
+    indices = find_supportnodes_cpdi(Val(16), (x₁, x₂, x₃, x₄), mesh)
+    supportnodes_storage(bw)[] = indices
 
     a = Vec(r₁[2]-r₂[2], r₂[1]-r₁[1])
     b = Vec(r₁[2]+r₂[2],-r₁[1]-r₂[1])
@@ -88,11 +88,11 @@ function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{2})
         w₄ = value(spline, x₄, mesh, i)
         w = (w₁ + w₂ + w₃ + w₄) / 4
         ∇w = ((w₁-w₃)*a + (w₂-w₄)*b) / Vₚ
-        set_values!(iw, ip, (w,∇w))
+        set_values!(bw, ip, (w,∇w))
     end
 end
 
-function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{3})
+function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{3})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2,0,0)
     r₂ = pt.F * Vec(0,pt.l/2,0)
@@ -107,8 +107,8 @@ function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{3})
     x₈ = xₚ - r₁ + r₂ + r₃
     Vₚ = 8 * (r₁ × r₂) ⋅ r₃
 
-    indices = find_neighboringnodes_cpdi(Val(64), (x₁, x₂, x₃, x₄, x₅, x₆, x₇, x₈), mesh)
-    neighboringnodes_storage(iw)[] = indices
+    indices = find_supportnodes_cpdi(Val(64), (x₁, x₂, x₃, x₄, x₅, x₆, x₇, x₈), mesh)
+    supportnodes_storage(bw)[] = indices
 
     A = hcat(r₂×r₃, r₃×r₁, r₁×r₂) / Vₚ
     spline = BSpline(Linear())
@@ -124,20 +124,20 @@ function update!(iw::InterpolationWeight{CPDI}, pt, mesh::CartesianMesh{3})
         w₈ = value(spline, x₈, mesh, i)
         w = (w₁ + w₂ + w₃ + w₄ + w₅ + w₆ + w₇ + w₈) / 8
         ∇w = A * Vec(-w₁+w₂+w₃-w₄-w₅+w₆+w₇-w₈, -w₁-w₂+w₃+w₄-w₅-w₆+w₇+w₈, -w₁-w₂-w₃-w₄+w₅+w₆+w₇+w₈)
-        set_values!(iw, ip, (w,∇w))
+        set_values!(bw, ip, (w,∇w))
     end
 end
 
-@inline function find_neighboringnodes_cpdi(::Val{L}, corners, mesh::CartesianMesh{dim}) where {L, dim}
+@inline function find_supportnodes_cpdi(::Val{L}, corners, mesh::CartesianMesh{dim}) where {L, dim}
     indices = MVector{L, CartesianIndex{dim}}(undef) # this works on GPU (https://discourse.julialang.org/t/cudanative-dynamic-allocation/35435/5)
     count = 0
     @inbounds for x in corners
         count_inner = count
-        for i in neighboringnodes(BSpline(Linear()), x, mesh)
+        for i in supportnodes(BSpline(Linear()), x, mesh)
             if all(j->@inbounds(indices[j]!==i), 1:count_inner)
                 indices[count+=1] = i
             end
         end
     end
-    CPDINeighboringNodes(SVector(indices), count)
+    CPDISupportNodes(SVector(indices), count)
 end

@@ -53,18 +53,14 @@ function KernelAbstractions.get_backend(mesh::UnstructuredMesh)
     backend
 end
 
-# InterpolationWeightArray
-function Adapt.adapt_structure(to, weights::InterpolationWeightArray{<: Any, <: Any, <: Any, <: Any, N}) where {N}
-    interp = getfield(weights, :interp)
+# BasisWeightArray
+function Adapt.adapt_structure(to, weights::BasisWeightArray)
+    b = basis(weights)
     prop = map(a -> adapt(to, a), getfield(weights, :prop))
     indices = adapt(to, getfield(weights, :indices))
-    Interp = typeof(interp)
-    Prop = typeof(prop)
-    Indices = typeof(indices)
-    ElType = Base._return_type(_getindex, Tuple{Interp, Prop, Indices, Int})
-    InterpolationWeightArray{Interp, Prop, Indices, ElType, N}(interp, prop, indices)
+    BasisWeightArray(b, prop, indices)
 end
-function KernelAbstractions.get_backend(weights::InterpolationWeightArray)
+function KernelAbstractions.get_backend(weights::BasisWeightArray)
     prop = getfield(weights, :prop)
     backend = get_backend(first(values(prop)))
     @assert all(==(backend), map(get_backend, prop))

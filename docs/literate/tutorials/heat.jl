@@ -27,8 +27,8 @@ function main()
     ## Integration points
     points = generate_particles(PointProp, mesh)
 
-    ## Interpolation
-    weights = generate_interpolation_weights(mesh, size(points); name=Val(:N))
+    ## Basis weights
+    weights = generate_basis_weights(mesh, size(points); name=Val(:N))
     feupdate!(weights, mesh; volume=points.V) # Use `feupdate!` instead of `update!`
 
     ## Global matrix
