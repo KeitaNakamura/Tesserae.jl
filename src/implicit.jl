@@ -299,21 +299,21 @@ macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, weights_ipjp, partit
 end
 
 function P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, partition, equations)
-    P2G_Matrix_expr(schedule, unpair2(grid_ij), unpair(particles_p), unpair2(weights_ipjp), partition, split_equations(equations))
+    P2G_Matrix_expr(schedule, unpair2(grid_ij), unpair(particles_p), unpair2(weights_ipjp), partition, parse_transfer_program(equations))
 end
 
-function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particles,p), ((weights_i,weights_j),(ip,jp)), partition, equations::Vector)
+function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particles,p), ((weights_i,weights_j),(ip,jp)), partition, program::TransferProgram)
     @gensym grid_i′ grid_j′ weights_i′ weights_j′ bw_i bw_j gridindices_i gridindices_j ldofs_i ldofs_j I J dofs_i dofs_j gdofs_i gdofs_j
 
+    equations = program.equations
     isempty(equations) && error("@P2G_Matrix: at least one equation is required")
-    all(eq -> eq.issumeq, equations) || error("@P2G_Matrix: all equations must use `@∑`")
+    all(is_sum, equations) || error("@P2G_Matrix: all equations must use `@∑`")
 
-    maps = [grid_i′=>i, grid_j′=>j, particles=>p, bw_i=>ip, bw_j=>jp]
-    replaced = replacement_groups(length(maps))
-    for k in eachindex(equations)
-        eq = equations[k]
-        eq.rhs = resolve_refs(eq.rhs, maps; replaced)
+    scope = TransferScope([grid_i′=>i, grid_j′=>j, particles=>p, bw_i=>ip, bw_j=>jp]; cache=true)
+    equations = map(equations) do eq
+        TransferEquation(eq.kind, eq.lhs, resolve_refs(eq.rhs, scope), eq.op)
     end
+    replaced = scope.replacements
 
     fillzeros = Any[]
     gmats = Any[]
@@ -360,11 +360,11 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         $(lmat_init...)
         for $jp in eachindex($gridindices_j)
             $j = $gridindices_j[$jp]
-            $(replacements(replaced, 2, 5)...)
+            $(cached_replacements(scope, 2, 5)...)
             $J = vec(view($ldofs_j,:,$jp))
             for $ip in eachindex($gridindices_i)
                 $i = $gridindices_i[$ip]
-                $(replacements(replaced, 1, 4)...)
+                $(cached_replacements(scope, 1, 4)...)
                 $I = vec(view($ldofs_i,:,$ip))
                 $(lmat_asm...)
             end

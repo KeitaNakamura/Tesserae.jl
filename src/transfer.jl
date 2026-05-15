@@ -54,19 +54,64 @@ hybrid(A::SpArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
 hybrid(A::StructArray) = StructArray(map(hybrid, StructArrays.components(A)))
 hybrid(mesh::AbstractMesh) = mesh
 
-mutable struct Equation
-    issumeq::Bool
+struct TransferEquation
+    kind::Symbol
     lhs::Any
     rhs::Any
     op::Symbol
 end
 
-function sum_equation_mask(equations::Vector, macroname::String)
-    issum = map(eq -> eq.issumeq, equations)
+is_sum(eq::TransferEquation) = eq.kind === :sum
+
+struct TransferProgram
+    equations::Vector{TransferEquation}
+end
+
+function split_sum_equations(program::TransferProgram, macroname::String)
+    equations = program.equations
+    issum = map(is_sum, equations)
     if !allequal(issum) && !issorted(issum; rev=true)
         error("$macroname: Equations without `@∑` must come after those with `@∑`")
     end
-    issum
+    equations[issum], equations[.!issum]
+end
+
+struct TransferBinding
+    parent::Symbol
+    index::Any
+end
+
+struct TransferScope
+    bindings::Vector{TransferBinding}
+    replacements::Union{Nothing, Vector{Vector{Expr}}}
+end
+
+function TransferScope(maps::Vector{<: Pair}; cache::Bool=false)
+    bindings = map(maps) do map
+        TransferBinding(map.first, map.second)
+    end
+    replacements = cache ? replacement_groups(length(bindings)) : nothing
+    TransferScope(bindings, replacements)
+end
+
+uncached(scope::TransferScope) = TransferScope(scope.bindings, nothing)
+
+function cached_replacements(scope::TransferScope, groups::Integer...)
+    scope.replacements === nothing && error("reference cache is not enabled for this transfer scope")
+    replacements(scope.replacements, groups...)
+end
+
+function resolve_equation(eq::TransferEquation, scope::TransferScope)
+    TransferEquation(eq.kind, resolve_refs(eq.lhs, scope), resolve_refs(eq.rhs, scope), eq.op)
+end
+
+function resolve_sum_equations(equations::Vector{TransferEquation}, scope::TransferScope, macroname::String, index)
+    lhs_scope = uncached(scope)
+    map(equations) do eq
+        @capture(eq.lhs, name_Symbol[idx_]) || error("$macroname: invalid LHS in `@∑` equation: $(eq.lhs)")
+        idx == index || error("$macroname: invalid LHS index in `@∑` equation: $(eq.lhs) (must be [$index])")
+        TransferEquation(eq.kind, resolve_refs(eq.lhs, lhs_scope), resolve_refs(eq.rhs, scope), eq.op)
+    end
 end
 
 replacement_groups(n::Integer) = [Expr[] for _ in 1:n]
@@ -165,17 +210,16 @@ macro P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, partition, equat
 end
 
 function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_ip::Expr, partition, equations::Expr)
-    P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(weights_ip), partition, split_equations(equations))
+    P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(weights_ip), partition, parse_transfer_program(equations))
 end
 
-function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, equations::Vector)
-    issum = sum_equation_mask(equations, "@P2G")
+function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, program::TransferProgram)
+    sum_equations, nosum_equations = split_sum_equations(program, "@P2G")
 
     code = quote
         Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
     end
 
-    sum_equations = equations[issum]
     if !isempty(sum_equations)
         pre, body = P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
         if !DEBUG
@@ -188,7 +232,6 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         end
     end
 
-    nosum_equations = equations[.!issum]
     if !isempty(nosum_equations)
         body = P2G_nosum_expr((grid,i), nosum_equations)
         code = quote
@@ -205,22 +248,17 @@ end
 function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
     @gensym bw gridindices
 
-    maps = [grid=>i, particles=>p, bw=>ip]
-    replaced = replacement_groups(length(maps))
-    for k in eachindex(sum_equations)
-        eq = sum_equations[k]
-        @capture(eq.lhs, name_Symbol[idx_]) || error("@P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
-        idx == i || error("@P2G: invalid LHS index in `@∑` equation: $(eq.lhs) (must be [$i])")
-        eq.lhs = resolve_refs(eq.lhs, maps)
-        eq.rhs = resolve_refs(eq.rhs, maps; replaced)
-    end
+    scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
+    sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
+    replaced = scope.replacements
 
     fillzeros = Any[]
-    for k in eachindex(sum_equations)
-        (; lhs, rhs, op) = sum_equations[k]
+    sum_exprs = Any[]
+    for eq in sum_equations
+        (; lhs, rhs, op) = eq
         op == :(=)  && push_unique!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
         op == :(-=) && (rhs = :(-$rhs))
-        sum_equations[k] = :(Tesserae.add!($(lhs.args...), $rhs))
+        push!(sum_exprs, :(Tesserae.add!($(lhs.args...), $rhs)))
     end
 
     body = quote
@@ -229,8 +267,8 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         $gridindices = supportnodes($bw, $grid)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
-            $(replacements(replaced, 1, 3)...)
-            $(sum_equations...)
+            $(cached_replacements(scope, 1, 3)...)
+            $(sum_exprs...)
         end
     end
     
@@ -282,15 +320,13 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
 end
 
 function P2G_nosum_expr((grid,i), nosum_equations::Vector)
-    maps = [grid=>i]
-    for k in eachindex(nosum_equations)
-        eq = nosum_equations[k]
-        eq.lhs = remove_indexing(resolve_refs(eq.lhs, maps))
-        eq.rhs = remove_indexing(resolve_refs(eq.rhs, maps))
-        nosum_equations[k] = eq
+    scope = TransferScope([grid=>i])
+    nosum_equations = map(nosum_equations) do eq
+        eq = resolve_equation(eq, scope)
+        TransferEquation(eq.kind, remove_indexing(eq.lhs), remove_indexing(eq.rhs), eq.op)
     end
 
-    map!(nosum_equations, nosum_equations) do eq
+    nosum_exprs = map(nosum_equations) do eq
         (; lhs, rhs, op) = eq
         if @capture(lhs, $grid.x_)
             :(@. $(Expr(op, lhs, rhs)))
@@ -298,7 +334,7 @@ function P2G_nosum_expr((grid,i), nosum_equations::Vector)
             Expr(op, lhs, :(@. $rhs))
         end
     end
-    Expr(:block, nosum_equations...)
+    Expr(:block, nosum_exprs...)
 end
 
 function check_arguments_for_P2G(grid, particles, weights, partition)
@@ -398,18 +434,18 @@ macro G2P(schedule::QuoteNode, grid_i, particles_p, weights_ip, equations)
 end
 
 function G2P_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_ip::Expr, equations::Expr)
-    G2P_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(weights_ip), split_equations(equations))
+    G2P_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(weights_ip), parse_transfer_program(equations))
 end
 
-function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), equations::Vector)
-    issum = sum_equation_mask(equations, "@G2P")
+function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), program::TransferProgram)
+    sum_equations, nosum_equations = split_sum_equations(program, "@G2P")
 
     code = quote
         Tesserae.check_arguments_for_G2P($grid, $particles, $weights)
     end
 
-    if !isempty(equations)
-        body = G2P_sum_expr((grid,i), (particles,p), (weights,ip), equations[issum], equations[.!issum])
+    if !isempty(program.equations)
+        body = G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations, nosum_equations)
         if !DEBUG
             body = :(@inbounds $body)
         end
@@ -446,26 +482,21 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     @gensym bw gridindices
 
     code = Expr(:block)
-    maps = [grid=>i, particles=>p, bw=>ip]
+    scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
 
     if !isempty(sum_equations)
-        replaced = replacement_groups(length(maps))
-        for k in eachindex(sum_equations)
-            eq = sum_equations[k]
-            @capture(eq.lhs, x_[idx_]) || error("@G2P: invalid LHS in `@∑` equation: $(eq.lhs)")
-            idx == p || error("@G2P: invalid LHS index in `@∑` equation: $(eq.lhs) (must be [$p])")
-            eq.lhs = resolve_refs(eq.lhs, maps)
-            eq.rhs = resolve_refs(eq.rhs, maps; replaced)
-        end
+        sum_equations = resolve_sum_equations(sum_equations, scope, "@G2P", p)
+        replaced = scope.replacements
 
         inits = []
         saves = []
-        for k in eachindex(sum_equations)
-            (; lhs, rhs, op) = sum_equations[k]
+        sum_exprs = Any[]
+        for eq in sum_equations
+            (; lhs, rhs, op) = eq
             tmp = Symbol(lhs, :_p)
             push!(inits, :($tmp = zero(eltype($(remove_indexing(lhs))))))
             push!(saves, Expr(op, lhs, tmp))
-            sum_equations[k] = :($tmp += $rhs)
+            push!(sum_exprs, :($tmp += $rhs))
         end
 
         code = quote
@@ -475,20 +506,16 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
             $gridindices = supportnodes($bw, $grid)
             for $ip in eachindex($gridindices)
                 $i = $gridindices[$ip]
-                $(replacements(replaced, 1, 3)...)
-                $(sum_equations...)
+                $(cached_replacements(scope, 1, 3)...)
+                $(sum_exprs...)
             end
             $(saves...)
         end
     end
 
     if !isempty(nosum_equations)
-        for k in eachindex(nosum_equations)
-            eq = nosum_equations[k]
-            eq.lhs = resolve_refs(eq.lhs, maps)
-            eq.rhs = resolve_refs(eq.rhs, maps)
-            nosum_equations[k] = Expr(eq.op, eq.lhs, eq.rhs)
-        end
+        nosum_scope = TransferScope([grid=>i, particles=>p, bw=>ip])
+        nosum_equations = map(eq -> Expr(eq.op, resolve_refs(eq.lhs, nosum_scope), resolve_refs(eq.rhs, nosum_scope)), nosum_equations)
         code = quote
             $code
             $(nosum_equations...)
@@ -537,18 +564,24 @@ macro G2P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, partition, equ
 end
 
 function G2P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_ip::Expr, partition, equations::Expr)
-    G2P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(weights_ip), partition, split_equations(equations))
+    G2P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(weights_ip), partition, parse_transfer_program(equations))
 end
 
-function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, equations::Vector)
-    equations_g2p_sum = Any[]
-    equations_p2g_sum = Any[]
-    equations_g2p_nosum = Any[]
-    equations_p2g_nosum = Any[]
+struct G2P2GStages
+    g2p_sum::Vector{TransferEquation}
+    p2g_sum::Vector{TransferEquation}
+    g2p_nosum::Vector{TransferEquation}
+    p2g_nosum::Vector{TransferEquation}
+end
+
+function split_g2p2g_stages(program::TransferProgram, i, p)
+    equations_g2p_sum = TransferEquation[]
+    equations_p2g_sum = TransferEquation[]
+    equations_g2p_nosum = TransferEquation[]
+    equations_p2g_nosum = TransferEquation[]
     precedence = 1
-    for k in eachindex(equations)
-        eq = equations[k]
-        if eq.issumeq
+    for eq in program.equations
+        if is_sum(eq)
             @capture(eq.lhs, A_[index_]) || error("@G2P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
             if index == p
                 precedence == 1 || error("@G2P2G: particle `@∑` equations must come before particle updates and grid-scattering equations")
@@ -572,6 +605,11 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
             end
         end
     end
+    G2P2GStages(equations_g2p_sum, equations_p2g_sum, equations_g2p_nosum, equations_p2g_nosum)
+end
+
+function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, program::TransferProgram)
+    stages = split_g2p2g_stages(program, i, p)
 
     code = quote
         Tesserae.check_arguments_for_G2P($grid, $particles, $weights)
@@ -579,16 +617,16 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     end
     body = Expr(:block)
 
-    if !isempty(equations_g2p_sum) || !isempty(equations_g2p_nosum)
-        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), equations_g2p_sum, equations_g2p_nosum)
+    if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
+        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum)
         body = quote
             $body
             $expr
         end
     end
 
-    if !isempty(equations_p2g_sum)
-        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), equations_p2g_sum)
+    if !isempty(stages.p2g_sum)
+        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum)
         code = quote
             $code
             $pre
@@ -607,8 +645,8 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         Tesserae.P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $weights, $partition)
     end
 
-    if !isempty(equations_p2g_nosum)
-        body = P2G_nosum_expr((grid,i), equations_p2g_nosum)
+    if !isempty(stages.p2g_nosum)
+        body = P2G_nosum_expr((grid,i), stages.p2g_nosum)
         code = quote
             $code
             let
@@ -647,32 +685,33 @@ function has_sum_macro(expr)
     has_sum[]
 end
 
-function split_equations(expr::Expr)::Vector{Any}
+function parse_transfer_program(expr::Expr)
     expr = MacroTools.prewalk(MacroTools.rmlines, expr)
     @capture(expr, begin exprs__ end) || error("expected a `begin ... end` block, got $expr")
-    map(exprs) do ex
+    equations = map(exprs) do ex
         dict = MacroTools.trymatch(Expr(:op_, :lhs_, :rhs_), ex)
         dict === nothing && error("wrong expression: $ex")
         lhs, rhs, op = dict[:lhs], dict[:rhs], dict[:op]
         if @capture(rhs, @∑ eq_)
             (op == :(=) || op == :(+=) || op == :(-=)) || error("@∑ is only allowed on the RHS of assignments with `=`, `+=`, or `-=`, got $ex")
-            return Equation(true, lhs, eq, op)
+            return TransferEquation(:sum, lhs, eq, op)
         end
         has_sum_macro(rhs) && error("@∑ must appear alone as the entire RHS expression, got $ex")
-        Equation(false, lhs, rhs, op)
+        TransferEquation(:assign, lhs, rhs, op)
     end
+    TransferProgram(equations)
 end
 
-function resolve_refs(expr, maps::Vector{Pair{Symbol, Symbol}}; replaced::Union{Nothing, Vector{Vector{Expr}}} = nothing) # maps: [:grid=>:i, :particles=>:p, ...]
-    replaced === nothing || @assert length(maps) == length(replaced)
+function resolve_refs(expr, scope::TransferScope)
     MacroTools.postwalk(expr) do ex
         if @capture(ex, x_[i_])
-            for (k, (parent, j)) in enumerate(maps)
-                if i == j # same index
+            for (k, binding) in enumerate(scope.bindings)
+                if i == binding.index
+                    parent = binding.parent
                     resolved = :($parent.$x[$i])
-                    replaced === nothing && return resolved
+                    scope.replacements === nothing && return resolved
                     sym = Symbol(resolved)
-                    push_unique_expr!(replaced[k], :($sym = $resolved))
+                    push_unique_expr!(scope.replacements[k], :($sym = $resolved))
                     return sym
                 end
             end

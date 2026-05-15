@@ -12,6 +12,7 @@ include("grid.jl")
 include("basis.jl")
 include("shapes.jl")
 
+include("transfer.jl")
 include("implicit.jl")
 
 include("export.jl")
