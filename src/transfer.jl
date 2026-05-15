@@ -61,6 +61,41 @@ mutable struct Equation
     op::Symbol
 end
 
+function sum_equation_mask(equations::Vector, macroname::String)
+    issum = map(eq -> eq.issumeq, equations)
+    if !allequal(issum) && !issorted(issum; rev=true)
+        error("$macroname: Equations without `@∑` must come after those with `@∑`")
+    end
+    issum
+end
+
+replacement_groups(n::Integer) = [Expr[] for _ in 1:n]
+
+function push_unique_expr!(xs::Vector{Expr}, x::Expr)
+    x in xs || push!(xs, x)
+    xs
+end
+
+function append_unique_exprs!(dst::Vector{Expr}, src::Vector{Expr})
+    for x in src
+        push_unique_expr!(dst, x)
+    end
+    dst
+end
+
+function replacements(replaced::Vector{Vector{Expr}}, groups::Integer...)
+    exprs = Expr[]
+    for group in groups
+        append_unique_exprs!(exprs, replaced[group])
+    end
+    exprs
+end
+
+function push_unique!(xs::Vector, x)
+    x in xs || push!(xs, x)
+    xs
+end
+
 """
     @P2G grid=>i particles=>p weights=>ip [partition] begin
         equations...
@@ -134,8 +169,7 @@ function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_
 end
 
 function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, equations::Vector)
-    issum = map(eq -> eq.issumeq, equations)
-    (!allequal(issum) && !issorted(issum; rev=true)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
+    issum = sum_equation_mask(equations, "@P2G")
 
     code = quote
         Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
@@ -172,7 +206,7 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     @gensym iw gridindices
 
     maps = [grid=>i, particles=>p, iw=>ip]
-    replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
+    replaced = replacement_groups(length(maps))
     for k in eachindex(sum_equations)
         eq = sum_equations[k]
         @capture(eq.lhs, name_Symbol[idx_]) || error("@P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
@@ -184,7 +218,7 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     fillzeros = Any[]
     for k in eachindex(sum_equations)
         (; lhs, rhs, op) = sum_equations[k]
-        op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
+        op == :(=)  && push_unique!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
         op == :(-=) && (rhs = :(-$rhs))
         sum_equations[k] = :(Tesserae.add!($(lhs.args...), $rhs))
     end
@@ -195,7 +229,7 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         $gridindices = neighboringnodes($iw, $grid)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
-            $(union(replaced[1], replaced[3])...)
+            $(replacements(replaced, 1, 3)...)
             $(sum_equations...)
         end
     end
@@ -368,8 +402,7 @@ function G2P_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_
 end
 
 function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), equations::Vector)
-    issum = map(eq -> eq.issumeq, equations)
-    (!allequal(issum) && !issorted(issum; rev=true)) && error("@P2G: Equations without `@∑` must come after those with `@∑`")
+    issum = sum_equation_mask(equations, "@G2P")
 
     code = quote
         Tesserae.check_arguments_for_G2P($grid, $particles, $weights)
@@ -416,11 +449,11 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     maps = [grid=>i, particles=>p, iw=>ip]
 
     if !isempty(sum_equations)
-        replaced = [Set{Expr}(), Set{Expr}(), Set{Expr}()]
+        replaced = replacement_groups(length(maps))
         for k in eachindex(sum_equations)
             eq = sum_equations[k]
-            @capture(eq.lhs, x_[idx_]) || error("@P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
-            idx == p || error("@P2G: invalid LHS index in `@∑` equation: $(eq.lhs) (must be [$p])")
+            @capture(eq.lhs, x_[idx_]) || error("@G2P: invalid LHS in `@∑` equation: $(eq.lhs)")
+            idx == p || error("@G2P: invalid LHS index in `@∑` equation: $(eq.lhs) (must be [$p])")
             eq.lhs = resolve_refs(eq.lhs, maps)
             eq.rhs = resolve_refs(eq.rhs, maps; replaced)
         end
@@ -442,7 +475,7 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
             $gridindices = neighboringnodes($iw, $grid)
             for $ip in eachindex($gridindices)
                 $i = $gridindices[$ip]
-                $(union(replaced[1], replaced[3])...)
+                $(replacements(replaced, 1, 3)...)
                 $(sum_equations...)
             end
             $(saves...)
@@ -516,12 +549,12 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     for k in eachindex(equations)
         eq = equations[k]
         if eq.issumeq
-            @assert @capture(eq.lhs, A_[index_])
+            @capture(eq.lhs, A_[index_]) || error("@G2P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
             if index == p
-                @assert precedence == 1
+                precedence == 1 || error("@G2P2G: particle `@∑` equations must come before particle updates and grid-scattering equations")
                 push!(equations_g2p_sum, eq)
             elseif index == i
-                @assert precedence ≤ 3
+                precedence ≤ 3 || error("@G2P2G: grid `@∑` equations must come before grid-only equations")
                 push!(equations_p2g_sum, eq)
                 precedence = 3
             else
@@ -616,7 +649,7 @@ end
 
 function split_equations(expr::Expr)::Vector{Any}
     expr = MacroTools.prewalk(MacroTools.rmlines, expr)
-    @assert @capture(expr, begin exprs__ end)
+    @capture(expr, begin exprs__ end) || error("expected a `begin ... end` block, got $expr")
     map(exprs) do ex
         dict = MacroTools.trymatch(Expr(:op_, :lhs_, :rhs_), ex)
         dict === nothing && error("wrong expression: $ex")
@@ -630,7 +663,7 @@ function split_equations(expr::Expr)::Vector{Any}
     end
 end
 
-function resolve_refs(expr, maps::Vector{Pair{Symbol, Symbol}}; replaced::Union{Nothing, Vector{Set{Expr}}} = nothing) # maps: [:grid=>:i, :particles=>:p, ...]
+function resolve_refs(expr, maps::Vector{Pair{Symbol, Symbol}}; replaced::Union{Nothing, Vector{Vector{Expr}}} = nothing) # maps: [:grid=>:i, :particles=>:p, ...]
     replaced === nothing || @assert length(maps) == length(replaced)
     MacroTools.postwalk(expr) do ex
         if @capture(ex, x_[i_])
@@ -639,7 +672,7 @@ function resolve_refs(expr, maps::Vector{Pair{Symbol, Symbol}}; replaced::Union{
                     resolved = :($parent.$x[$i])
                     replaced === nothing && return resolved
                     sym = Symbol(resolved)
-                    push!(replaced[k], :($sym = $resolved))
+                    push_unique_expr!(replaced[k], :($sym = $resolved))
                     return sym
                 end
             end

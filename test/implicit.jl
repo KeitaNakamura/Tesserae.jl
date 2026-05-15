@@ -21,6 +21,36 @@
         @test !(B ≈ B')
         @test A ≈ B
     end
+    @testset "multiple matrices" begin
+        A = create_sparse_matrix(interp, mesh)
+        B = create_sparse_matrix(interp, mesh)
+        Aref = create_sparse_matrix(interp, mesh)
+        Bref = create_sparse_matrix(interp, mesh)
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            A[i,j] = @∑ w[ip] * w[jp]
+            B[i,j] = @∑ sum(∇w[ip]) * sum(∇w[jp])
+        end
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Aref[i,j] = @∑ w[ip] * w[jp]
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Bref[i,j] = @∑ sum(∇w[ip]) * sum(∇w[jp])
+        end
+
+        @test A ≈ Aref
+        @test B ≈ Bref
+    end
+    @testset "duplicate matrix" begin
+        ex = quote
+            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                A[i,j] = @∑ w[ip] * w[jp]
+                A[i,j] += @∑ sum(∇w[ip]) * sum(∇w[jp])
+            end
+        end
+        @test_throws ErrorException macroexpand(@__MODULE__, ex)
+    end
     @testset "rectangular blocks" begin
         n = length(grid)
 
