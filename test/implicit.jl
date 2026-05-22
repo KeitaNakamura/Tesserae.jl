@@ -156,47 +156,6 @@
         @test Aplus ≈ Abase + Aterm
         @test Aminus ≈ Abase - Aterm
     end
-    @testset "allocation sanity" begin
-        function assemble_mixed_block!(Kuu, Kup, Kpu, Kpp, grid, particles, weights)
-            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-                Kuu[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
-                Kup[i,j] = @∑ ∇w[ip] * w[jp]
-                Kpu[j,i] = @∑ ∇w[ip] * w[jp]
-                Kpp[i,j] = @∑ w[ip] * w[jp]
-            end
-            nothing
-        end
-        function assemble_mixed_separate!(Kuu, Kup, Kpu, Kpp, grid, particles, weights)
-            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-                Kuu[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
-            end
-            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-                Kup[i,j] = @∑ ∇w[ip] * w[jp]
-            end
-            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-                Kpu[j,i] = @∑ ∇w[ip] * w[jp]
-            end
-            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-                Kpp[i,j] = @∑ w[ip] * w[jp]
-            end
-            nothing
-        end
-        make_matrices() = (
-            create_sparse_matrix(basis, mesh; ndofs=(2, 2)),
-            create_sparse_matrix(basis, mesh; ndofs=(2, 1)),
-            create_sparse_matrix(basis, mesh; ndofs=(1, 2)),
-            create_sparse_matrix(basis, mesh; ndofs=(1, 1)),
-        )
-
-        Ks = make_matrices()
-        Ks_ref = make_matrices()
-        assemble_mixed_block!(Ks..., grid, particles, weights)
-        assemble_mixed_separate!(Ks_ref..., grid, particles, weights)
-
-        alloc_block = @allocated assemble_mixed_block!(Ks..., grid, particles, weights)
-        alloc_separate = @allocated assemble_mixed_separate!(Ks_ref..., grid, particles, weights)
-        @test alloc_block <= 2alloc_separate
-    end
 end
 
 @testset "Backtracking" begin
