@@ -99,8 +99,13 @@ closepvd(file::WriteVTK.CollectionFile) = WriteVTK.vtk_save(file)
 # f32
 f32(A::AbstractArray{Float64}) = maparray(Float32, A)
 f32(A::AbstractArray{Float32}) = A
-f32(A::AbstractArray{<: Tensor{<: Any, Float64}}) = maparray(Tensorial.tensortype(Tensorial.Space(eltype(A))){Float32}, A)
+f32(A::AbstractArray{<: Tensor{<: Any, Float64}}) = maparray(concrete_tensortype(eltype(A), Float32), A)
 f32(A::AbstractArray{<: Tensor{<: Any, Float32}}) = A
+
+function concrete_tensortype(::Type{TT}, ::Type{T}) where {TT <: Tensor, T}
+    space = Tensorial.Space(TT)
+    Tensorial.tensortype(space){T, Tensorial.tensororder(space), Tensorial.ncomponents(space)}
+end
 
 # write ply binary
 function write_ply(name::AbstractString, xs::AbstractArray{<: Vec})
