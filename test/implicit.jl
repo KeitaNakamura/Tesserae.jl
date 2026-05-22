@@ -42,6 +42,64 @@
         @test A ≈ Aref
         @test B ≈ Bref
     end
+    @testset "mixed dof matrices" begin
+        Kuu = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+        Kup = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        Kpu = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
+        Kpp = create_sparse_matrix(basis, mesh; ndofs=(1, 1))
+        Kuu_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+        Kup_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        Kpu_ref = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
+        Kpp_ref = create_sparse_matrix(basis, mesh; ndofs=(1, 1))
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Kuu[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+            Kup[i,j] = @∑ ∇w[ip] * w[jp]
+            Kpu[i,j] = @∑ w[ip] * ∇w[jp]'
+            Kpp[i,j] = @∑ w[ip] * w[jp]
+        end
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Kuu_ref[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Kup_ref[i,j] = @∑ ∇w[ip] * w[jp]
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Kpu_ref[i,j] = @∑ w[ip] * ∇w[jp]'
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Kpp_ref[i,j] = @∑ w[ip] * w[jp]
+        end
+
+        @test Kuu ≈ Kuu_ref
+        @test Kup ≈ Kup_ref
+        @test Kpu ≈ Kpu_ref
+        @test Kpp ≈ Kpp_ref
+        @test Kup ≈ Kpu'
+    end
+    @testset "mixed lhs order" begin
+        A = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        B = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
+        Aref = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        Bref = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            A[i,j] = @∑ ∇w[ip] * w[jp]
+            B[j,i] = @∑ ∇w[ip] * w[jp]
+        end
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Aref[i,j] = @∑ ∇w[ip] * w[jp]
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Bref[j,i] = @∑ ∇w[ip] * w[jp]
+        end
+
+        @test A ≈ Aref
+        @test B ≈ Bref
+        @test A ≈ B'
+    end
     @testset "duplicate matrix" begin
         ex = quote
             @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
@@ -69,6 +127,75 @@
         end
 
         @test Aup ≈ Bpu'
+    end
+    @testset "assignment operators" begin
+        Aterm = create_sparse_matrix(basis, mesh; ndofs=1)
+        Aeq = create_sparse_matrix(basis, mesh; ndofs=1)
+        Aplus = create_sparse_matrix(basis, mesh; ndofs=1)
+        Aminus = create_sparse_matrix(basis, mesh; ndofs=1)
+
+        fill!(Tesserae.SparseArrays.nonzeros(Aeq), 7)
+        fill!(Tesserae.SparseArrays.nonzeros(Aplus), 7)
+        fill!(Tesserae.SparseArrays.nonzeros(Aminus), 7)
+        Abase = copy(Aplus)
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Aterm[i,j] = @∑ w[ip] * w[jp]
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Aeq[i,j] = @∑ w[ip] * w[jp]
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Aplus[i,j] += @∑ w[ip] * w[jp]
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Aminus[i,j] -= @∑ w[ip] * w[jp]
+        end
+
+        @test Aeq ≈ Aterm
+        @test Aplus ≈ Abase + Aterm
+        @test Aminus ≈ Abase - Aterm
+    end
+    @testset "allocation sanity" begin
+        function assemble_mixed_block!(Kuu, Kup, Kpu, Kpp, grid, particles, weights)
+            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                Kuu[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+                Kup[i,j] = @∑ ∇w[ip] * w[jp]
+                Kpu[j,i] = @∑ ∇w[ip] * w[jp]
+                Kpp[i,j] = @∑ w[ip] * w[jp]
+            end
+            nothing
+        end
+        function assemble_mixed_separate!(Kuu, Kup, Kpu, Kpp, grid, particles, weights)
+            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                Kuu[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+            end
+            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                Kup[i,j] = @∑ ∇w[ip] * w[jp]
+            end
+            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                Kpu[j,i] = @∑ ∇w[ip] * w[jp]
+            end
+            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                Kpp[i,j] = @∑ w[ip] * w[jp]
+            end
+            nothing
+        end
+        make_matrices() = (
+            create_sparse_matrix(basis, mesh; ndofs=(2, 2)),
+            create_sparse_matrix(basis, mesh; ndofs=(2, 1)),
+            create_sparse_matrix(basis, mesh; ndofs=(1, 2)),
+            create_sparse_matrix(basis, mesh; ndofs=(1, 1)),
+        )
+
+        Ks = make_matrices()
+        Ks_ref = make_matrices()
+        assemble_mixed_block!(Ks..., grid, particles, weights)
+        assemble_mixed_separate!(Ks_ref..., grid, particles, weights)
+
+        alloc_block = @allocated assemble_mixed_block!(Ks..., grid, particles, weights)
+        alloc_separate = @allocated assemble_mixed_separate!(Ks_ref..., grid, particles, weights)
+        @test alloc_block <= 2alloc_separate
     end
 end
 
