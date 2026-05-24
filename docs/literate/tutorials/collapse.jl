@@ -182,7 +182,7 @@ function main()
                 v̄ₙ = vᵢ ⋅ n
                 vₜ = vᵢ - v̄ₙ*n
                 v̄ₜ = norm(vₜ)
-                grid.v[i] = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ, v̄ₜ) * vₜ/v̄ₜ)
+                grid.v[i] = vᵢ - (v̄ₙ*n + min(μ*v̄ₙ/v̄ₜ, 1) * vₜ)
             end
         end
 
