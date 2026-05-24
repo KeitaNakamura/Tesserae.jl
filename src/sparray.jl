@@ -3,11 +3,16 @@ struct SpIndex{I}
     spindex::Int
 end
 
+# `SpIndex` is tied to the current numbering of a `SpIndices` object.
+# It should be treated as a short-lived token and not stored across
+# `update_sparsity!` calls.
+@inline logicalindex(x::SpIndex) = x.index
+@inline storageindex(x::SpIndex) = x.spindex
 isactive(x::SpIndex) = !iszero(x.spindex)
 
 @inline function Base.getindex(A::AbstractArray, i::SpIndex)
-    @boundscheck checkbounds(A, i.index)
-    @inbounds isactive(i) ? A[i.index] : zero_recursive(eltype(A))
+    @boundscheck checkbounds(A, logicalindex(i))
+    @inbounds isactive(i) ? A[logicalindex(i)] : zero_recursive(eltype(A))
 end
 
 Base.show(io::IO, x::SpIndex) = print(io, "SpIndex(", x.index, ", ", ifelse(isactive(x), x.spindex, CDot()), ")")
@@ -26,6 +31,15 @@ Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()
 @inline blockindices(sp::SpIndices) = sp.blkinds
 @inline nblocks(sp::SpIndices) = size(blockindices(sp))
 
+@inline blocksize() = 1 << BLOCK_SIZE_LOG2
+@inline blockdims(::Val{dim}) where {dim} = nfill(blocksize(), Val(dim))
+@inline blocklength(::Val{dim}) where {dim} = 1 << (BLOCK_SIZE_LOG2*dim)
+@inline blocklength(::SpIndices{dim}) where {dim} = blocklength(Val(dim))
+@inline storageindex(blockindex::Integer, localindex::Integer, ::Val{dim}) where {dim} =
+    (blockindex - 1) * blocklength(Val(dim)) + localindex
+@inline blockglobal(blk::CartesianIndex{dim}, lcl::CartesianIndex{dim}) where {dim} =
+    CartesianIndex(ntuple(d -> ((blk[d] - 1) << BLOCK_SIZE_LOG2) + lcl[d], Val(dim)))
+
 @inline function _blocklocal(I::Integer...)
     j = I .- 1
     blk = @. j >> BLOCK_SIZE_LOG2 + 1
@@ -42,8 +56,49 @@ end
     @boundscheck checkbounds(sp, I...)
     blk, lcl = blocklocal(I...)
     @inbounds n = blockindices(sp)[blk...]
-    index = (n-1) << (BLOCK_SIZE_LOG2*dim) + lcl
+    index = storageindex(n, lcl, Val(dim))
     SpIndex(CartesianIndex(I), ifelse(iszero(n), zero(index), index))
+end
+
+struct ActiveSpIndices{dim, S <: SpIndices{dim}}
+    spinds::S
+end
+
+# Iterate active logical indices in storage order. This is intentionally not
+# Cartesian iteration order; callers that work with `SpArray.data` can use the
+# resulting `SpIndex` values without re-sorting.
+activeindices(sp::SpIndices) = ActiveSpIndices(sp)
+
+Base.IteratorSize(::Type{<: ActiveSpIndices}) = Base.SizeUnknown()
+Base.IteratorEltype(::Type{<: ActiveSpIndices}) = Base.HasEltype()
+Base.eltype(::Type{ActiveSpIndices{dim, S}}) where {dim, S} = SpIndex{CartesianIndex{dim}}
+
+function Base.iterate(iter::ActiveSpIndices{dim}, state=(1, 1)) where {dim}
+    sp = iter.spinds
+    blkinds = blockindices(sp)
+    blkCI = CartesianIndices(blkinds)
+    lclCI = CartesianIndices(blockdims(Val(dim)))
+    nblk = length(blkinds)
+    nlcl = length(lclCI)
+    b, l = state
+
+    @inbounds while b ≤ nblk
+        n = blkinds[b]
+        if !iszero(n)
+            blk = blkCI[b]
+            while l ≤ nlcl
+                lcl = lclCI[l]
+                I = blockglobal(blk, lcl)
+                i = storageindex(n, l, Val(dim))
+                l += 1
+                checkbounds(Bool, sp, Tuple(I)...) && return SpIndex(I, i), (b, l)
+            end
+        end
+        b += 1
+        l = 1
+    end
+
+    nothing
 end
 
 @inline function isactive(sp::SpIndices{dim}, I::Vararg{Integer, dim}) where {dim}
@@ -165,21 +220,23 @@ Base.size(A::SpArray) = size(A.spinds)
 
 get_data(A::SpArray) = A.data
 get_spinds(A::SpArray) = A.spinds
+storedindices(A::SpArray) = eachindex(get_data(A))
+activeindices(A::SpArray) = activeindices(get_spinds(A))
 
 # return zero if the index is not active
 @inline function Base.getindex(A::SpArray, i::SpIndex)
-    @boundscheck checkbounds(A, i.index)
+    @boundscheck checkbounds(A, logicalindex(i))
     isactive(i) || return zero_recursive(eltype(A))
-    @debug checkbounds(get_data(A), i.spindex)
-    @inbounds get_data(A)[i.spindex]
+    @debug checkbounds(get_data(A), storageindex(i))
+    @inbounds get_data(A)[storageindex(i)]
 end
 
 # do nothing if the index is not active (do not throw error!!)
 @inline function Base.setindex!(A::SpArray, v, i::SpIndex)
-    @boundscheck checkbounds(A, i.index)
+    @boundscheck checkbounds(A, logicalindex(i))
     isactive(i) || return A
-    @debug checkbounds(get_data(A), i.spindex)
-    @inbounds get_data(A)[i.spindex] = v
+    @debug checkbounds(get_data(A), storageindex(i))
+    @inbounds get_data(A)[storageindex(i)] = v
     A
 end
 
@@ -195,10 +252,10 @@ end
 end
 
 @inline function add!(A::SpArray{T}, i::SpIndex, v::T) where {T}
-    @boundscheck checkbounds(A, i.index)
+    @boundscheck checkbounds(A, logicalindex(i))
     isactive(i) || return A
-    @debug checkbounds(get_data(A), i.spindex)
-    @inbounds get_data(A)[i.spindex] += v
+    @debug checkbounds(get_data(A), storageindex(i))
+    @inbounds get_data(A)[storageindex(i)] += v
     A
 end
 
@@ -240,10 +297,8 @@ function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     if identical_spinds(dest, bcf.args...)
         Base.copyto!(_get_data(dest), _get_data(bc))
     else
-        @inbounds @simd for I in eachindex(dest)
-            if isactive(dest, I)
-                dest[I] = bc[I]
-            end
+        @inbounds for i in activeindices(dest)
+            dest[i] = bc[logicalindex(i)]
         end
     end
     dest
