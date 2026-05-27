@@ -22,7 +22,6 @@ end
     blkspy = rand(Bool, Tesserae.nblocks(spinds))
     n = update_sparsity!(spinds, blkspy)
     @test n == count(blkspy) * Tesserae.blocklength(spinds)
-    @test n == Tesserae.countnnz(spinds)
     inds = zeros(Int, size(spinds))
     for I in CartesianIndices(inds)
         block, localindex = Tesserae.global_to_blocklocal(Tuple(I)...; block_size_log2=Val(Tesserae.block_size_log2(spinds)))
@@ -44,7 +43,6 @@ end
     @test isempty(collect(Tesserae.activeindices(Tesserae.SpIndices(12,20))))
 
     update_sparsity!(spinds, falses(Tesserae.nblocks(spinds)))
-    @test Tesserae.countnnz(spinds) == 0
     @test isempty(collect(Tesserae.activeindices(spinds)))
     @test all(i->!Tesserae.isactive(i), spinds)
 
@@ -66,6 +64,74 @@ end
     @test_throws MethodError Tesserae.SpIndices((12, 20); block_size_log2=3)
 end
 
+@testset "SpGrid update from particles" begin
+    mesh = CartesianMesh(0.2, (0,3), (0,4))
+    xₚ = generate_particles(mesh)
+    filter!(xₚ) do (x, y)
+        (x - 1.5)^2 + (y - 2)^2 < 1
+    end
+
+    GridProp = @NamedTuple{x::Vec{2,Float64}, m::Float64}
+    grid = generate_grid(SpArray, GridProp, mesh)
+    update_sparsity!(grid, xₚ)
+    from_particles = Tesserae.get_spinds(grid)
+    n_particles = length(Tesserae.get_data(grid.m))
+
+    expected_occupied = falses(Tesserae.nblocks(mesh))
+    expected_counts = zeros(Int, Tesserae.nblocks(mesh))
+    expected_blockids = zeros(Int, length(xₚ))
+    expected_active = falses(Tesserae.nblocks(mesh))
+    LI = LinearIndices(expected_occupied)
+    CI = CartesianIndices(expected_active)
+    for p in eachindex(xₚ)
+        x = xₚ[p]
+        I = Tesserae.findblock(x, mesh)
+        I === nothing && continue
+        expected_counts[I] += 1
+        expected_blockids[p] = LI[I]
+        if !expected_occupied[I]
+            expected_occupied[I] = true
+            blks = (I - oneunit(I)):(I + oneunit(I))
+            expected_active[blks ∩ CI] .= true
+        end
+    end
+
+    tracker = Tesserae.sparsity_tracker(from_particles)
+    @test tracker.blockids == expected_blockids
+    @test tracker.counts == expected_counts
+    @test map(!iszero, Tesserae.occupied_blocks(from_particles)) == expected_occupied
+    @test n_particles == count(expected_active) * Tesserae.blocklength(from_particles)
+    @test map(!iszero, Tesserae.blocknumbering(from_particles)) == expected_active
+
+    mesh = CartesianMesh(1.0, (0,20), (0,8))
+    spinds = Tesserae.SpIndices(mesh)
+    xₚ = [Vec(1.0, 1.0), Vec(2.0, 1.0), Vec(9.0, 1.0)]
+    n₁ = update_sparsity!(spinds, xₚ, mesh)
+    blocknumbering₁ = copy(Tesserae.blocknumbering(spinds))
+
+    xₚ[1] = Vec(10.0, 1.0)
+    n₂ = update_sparsity!(spinds, xₚ, mesh)
+    tracker = Tesserae.sparsity_tracker(spinds)
+    LI = LinearIndices(Tesserae.nblocks(mesh))
+    bid₁ = LI[Tesserae.findblock(Vec(2.0, 1.0), mesh)]
+    bid₂ = LI[Tesserae.findblock(Vec(10.0, 1.0), mesh)]
+    @test n₂ === nothing
+    @test Tesserae.blocknumbering(spinds) == blocknumbering₁
+    @test tracker.counts[bid₁] == 1
+    @test tracker.counts[bid₂] == 2
+
+    update_sparsity!(spinds, falses(Tesserae.nblocks(spinds)))
+    @test isempty(tracker.blockids)
+    n₃ = update_sparsity!(spinds, xₚ, mesh)
+    @test n₃ == n₁
+    @test Tesserae.blocknumbering(spinds) == blocknumbering₁
+
+    update_sparsity!(spinds, trues(Tesserae.nblocks(spinds)))
+    @test update_sparsity!(spinds, Vec{2,Float64}[], mesh) == 0
+    @test isempty(collect(Tesserae.activeindices(spinds)))
+    @test all(iszero, Tesserae.blocknumbering(spinds))
+end
+
 @testset "SpArray" begin
     A = SpArray{Float64}(undef, 12, 20)
     @test IndexStyle(A) === IndexCartesian()
@@ -80,6 +146,11 @@ end
           Set(filter(i->Tesserae.isactive(A,i), eachindex(A)))
     @test all(i->(A[i]=rand(); iszero(A[i])), filter(i->!Tesserae.isactive(A,i), eachindex(A)))
     @test all(i->(a=rand(); A[i]=a; A[i]==a), filter(i->Tesserae.isactive(A,i), eachindex(A)))
+    fill!(A, 4)
+    @test all(i->A[i] == 4, filter(i->Tesserae.isactive(A,i), eachindex(A)))
+    @test all(i->iszero(A[i]), filter(i->!Tesserae.isactive(A,i), eachindex(A)))
+    Tesserae.resize_fillzero_data!(A, length(Tesserae.get_data(A)))
+    @test all(iszero, Tesserae.get_data(A))
 
     fillzero!(A)
     for i in Tesserae.activeindices(A)
@@ -122,9 +193,14 @@ end
         particles.v[p] = Vec(0.2p, -0.3p)
     end
 
-    update_sparsity!(sp_grid, trues(Tesserae.nblocks(Tesserae.get_spinds(sp_grid))))
+    update_sparsity!(sp_grid, particles.x)
     @test all(i->Tesserae.isactive(sp_grid, i), eachindex(sp_grid))
     @test all(x->Tesserae.get_spinds(x) === Tesserae.get_spinds(sp_grid), (sp_grid.m, sp_grid.mv))
+    hybrid_grid = Tesserae.hybrid(sp_grid)
+    @test hybrid_grid isa SpGrid
+    @test Tesserae.get_spinds(hybrid_grid) === Tesserae.get_spinds(sp_grid)
+    @test Tesserae.get_data(hybrid_grid.m) === Tesserae.get_data(sp_grid.m)
+    @test eltype(supportnodes(weights[1], hybrid_grid)) <: Tesserae.SpIndex
 
     @P2G dense_grid=>i particles=>p weights=>ip begin
         m[i] = @∑ w[ip] * m[p]

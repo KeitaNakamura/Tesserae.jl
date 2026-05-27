@@ -10,6 +10,9 @@ end
 @inline storageindex(x::SpIndex) = x.spindex
 isactive(x::SpIndex) = !iszero(x.spindex)
 
+@inline elone(A) = one(eltype(A))
+@inline elzero(A) = zero(eltype(A))
+
 @inline function Base.getindex(A::AbstractArray, i::SpIndex)
     @boundscheck checkbounds(A, logicalindex(i))
     @inbounds isactive(i) ? A[logicalindex(i)] : zero_recursive(eltype(A))
@@ -17,17 +20,55 @@ end
 
 Base.show(io::IO, x::SpIndex) = print(io, "SpIndex(", x.index, ", ", ifelse(isactive(x), x.spindex, CDot()), ")")
 
+function resize_fillzero!(A::AbstractVector, n::Integer)
+    # Existing Metal buffers cannot resize to zero length. Zeroing stale
+    # storage is enough when the active numbering no longer references it.
+    if iszero(n) && get_device(A) isa MetalDevice
+        fillzero!(A)
+    else
+        fillzero!(resize!(A, n))
+    end
+    A
+end
+
+struct ParticleBlockTracker{B <: AbstractArray{Int}, C <: AbstractArray{Int32}}
+    blockids::B  # block id currently recorded for each particle
+    counts::C    # number of particles currently recorded in each block
+end
+
+function ParticleBlockTracker(blocknumbering::AbstractArray)
+    blockids = similar(vec(blocknumbering), Int, 0)
+    counts = fillzero!(similar(blocknumbering, Int32))
+    ParticleBlockTracker(blockids, counts)
+end
+
+# Owned by `SpIndices`, so particle-driven sparsity updates reuse storage
+# instead of allocating block-sized temporaries every step.
+struct BlockSparsityWorkspace{O <: AbstractArray{Bool}, A <: AbstractArray{Bool}, T <: ParticleBlockTracker}
+    occupied::O  # blocks containing particles
+    active::A    # blocks allocated for basis support
+    tracker::T   # particle block ids and per-block particle counts
+end
+
+function BlockSparsityWorkspace(blocknumbering::AbstractArray)
+    occupied = fillzero!(similar(blocknumbering, Bool))
+    active = fillzero!(similar(blocknumbering, Bool))
+    BlockSparsityWorkspace(occupied, active, ParticleBlockTracker(blocknumbering))
+end
+
 # Block sparsity is stored as a dense array over block coordinates.
 # Zero means inactive; positive values are compact blocknumbers for SpArray.data.
-struct SpIndices{dim, L, B <: AbstractArray{Int, dim}} <: AbstractArray{SpIndex{CartesianIndex{dim}}, dim}
+struct SpIndices{dim, L, B <: AbstractArray{Int, dim}, W <: BlockSparsityWorkspace} <: AbstractArray{SpIndex{CartesianIndex{dim}}, dim}
     dims::Dims{dim}
     blocknumbering::B
+    workspace::W
 end
 
 function SpIndices(dims::Dims{dim}; block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)) where {dim, L}
     _check_block_size_log2(block_size_log2)
     blocknumbering = fill(0, nblocks(dims; block_size_log2))
-    SpIndices{dim, L, typeof(blocknumbering)}(dims, blocknumbering)
+    workspace = BlockSparsityWorkspace(blocknumbering)
+    SpIndices{dim, L, typeof(blocknumbering), typeof(workspace)}(dims, blocknumbering, workspace)
 end
 SpIndices(dims::Int...; kwargs...) = SpIndices(dims; kwargs...)
 SpIndices(mesh::CartesianMesh) = SpIndices(size(mesh); block_size_log2=Val(block_size_log2(mesh)))
@@ -36,6 +77,10 @@ Base.size(sp::SpIndices) = sp.dims
 Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()
 
 @inline blocknumbering(sp::SpIndices) = sp.blocknumbering
+@inline sparsity_workspace(sp::SpIndices) = sp.workspace
+@inline occupied_blocks(sp::SpIndices) = sparsity_workspace(sp).occupied
+@inline active_blocks(sp::SpIndices) = sparsity_workspace(sp).active
+@inline sparsity_tracker(sp::SpIndices) = sparsity_workspace(sp).tracker
 @inline nblocks(sp::SpIndices) = size(blocknumbering(sp))
 @inline block_size_log2(::SpIndices{dim, L}) where {dim, L} = L
 
@@ -124,42 +169,258 @@ end
 end
 @inline isactive(sp::SpIndices, I::CartesianIndex) = (@_propagate_inbounds_meta; isactive(sp, Tuple(I)...))
 
-# this should be done after updating `blocknumbering(sp)`
-function numbering!(sp::SpIndices{dim}) where {dim}
-    numbers = blocknumbering(sp)
-    count = 0
-    @inbounds for i in eachindex(numbers)
-        numbers[i] = iszero(numbers[i]) ? 0 : (count += 1)
+function _check_nblocks(sp::SpIndices, blocks)
+    nblocks(sp) == size(blocks) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
+end
+function _check_nblocks(sp::SpIndices, mesh::CartesianMesh)
+    nblocks(sp) == nblocks(mesh) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
+end
+
+function _check_same_backend(label, x, backend)
+    get_backend(x) == backend || throw(ArgumentError("SpIndices and $label must live on the same backend"))
+end
+
+function update_sparsity!(sp::SpIndices, blkspy::AbstractArray)
+    _apply_block_activity!(sp, blkspy)
+end
+
+function update_sparsity!(spinds::SpIndices, xₚ::AbstractVector{<: Vec}, mesh::CartesianMesh)
+    backend = get_backend(blocknumbering(spinds))
+    _check_same_backend("particle positions", xₚ, backend)
+    _check_same_backend("mesh", mesh, backend)
+    _check_nblocks(spinds, mesh)
+
+    if isempty(xₚ)
+        _reset_particle_block_tracker!(spinds, 0)
+        return _apply_block_activity!(spinds, fillzero!(active_blocks(spinds)); preserve_tracker=true)
     end
-    count * blocklength(sp) # return the number of activated nodes
+
+    # Reuse numbering when the occupied block set is unchanged.
+    if !_update_particle_block_tracker!(spinds, xₚ, mesh, backend)
+        return nothing
+    end
+    activity = _activate_neighbor_blocks!(active_blocks(spinds), occupied_blocks(spinds), backend)
+    _apply_block_activity!(spinds, activity; preserve_tracker=true)
 end
 
-function countnnz(sp::SpIndices)
-    count(!iszero, blocknumbering(sp)) * blocklength(sp)
+# Block activity -> compact block numbering.
+function _apply_block_activity!(sp::SpIndices, activity; preserve_tracker::Bool=false)
+    _check_nblocks(sp, activity)
+    _check_same_backend("block activity", activity, get_backend(blocknumbering(sp)))
+    n = _number_blocks!(sp, activity)
+    preserve_tracker || _invalidate_particle_block_tracker!(sp)
+    n
 end
 
-function update_sparsity!(sp::SpIndices, blkspy::AbstractArray{Bool})
-    nblocks(sp) == size(blkspy) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
-    blocknumbering(sp) .= blkspy
-    numbering!(sp)
+_number_blocks!(sp::SpIndices, activity) = _number_blocks!(sp, activity, get_backend(blocknumbering(sp)))
+
+function _number_blocks!(sp::SpIndices, activity, ::CPU)
+    numbers = blocknumbering(sp)
+    active_block_count = 0
+    @inbounds for i in eachindex(numbers, activity)
+        numbers[i] = iszero(activity[i]) ? 0 : (active_block_count += 1)
+    end
+    active_block_count * blocklength(sp)
 end
 
-function update_sparsity!(spinds::SpIndices, partition::ColorPartition{<: BlockStrategy})
+@kernel function gpukernel_init_block_numbering!(block_numbers, @Const(activity))
+    b = @index(Global)
+    @inbounds block_numbers[b] = ifelse(iszero(activity[b]), elzero(block_numbers), elone(block_numbers))
+end
+
+@kernel function gpukernel_finalize_block_numbering!(block_numbers, @Const(activity), active_count)
+    b = @index(Global)
+    @inbounds if b == length(block_numbers)
+        active_count[] = block_numbers[b]
+    end
+    @inbounds if iszero(activity[b])
+        block_numbers[b] = 0
+    end
+end
+
+function _number_blocks!(sp::SpIndices, activity, backend::GPU)
+    block_numbers = blocknumbering(sp)
+    active_count_buffer = similar(vec(block_numbers), eltype(block_numbers), 1)
+
+    # Build compact block numbers with an inclusive scan:
+    # activity -> 0/1 markers -> prefix sum -> inactive blocks reset to 0.
+    init_kernel = gpukernel_init_block_numbering!(backend)
+    init_kernel(block_numbers, activity; ndrange=length(block_numbers))
+    synchronize(backend)
+
+    cumsum!(vec(block_numbers), vec(block_numbers))
+    synchronize(backend)
+
+    finalize_kernel = gpukernel_finalize_block_numbering!(backend)
+    finalize_kernel(block_numbers, activity, active_count_buffer; ndrange=length(block_numbers))
+    synchronize(backend)
+    only(Array(active_count_buffer)) * blocklength(sp)
+end
+
+# Particle block tracker.
+# Manual sparsity updates bypass particle positions, so the particle tracker is
+# no longer a valid description of the current sparsity state.
+function _invalidate_particle_block_tracker!(spinds::SpIndices)
+    tracker = sparsity_tracker(spinds)
+    resize_fillzero!(tracker.blockids, 0)
+    fillzero!(tracker.counts)
+    fillzero!(occupied_blocks(spinds))
+    spinds
+end
+
+# Rebuild tracker storage on the first particle update, after invalidation, or
+# when the particle count changes.
+function _reset_particle_block_tracker!(spinds::SpIndices, nparticles::Integer)
+    tracker = sparsity_tracker(spinds)
+    length(tracker.blockids) == nparticles && return false
+    resize_fillzero!(tracker.blockids, nparticles)
+    fillzero!(tracker.counts)
+    fillzero!(occupied_blocks(spinds))
+    true
+end
+
+@inline blockid(dims::Dims, x::Vec, mesh::CartesianMesh)::Int = sub2ind(dims, findblock(x, mesh))
+
+# Update particle -> block ids and per-block particle counts. The expensive
+# active expansion and numbering are needed only when occupied blocks change.
+function _update_particle_block_tracker!(spinds::SpIndices, xₚ, mesh, ::CPU)
+    reset = _reset_particle_block_tracker!(spinds, length(xₚ))
+    tracker = sparsity_tracker(spinds)
+    blockids = tracker.blockids
+    counts = tracker.counts
+    moved = reset
+
+    @inbounds for p in eachindex(xₚ)
+        new = blockid(size(counts), xₚ[p], mesh)
+        old = blockids[p]
+        if old != new
+            blockids[p] = new
+            moved = true
+            iszero(old) || (counts[old] -= elone(counts))
+            iszero(new) || (counts[new] += elone(counts))
+        end
+    end
+
+    moved && _refresh_occupied_blocks!(occupied_blocks(spinds), counts, reset)
+end
+
+# Convert block particle counts into occupied flags and report whether the
+# occupied set changed.
+function _refresh_occupied_blocks!(occupied, counts, tracker_reset::Bool)
+    changed = tracker_reset
+    @inbounds for i in eachindex(occupied, counts)
+        now = !iszero(counts[i])
+        if now != !iszero(occupied[i])
+            occupied[i] = now
+            changed = true
+        end
+    end
+    changed
+end
+
+@kernel function gpukernel_update_particle_block_tracker!(blockids, counts, @Const(xₚ), @Const(mesh))
+    p = @index(Global)
+    new = blockid(size(counts), xₚ[p], mesh)
+    @inbounds old = blockids[p]
+    if old != new
+        @inbounds blockids[p] = new
+        if !iszero(old)
+            @inbounds Atomix.@atomic counts[old] -= elone(counts)
+        end
+        if !iszero(new)
+            @inbounds Atomix.@atomic counts[new] += elone(counts)
+        end
+    end
+end
+
+@kernel function gpukernel_refresh_occupied_blocks!(occupied_blocks, @Const(counts), changed)
+    b = @index(Global)
+    @inbounds begin
+        now = !iszero(counts[b])
+        if now != !iszero(occupied_blocks[b])
+            occupied_blocks[b] = now
+            Atomix.@atomic changed[] += elone(changed)
+        end
+    end
+end
+
+function _update_particle_block_tracker!(spinds::SpIndices, xₚ, mesh, backend::GPU)
+    reset = _reset_particle_block_tracker!(spinds, length(xₚ))
+    tracker = sparsity_tracker(spinds)
+    # Only the occupied set decides whether active expansion and numbering are
+    # needed; individual particle moves are just an intermediate detail.
+    changed = fillzero!(similar(vec(blocknumbering(spinds)), Int32, 1))
+
+    update_kernel = gpukernel_update_particle_block_tracker!(backend)
+    update_kernel(tracker.blockids, tracker.counts, xₚ, mesh; ndrange=length(xₚ))
+
+    # Launches on the same backend are ordered; only sync before the CPU reads `changed`.
+    refresh_kernel = gpukernel_refresh_occupied_blocks!(backend)
+    refresh_kernel(occupied_blocks(spinds), tracker.counts, changed; ndrange=length(occupied_blocks(spinds)))
+    synchronize(backend)
+    reset || !iszero(only(Array(changed)))
+end
+
+# Occupied blocks -> active blocks for basis support.
+function _activate_block_neighborhood!(active_blocks, I::CartesianIndex, CI)
+    blks = (I - oneunit(I)):(I + oneunit(I))
+    active_blocks[blks ∩ CI] .= true
+    active_blocks
+end
+
+function _activate_neighbor_blocks!(active, occupied, ::CPU)
+    fillzero!(active)
+    CI = CartesianIndices(active)
+    @inbounds for I in CartesianIndices(occupied)
+        iszero(occupied[I]) || _activate_block_neighborhood!(active, I, CI)
+    end
+    active
+end
+
+@inline function _inbounds_block(I::CartesianIndex{dim}, dims::Dims{dim}) where {dim}
+    all(ntuple(d -> 1 ≤ I[d] ≤ dims[d], Val(dim)))
+end
+
+# GPU particle-driven updates expand occupied blocks here instead of relying on
+# CPU ColorPartition scheduling. Multiple threads may write the same `true`;
+# only the final boolean state matters.
+@kernel function gpukernel_expand_occupied_blocks!(active_blocks, @Const(occupied_blocks))
+    b = @index(Global)
+    @inbounds if !iszero(occupied_blocks[b])
+        dims = size(occupied_blocks)
+        blk = CartesianIndices(dims)[b]
+        for offset in CartesianIndices(nfill(-1:1, Val(length(dims))))
+            neighbor = CartesianIndex(ntuple(d -> blk[d] + offset[d], Val(length(dims))))
+            if _inbounds_block(neighbor, dims)
+                active_blocks[sub2ind(dims, neighbor)] = true
+            end
+        end
+    end
+end
+
+function _activate_neighbor_blocks!(active, occupied, backend::GPU)
+    fillzero!(active)
+    expand_kernel = gpukernel_expand_occupied_blocks!(backend)
+    expand_kernel(active, occupied; ndrange=length(occupied))
+    synchronize(backend)
+    active
+end
+
+function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, partition::ColorPartition{<: BlockStrategy}) where {dim}
     bs = strategy(partition)
     nblocks(spinds) == nblocks(bs) || throw(ArgumentError("blocks per dimension $(nblocks(spinds)) must match"))
     block_size_log2(spinds) == block_size_log2(bs) ||
         throw(ArgumentError("block_size_log2 $(block_size_log2(spinds)) must match partition block_size_log2 $(block_size_log2(bs))"))
 
-    inds = fillzero!(blocknumbering(spinds))
-    CI = CartesianIndices(nblocks(bs))
+    activity = fillzero!(active_blocks(spinds))
+    CI = CartesianIndices(activity)
     @inbounds for I in CI
         if !isempty(particle_indices_in(bs, I))
-            blks = (I - oneunit(I)):(I + oneunit(I))
-            inds[blks ∩ CI] .= true
+            _activate_block_neighborhood!(activity, I, CI)
         end
     end
 
-    numbering!(spinds)
+    _apply_block_activity!(spinds, activity)
 end
 
 """
@@ -215,9 +476,9 @@ julia> A
  0.0  0.0  0.0  0.0  0.0
 ```
 """
-struct SpArray{T, dim} <: AbstractArray{T, dim}
-    data::Vector{T}
-    spinds::SpIndices{dim}
+struct SpArray{T, dim, D <: AbstractVector{T}, S <: SpIndices{dim}} <: AbstractArray{T, dim}
+    data::D
+    spinds::S
     shared_spinds::Bool
 end
 
@@ -241,6 +502,11 @@ get_spinds(A::SpArray) = A.spinds
 nblocks(A::SpArray) = nblocks(get_spinds(A))
 storedindices(A::SpArray) = eachindex(get_data(A))
 activeindices(A::SpArray) = activeindices(get_spinds(A))
+
+function Base.fill!(A::SpArray, x)
+    fill!(get_data(A), x)
+    A
+end
 
 # return zero if the index is not active
 @inline function Base.getindex(A::SpArray, i::SpIndex)
@@ -293,7 +559,7 @@ function update_sparsity!(A::SpArray, blkspy)
 end
 
 function resize_fillzero_data!(A::SpArray, n::Integer)
-    fillzero!(resize!(get_data(A), n))
+    resize_fillzero!(get_data(A), n)
     A
 end
 resize_fillzero_data!(A::AbstractMesh, n) = A
@@ -322,7 +588,11 @@ function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     end
     dest
 end
-@inline _get_data(bc::Broadcasted{ArrayStyle{SpArray}}) = Broadcast.broadcasted(bc.f, map(_get_data, bc.args)...)
+
+# Fast path for broadcasts over SpArrays with identical sparsity: unwrap the
+# data vectors, but instantiate the broadcast here so GPU kernels do not infer
+# broadcast axes from the sparse wrapper.
+@inline _get_data(bc::Broadcasted{ArrayStyle{SpArray}}) = Broadcast.instantiate(Broadcast.broadcasted(bc.f, map(_get_data, bc.args)...))
 @inline _get_data(x::SpArray) = get_data(x)
 @inline _get_data(x::Any) = x
 
