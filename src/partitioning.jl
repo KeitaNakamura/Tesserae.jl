@@ -1,5 +1,3 @@
-const BLOCK_SIZE_LOG2 = unsigned(Preferences.@load_preference("block_size_log2", 2)) # 2^n
-
 abstract type ColoringStrategy end
 
 struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: ColoringStrategy
@@ -20,6 +18,8 @@ function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
 end
 
 nblocks(bs::BlockStrategy) = size(bs.stops)
+block_size_log2(bs::BlockStrategy) = block_size_log2(bs.mesh)
+blockwidth(bs::BlockStrategy) = blockwidth(bs.mesh)
 
 @inline function particle_indices_in(bs::BlockStrategy, blk::Integer)
     @boundscheck checkbounds(LinearIndices(nblocks(bs)), blk)
@@ -49,7 +49,7 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
 
     @threaded for chunk_id in 1:nchunks
         @inbounds for p in chunks[chunk_id]
-            blk = sub2ind(nblocks(bs), whichblock(xₚ[p], bs.mesh))
+            blk = sub2ind(nblocks(bs), findblock(xₚ[p], bs.mesh))
             bs.blockindices[p] = blk
             if !iszero(blk)
                 bs.localindices[p] = (bs.nparticles_chunks[chunk_id][blk] += 1)
@@ -152,33 +152,40 @@ end
 # block operations #
 ####################
 
-nblocks(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCK_SIZE_LOG2+1
-nblocks(A::AbstractArray) = nblocks(size(A))
+blockwidth(::Val{L}) where {L} = 1 << L
+blockwidth(mesh::CartesianMesh) = blockwidth(Val(block_size_log2(mesh)))
 
-@inline function _nodeindices_in_block(blk::CartesianIndex{dim}) where {dim}
+nblocks(gridsize::Tuple{Vararg{Int}}; block_size_log2::Val{L}) where {L} =
+    (_check_block_size_log2(block_size_log2); map(n -> ((n - 1) >> L) + 1, gridsize))
+nblocks(mesh::CartesianMesh) = nblocks(size(mesh); block_size_log2=Val(block_size_log2(mesh)))
+
+@inline function _nodeindices_in_block(blk::CartesianIndex{dim}, ::Val{L}) where {dim, L}
     ranges = ntuple(d -> begin
-        i0 = ((blk[d] - 1) << BLOCK_SIZE_LOG2) + 1
-        i1 = ( blk[d]      << BLOCK_SIZE_LOG2) + 1
+        i0 = ((blk[d] - 1) << L) + 1
+        i1 = ( blk[d]      << L) + 1
         i0:i1
     end, Val(dim))
     CartesianIndices(ranges)
 end
-@inline function nodeindices_in_block(blk::CartesianIndex{dim}, gridsize::Dims{dim}) where {dim}
-    nodes = _nodeindices_in_block(blk) ∩ CartesianIndices(gridsize)
-    isempty(nodes) && throw(BoundsError(CartesianIndices(nblocks(gridsize)), Tuple(blk)))
+@inline function nodeindices_in_block(blk::CartesianIndex{dim}, gridsize::Dims{dim}; block_size_log2::Val{L}) where {dim, L}
+    _check_block_size_log2(block_size_log2)
+    nodes = _nodeindices_in_block(blk, block_size_log2) ∩ CartesianIndices(gridsize)
+    isempty(nodes) && throw(BoundsError(CartesianIndices(nblocks(gridsize; block_size_log2)), Tuple(blk)))
     nodes
 end
+@inline nodeindices_in_block(blk::CartesianIndex{dim}, mesh::CartesianMesh{dim}) where {dim} =
+    nodeindices_in_block(blk, size(mesh); block_size_log2=Val(block_size_log2(mesh)))
 
 """
-    Tesserae.whichblock(x::Vec, mesh::CartesianMesh)
+    Tesserae.findblock(x::Vec, mesh::CartesianMesh)
 
 Return block index where `x` locates.
-The unit block size is `2^$BLOCK_SIZE_LOG2` cells.
+The unit block size is `2^block_size_log2(mesh)` cells.
 
 # Examples
 ```jldoctest
 julia> mesh = CartesianMesh(1, (0,10), (0,10))
-11×11 CartesianMesh{2, Float64, Vector{Float64}}:
+11×11 CartesianMesh{2, Float64, Vector{Float64}, 2}:
  [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
  [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
  [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]
@@ -191,14 +198,14 @@ julia> mesh = CartesianMesh(1, (0,10), (0,10))
  [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]      [9.0, 9.0]   [9.0, 10.0]
  [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
 
-julia> Tesserae.whichblock(Vec(8.5, 1.5), mesh)
+julia> Tesserae.findblock(Vec(8.5, 1.5), mesh)
 CartesianIndex(3, 1)
 ```
 """
-@inline function whichblock(x::Vec, mesh::CartesianMesh)
+@inline function findblock(x::Vec, mesh::CartesianMesh{dim, T, V, L}) where {dim, T, V, L}
     I = findcell(x, mesh)
     I === nothing && return nothing
-    CartesianIndex(@. (I.I-1) >> BLOCK_SIZE_LOG2 + 1)
+    CartesianIndex(@. (I.I-1) >> L + 1)
 end
 
 function threadsafe_blocks(nblocks::NTuple{dim, Int}) where {dim}

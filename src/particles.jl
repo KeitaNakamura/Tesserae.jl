@@ -147,9 +147,9 @@ function generate_particles(mesh::CartesianMesh{dim, T}; alg::SamplingAlgorithm=
 end
 
 function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)
-    ptsinblks = map(_->Int[], CartesianIndices(blocksize(mesh)))
+    ptsinblks = map(_->Int[], CartesianIndices(nblocks(mesh)))
     for p in eachindex(particles)
-        I = whichblock(getx(particles)[p], mesh)
+        I = findblock(getx(particles)[p], mesh)
         I === nothing || push!(ptsinblks[I], p)
     end
     reorder_particles!(particles, ptsinblks)

@@ -1,5 +1,5 @@
 import ..Tesserae
-using ..Tesserae: CartesianMesh, generate_grid, spacing, spacing_inv
+using ..Tesserae: CartesianMesh, block_size_log2, generate_grid, spacing, spacing_inv
 
 #################
 # StaggeredGrid #
@@ -10,7 +10,7 @@ function Tesserae.generate_grid(::Type{Arr}, loc::Cell, ::Type{CellProp}, mesh::
     h⁻¹ = spacing_inv(mesh)
     axes = mesh.axes
     cellaxes = map(ax -> ax[1:end-1] .+ h/2, axes)
-    StructArrays.replace_storage(generate_grid(Arr, CellProp, CartesianMesh(cellaxes, h, h⁻¹))) do a
+    StructArrays.replace_storage(generate_grid(Arr, CellProp, CartesianMesh(cellaxes, h, h⁻¹; block_size_log2=Val(block_size_log2(mesh))))) do a
         a isa CartesianMesh && return a
         StencilArray(loc, a)
     end
@@ -22,7 +22,7 @@ function Tesserae.generate_grid(::Type{Arr}, loc::Face, ::Type{FaceProp}, mesh::
     h⁻¹ = spacing_inv(mesh)
     axes = mesh.axes
     cellaxes = map(ax -> ax[1:end-1] .+ h/2, axes)
-    StructArrays.replace_storage(generate_grid(Arr, FaceProp, CartesianMesh(ntuple(j -> j==loc.axis ? axes[j] : cellaxes[j], Val(dim)), h, h⁻¹))) do a
+    StructArrays.replace_storage(generate_grid(Arr, FaceProp, CartesianMesh(ntuple(j -> j==loc.axis ? axes[j] : cellaxes[j], Val(dim)), h, h⁻¹; block_size_log2=Val(block_size_log2(mesh))))) do a
         a isa CartesianMesh && return a
         StencilArray(loc, a)
     end
@@ -39,7 +39,7 @@ function inner(mesh::CartesianMesh; pad::Int)
     axes = map(mesh.axes) do ax
         @view ax[begin+pad:end-pad]
     end
-    CartesianMesh(axes, h, h⁻¹)
+    CartesianMesh(axes, h, h⁻¹; block_size_log2=Val(block_size_log2(mesh)))
 end
 
 Tesserae.fillzero!(x::StencilArray) = (Tesserae.fillzero!(parent(x)); x)
