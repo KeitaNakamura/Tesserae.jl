@@ -155,7 +155,7 @@ end
 nblocks(gridsize::Tuple{Vararg{Int}}) = @. (gridsize-1)>>BLOCK_SIZE_LOG2+1
 nblocks(A::AbstractArray) = nblocks(size(A))
 
-@inline function _nodes_in_block(blk::CartesianIndex{dim}) where {dim}
+@inline function _nodeindices_in_block(blk::CartesianIndex{dim}) where {dim}
     ranges = ntuple(d -> begin
         i0 = ((blk[d] - 1) << BLOCK_SIZE_LOG2) + 1
         i1 = ( blk[d]      << BLOCK_SIZE_LOG2) + 1
@@ -163,8 +163,8 @@ nblocks(A::AbstractArray) = nblocks(size(A))
     end, Val(dim))
     CartesianIndices(ranges)
 end
-@inline function nodes_in_block(blk::CartesianIndex{dim}, gridsize::Dims{dim}) where {dim}
-    nodes = _nodes_in_block(blk) ∩ CartesianIndices(gridsize)
+@inline function nodeindices_in_block(blk::CartesianIndex{dim}, gridsize::Dims{dim}) where {dim}
+    nodes = _nodeindices_in_block(blk) ∩ CartesianIndices(gridsize)
     isempty(nodes) && throw(BoundsError(CartesianIndices(nblocks(gridsize)), Tuple(blk)))
     nodes
 end

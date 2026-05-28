@@ -51,9 +51,9 @@
         @test sort(allcells) == collect(1:Tesserae.ncells(mesh))
     end
     @testset "Utilities" begin
-        @test Tesserae.nodes_in_block(CartesianIndex(1,1), (20,20)) === CartesianIndices((1:5,1:5))
-        @test Tesserae.nodes_in_block(CartesianIndex(2,3), (20,20)) === CartesianIndices((5:9,9:13))
-        @test Tesserae.nodes_in_block(CartesianIndex(2,3), (10,10)) === CartesianIndices((5:9,9:10))
-        @test_throws BoundsError Tesserae.nodes_in_block(CartesianIndex(2,3), (5,5))
+        @test Tesserae.nodeindices_in_block(CartesianIndex(1,1), (20,20)) === CartesianIndices((1:5,1:5))
+        @test Tesserae.nodeindices_in_block(CartesianIndex(2,3), (20,20)) === CartesianIndices((5:9,9:13))
+        @test Tesserae.nodeindices_in_block(CartesianIndex(2,3), (10,10)) === CartesianIndices((5:9,9:10))
+        @test_throws BoundsError Tesserae.nodeindices_in_block(CartesianIndex(2,3), (5,5))
     end
 end
