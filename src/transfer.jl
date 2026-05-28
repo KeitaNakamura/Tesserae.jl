@@ -349,13 +349,13 @@ function check_arguments_for_P2G(grid, particles, weights, partition)
     if partition isa ColorPartition
         strat = strategy(partition)
         if strat isa BlockStrategy
-            @assert nblocks(grid) == nblocks(strat)
+            @assert nblocks(get_mesh(grid)) == nblocks(strat)
             if sum(length(particle_indices_in(strat, blk)) for blk in LinearIndices(nblocks(strat))) == 0
                 error("@P2G: No particles assigned to any block in ColorPartition")
             end
             b = basis(first(weights))
-            if kernel_support(b) > (1 << BLOCK_SIZE_LOG2)
-                error("@P2G: Block size for `ColorPartition` is too small for basis $b. Increase `block_size_log2` (default = 2) in LocalPreferences.toml to ensure block size is ≥ kernel support.")
+            if kernel_support(b) > blockwidth(strat)
+                error("@P2G: Block size for `ColorPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
             end
         end
     end

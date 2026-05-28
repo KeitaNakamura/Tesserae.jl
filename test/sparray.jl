@@ -16,21 +16,21 @@ end
     spinds = Tesserae.SpIndices(12,20)
     @test IndexStyle(spinds) === IndexCartesian()
     @test size(spinds) === (12,20)
-    @test Tesserae.nblocks(spinds) === Tesserae.nblocks((12,20))
+    @test Tesserae.nblocks(spinds) === Tesserae.nblocks(size(spinds); block_size_log2=Val(Tesserae.block_size_log2(spinds)))
     @test !all(Tesserae.isactive, spinds)
     @test !all(i->Tesserae.isactive(spinds,i), eachindex(spinds))
     blkspy = rand(Bool, Tesserae.nblocks(spinds))
     n = update_sparsity!(spinds, blkspy)
-    @test n == count(blkspy) * (2^Tesserae.BLOCK_SIZE_LOG2)^2 # `^2` is for dimension
+    @test n == count(blkspy) * Tesserae.blocklength(spinds)
     @test n == Tesserae.countnnz(spinds)
     inds = zeros(Int, size(spinds))
     for I in CartesianIndices(inds)
-        blk, i = Tesserae.blocklocal(Tuple(I)...)
-        if blkspy[blk...]
-            linear_blkindex = LinearIndices(blkspy)[blk...]
+        block, localindex = Tesserae.global_to_blocklocal(Tuple(I)...; block_size_log2=Val(Tesserae.block_size_log2(spinds)))
+        if blkspy[block...]
+            linear_blkindex = LinearIndices(blkspy)[block...]
             nblks = count(blkspy[1:linear_blkindex])
-            blkunit = (2^Tesserae.BLOCK_SIZE_LOG2)^2
-            index = (nblks-1) * blkunit + i
+            blkunit = Tesserae.blocklength(spinds)
+            index = (nblks-1) * blkunit + localindex
             inds[I] = index
         end
     end
@@ -54,6 +54,16 @@ end
     @test length(edge_active) == length(edge_spinds)
     @test all(i->1 ≤ Tesserae.storageindex(i) ≤ edge_n, edge_active)
     @test Set(map(Tesserae.logicalindex, edge_active)) == Set(CartesianIndices(edge_spinds))
+
+    spinds_block3 = Tesserae.SpIndices((12, 20); block_size_log2=Val(3))
+    @test Tesserae.block_size_log2(spinds_block3) === 3
+    @test Tesserae.blockwidth(spinds_block3) === 8
+    @test Tesserae.blocksize(spinds_block3) === (8, 8)
+    @test Tesserae.nblocks(spinds_block3) === (2, 3)
+    @test update_sparsity!(spinds_block3, trues(Tesserae.nblocks(spinds_block3))) ==
+          prod(Tesserae.nblocks(spinds_block3)) * Tesserae.blocklength(spinds_block3)
+    @test Tesserae.isactive(spinds_block3, 12, 20)
+    @test_throws MethodError Tesserae.SpIndices((12, 20); block_size_log2=3)
 end
 
 @testset "SpArray" begin
@@ -112,7 +122,7 @@ end
         particles.v[p] = Vec(0.2p, -0.3p)
     end
 
-    update_sparsity!(sp_grid, trues(Tesserae.nblocks(sp_grid)))
+    update_sparsity!(sp_grid, trues(Tesserae.nblocks(Tesserae.get_spinds(sp_grid))))
     @test all(i->Tesserae.isactive(sp_grid, i), eachindex(sp_grid))
     @test all(x->Tesserae.get_spinds(x) === Tesserae.get_spinds(sp_grid), (sp_grid.m, sp_grid.mv))
 
@@ -129,4 +139,10 @@ end
     @test sp_grid.m ≈ dense_grid.m
     @test sp_grid.mv ≈ dense_grid.mv
     @test all(!iszero, map(Tesserae.storageindex, Tesserae.activeindices(sp_grid.m)))
+
+    mesh_block3 = CartesianMesh(1.0, (0, 12), (0, 20); block_size_log2=Val(3))
+    grid_block3 = generate_grid(SpArray, GridProp, mesh_block3)
+    partition_block3 = ColorPartition(mesh_block3)
+    @test Tesserae.block_size_log2(Tesserae.get_spinds(grid_block3)) === 3
+    @test Tesserae.nblocks(Tesserae.get_spinds(grid_block3)) === Tesserae.nblocks(Tesserae.strategy(partition_block3))
 end

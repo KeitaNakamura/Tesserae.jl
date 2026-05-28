@@ -19,6 +19,15 @@
     @test IndexStyle(mesh) === IndexCartesian()
     @test (@inferred spacing(mesh)) === 0.2
     @test (@inferred Tesserae.spacing_inv(mesh)) === inv(0.2)
+    @test (@inferred Tesserae.block_size_log2(mesh)) === Tesserae.BLOCK_SIZE_LOG2
+
+    mesh_block3 = CartesianMesh(0.2, (0,3), (0,4); block_size_log2=Val(3))
+    @test (@inferred Tesserae.block_size_log2(mesh_block3)) === 3
+    @test Tesserae.blockwidth(mesh_block3) === 8
+    @test Tesserae.nblocks(mesh_block3) === (2, 3)
+    @test Tesserae.findblock(Vec(1.7, 2.1), mesh_block3) === CartesianIndex(2, 2)
+    @test Tesserae.block_size_log2(mesh_block3[2:10, 3:15]) === 3
+    @test_throws MethodError CartesianMesh(0.2, (0,3), (0,4); block_size_log2=3)
 
     # isinside
     @test (@inferred Tesserae.isinside(Vec(0.1,0.3), mesh)) === true

@@ -17,47 +17,62 @@ end
 
 Base.show(io::IO, x::SpIndex) = print(io, "SpIndex(", x.index, ", ", ifelse(isactive(x), x.spindex, CDot()), ")")
 
-struct SpIndices{dim} <: AbstractArray{SpIndex{CartesianIndex{dim}}, dim}
+# Block sparsity is stored as a dense array over block coordinates.
+# Zero means inactive; positive values are compact blocknumbers for SpArray.data.
+struct SpIndices{dim, L, B <: AbstractArray{Int, dim}} <: AbstractArray{SpIndex{CartesianIndex{dim}}, dim}
     dims::Dims{dim}
-    blkinds::Array{Int, dim}
+    blocknumbering::B
 end
 
-SpIndices(dims::Tuple{Vararg{Int}}) = SpIndices(dims, fill(0, nblocks(dims)))
-SpIndices(dims::Int...) = SpIndices(dims)
+function SpIndices(dims::Dims{dim}; block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)) where {dim, L}
+    _check_block_size_log2(block_size_log2)
+    blocknumbering = fill(0, nblocks(dims; block_size_log2))
+    SpIndices{dim, L, typeof(blocknumbering)}(dims, blocknumbering)
+end
+SpIndices(dims::Int...; kwargs...) = SpIndices(dims; kwargs...)
+SpIndices(mesh::CartesianMesh) = SpIndices(size(mesh); block_size_log2=Val(block_size_log2(mesh)))
 
 Base.size(sp::SpIndices) = sp.dims
 Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()
 
-@inline blockindices(sp::SpIndices) = sp.blkinds
-@inline nblocks(sp::SpIndices) = size(blockindices(sp))
+@inline blocknumbering(sp::SpIndices) = sp.blocknumbering
+@inline nblocks(sp::SpIndices) = size(blocknumbering(sp))
+@inline block_size_log2(::SpIndices{dim, L}) where {dim, L} = L
 
-@inline blocksize() = 1 << BLOCK_SIZE_LOG2
-@inline blockdims(::Val{dim}) where {dim} = nfill(blocksize(), Val(dim))
-@inline blocklength(::Val{dim}) where {dim} = 1 << (BLOCK_SIZE_LOG2*dim)
-@inline blocklength(::SpIndices{dim}) where {dim} = blocklength(Val(dim))
-@inline storageindex(blockindex::Integer, localindex::Integer, ::Val{dim}) where {dim} =
-    (blockindex - 1) * blocklength(Val(dim)) + localindex
-@inline blockglobal(blk::CartesianIndex{dim}, lcl::CartesianIndex{dim}) where {dim} =
-    CartesianIndex(ntuple(d -> ((blk[d] - 1) << BLOCK_SIZE_LOG2) + lcl[d], Val(dim)))
+# Each active block stores a dense block of size blocksize(sp) in SpArray.data.
+@inline blockwidth(sp::SpIndices) = blockwidth(Val(block_size_log2(sp)))
+@inline blocksize(sp::SpIndices{dim}) where {dim} = nfill(blockwidth(sp), Val(dim))
+@inline blocklength(sp::SpIndices{dim, L}) where {dim, L} = 1 << (L*dim)
 
-@inline function _blocklocal(I::Integer...)
+# blocknumber + local linear index inside the block -> SpArray.data index.
+@inline storageindex(blocknumber::Integer, localindex::Integer, sp::SpIndices) =
+    (blocknumber - 1) * blocklength(sp) + localindex
+
+# Logical node index -> block coordinate.
+@inline blockindex(I::Vararg{Integer, dim}; block_size_log2::Val{L}) where {dim, L} =
+    @. ((I - 1) >> L) + 1
+
+# Logical node index -> block coordinate and local linear index inside the block.
+@inline function global_to_blocklocal(I::Vararg{Integer, dim}; block_size_log2::Val{L}) where {dim, L}
     j = I .- 1
-    blk = @. j >> BLOCK_SIZE_LOG2 + 1
-    lcl = @. j & (1<<BLOCK_SIZE_LOG2 - 1) + 1
-    blk, lcl
+    block = blockindex(I...; block_size_log2)
+    localcoord = @. (j & ((1 << L) - 1)) + 1
+    LI = LinearIndices(nfill(1 << L, Val(dim)))
+    @inbounds block, LI[localcoord...]
 end
-@inline function blocklocal(I::Vararg{Integer, dim}) where {dim}
-    blk, lcl = _blocklocal(I...)
-    LI = LinearIndices(nfill(1 << BLOCK_SIZE_LOG2, Val(dim)))
-    @inbounds blk, LI[lcl...]
+
+# block coordinate and local Cartesian index inside the block -> logical node index.
+@inline function blocklocal_to_global(block::CartesianIndex{dim}, localcoord::CartesianIndex{dim}; block_size_log2::Val{L}) where {dim, L}
+    CartesianIndex(ntuple(d -> ((block[d] - 1) << L) + localcoord[d], Val(dim)))
 end
 
 @inline function Base.getindex(sp::SpIndices{dim}, I::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(sp, I...)
-    blk, lcl = blocklocal(I...)
-    @inbounds n = blockindices(sp)[blk...]
-    index = storageindex(n, lcl, Val(dim))
-    SpIndex(CartesianIndex(I), ifelse(iszero(n), zero(index), index))
+    block_size = Val(block_size_log2(sp))
+    block, localindex = global_to_blocklocal(I...; block_size_log2=block_size)
+    @inbounds blocknumber = blocknumbering(sp)[block...]
+    index = storageindex(blocknumber, localindex, sp)
+    SpIndex(CartesianIndex(I), ifelse(iszero(blocknumber), zero(index), index))
 end
 
 struct ActiveSpIndices{dim, S <: SpIndices{dim}}
@@ -75,21 +90,22 @@ Base.eltype(::Type{ActiveSpIndices{dim, S}}) where {dim, S} = SpIndex{CartesianI
 
 function Base.iterate(iter::ActiveSpIndices{dim}, state=(1, 1)) where {dim}
     sp = iter.spinds
-    blkinds = blockindices(sp)
-    blkCI = CartesianIndices(blkinds)
-    lclCI = CartesianIndices(blockdims(Val(dim)))
-    nblk = length(blkinds)
-    nlcl = length(lclCI)
+    numbering = blocknumbering(sp)
+    blocks = CartesianIndices(numbering)
+    localindices = CartesianIndices(blocksize(sp))
+    block_size = Val(block_size_log2(sp))
+    nblock = length(numbering)
+    nlocal = length(localindices)
     b, l = state
 
-    @inbounds while b ≤ nblk
-        n = blkinds[b]
-        if !iszero(n)
-            blk = blkCI[b]
-            while l ≤ nlcl
-                lcl = lclCI[l]
-                I = blockglobal(blk, lcl)
-                i = storageindex(n, l, Val(dim))
+    @inbounds while b ≤ nblock
+        blocknumber = numbering[b]
+        if !iszero(blocknumber)
+            block = blocks[b]
+            while l ≤ nlocal
+                localcoord = localindices[l]
+                I = blocklocal_to_global(block, localcoord; block_size_log2=block_size)
+                i = storageindex(blocknumber, l, sp)
                 l += 1
                 checkbounds(Bool, sp, Tuple(I)...) && return SpIndex(I, i), (b, l)
             end
@@ -103,36 +119,38 @@ end
 
 @inline function isactive(sp::SpIndices{dim}, I::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(sp, I...)
-    blkinds = blockindices(sp)
-    @inbounds !iszero(blkinds[nblocks(I)...])
+    block = blockindex(I...; block_size_log2=Val(block_size_log2(sp)))
+    @inbounds !iszero(blocknumbering(sp)[block...])
 end
 @inline isactive(sp::SpIndices, I::CartesianIndex) = (@_propagate_inbounds_meta; isactive(sp, Tuple(I)...))
 
-# this should be done after updating `blockindices(sp)`
+# this should be done after updating `blocknumbering(sp)`
 function numbering!(sp::SpIndices{dim}) where {dim}
-    inds = blockindices(sp)
+    numbers = blocknumbering(sp)
     count = 0
-    @inbounds for i in eachindex(inds)
-        inds[i] = iszero(inds[i]) ? 0 : (count += 1)
+    @inbounds for i in eachindex(numbers)
+        numbers[i] = iszero(numbers[i]) ? 0 : (count += 1)
     end
-    count << (BLOCK_SIZE_LOG2*dim) # return the number of activated nodes
+    count * blocklength(sp) # return the number of activated nodes
 end
 
-function countnnz(sp::SpIndices{dim}) where {dim}
-    count(!iszero, sp.blkinds) << (BLOCK_SIZE_LOG2*dim)
+function countnnz(sp::SpIndices)
+    count(!iszero, blocknumbering(sp)) * blocklength(sp)
 end
 
 function update_sparsity!(sp::SpIndices, blkspy::AbstractArray{Bool})
     nblocks(sp) == size(blkspy) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
-    blockindices(sp) .= blkspy
+    blocknumbering(sp) .= blkspy
     numbering!(sp)
 end
 
 function update_sparsity!(spinds::SpIndices, partition::ColorPartition{<: BlockStrategy})
     bs = strategy(partition)
     nblocks(spinds) == nblocks(bs) || throw(ArgumentError("blocks per dimension $(nblocks(spinds)) must match"))
+    block_size_log2(spinds) == block_size_log2(bs) ||
+        throw(ArgumentError("block_size_log2 $(block_size_log2(spinds)) must match partition block_size_log2 $(block_size_log2(bs))"))
 
-    inds = fillzero!(blockindices(spinds))
+    inds = fillzero!(blocknumbering(spinds))
     CI = CartesianIndices(nblocks(bs))
     @inbounds for I in CI
         if !isempty(particle_indices_in(bs, I))
@@ -203,12 +221,12 @@ struct SpArray{T, dim} <: AbstractArray{T, dim}
     shared_spinds::Bool
 end
 
-function SpArray{T}(::UndefInitializer, dims::Tuple{Vararg{Int}}) where {T}
+function SpArray{T}(::UndefInitializer, dims::Tuple{Vararg{Int}}; block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)) where {T, L}
     data = Vector{T}(undef, 0)
-    spinds = SpIndices(dims)
+    spinds = SpIndices(dims; block_size_log2)
     SpArray(data, spinds, false)
 end
-SpArray{T}(::UndefInitializer, dims::Int...) where {T} = SpArray{T}(undef, dims)
+SpArray{T}(::UndefInitializer, dims::Int...; kwargs...) where {T} = SpArray{T}(undef, dims; kwargs...)
 
 function SpArray{T}(spinds::SpIndices) where {T}
     data = Vector{T}(undef, 0)
@@ -220,6 +238,7 @@ Base.size(A::SpArray) = size(A.spinds)
 
 get_data(A::SpArray) = A.data
 get_spinds(A::SpArray) = A.spinds
+nblocks(A::SpArray) = nblocks(get_spinds(A))
 storedindices(A::SpArray) = eachindex(get_data(A))
 activeindices(A::SpArray) = activeindices(get_spinds(A))
 

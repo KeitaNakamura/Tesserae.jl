@@ -2,22 +2,32 @@ abstract type AbstractMesh{dim, T, N} <: AbstractArray{Vec{dim, T}, N} end
 
 fillzero!(x::AbstractMesh) = x
 
+const BLOCK_SIZE_LOG2 = Int(Preferences.@load_preference("block_size_log2", 2)) # default 2^n cells per block
+
+function _check_block_size_log2(::Val{L}) where {L}
+    L isa Integer || throw(ArgumentError("block_size_log2 must be an integer Val, got Val{$L}()"))
+    L < 0 && throw(ArgumentError("block_size_log2 must be non-negative, got $L"))
+    nothing
+end
+
 """
-    CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...)
+    CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...; block_size_log2=Val(2))
 
 Construct a uniform Cartesian mesh with scalar spacing `h` (same in all directions).
+`block_size_log2` sets the block decomposition used by [`ColorPartition`](@ref) and [`SpArray`](@ref)
+grids generated from this mesh.
 
 # Examples
 ```jldoctest
 julia> CartesianMesh(1.0, (0,3), (1,4))
-4×4 CartesianMesh{2, Float64, Vector{Float64}}:
+4×4 CartesianMesh{2, Float64, Vector{Float64}, 2}:
  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]
  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]
  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]
  [3.0, 1.0]  [3.0, 2.0]  [3.0, 3.0]  [3.0, 4.0]
 ```
 """
-struct CartesianMesh{dim, T, V <: AbstractVector{T}} <: AbstractMesh{dim, T, dim}
+struct CartesianMesh{dim, T, V <: AbstractVector{T}, L} <: AbstractMesh{dim, T, dim}
     axes::NTuple{dim, V}
     h::T
     h_inv::T
@@ -33,6 +43,7 @@ Return the spacing of the mesh.
 """
 spacing(mesh::CartesianMesh) = mesh.h
 spacing_inv(mesh::CartesianMesh) = mesh.h_inv
+block_size_log2(::CartesianMesh{dim, T, V, L}) where {dim, T, V, L} = L
 
 @inline get_xmin(x::CartesianMesh{dim}) where {dim} = @inbounds x[oneunit(CartesianIndex{dim})]
 @inline get_xmax(x::CartesianMesh{dim}) where {dim} = @inbounds x[size(x)...]
@@ -44,13 +55,18 @@ Return the volume of the mesh.
 """
 volume(mesh::CartesianMesh) = prod(get_xmax(mesh) - get_xmin(mesh))
 
-function CartesianMesh(axes::Vararg{AbstractRange, dim}) where {dim}
-    @assert all(ax->step(ax)==step(first(axes)), axes)
-    h = step(first(axes))
-    CartesianMesh(axes, h, inv(h))
+function CartesianMesh(axes::NTuple{dim, V}, h::Real, h_inv::Real; block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)) where {dim, T, V <: AbstractVector{T}, L}
+    _check_block_size_log2(block_size_log2)
+    CartesianMesh{dim, T, V, L}(axes, T(h), T(h_inv))
 end
 
-function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}; pad::Int = 0) where {T, dim}
+function CartesianMesh(axes::Vararg{AbstractRange{<: AbstractFloat}, dim}; block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)) where {dim, L}
+    @assert all(ax->step(ax)==step(first(axes)), axes)
+    h = step(first(axes))
+    CartesianMesh(axes, h, inv(h); block_size_log2)
+end
+
+function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}; pad::Int = 0, block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)) where {T, dim, L}
     @assert all(x->x[1]<x[2], minmax)
 
     axes = map(minmax) do lims
@@ -62,7 +78,7 @@ function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim
         Vector{T}(range(start; step=h, length=n))
     end
 
-    CartesianMesh(axes, T(h), T(inv(h)))
+    CartesianMesh(axes, T(h), T(inv(h)); block_size_log2)
 end
 CartesianMesh(h::Real, minmax::Tuple{Real, Real}...; kwargs...) = CartesianMesh(Float64, h, minmax...; kwargs...)
 
@@ -84,7 +100,7 @@ function extract(mesh::CartesianMesh{dim}, minmax::Vararg{Tuple{Real, Real}, dim
     mesh[indices]
 end
 
-axismesh(mesh::CartesianMesh, d::Integer) = CartesianMesh((mesh.axes[d],), spacing(mesh), spacing_inv(mesh))
+axismesh(mesh::CartesianMesh, d::Integer) = CartesianMesh((mesh.axes[d],), spacing(mesh), spacing_inv(mesh); block_size_log2=Val(block_size_log2(mesh)))
 
 @generated function Base.getindex(mesh::CartesianMesh{dim}, I::Vararg{Integer, dim}) where {dim}
     quote
@@ -97,7 +113,7 @@ end
     quote
         @_inline_meta
         @boundscheck checkbounds(mesh, ranges...)
-        @inbounds CartesianMesh((@ntuple $dim d -> mesh.axes[d][ranges[d]]), spacing(mesh), spacing_inv(mesh))
+        @inbounds CartesianMesh((@ntuple $dim d -> mesh.axes[d][ranges[d]]), spacing(mesh), spacing_inv(mesh); block_size_log2=Val(block_size_log2(mesh)))
     end
 end
 @inline function Base.getindex(mesh::CartesianMesh, indices::CartesianIndices)
@@ -105,7 +121,7 @@ end
     mesh[indices.indices...]
 end
 
-Base.copy(mesh::CartesianMesh) = CartesianMesh(copy(get_axisarray(mesh)), spacing(mesh), spacing_inv(mesh))
+Base.copy(mesh::CartesianMesh) = CartesianMesh(copy(get_axisarray(mesh)), spacing(mesh), spacing_inv(mesh); block_size_log2=Val(block_size_log2(mesh)))
 
 # normalize `x` by `mesh`
 @inline function Tensorial.normalize(x::Vec{dim}, mesh::CartesianMesh{dim}) where {dim}
@@ -137,7 +153,7 @@ becomes ` x-r*h ≤ a < x+r*h` where `h` is `spacing(mesh)`.
 # Examples
 ```jldoctest
 julia> mesh = CartesianMesh(1, (0,5))
-6-element CartesianMesh{1, Float64, Vector{Float64}}:
+6-element CartesianMesh{1, Float64, Vector{Float64}, 2}:
  [0.0]
  [1.0]
  [2.0]
@@ -172,7 +188,7 @@ Return the cell index where `x` is located.
 # Examples
 ```jldoctest
 julia> mesh = CartesianMesh(1, (0,5), (0,5))
-6×6 CartesianMesh{2, Float64, Vector{Float64}}:
+6×6 CartesianMesh{2, Float64, Vector{Float64}, 2}:
  [0.0, 0.0]  [0.0, 1.0]  [0.0, 2.0]  [0.0, 3.0]  [0.0, 4.0]  [0.0, 5.0]
  [1.0, 0.0]  [1.0, 1.0]  [1.0, 2.0]  [1.0, 3.0]  [1.0, 4.0]  [1.0, 5.0]
  [2.0, 0.0]  [2.0, 1.0]  [2.0, 2.0]  [2.0, 3.0]  [2.0, 4.0]  [2.0, 5.0]
@@ -279,7 +295,7 @@ function adapt_mesh(::Order{2}, mesh::CartesianMesh{dim}) where {dim}
         xmax = get_xmax(mesh)[d]
         h = spacing(mesh)
         xmin:(h/2):xmax
-    end...)
+    end...; block_size_log2=Val(block_size_log2(mesh)))
 end
 
 function extract(mesh::UnstructuredMesh, nodeindices::AbstractVector{Int})

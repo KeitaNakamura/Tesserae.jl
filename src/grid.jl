@@ -46,7 +46,7 @@ julia> grid[1]
 GridProp{2, Float64}([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
 
 julia> grid.x
-7×5 CartesianMesh{2, Float64, Vector{Float64}}:
+7×5 CartesianMesh{2, Float64, Vector{Float64}, 2}:
  [0.0, 0.0]  [0.0, 0.5]  [0.0, 1.0]  [0.0, 1.5]  [0.0, 2.0]
  [0.5, 0.0]  [0.5, 0.5]  [0.5, 1.0]  [0.5, 1.5]  [0.5, 2.0]
  [1.0, 0.0]  [1.0, 0.5]  [1.0, 1.0]  [1.0, 1.5]  [1.0, 2.0]
@@ -79,7 +79,7 @@ end
 # SpArray is designed for Cartesian mesh
 function generate_grid(::Type{SpArray}, ::Type{GridProp}, mesh::CartesianMesh) where {GridProp}
     check_gridproperty(GridProp, eltype(mesh))
-    spinds = SpIndices(size(mesh))
+    spinds = SpIndices(mesh)
     arrays = map(T->SpArray{T}(spinds), Base.tail(fieldtypes(GridProp)))
     StructArray{GridProp}(tuple(mesh, arrays...))
 end

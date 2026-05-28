@@ -35,6 +35,10 @@
     @test all(iszero, (grid.v)::SpArray{Vec{2,Float64}, 2})
     @test !all(i->Tesserae.isactive(grid,i), eachindex(grid))
     @test all(x->Tesserae.get_spinds(x)===Tesserae.get_spinds(grid), (grid.m, grid.v))
+    mesh_block3 = CartesianMesh(h, xlims, ylims; block_size_log2=Val(3))
+    grid_block3 = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh_block3)
+    @test Tesserae.block_size_log2(Tesserae.get_spinds(grid_block3)) === 3
+    @test Tesserae.nblocks(Tesserae.get_spinds(grid_block3)) === Tesserae.nblocks(mesh_block3)
     # wrong type of `x`
     @test_throws Exception generate_grid(SpArray, @NamedTuple{x::Vec{3,Float64}, m::Float64, v::Vec{3,Float64}}, mesh)
     # give type must be `isbitstype`
@@ -48,9 +52,15 @@
 
     # broadcast for SpArray
     grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)
-    blkspy = rand(Bool, Tesserae.nblocks(grid))
+    spinds = Tesserae.get_spinds(grid)
+    blkspy = rand(Bool, Tesserae.nblocks(spinds))
     update_sparsity!(grid, blkspy)
-    @test all(i->Tesserae.isactive(grid,i), filter(I->blkspy[Tesserae.blocklocal(Tuple(I)...)[1]...]===true, eachindex(grid)))
+    block_size = Val(Tesserae.block_size_log2(spinds))
+    active_indices = filter(eachindex(grid)) do I
+        block, _ = Tesserae.global_to_blocklocal(Tuple(I)...; block_size_log2=block_size)
+        blkspy[block...]
+    end
+    @test all(i->Tesserae.isactive(grid,i), active_indices)
     grid.m .= rand(size(grid))
     grid.v .= grid.x .* rand(size(grid))
     array_x = Array(grid.x)

@@ -39,7 +39,7 @@ KernelAbstractions.get_backend(::BitArray) = CPU() # should be implemented in Ke
 function Adapt.adapt_structure(to, mesh::CartesianMesh)
     axes = map(a -> adapt(to, a), mesh.axes)
     T = eltype(eltype(axes))
-    CartesianMesh(axes, T(spacing(mesh)), T(spacing_inv(mesh)))
+    CartesianMesh(axes, T(spacing(mesh)), T(spacing_inv(mesh)); block_size_log2=Val(block_size_log2(mesh)))
 end
 function KernelAbstractions.get_backend(mesh::CartesianMesh)
     @assert allequal(map(get_backend, mesh.axes))
@@ -70,7 +70,7 @@ end
 
 # SpIndices
 function KernelAbstractions.get_backend(A::SpIndices)
-    get_backend(A.blkinds)
+    get_backend(A.blocknumbering)
 end
 
 # SpArray
