@@ -432,7 +432,7 @@ For example, trying to `setindex!` doesn't change anything without any errors as
 
 ```jldoctest sparray
 julia> A = SpArray{Float64}(undef, 5, 5)
-5×5 SpArray{Float64, 2}:
+5×5 SpArray{Float64, 2, Vector{Float64}, Tesserae.SpIndices{2, 2, Matrix{Int64}, Tesserae.BlockSparsityWorkspace{Matrix{Bool}, Matrix{Bool}, Tesserae.ParticleBlockTracker{Vector{Int64}, Matrix{Int32}}}}}:
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
@@ -468,7 +468,7 @@ julia> A[1,1] = 2
 2
 
 julia> A
-5×5 SpArray{Float64, 2}:
+5×5 SpArray{Float64, 2, Vector{Float64}, Tesserae.SpIndices{2, 2, Matrix{Int64}, Tesserae.BlockSparsityWorkspace{Matrix{Bool}, Matrix{Bool}, Tesserae.ParticleBlockTracker{Vector{Int64}, Matrix{Int32}}}}}:
  2.0  0.0  0.0  0.0  0.0
  0.0  0.0  0.0  0.0  0.0
  0.0  0.0  0.0  0.0  0.0
