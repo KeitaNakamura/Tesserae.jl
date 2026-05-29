@@ -114,6 +114,7 @@ include("shapes.jl")
 include("mesh.jl")
 include("partitioning.jl")
 include("sparray.jl")
+include("hybridarray.jl")
 
 include("grid.jl")
 include("particles.jl")

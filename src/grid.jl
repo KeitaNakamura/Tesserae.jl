@@ -10,7 +10,10 @@ get_mesh(grid::Grid) = getx(grid)
 # SpGrid #
 ##########
 
-const SpGrid{dim, T, N, NT <: NamedTuple{<: Any, <: Tuple{CartesianMesh{dim}, SpArray, Vararg{SpArray}}}, I} = StructArray{T, N, NT, I}
+# `hybrid(spgrid)` keeps the grid as a StructArray while wrapping SpArray
+# components for GPU atomics, so SpGrid accepts either representation.
+const SpGridComponent = Union{SpArray, HybridArray{<:Any, <:Any, <:SpArray}}
+const SpGrid{dim, T, N, NT <: NamedTuple{<: Any, <: Tuple{CartesianMesh{dim}, SpGridComponent, Vararg{SpGridComponent}}}, I} = StructArray{T, N, NT, I}
 
 function check_gridproperty(::Type{GridProp}, ::Type{Vec{dim, T}}) where {GridProp, dim, T}
     V = fieldtype(GridProp, 1)
@@ -88,6 +91,13 @@ get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
 function update_sparsity!(A::SpGrid, blkspy)
     n = update_sparsity!(get_spinds(A), blkspy)
+    StructArrays.foreachfield(a->resize_fillzero_data!(a,n), A)
+    A
+end
+
+function update_sparsity!(A::SpGrid, xₚ::AbstractVector{<: Vec})
+    n = update_sparsity!(get_spinds(A), xₚ, get_mesh(A))
+    n === nothing && return fillzero!(A)
     StructArrays.foreachfield(a->resize_fillzero_data!(a,n), A)
     A
 end

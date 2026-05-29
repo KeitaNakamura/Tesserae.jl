@@ -39,6 +39,9 @@ update!(partition, particles.x)
 update_sparsity!(grid, partition)
 ```
 
+This is the usual CPU path when [`ColorPartition`](@ref) is already used for threaded scattering.
+The partition stores the particle lists needed by `@threaded @P2G`, and the same block information can be reused to activate the sparse grid.
+
 After that, the usual transfer macros can be used with the sparse grid:
 
 ```julia
@@ -48,12 +51,41 @@ After that, the usual transfer macros can be used with the sparse grid:
 end
 ```
 
+For threaded CPU scattering, pass the same partition to `@P2G` as usual.
+
 For a `SpGrid`, call `update_sparsity!` on the whole grid rather than on each field.
 This keeps all `SpArray` fields using the same active blocks.
 
 !!! note
     `update_sparsity!` changes the active block pattern of the grid.
     Existing values in the sparse grid fields are reset to zero when the active blocks are updated.
+
+## GPU usage
+
+On GPU, `ColorPartition` is not used.
+Move the grid, particles, and interpolation weights to the GPU, then update the sparse grid directly from particle positions:
+
+```julia
+grid = generate_grid(SpArray, GridProp, mesh)
+weights = generate_interpolation_weights(Float32, BSpline(Quadratic()), grid.x, length(particles))
+
+grid, particles, weights = (grid, particles, weights) .|> gpu
+
+update_sparsity!(grid, particles.x)
+update!(weights, particles, grid.x)
+
+@P2G grid=>i particles=>p weights=>ip begin
+    m[i] = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+end
+```
+
+For moving particles, call `update_sparsity!(grid, particles.x)` again before transfers that use the new particle positions.
+This keeps the active blocks large enough for the particle support nodes used by `@P2G` and `@G2P`.
+
+On GPU, `@P2G` uses particle-parallel kernels with atomic updates.
+`SpArray` reduces the storage used by grid fields and the cost of grid-wide operations such as zeroing or broadcasts over active grid data.
+The particle-to-grid scatter itself still performs work proportional to the number of particles times the number of support nodes, so `SpArray` should be viewed primarily as a memory-saving representation rather than a guaranteed P2G speedup.
 
 ## Block size
 

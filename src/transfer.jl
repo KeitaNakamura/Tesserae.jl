@@ -1,59 +1,5 @@
 using MacroTools
 
-###############
-# HybridArray #
-###############
-
-# HybridArray is used to handle atomic operations on the GPU.
-# Since atomic operations do not support custom bitstypes such as `Tensor`,
-# the data is flattened into a HybridArray.
-
-struct HybridArray{T, N, A <: AbstractArray{T, N}, B <: AbstractArray, D <: AbstractDevice} <: AbstractArray{T, N}
-    parent::A
-    flat::B
-    device::D # stored in advance to avoid the overhead of calling `get_device` in a loop.
-end
-
-Base.parent(A::HybridArray) = A.parent
-flatten(A::HybridArray) =  A.flat
-get_device(A::HybridArray) = A.device
-
-Base.size(A::HybridArray) = size(parent(A))
-Base.IndexStyle(::Type{<: HybridArray{<: Any, <: Any, A}}) where {A} = IndexStyle(A)
-
-@inline function Base.getindex(A::HybridArray, I...)
-    @boundscheck checkbounds(parent(A), I...)
-    @inbounds parent(A)[I...]
-end
-@inline function Base.setindex!(A::HybridArray, v, I...)
-    @boundscheck checkbounds(parent(A), I...)
-    @inbounds parent(A)[I...] = v
-    A
-end
-
-@inline add!(A::AbstractArray{T}, i, v::T) where {T} = (@_propagate_inbounds_meta; A[i] += v)
-@inline add!(A::HybridArray{T}, i, v::T) where {T} = (@_propagate_inbounds_meta; _add!(get_device(A), A, i, v))
-@inline _add!(::CPUDevice, A::HybridArray, i, v) = (@_propagate_inbounds_meta; add!(parent(A), i, v))
-@inline function _add!(::GPUDevice, A::HybridArray, i, v::Number)
-    @_propagate_inbounds_meta
-    Atomix.@atomic parent(A)[i] += v
-end
-@inline function _add!(::GPUDevice, A::HybridArray, i, v::Union{Tensor, StaticArray})
-    @_propagate_inbounds_meta
-    data = Tuple(v)
-    for j in eachindex(data)
-        Atomix.@atomic flatten(A)[j,i] += data[j]
-    end
-end
-
-flatten(A::AbstractArray{T}) where {T <: Number} = reshape(A, 1, size(A)...)
-flatten(A::AbstractArray{T}) where {T <: Tensor} = reinterpret(reshape, eltype(T), A)
-
-hybrid(A::AbstractArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
-hybrid(A::SpArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
-hybrid(A::StructArray) = StructArray(map(hybrid, StructArrays.components(A)))
-hybrid(mesh::AbstractMesh) = mesh
-
 struct TransferEquation
     kind::Symbol
     lhs::Any
@@ -346,22 +292,32 @@ function check_arguments_for_P2G(grid, particles, weights, partition)
         end
     end
     @assert length(particles) ≤ length(weights)
-    if partition isa ColorPartition
-        strat = strategy(partition)
-        if strat isa BlockStrategy
-            @assert nblocks(get_mesh(grid)) == nblocks(strat)
-            if sum(length(particle_indices_in(strat, blk)) for blk in LinearIndices(nblocks(strat))) == 0
-                error("@P2G: No particles assigned to any block in ColorPartition")
-            end
-            b = basis(first(weights))
-            if kernel_support(b) > blockwidth(strat)
-                error("@P2G: Block size for `ColorPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
-            end
-        end
-    end
     # check device
     device = get_device(grid)
     @assert get_device(particles) == get_device(weights) == device
+    check_partition_for_P2G(device, grid, weights, partition)
+end
+
+# ColorPartition is a CPU scheduling aid. GPU P2G uses particle-parallel kernels
+# and SpGrid sparsity is updated separately from particle positions.
+check_partition_for_P2G(::CPUDevice, grid, weights, ::Nothing) = nothing
+check_partition_for_P2G(::GPUDevice, grid, weights, ::Nothing) = nothing
+function check_partition_for_P2G(::GPUDevice, grid, weights, partition)
+    error("@P2G: ColorPartition is only used on CPU. Use partitionless @P2G on GPU.")
+end
+function check_partition_for_P2G(::CPUDevice, grid, weights, partition::ColorPartition)
+    check_partition_for_P2G(grid, weights, strategy(partition))
+end
+check_partition_for_P2G(grid, weights, strat) = nothing
+function check_partition_for_P2G(grid, weights, strat::BlockStrategy)
+    @assert nblocks(get_mesh(grid)) == nblocks(strat)
+    if sum(length(particle_indices_in(strat, blk)) for blk in LinearIndices(nblocks(strat))) == 0
+        error("@P2G: No particles assigned to any block in ColorPartition")
+    end
+    b = basis(first(weights))
+    if kernel_support(b) > blockwidth(strat)
+        error("@P2G: Block size for `ColorPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
+    end
 end
 
 """

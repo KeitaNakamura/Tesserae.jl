@@ -8,6 +8,10 @@ function Adapt.adapt_storage(::CPUDevice, A::AbstractArray)
     get_device(A) isa CPUDevice ? A : Array(A)
 end
 
+# These helpers call `adapt` with a Tesserae `AbstractDevice` as `to`.
+# Methods specialized on `to::AbstractDevice` are therefore explicit Tesserae
+# device transfers, while unspecialized `adapt_structure(to, ...)` methods may
+# also be used by other Adapt callers.
 cpu(A) = A |> CPUDevice()
 gpu(A) = A |> gpu_device(CastFloat32)
 gpu_preserve(A) = A |> gpu_device(PreserveEltype)
@@ -20,6 +24,21 @@ gpu_preserve(A) = A |> gpu_device(PreserveEltype)
 function Adapt.adapt_structure(to::GPUDevice, A::StructArray)
     named_tuple = map(a -> adapt(to, a), StructArrays.components(A))
     StructArray(named_tuple) # always convert to NamedTuple
+end
+
+_spgrid_sparray(A::SpArray) = A
+_spgrid_sparray(A::HybridArray{<:Any, <:Any, <:SpArray}) = parent(A)
+
+function Adapt.adapt_structure(to::GPUDevice, A::SpGrid)
+    components = StructArrays.components(A)
+    names = propertynames(components)
+    mesh = adapt(to, get_mesh(A))
+    spinds = adapt(to, get_spinds(A))
+    arrays = map(Base.tail(names)) do name
+        a = _spgrid_sparray(getproperty(components, name))
+        SpArray(adapt(to, get_data(a)), spinds, a.shared_spinds)
+    end
+    StructArray(NamedTuple{names}((mesh, arrays...)))
 end
 
 function Adapt.adapt_structure(to::GPUDevice{CastFloat32}, x::StepRangeLen{T, R, S, L}) where {T, R, S, L}
@@ -69,11 +88,30 @@ function KernelAbstractions.get_backend(weights::BasisWeightArray)
 end
 
 # SpIndices
+function Adapt.adapt_structure(to::AbstractDevice, A::SpIndices{dim, L}) where {dim, L}
+    numbers = adapt(to, blocknumbering(A))
+    workspace = BlockSparsityWorkspace(numbers)
+    SpIndices{dim, L, typeof(numbers), typeof(workspace)}(A.dims, numbers, workspace)
+end
+function Adapt.adapt_structure(to, tracker::ParticleBlockTracker)
+    ParticleBlockTracker(adapt(to, tracker.blockids), adapt(to, tracker.counts))
+end
+function Adapt.adapt_structure(to, workspace::BlockSparsityWorkspace)
+    BlockSparsityWorkspace(adapt(to, workspace.occupied), adapt(to, workspace.active), adapt(to, workspace.tracker))
+end
+function Adapt.adapt_structure(to, A::SpIndices{dim, L}) where {dim, L}
+    numbers = adapt(to, blocknumbering(A))
+    workspace = adapt(to, sparsity_workspace(A))
+    SpIndices{dim, L, typeof(numbers), typeof(workspace)}(A.dims, numbers, workspace)
+end
 function KernelAbstractions.get_backend(A::SpIndices)
-    get_backend(A.blocknumbering)
+    get_backend(blocknumbering(A))
 end
 
 # SpArray
+function Adapt.adapt_structure(to, A::SpArray)
+    SpArray(adapt(to, get_data(A)), adapt(to, get_spinds(A)), A.shared_spinds)
+end
 function KernelAbstractions.get_backend(A::SpArray)
     backend = get_backend(A.data)
     @assert get_backend(A.spinds) == backend
@@ -81,6 +119,10 @@ function KernelAbstractions.get_backend(A::SpArray)
 end
 
 # HybridArray
+function Adapt.adapt_structure(to::AbstractDevice, A::HybridArray)
+    parent′ = adapt(to, parent(A))
+    HybridArray(parent′, flatten(parent′), get_device(parent′))
+end
 function Adapt.adapt_structure(to, A::HybridArray)
     HybridArray(adapt(to, parent(A)), adapt(to, flatten(A)), get_device(A))
 end
