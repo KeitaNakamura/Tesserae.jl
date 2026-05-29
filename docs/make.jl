@@ -43,6 +43,7 @@ makedocs(;
             "transfer.md"
             "implicit_utils.md"
             "multithreading.md"
+            "gpu.md"
             "sparray.md"
             "export.md"
         ]
