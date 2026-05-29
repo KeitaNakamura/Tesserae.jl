@@ -1,3 +1,5 @@
+@testset "SpArray" begin
+
 @testset "SpIndex" begin
     @test Tesserae.isactive(Tesserae.SpIndex(1, 0)) === false
     @test Tesserae.isactive(Tesserae.SpIndex(1, 1)) === true
@@ -132,7 +134,129 @@ end
     @test all(iszero, Tesserae.blocknumbering(spinds))
 end
 
-@testset "SpArray" begin
+@testset "SpArray GPU sparsity kernels on CPU backend" begin
+    backend = Tesserae.CPU()
+
+    activity = Bool[
+        true  false true
+        false true  false
+    ]
+    block_numbers = zeros(Int, size(activity))
+    active_count = zeros(Int, 1)
+
+    init_kernel = Tesserae.gpukernel_init_block_numbering!(backend)
+    init_kernel(block_numbers, activity; ndrange=length(activity))
+    Tesserae.synchronize(backend)
+    @test block_numbers == Int.(activity)
+
+    cumsum!(vec(block_numbers), vec(block_numbers))
+    finalize_kernel = Tesserae.gpukernel_finalize_block_numbering!(backend)
+    finalize_kernel(block_numbers, activity, active_count; ndrange=length(activity))
+    Tesserae.synchronize(backend)
+
+    expected_numbers = zeros(Int, size(activity))
+    nactive = 0
+    for i in eachindex(activity)
+        if activity[i]
+            nactive += 1
+            expected_numbers[i] = nactive
+        end
+    end
+    @test block_numbers == expected_numbers
+    @test active_count[] == nactive
+
+    mesh = CartesianMesh(1.0, (0,20), (0,8))
+    dims = Tesserae.nblocks(mesh)
+    LI = LinearIndices(dims)
+    x₁ = [Vec(1.0, 1.0), Vec(2.0, 1.0), Vec(9.0, 1.0)]
+    x₂ = [Vec(10.0, 1.0), Vec(2.0, 1.0), Vec(9.0, 1.0)]
+    x₃ = [Vec(10.0, 1.0), Vec(14.0, 1.0), Vec(9.0, 1.0)]
+
+    expected_tracker(xₚ) = begin
+        blockids = zeros(Int, length(xₚ))
+        counts = zeros(Int32, dims)
+        for p in eachindex(xₚ)
+            I = Tesserae.findblock(xₚ[p], mesh)
+            I === nothing && continue
+            bid = LI[I]
+            blockids[p] = bid
+            counts[bid] += 1
+        end
+        blockids, counts, map(!iszero, counts)
+    end
+
+    blockids = zeros(Int, length(x₁))
+    counts = zeros(Int32, dims)
+    occupied = falses(dims)
+    changed = zeros(Int32, 1)
+
+    update_kernel = Tesserae.gpukernel_update_particle_block_tracker!(backend)
+    refresh_kernel = Tesserae.gpukernel_refresh_occupied_blocks!(backend)
+
+    update_kernel(blockids, counts, x₁, mesh; ndrange=length(x₁))
+    refresh_kernel(occupied, counts, changed; ndrange=length(occupied))
+    Tesserae.synchronize(backend)
+    expected_blockids, expected_counts, expected_occupied = expected_tracker(x₁)
+    @test blockids == expected_blockids
+    @test counts == expected_counts
+    @test occupied == expected_occupied
+    @test changed[] == count(expected_occupied)
+
+    changed .= 0
+    update_kernel(blockids, counts, x₂, mesh; ndrange=length(x₂))
+    refresh_kernel(occupied, counts, changed; ndrange=length(occupied))
+    Tesserae.synchronize(backend)
+    expected_blockids, expected_counts, expected_occupied = expected_tracker(x₂)
+    @test blockids == expected_blockids
+    @test counts == expected_counts
+    @test occupied == expected_occupied
+    @test iszero(changed[])
+
+    changed .= 0
+    update_kernel(blockids, counts, x₃, mesh; ndrange=length(x₃))
+    refresh_kernel(occupied, counts, changed; ndrange=length(occupied))
+    Tesserae.synchronize(backend)
+    expected_blockids, expected_counts, expected_occupied = expected_tracker(x₃)
+    @test blockids == expected_blockids
+    @test counts == expected_counts
+    @test occupied == expected_occupied
+    @test !iszero(changed[])
+
+    active = falses(dims)
+    expand_kernel = Tesserae.gpukernel_expand_occupied_blocks!(backend)
+    expand_kernel(active, occupied; ndrange=length(occupied))
+    Tesserae.synchronize(backend)
+
+    expected_active = falses(dims)
+    CI = CartesianIndices(expected_active)
+    for I in CartesianIndices(occupied)
+        if occupied[I]
+            expected_active[((I - oneunit(I)):(I + oneunit(I))) ∩ CI] .= true
+        end
+    end
+    @test active == expected_active
+
+    block_numbers = zeros(Int, dims)
+    active_count = zeros(Int, 1)
+    init_kernel(block_numbers, active; ndrange=length(active))
+    Tesserae.synchronize(backend)
+    cumsum!(vec(block_numbers), vec(block_numbers))
+    finalize_kernel(block_numbers, active, active_count; ndrange=length(active))
+    Tesserae.synchronize(backend)
+
+    expected_numbers = zeros(Int, dims)
+    nactive = 0
+    for i in eachindex(active)
+        if active[i]
+            nactive += 1
+            expected_numbers[i] = nactive
+        end
+    end
+    @test block_numbers == expected_numbers
+    @test active_count[] == nactive
+end
+
+@testset "Array behavior" begin
     A = SpArray{Float64}(undef, 12, 20)
     @test IndexStyle(A) === IndexCartesian()
     @test size(A) === (12,20)
@@ -169,7 +293,7 @@ end
     # breadcast is tested on grid part
 end
 
-@testset "SpArray @P2G" begin
+@testset "@P2G" begin
     mesh = CartesianMesh(1.0, (0,2), (0,2))
     GridProp = @NamedTuple begin
         x  :: Vec{2, Float64}
@@ -221,4 +345,6 @@ end
     partition_block3 = ColorPartition(mesh_block3)
     @test Tesserae.block_size_log2(Tesserae.get_spinds(grid_block3)) === 3
     @test Tesserae.nblocks(Tesserae.get_spinds(grid_block3)) === Tesserae.nblocks(Tesserae.strategy(partition_block3))
+end
+
 end
