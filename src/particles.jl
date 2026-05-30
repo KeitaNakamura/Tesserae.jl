@@ -44,9 +44,9 @@ The particles are generated based on the Poisson disk sampling.
 The `spacing` parameter is used to produce a similar number of particles as are generated with [`GridSampling`](@ref).
 """
 @kwdef struct PoissonDiskSampling{T, RNG} <: SamplingAlgorithm
-    spacing        :: T    = 1/2
-    rng            :: RNG  = Random.default_rng()
-    multithreading :: Bool = rng isa Random.TaskLocalRNG ? true : false
+    spacing  :: T    = 1/2
+    rng      :: RNG  = Random.default_rng()
+    threaded :: Bool = rng isa Random.TaskLocalRNG ? true : false
 end
 
 # Determine minimum distance between particles for Poisson disk sampling
@@ -57,7 +57,7 @@ function generate_points(alg::PoissonDiskSampling, mesh::CartesianMesh{dim, T}) 
     l = T(alg.spacing) * spacing(mesh)
     domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
     d = poisson_disk_sampling_minimum_distance(l, dim)
-    reinterpret(Vec{dim, T}, poisson_disk_sampling(alg.rng, T, d, domain...; alg.multithreading))
+    reinterpret(Vec{dim, T}, poisson_disk_sampling(alg.rng, T, d, domain...; alg.threaded))
 end
 
 function _generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}) where {ParticleProp}
