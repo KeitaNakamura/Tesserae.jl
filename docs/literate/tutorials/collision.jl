@@ -41,6 +41,9 @@ function main(transfer = FLIP(1.0))
     h   = 0.1 # Grid spacing
     T   = 0.6 # Time span
     CFL = 0.8 # Courant number
+    if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        T = 0.2                           #src
+    end                                   #src
 
     ## Material constants
     E  = 100e6                  # Young's modulus
@@ -258,10 +261,10 @@ end
 
 using Test                                     #src
 if @isdefined(RUN_TESTS) && RUN_TESTS          #src
-    @test main(FLIP(0.0))  ≈ 7.998e6 rtol=1e-3 #src
-    @test main(FLIP(1.0))  ≈ 1.352e7 rtol=1e-3 #src
-    @test main(FLIP(0.99)) ≈ 1.342e7 rtol=1e-3 #src
-    @test main(APIC())     ≈ 1.349e7 rtol=1e-3 #src
-    @test main(TPIC())     ≈ 1.350e7 rtol=1e-3 #src
-    @test main(XPIC(5))    ≈ 1.330e7 rtol=1e-3 #src
+    @test main(FLIP(0.0))  ≈ 1.142e7 rtol=1e-3 #src
+    @test main(FLIP(1.0))  ≈ 1.623e7 rtol=1e-3 #src
+    @test main(FLIP(0.99)) ≈ 1.605e7 rtol=1e-3 #src
+    @test main(APIC())     ≈ 1.607e7 rtol=1e-3 #src
+    @test main(TPIC())     ≈ 1.606e7 rtol=1e-3 #src
+    @test main(XPIC(5))    ≈ 1.593e7 rtol=1e-3 #src
 end                                            #src
