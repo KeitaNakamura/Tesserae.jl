@@ -283,42 +283,35 @@ end
         tol = sqrt(eps(typeof(x)))
         x > -tol
     end
+    is_positive_everywhere(mesh, kernel, poly, index) =
+        all(ispositive, kernelvalues(mesh, kernel, poly, index))
+
     @testset "Quadratic B-spline" begin
         kern = BSpline(Quadratic())
         lin = Polynomial(Linear())
         multilin = Polynomial(MultiLinear())
         @testset "2D" begin
-            # boundaries
             mesh = CartesianMesh(1, (0,10), (0,10))
-            for i in CartesianIndices((3,3))
-                if i == CartesianIndex(2,2)
-                    @test !all(ispositive, kernelvalues(mesh, kern, lin, i))
-                else
-                    @test all(ispositive, kernelvalues(mesh, kern, lin, i))
-                end
-                @test all(ispositive, kernelvalues(mesh, kern, multilin, i))
-            end
-            # aggressive kernel correction (only for hyperrectangle)
-            for I in CartesianIndices((3,3))
-                @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, lin,      i)), CartesianIndices(Tuple(I)))
-                @test  all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, multilin, i)), CartesianIndices(Tuple(I)))
+            @test is_positive_everywhere(mesh, kern, lin, CartesianIndex(1,1))
+            @test !is_positive_everywhere(mesh, kern, lin, CartesianIndex(2,2))
+            @test is_positive_everywhere(mesh, kern, multilin, CartesianIndex(2,2))
+
+            for I in (CartesianIndex(1,1), CartesianIndex(3,2))
+                domain = CartesianMesh(1, (0,I[1]), (0,I[2]))
+                @test !all(i -> is_positive_everywhere(domain, kern, lin, i), CartesianIndices(Tuple(I)))
+                @test  all(i -> is_positive_everywhere(domain, kern, multilin, i), CartesianIndices(Tuple(I)))
             end
         end
         @testset "3D" begin
-            # for boundaries
             mesh = CartesianMesh(1, (0,10), (0,10), (0,10))
-            for i in CartesianIndices((3,3,3))
-                if length(findall(==(2), Tuple(i))) > 1
-                    @test !all(ispositive, kernelvalues(mesh, kern, lin, i))
-                else
-                    @test all(ispositive, kernelvalues(mesh, kern, lin, i))
-                end
-                @test all(ispositive, kernelvalues(mesh, kern, multilin, i))
-            end
-            # aggressive kernel correction (only for hyperrectangle)
-            for I in CartesianIndices((3,3,3))
-                @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, lin,      i)), CartesianIndices(Tuple(I)))
-                @test  all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, multilin, i)), CartesianIndices(Tuple(I)))
+            @test is_positive_everywhere(mesh, kern, lin, CartesianIndex(1,1,1))
+            @test !is_positive_everywhere(mesh, kern, lin, CartesianIndex(2,2,1))
+            @test is_positive_everywhere(mesh, kern, multilin, CartesianIndex(2,2,1))
+
+            for I in (CartesianIndex(1,1,1), CartesianIndex(3,2,1))
+                domain = CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3]))
+                @test !all(i -> is_positive_everywhere(domain, kern, lin, i), CartesianIndices(Tuple(I)))
+                @test  all(i -> is_positive_everywhere(domain, kern, multilin, i), CartesianIndices(Tuple(I)))
             end
         end
     end
@@ -327,55 +320,31 @@ end
         lin = Polynomial(Linear())
         multilin = Polynomial(MultiLinear())
         @testset "2D" begin
-            # for boundaries
             mesh = CartesianMesh(1, (0,10), (0,10))
-            for i in CartesianIndices((4,4))
-                if length(findall(==(3), Tuple(i))) > 0
-                    @test !all(ispositive, kernelvalues(mesh, kern, lin,      i))
-                    @test !all(ispositive, kernelvalues(mesh, kern, multilin, i))
-                else
-                    if i == CartesianIndex(2,2)
-                        @test !all(ispositive, kernelvalues(mesh, kern, lin, i))
-                    else
-                        @test all(ispositive, kernelvalues(mesh, kern, lin, i))
-                    end
-                    @test all(ispositive, kernelvalues(mesh, kern, multilin, i))
-                end
-            end
-            # aggressive kernel correction (only for hyperrectangle)
-            for I in CartesianIndices((4,4))
-                @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, lin, i)), CartesianIndices(Tuple(I)))
-                if I == CartesianIndex(1,1)
-                    @test all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, multilin, i)), CartesianIndices(Tuple(I)))
-                else
-                    @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2])), kern, multilin, i)), CartesianIndices(Tuple(I)))
-                end
+            @test is_positive_everywhere(mesh, kern, lin, CartesianIndex(1,1))
+            @test !is_positive_everywhere(mesh, kern, lin, CartesianIndex(2,2))
+            @test is_positive_everywhere(mesh, kern, multilin, CartesianIndex(2,2))
+            @test !is_positive_everywhere(mesh, kern, lin, CartesianIndex(3,1))
+            @test !is_positive_everywhere(mesh, kern, multilin, CartesianIndex(3,1))
+
+            for (I, multilin_positive) in ((CartesianIndex(1,1), true), (CartesianIndex(2,1), false))
+                domain = CartesianMesh(1, (0,I[1]), (0,I[2]))
+                @test !all(i -> is_positive_everywhere(domain, kern, lin, i), CartesianIndices(Tuple(I)))
+                @test all(i -> is_positive_everywhere(domain, kern, multilin, i), CartesianIndices(Tuple(I))) === multilin_positive
             end
         end
         @testset "3D" begin
-            # for boundaries
             mesh = CartesianMesh(1, (0,10), (0,10), (0,10))
-            for i in CartesianIndices((4,4,4))
-                if length(findall(==(3), Tuple(i))) > 0
-                    @test !all(ispositive, kernelvalues(mesh, kern, lin,      i))
-                    @test !all(ispositive, kernelvalues(mesh, kern, multilin, i))
-                else
-                    if length(findall(==(2), Tuple(i))) > 1
-                        @test !all(ispositive, kernelvalues(mesh, kern, lin, i))
-                    else
-                        @test all(ispositive, kernelvalues(mesh, kern, lin, i))
-                    end
-                    @test all(ispositive, kernelvalues(mesh, kern, multilin, i))
-                end
-            end
-            # aggressive kernel correction (only for hyperrectangle)
-            for I in CartesianIndices((4,4,4))
-                @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, lin, i)), CartesianIndices(Tuple(I)))
-                if I == CartesianIndex(1,1,1)
-                    @test all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, multilin, i)), CartesianIndices(Tuple(I)))
-                else
-                    @test !all(i -> all(ispositive, kernelvalues(CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3])), kern, multilin, i)), CartesianIndices(Tuple(I)))
-                end
+            @test is_positive_everywhere(mesh, kern, lin, CartesianIndex(1,1,1))
+            @test !is_positive_everywhere(mesh, kern, lin, CartesianIndex(2,2,1))
+            @test is_positive_everywhere(mesh, kern, multilin, CartesianIndex(2,2,1))
+            @test !is_positive_everywhere(mesh, kern, lin, CartesianIndex(3,1,1))
+            @test !is_positive_everywhere(mesh, kern, multilin, CartesianIndex(3,1,1))
+
+            for (I, multilin_positive) in ((CartesianIndex(1,1,1), true), (CartesianIndex(2,1,1), false))
+                domain = CartesianMesh(1, (0,I[1]), (0,I[2]), (0,I[3]))
+                @test !all(i -> is_positive_everywhere(domain, kern, lin, i), CartesianIndices(Tuple(I)))
+                @test all(i -> is_positive_everywhere(domain, kern, multilin, i), CartesianIndices(Tuple(I))) === multilin_positive
             end
         end
     end

@@ -82,16 +82,16 @@ end
         feupdate!(weights, mesh; volume = particles.detJdV)
         sum(particles.detJdV)
     end
-    cmesh = CartesianMesh(0.5, (0,2))
+    cmesh = CartesianMesh(1, (0,2))
     @test compute_volume(UnstructuredMesh(Tesserae.Line2(), cmesh)) ≈
           compute_volume(UnstructuredMesh(Tesserae.Line3(), cmesh)) ≈ 2
-    cmesh = CartesianMesh(0.5, (0,2), (-1,3))
+    cmesh = CartesianMesh(1, (0,2), (-1,3))
     @test compute_volume(UnstructuredMesh(Tesserae.Quad4(), cmesh)) ≈
           compute_volume(UnstructuredMesh(Tesserae.Quad8(), cmesh)) ≈
           compute_volume(UnstructuredMesh(Tesserae.Quad9(), cmesh)) ≈
           compute_volume(UnstructuredMesh(Tesserae.Tri3(), cmesh))  ≈
           compute_volume(UnstructuredMesh(Tesserae.Tri6(), cmesh))  ≈ 8
-    cmesh = CartesianMesh(0.5, (0,2), (-1,3), (2,5))
+    cmesh = CartesianMesh(1, (0,2), (-1,3), (2,5))
     @test compute_volume(UnstructuredMesh(Tesserae.Hex8(), cmesh))  ≈
           compute_volume(UnstructuredMesh(Tesserae.Hex20(), cmesh)) ≈
           compute_volume(UnstructuredMesh(Tesserae.Hex27(), cmesh)) ≈
@@ -124,19 +124,19 @@ end
     @test compute_area(UnstructuredMesh(Tesserae.Tet4(), cmesh))  ≈
           compute_area(UnstructuredMesh(Tesserae.Tet10(), cmesh)) ≈ 6 * (1+√2)
 
-    cmesh1 = CartesianMesh(1/3, (-1,1), (0,6))
-    cmesh2 = CartesianMesh(1/3, (-5,5), (4,5))
+    cmesh1 = CartesianMesh(1, (0,2), (0,2))
+    cmesh2 = CartesianMesh(1, (1,3), (1,3))
     @test compute_volume(merge(UnstructuredMesh(Tesserae.Quad4(), cmesh1), UnstructuredMesh(Tesserae.Quad4(), cmesh2))) ≈
           compute_volume(merge(UnstructuredMesh(Tesserae.Quad8(), cmesh1), UnstructuredMesh(Tesserae.Quad8(), cmesh2))) ≈
           compute_volume(merge(UnstructuredMesh(Tesserae.Quad9(), cmesh1), UnstructuredMesh(Tesserae.Quad9(), cmesh2))) ≈
           compute_volume(merge(UnstructuredMesh(Tesserae.Tri3(), cmesh1), UnstructuredMesh(Tesserae.Tri3(), cmesh2)))   ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Tri6(), cmesh1), UnstructuredMesh(Tesserae.Tri6(), cmesh2)))   ≈ 20
+          compute_volume(merge(UnstructuredMesh(Tesserae.Tri6(), cmesh1), UnstructuredMesh(Tesserae.Tri6(), cmesh2)))   ≈ 7
 
-    cmesh1 = CartesianMesh(1/3, (-1,1), (0,6), (-1,1))
-    cmesh2 = CartesianMesh(1/3, (-5,5), (4,5), (-5,5))
+    cmesh1 = CartesianMesh(1, (0,2), (0,2), (0,2))
+    cmesh2 = CartesianMesh(1, (1,3), (1,3), (1,3))
     @test compute_volume(merge(UnstructuredMesh(Tesserae.Hex8(), cmesh1), UnstructuredMesh(Tesserae.Hex8(), cmesh2)))   ≈
           compute_volume(merge(UnstructuredMesh(Tesserae.Hex20(), cmesh1), UnstructuredMesh(Tesserae.Hex20(), cmesh2))) ≈
           compute_volume(merge(UnstructuredMesh(Tesserae.Hex27(), cmesh1), UnstructuredMesh(Tesserae.Hex27(), cmesh2))) ≈
           compute_volume(merge(UnstructuredMesh(Tesserae.Tet4(), cmesh1), UnstructuredMesh(Tesserae.Tet4(), cmesh2)))   ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Tet10(), cmesh1), UnstructuredMesh(Tesserae.Tet10(), cmesh2))) ≈ 120
+          compute_volume(merge(UnstructuredMesh(Tesserae.Tet10(), cmesh1), UnstructuredMesh(Tesserae.Tet10(), cmesh2))) ≈ 15
 end
