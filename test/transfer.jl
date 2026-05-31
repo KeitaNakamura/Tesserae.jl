@@ -211,6 +211,65 @@
         @test actual_grid.v ≈ expected_grid.v
     end
 
+    @testset "threaded matches sequential" begin
+        Δt = 0.01
+        gravity = Vec(0.0, -9.81)
+        grid, particles, weights = transfer_fixture()
+        partition = ColorPartition(grid.x)
+        update!(partition, particles.x)
+
+        sequential_grid = deepcopy(grid)
+        threaded_grid = deepcopy(grid)
+
+        @P2G sequential_grid=>i particles=>p weights=>ip begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            f[i] = @∑ w[ip] * m[p] * gravity
+            f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            vⁿ[i] = mv[i] * m⁻¹[i]
+            v[i] = vⁿ[i] + (f[i] * m⁻¹[i]) * Δt
+        end
+
+        @threaded :static @P2G threaded_grid=>i particles=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            f[i] = @∑ w[ip] * m[p] * gravity
+            f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            vⁿ[i] = mv[i] * m⁻¹[i]
+            v[i] = vⁿ[i] + (f[i] * m⁻¹[i]) * Δt
+        end
+
+        @test threaded_grid.m ≈ sequential_grid.m
+        @test threaded_grid.mv ≈ sequential_grid.mv
+        @test threaded_grid.f ≈ sequential_grid.f
+        @test threaded_grid.v ≈ sequential_grid.v
+
+        sequential_particles = deepcopy(particles)
+        threaded_particles = deepcopy(particles)
+        α = 0.95
+
+        @G2P sequential_grid=>i sequential_particles=>p weights=>ip begin
+            v[p] = @∑ w[ip] * ((1 - α) * v[i] + α * (v[p] + (v[i] - vⁿ[i])))
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+            x[p] += @∑ w[ip] * v[i] * Δt
+            F[p] = (one(F[p]) + ∇v[p] * Δt) * F[p]
+        end
+
+        @threaded :static @G2P threaded_grid=>i threaded_particles=>p weights=>ip begin
+            v[p] = @∑ w[ip] * ((1 - α) * v[i] + α * (v[p] + (v[i] - vⁿ[i])))
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+            x[p] += @∑ w[ip] * v[i] * Δt
+            F[p] = (one(F[p]) + ∇v[p] * Δt) * F[p]
+        end
+
+        @test threaded_particles.v ≈ sequential_particles.v
+        @test threaded_particles.∇v ≈ sequential_particles.∇v
+        @test threaded_particles.x ≈ sequential_particles.x
+        @test threaded_particles.F ≈ sequential_particles.F
+    end
+
     @testset "ordering errors" begin
         ex = quote
             @P2G grid=>i particles=>p weights=>ip begin

@@ -54,7 +54,7 @@ end
 ndofs(dofmap::DofMap) = length(dofmap.indices)
 
 function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Vec{1}}
-    A′ = reshape(reinterpret(eltype(T), A), 1, length(A))
+    A′ = reshape(reinterpret(eltype(T), A), 1, size(A)...)
     @boundscheck checkbounds(A′, dofmap.indices)
     @inbounds view(A′, dofmap.indices)
 end
