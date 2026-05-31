@@ -39,11 +39,11 @@ function main(transfer = FLIP(1.0))
 
     ## Simulation parameters
     h   = 0.1 # Grid spacing
-    T   = 0.6 # Time span
+    t_stop = 0.6 # Final time
     CFL = 0.8 # Courant number
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
         h = 0.2                           #src
-        T = 0.2                           #src
+        t_stop = 0.2                      #src
     end                                   #src
 
     ## Material constants
@@ -138,9 +138,9 @@ function main(transfer = FLIP(1.0))
     t = 0.0
     step = 0
     fps = 120
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
-    Tesserae.@showprogress while t < T
+    Tesserae.@showprogress while t < t_stop
 
         ## Calculate time step based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v))

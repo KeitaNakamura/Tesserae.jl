@@ -10,10 +10,10 @@ function main()
 
     ## Simulation parameters
     dim = 3
-    h = 0.0322  # grid spacing
-    T = 10.0    # final time
-    Δt = 2.0e-3 # time step
-    g = 9.81    # gravity magnitude
+    h = 0.0322    # grid spacing
+    t_stop = 10.0 # final time
+    Δt = 2.0e-3   # time step
+    g = 9.81      # gravity magnitude
 
     ## Material constants
     ρ = 1.0e3   # density
@@ -79,9 +79,9 @@ function main()
     t = 0.0
     step = 0
     fps = 30
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
-    Tesserae.@showprogress while t < T
+    Tesserae.@showprogress while t < t_stop
 
         ## P2G: transfer volume to cells, then compute volume fraction ϕ
         update!(cellweight, particles, cells.x)

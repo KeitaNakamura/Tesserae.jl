@@ -15,7 +15,7 @@ function main()
 
     ## Simulation parameters
     h  = 0.25 # Grid spacing
-    T  = 3.0  # Time span
+    t_stop = 3.0 # Final time
     g  = 10.0 # Gravity acceleration
     Δt = 0.01 # Time step
 
@@ -95,9 +95,9 @@ function main()
     t = 0.0
     step = 0
     fps = 60
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
-    Tesserae.@showprogress while t < T
+    Tesserae.@showprogress while t < t_stop
 
         activenodes = trues(size(grid))
         for i in eachindex(grid)

@@ -60,10 +60,10 @@ end
 function main()
 
     ## Simulation parameters
-    T = 80e-6 # Time span
+    t_stop = 80e-6 # Final time
     CFL = 0.8 # Courant number
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        T = 0.1e-6                        #src
+        t_stop = 0.1e-6                   #src
     end                                   #src
 
     ## Material constants
@@ -136,12 +136,12 @@ function main()
     step = 0
     fps = 300e3
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        fps = inv(T)                      #src
+        fps = inv(t_stop)                 #src
     end                                   #src
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
     reset_timer!()
-    Tesserae.@showprogress while t < T
+    Tesserae.@showprogress while t < t_stop
 
         @timeit "Update timestep" begin
             @threaded for p in eachindex(particles)

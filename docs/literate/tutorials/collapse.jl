@@ -79,12 +79,12 @@ function main()
 
     ## Simulation parameters
     h   = 0.01 # Grid spacing
-    T   = 1.5  # Time span
+    t_stop = 1.5 # Final time
     g   = 9.81 # Gravity acceleration
     CFL = 1.0  # Courant number
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
         h = 0.015                         #src
-        T = 0.75                          #src
+        t_stop = 0.75                     #src
     end                                   #src
 
     ## Material constants
@@ -153,9 +153,9 @@ function main()
     t = 0.0
     step = 0
     fps = 60
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
-    Tesserae.@showprogress while t < T
+    Tesserae.@showprogress while t < t_stop
 
         ## Calculate time step based on the wave speed
         vmax = maximum(@. sqrt((λ+2G) / (particles.m/particles.V)) + norm(particles.v))

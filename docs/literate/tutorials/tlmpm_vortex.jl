@@ -22,7 +22,7 @@ function main()
 
     ## Simulation parameters
     h   = 0.02 # Grid spacing
-    T   = 1.0  # Time span
+    t_stop = 1.0 # Final time
     CFL = 0.1  # Courant number
     α   = 0.99 # PIC-FLIP parameter
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
@@ -45,7 +45,7 @@ function main()
     R̄ = (Rᵢ + Rₒ) / 2
     function calc_b_Rθ(R, t)
         local h′′, h′, h = hessian(R -> 1-8((R-R̄)/(Rᵢ-Rₒ))^2+16((R-R̄)/(Rᵢ-Rₒ))^4, R, :all)
-        local g′′, g′, g = hessian(t -> G*sin(π*t/T), t, :all)
+        local g′′, g′, g = hessian(t -> G*sin(π*t/t_stop), t, :all)
         β = g * h
         b_R = ( μ/ρ⁰*(3g*h′+R*g*h′′) - R*g′′*h)*sin(β) + (μ/ρ⁰*R*(g*h′)^2 - R*(g′*h)^2)*cos(β)
         b_θ = (-μ/ρ⁰*(3g*h′+R*g*h′′) + R*g′′*h)*cos(β) + (μ/ρ⁰*R*(g*h′)^2 + R*(g′*h)^2)*sin(β)
@@ -103,9 +103,9 @@ function main()
     t = 0.0
     step = 0
     fps = 60
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
-    Tesserae.@showprogress while t < T
+    Tesserae.@showprogress while t < t_stop
 
         ## Calculate time step based on the wave speed
         vmax = maximum(@. sqrt((λ+2μ) / (particles.m/(particles.V⁰ * det(particles.F)))) + norm(particles.v))

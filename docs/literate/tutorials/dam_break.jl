@@ -28,12 +28,12 @@ function main(transfer = FLIP(1.0))
 
     ## Simulation parameters
     h  = 0.02   # Grid spacing
-    T  = 7.0    # Time span
+    t_stop = 7.0 # Final time
     g  = 9.81   # Gravity acceleration
     Δt = 2.0e-3 # Time step
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
         h = 0.04                          #src
-        T = 0.1                           #src
+        t_stop = 0.1                      #src
     end                                   #src
 
     ## Material constants
@@ -121,9 +121,9 @@ function main(transfer = FLIP(1.0))
     t = 0.0
     step = 0
     fps = 30
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
-    Tesserae.@showprogress while t < T
+    Tesserae.@showprogress while t < t_stop
 
         ## Update basis weights based on the nodes of active cells
         ## where the particles are located

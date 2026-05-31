@@ -18,11 +18,11 @@ function main()
 
     ## Simulation parameters
     h  = 0.1    # Grid spacing
-    T  = 0.5    # Time span
+    t_stop = 0.5 # Final time
     Δt = 0.001  # Time step
     g  = 1000.0 # Gravity acceleration
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        T = 0.05                          #src
+        t_stop = 0.05                     #src
     end                                   #src
 
     ## Material constants
@@ -83,9 +83,9 @@ function main()
     t = 0.0
     step = 0
     fps = 240
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
-    Tesserae.@showprogress while t < T
+    Tesserae.@showprogress while t < t_stop
 
         ## Update basis weights
         update!(weights, particles, grid.x)

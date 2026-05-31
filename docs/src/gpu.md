@@ -193,7 +193,7 @@ function main()
     T = Float64
 
     ## Simulation parameters
-    Tstop = T(80e-6) # Time span
+    t_stop = T(80e-6) # Final time
     CFL = T(0.8)     # Courant number
 
     ## Material constants
@@ -254,14 +254,14 @@ function main()
     t = zero(T)
     step = 0
     fps = T(300e3)
-    savepoints = collect(LinRange(t, Tstop, round(Int, Tstop*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
     reset_timer!()
 
     # Move the simulation state to the GPU after CPU-side setup; the time loop below stays on GPU.
     let (grid, particles, weights) = (grid, particles, weights) .|> gpu_preserve
 
-        Tesserae.@showprogress while t < Tstop
+        Tesserae.@showprogress while t < t_stop
 
             @timeit "Update timestep" begin
                 @. particles.c = sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v)
