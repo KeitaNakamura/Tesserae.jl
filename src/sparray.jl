@@ -111,6 +111,30 @@ end
     CartesianIndex(ntuple(d -> ((block[d] - 1) << L) + localcoord[d], Val(dim)))
 end
 
+# GPU kernels cannot iterate `activeindices(spinds)` directly, so they launch over
+# block-local slots and recover the corresponding active `SpIndex` with these helpers.
+@inline _spindex_ndrange(spinds::SpIndices) = length(blocknumbering(spinds)) * blocklength(spinds)
+
+@inline function _active_spindex(spinds::SpIndices, blocknumber, block::CartesianIndex, l::Integer, localindices)
+    iszero(blocknumber) && return false, SpIndex(block, 0)
+    @inbounds localcoord = localindices[l]
+    I = blocklocal_to_global(block, localcoord; block_size_log2=Val(block_size_log2(spinds)))
+    checkbounds(Bool, spinds, Tuple(I)...) || return false, SpIndex(I, 0)
+    true, SpIndex(I, storageindex(blocknumber, l, spinds))
+end
+
+@inline function _active_spindex(spinds::SpIndices, k::Integer)
+    numbering = blocknumbering(spinds)
+    blocks = CartesianIndices(numbering)
+    localindices = CartesianIndices(blocksize(spinds))
+    nlocal = length(localindices)
+    b = (k - 1) ÷ nlocal + 1
+    l = (k - 1) % nlocal + 1
+    @inbounds blocknumber = numbering[b]
+    @inbounds block = blocks[b]
+    _active_spindex(spinds, blocknumber, block, l, localindices)
+end
+
 @inline function Base.getindex(sp::SpIndices{dim}, I::Vararg{Integer, dim}) where {dim}
     @boundscheck checkbounds(sp, I...)
     block_size = Val(block_size_log2(sp))
@@ -568,24 +592,70 @@ resize_fillzero_data!(A::AbstractMesh, n) = A
 # Broadcast #
 #############
 
+# Non-mutating broadcasts normally materialize a dense array over the logical
+# domain.  We keep a sparse result only for simple zero-preserving operations
+# whose flattened arguments are all SpArrays sharing the exact same SpIndices
+# object (`===`), not merely an equal sparsity pattern.  Mutating broadcasts to
+# a SpArray never change its sparsity; they write only into the destination's
+# active storage.
+
 Broadcast.BroadcastStyle(::Type{<: SpArray}) = ArrayStyle{SpArray}()
 
 function Base.similar(bc::Broadcasted{ArrayStyle{SpArray}}, ::Type{ElType}) where {ElType}
-    N = ndims(bc)
-    bc′ = convert(Broadcasted{DefaultArrayStyle{N}}, bc)
-    similar(bc′, ElType)
+    bc = Broadcast.instantiate(bc)
+    bcf = Broadcast.flatten(bc)
+    A = _first_sparray(bcf)
+    _preserves_sparsity(bcf) ? similar_sparray(A, ElType) : similar(get_data(A), ElType, axes(bc))
 end
+
+similar_sparray(A::SpArray, ::Type{T}) where {T} = SpArray(similar(get_data(A), T, length(get_data(A))), get_spinds(A), true)
+
+_first_sparray(A::SpArray) = A
+_first_sparray(bc::Broadcasted) = _first_sparray(bc.args)
+_first_sparray(::Tuple{}) = nothing
+function _first_sparray(args::Tuple)
+    A = _first_sparray(first(args))
+    A === nothing ? _first_sparray(Base.tail(args)) : A
+end
+_first_sparray(x) = nothing
+
+_all_sparrays(args::Tuple) = all(x -> x isa SpArray, args)
+_preserves_sparsity(bc::Broadcasted) = _all_sparrays(bc.args) && identical_spinds(bc.args...) && _is_zero_preserving_bc_function(bc.f)
+_is_zero_preserving_bc_function(f) = f in (+, -, *)
 
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
+    bc = Broadcast.instantiate(bc)
     bcf = Broadcast.flatten(bc)
     if identical_spinds(dest, bcf.args...)
         Base.copyto!(_get_data(dest), _get_data(bc))
     else
-        @inbounds for i in activeindices(dest)
-            dest[i] = bc[logicalindex(i)]
-        end
+        _copyto_sp_broadcast!(get_device(dest), dest, bc)
     end
+    dest
+end
+
+function _copyto_sp_broadcast!(::CPUDevice, dest::SpArray, bc::Broadcasted)
+    @inbounds for i in activeindices(dest)
+        dest[i] = bc[logicalindex(i)]
+    end
+    dest
+end
+
+@kernel function gpukernel_copyto_sp_broadcast!(dest, @Const(bc), @Const(spinds))
+    k = @index(Global)
+    active, i = _active_spindex(spinds, k)
+    if active
+        @inbounds dest[i] = bc[logicalindex(i)]
+    end
+end
+
+function _copyto_sp_broadcast!(device::GPUDevice, dest::SpArray, bc::Broadcasted)
+    backend = get_backend(device)
+    spinds = get_spinds(dest)
+    kernel = gpukernel_copyto_sp_broadcast!(backend)
+    kernel(dest, bc, spinds; ndrange=_spindex_ndrange(spinds))
+    synchronize(backend)
     dest
 end
 
@@ -619,9 +689,16 @@ end
 struct CDot end
 Base.show(io::IO, x::CDot) = print(io, "⋅")
 
-struct ShowSpArray{T, N, A <: AbstractArray{T, N}} <: AbstractArray{T, N}
+struct ShowSpArray{T, N, A <: AbstractArray{T, N}, S} <: AbstractArray{T, N}
     parent::A
+    summary_parent::S
 end
+
+# Array display scalar-indexes through `getindex`; show GPU-backed sparse arrays
+# through a CPU copy while keeping the original object for the printed summary.
+ShowSpArray(parent) = ShowSpArray(_show_parent(parent), parent)
+_show_parent(parent) = get_device(parent) isa CPUDevice ? parent : cpu(parent)
+
 Base.size(x::ShowSpArray) = size(x.parent)
 Base.axes(x::ShowSpArray) = axes(x.parent)
 @inline function Base.getindex(x::ShowSpArray, i::Integer...)
@@ -632,6 +709,6 @@ end
 maybecustomshow(x) = x
 maybecustomshow(x::SpArray) = ShowSpArray(x)
 
-Base.summary(io::IO, x::ShowSpArray) = summary(io, x.parent)
+Base.summary(io::IO, x::ShowSpArray) = summary(io, x.summary_parent)
 Base.show(io::IO, mime::MIME"text/plain", x::SpArray) = show(io, mime, ShowSpArray(x))
 Base.show(io::IO, x::SpArray) = show(io, ShowSpArray(x))

@@ -1,7 +1,7 @@
 module Tesserae
 
 using Base: @propagate_inbounds, @_inline_meta, @_propagate_inbounds_meta
-using Base.Broadcast: Broadcasted, ArrayStyle, DefaultArrayStyle
+using Base.Broadcast: Broadcasted, ArrayStyle
 using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using SparseArrays
