@@ -15,13 +15,15 @@ using FileIO, MeshIO
     @test size(formatted) == (6, 1)
     @test isequal(formatted[:, 1], [3.0, 8.0, NaN, 5.0, NaN, NaN])
 
-    cd(tempdir()) do
-        files = openvtk("quad4", UnstructuredMesh(Tesserae.Quad4(), CartesianMesh(1, (0,1), (0,1)))) do vtk
-            vtk["temperature"] = [1.0, 2.0, 3.0, 4.0]
+    mktempdir() do dir
+        cd(dir) do
+            files = openvtk("quad4", UnstructuredMesh(Tesserae.Quad4(), CartesianMesh(1, (0,1), (0,1)))) do vtk
+                vtk["temperature"] = [1.0, 2.0, 3.0, 4.0]
+            end
+            @test length(files) == 1
+            @test isfile(only(files))
+            @test filesize(only(files)) > 0
         end
-        @test length(files) == 1
-        @test isfile(only(files))
-        @test filesize(only(files)) > 0
     end
 end
 

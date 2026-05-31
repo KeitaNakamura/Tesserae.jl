@@ -21,6 +21,7 @@
         ]
 
         @test eltype(points) == Vec{2,Float64}
+        @test length(points) == length(expected)
         @test Set(points) == Set(expected)
     end
 
@@ -33,13 +34,13 @@
         d2 = Tesserae.poisson_disk_sampling_minimum_distance(l2, domain2)
 
         @test eltype(points2) == Vec{2,Float64}
-        @test !isempty(points2)
+        @test length(points2) > 1
         @test all(x -> in_domain(x, mesh2), points2)
         @test minimum_distance(points2) ≥ d2 * (1 - sqrt(eps(Float64)))
 
         threaded_points = Tesserae.generate_points(
             PoissonDiskSampling(; spacing=1/2, rng=Random.MersenneTwister(1234), threaded=true), mesh2)
-        @test !isempty(threaded_points)
+        @test length(threaded_points) > 1
         @test abs(length(threaded_points) - length(points2)) / length(points2) ≤ 0.15
         @test all(x -> in_domain(x, mesh2), threaded_points)
         @test minimum_distance(threaded_points) ≥ d2 * (1 - sqrt(eps(Float64)))
@@ -52,7 +53,7 @@
         d3 = Tesserae.poisson_disk_sampling_minimum_distance(l3, domain3)
 
         @test eltype(points3) == Vec{3,Float64}
-        @test !isempty(points3)
+        @test length(points3) > 1
         @test all(x -> in_domain(x, mesh3), points3)
         @test minimum_distance(points3) ≥ d3 * (1 - sqrt(eps(Float64)))
 
