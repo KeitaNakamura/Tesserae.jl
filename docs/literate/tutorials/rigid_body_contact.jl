@@ -135,7 +135,7 @@ function main()
             m⁻¹[i] = inv(m[i]) * !iszero(m[i])
             vⁿ[i]  = mv[i] * m⁻¹[i]
             v[i]   = vⁿ[i] + (fint[i] * m⁻¹[i]) * Δt
-            fext[i] += contact_force_tangent(fext[i], v[i]-$Ref(disk.v), m[i], Δt)
+            fext[i] += contact_force_tangent(fext[i], v[i]-disk.v, m[i], Δt)
             v[i]    += (fext[i] * m⁻¹[i]) * Δt
         end
 

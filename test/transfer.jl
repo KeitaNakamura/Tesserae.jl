@@ -146,8 +146,9 @@
             mv[i] = @∑ w[ip] * m[p] * v[p]
             f[i] = @∑ w[ip] * m[p] * gravity
             f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
-            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
-            vⁿ[i] = mv[i] * m⁻¹[i]
+            invm = inv(m[i]) * !iszero(m[i])
+            m⁻¹[i] = invm
+            vⁿ[i] = mv[i] * invm
             v[i] = vⁿ[i] + (f[i] * m⁻¹[i]) * Δt
         end
 
@@ -201,7 +202,8 @@
             F[p] = (one(F[p]) + ∇v[p] * Δt) * F[p]
             σ[p] = stiffness * symmetric(∇v[p])
             f[i] = @∑ -V[p] * σ[p] * ∇w[ip]
-            v[i] = vⁿ[i] + (f[i] * m⁻¹[i]) * Δt
+            Δv = (f[i] * m⁻¹[i]) * Δt
+            v[i] = vⁿ[i] + Δv
         end
 
         @test actual_particles.∇v ≈ expected_particles.∇v

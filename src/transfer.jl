@@ -134,8 +134,10 @@ for p in eachindex(particles)
 end
 
 # Calculation on grid
-@. grid.vⁿ = grid.mv / grid.m
-@. grid.v  = grid.vⁿ + (grid.f / grid.m) * Δt
+for i in eachindex(grid)
+    grid.vⁿ[i] = grid.mv[i] / grid.m[i]
+    grid.v[i]  = grid.vⁿ[i] + (grid.f[i] / grid.m[i]) * Δt
+end
 ```
 
 !!! warning
@@ -180,11 +182,12 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
 
     if !isempty(nosum_equations)
         body = P2G_nosum_expr((grid,i), nosum_equations)
+        if !DEBUG
+            body = :(@inbounds $body)
+        end
         code = quote
             $code
-            let
-                $body
-            end
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $grid)
         end
     end
 
@@ -267,20 +270,54 @@ end
 
 function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     scope = TransferScope([grid=>i])
-    nosum_equations = map(nosum_equations) do eq
-        eq = resolve_equation(eq, scope)
-        TransferEquation(eq.kind, remove_indexing(eq.lhs), remove_indexing(eq.rhs), eq.op)
-    end
+    nosum_equations = map(eq -> resolve_equation(eq, scope), nosum_equations)
 
     nosum_exprs = map(nosum_equations) do eq
         (; lhs, rhs, op) = eq
-        if @capture(lhs, $grid.x_)
-            :(@. $(Expr(op, lhs, rhs)))
-        else # TODO: avoid intermediate allocation
-            Expr(op, lhs, :(@. $rhs))
-        end
+        Expr(op, lhs, rhs)
     end
     Expr(:block, nosum_exprs...)
+end
+
+grid_node_indices(grid) = eachindex(grid)
+grid_node_indices(grid::SpGrid) = activeindices(get_spinds(grid))
+
+function P2G_nosum(f, ::CPUDevice, grid)
+    @inbounds @simd for i in grid_node_indices(grid)
+        @inline f(grid, i)
+    end
+end
+
+function P2G_nosum(f, ::CPUDevice, grid::SpGrid)
+    @inbounds for i in grid_node_indices(grid)
+        @inline f(grid, i)
+    end
+end
+
+@kernel function gpukernel_P2G_nosum(f, grid)
+    i = @index(Global, Cartesian)
+    f(grid, i)
+end
+
+@kernel function gpukernel_P2G_nosum_spgrid(f, grid, @Const(spinds))
+    k = @index(Global)
+    active, i = _active_spindex(spinds, k)
+    if active
+        @inbounds f(grid, i)
+    end
+end
+
+function P2G_nosum(f, device::GPUDevice, grid)
+    backend = get_backend(device)
+    if grid isa SpGrid
+        spinds = get_spinds(grid)
+        kernel = gpukernel_P2G_nosum_spgrid(backend)
+        kernel(f, grid, spinds; ndrange=_spindex_ndrange(spinds))
+    else
+        kernel = gpukernel_P2G_nosum(backend)
+        kernel(f, grid; ndrange=size(grid))
+    end
+    synchronize(backend)
 end
 
 function check_arguments_for_P2G(grid, particles, weights, partition)
@@ -603,11 +640,12 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
 
     if !isempty(stages.p2g_nosum)
         body = P2G_nosum_expr((grid,i), stages.p2g_nosum)
+        if !DEBUG
+            body = :(@inbounds $body)
+        end
         code = quote
             $code
-            let
-                $body
-            end
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $grid)
         end
     end
 
