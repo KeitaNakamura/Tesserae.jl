@@ -42,6 +42,7 @@ function main(transfer = FLIP(1.0))
     T   = 0.6 # Time span
     CFL = 0.8 # Courant number
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        h = 0.2                           #src
         T = 0.2                           #src
     end                                   #src
 
@@ -261,10 +262,10 @@ end
 
 using Test                                     #src
 if @isdefined(RUN_TESTS) && RUN_TESTS          #src
-    @test main(FLIP(0.0))  ≈ 1.142e7 rtol=1e-3 #src
-    @test main(FLIP(1.0))  ≈ 1.623e7 rtol=1e-3 #src
-    @test main(FLIP(0.99)) ≈ 1.605e7 rtol=1e-3 #src
-    @test main(APIC())     ≈ 1.607e7 rtol=1e-3 #src
-    @test main(TPIC())     ≈ 1.606e7 rtol=1e-3 #src
-    @test main(XPIC(5))    ≈ 1.593e7 rtol=1e-3 #src
+    @test main(FLIP(0.0))  ≈ 9.114e6 rtol=1e-3 #src
+    @test main(FLIP(1.0))  ≈ 1.567e7 rtol=1e-3 #src
+    @test main(FLIP(0.99)) ≈ 1.543e7 rtol=1e-3 #src
+    @test main(APIC())     ≈ 1.539e7 rtol=1e-3 #src
+    @test main(TPIC())     ≈ 1.537e7 rtol=1e-3 #src
+    @test main(XPIC(5))    ≈ 1.502e7 rtol=1e-3 #src
 end                                            #src

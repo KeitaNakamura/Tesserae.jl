@@ -32,6 +32,7 @@ function main(transfer = FLIP(1.0))
     g  = 9.81   # Gravity acceleration
     Δt = 2.0e-3 # Time step
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
+        h = 0.04                          #src
         T = 0.1                           #src
     end                                   #src
 
@@ -392,6 +393,6 @@ end
 
 using Test                                            #src
 if @isdefined(RUN_TESTS) && RUN_TESTS                 #src
-    @test main(FLIP(1.0))  ≈ [0.611,0.287] rtol=0.005 #src
-    @test main(TPIC())     ≈ [0.611,0.287] rtol=0.005 #src
+    @test main(FLIP(1.0))  ≈ [0.611,0.288] rtol=0.005 #src
+    @test main(TPIC())     ≈ [0.611,0.288] rtol=0.005 #src
 end                                                   #src

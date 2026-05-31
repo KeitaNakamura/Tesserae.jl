@@ -15,9 +15,9 @@
 end
 
 @testset "SpIndices" begin
-    spinds = Tesserae.SpIndices(12,20)
+    spinds = Tesserae.SpIndices(9,17)
     @test IndexStyle(spinds) === IndexCartesian()
-    @test size(spinds) === (12,20)
+    @test size(spinds) === (9,17)
     @test Tesserae.nblocks(spinds) === Tesserae.nblocks(size(spinds); block_size_log2=Val(Tesserae.block_size_log2(spinds)))
     @test !all(Tesserae.isactive, spinds)
     @test !all(i->Tesserae.isactive(spinds,i), eachindex(spinds))
@@ -42,7 +42,7 @@ end
     @test Set(map(Tesserae.logicalindex, active)) == Set(expected_active)
     @test map(Tesserae.storageindex, active) == sort(map(I->spinds[I].spindex, expected_active))
     @test all(i->1 ≤ Tesserae.storageindex(i) ≤ n, active)
-    @test isempty(collect(Tesserae.activeindices(Tesserae.SpIndices(12,20))))
+    @test isempty(collect(Tesserae.activeindices(Tesserae.SpIndices(9,17))))
 
     update_sparsity!(spinds, falses(Tesserae.nblocks(spinds)))
     @test isempty(collect(Tesserae.activeindices(spinds)))
@@ -55,22 +55,22 @@ end
     @test all(i->1 ≤ Tesserae.storageindex(i) ≤ edge_n, edge_active)
     @test Set(map(Tesserae.logicalindex, edge_active)) == Set(CartesianIndices(edge_spinds))
 
-    spinds_block3 = Tesserae.SpIndices((12, 20); block_size_log2=Val(3))
+    spinds_block3 = Tesserae.SpIndices((9, 17); block_size_log2=Val(3))
     @test Tesserae.block_size_log2(spinds_block3) === 3
     @test Tesserae.blockwidth(spinds_block3) === 8
     @test Tesserae.blocksize(spinds_block3) === (8, 8)
     @test Tesserae.nblocks(spinds_block3) === (2, 3)
     @test update_sparsity!(spinds_block3, trues(Tesserae.nblocks(spinds_block3))) ==
           prod(Tesserae.nblocks(spinds_block3)) * Tesserae.blocklength(spinds_block3)
-    @test Tesserae.isactive(spinds_block3, 12, 20)
-    @test_throws MethodError Tesserae.SpIndices((12, 20); block_size_log2=3)
+    @test Tesserae.isactive(spinds_block3, 9, 17)
+    @test_throws MethodError Tesserae.SpIndices((9, 17); block_size_log2=3)
 end
 
 @testset "SpGrid update from particles" begin
-    mesh = CartesianMesh(0.2, (0,3), (0,4))
+    mesh = CartesianMesh(0.25, (0,4), (0,4))
     xₚ = generate_particles(mesh)
     filter!(xₚ) do (x, y)
-        (x - 1.5)^2 + (y - 2)^2 < 1
+        (x - 2)^2 + (y - 2)^2 < 1
     end
 
     GridProp = @NamedTuple{x::Vec{2,Float64}, m::Float64}
@@ -105,7 +105,7 @@ end
     @test n_particles == count(expected_active) * Tesserae.blocklength(from_particles)
     @test map(!iszero, Tesserae.blocknumbering(from_particles)) == expected_active
 
-    mesh = CartesianMesh(1.0, (0,20), (0,8))
+    mesh = CartesianMesh(1.0, (0,16), (0,4))
     spinds = Tesserae.SpIndices(mesh)
     xₚ = [Vec(1.0, 1.0), Vec(2.0, 1.0), Vec(9.0, 1.0)]
     n₁ = update_sparsity!(spinds, xₚ, mesh)
@@ -165,7 +165,7 @@ end
     @test block_numbers == expected_numbers
     @test active_count[] == nactive
 
-    mesh = CartesianMesh(1.0, (0,20), (0,8))
+    mesh = CartesianMesh(1.0, (0,16), (0,4))
     dims = Tesserae.nblocks(mesh)
     LI = LinearIndices(dims)
     x₁ = [Vec(1.0, 1.0), Vec(2.0, 1.0), Vec(9.0, 1.0)]
@@ -257,9 +257,9 @@ end
 end
 
 @testset "Array behavior" begin
-    A = SpArray{Float64}(undef, 12, 20)
+    A = SpArray{Float64}(undef, 9, 17)
     @test IndexStyle(A) === IndexCartesian()
-    @test size(A) === (12,20)
+    @test size(A) === (9,17)
     @test !all(i->Tesserae.isactive(A,i), eachindex(A))
     @test all(iszero, A)
     blkspy = rand(Bool, Tesserae.nblocks(A))
@@ -283,7 +283,7 @@ end
     @test all(i->A[Tesserae.logicalindex(i)] == Float64(Tesserae.storageindex(i)), Tesserae.activeindices(A))
     @test all(i->iszero(A[i]), filter(i->!Tesserae.isactive(A,i), eachindex(A)))
 
-    B = SpArray{Float64}(undef, 12, 20)
+    B = SpArray{Float64}(undef, 9, 17)
     update_sparsity!(B, trues(Tesserae.nblocks(B)))
     B .= 2
     A .= B .+ 1
@@ -340,7 +340,7 @@ end
     @test sp_grid.mv ≈ dense_grid.mv
     @test all(!iszero, map(Tesserae.storageindex, Tesserae.activeindices(sp_grid.m)))
 
-    mesh_block3 = CartesianMesh(1.0, (0, 12), (0, 20); block_size_log2=Val(3))
+    mesh_block3 = CartesianMesh(1.0, (0, 8), (0, 16); block_size_log2=Val(3))
     grid_block3 = generate_grid(SpArray, GridProp, mesh_block3)
     partition_block3 = ColorPartition(mesh_block3)
     @test Tesserae.block_size_log2(Tesserae.get_spinds(grid_block3)) === 3
