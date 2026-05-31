@@ -1,5 +1,3 @@
-using LinearAlgebra
-
 @testset "Particles" begin
     function in_domain(x, mesh)
         xmin = Tesserae.get_xmin(mesh)

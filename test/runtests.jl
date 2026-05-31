@@ -1,4 +1,5 @@
 using Tesserae
+using LinearAlgebra
 using Random
 using Test
 
