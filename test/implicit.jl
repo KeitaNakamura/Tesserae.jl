@@ -176,3 +176,50 @@ end
         @test isapprox(x[1], (1e6)^(1/3); rtol=0.0, atol=1e-12)
     end
 end
+
+@testset "DofMap and sparse extraction" begin
+    mesh = CartesianMesh(1, (0,2), (0,1))
+    grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, u::Float64, s::Vec{1,Float64}, v::Vec{2,Float64}}, mesh)
+
+    grid.u .= reshape(1.0:length(grid), size(grid))
+    grid.s .= map(x -> Vec(x), grid.u)
+    grid.v .= reshape(reinterpret(Vec{2,Float64}, 1.0:2length(grid)), size(grid))
+
+    vmask = falses(2, size(grid)...)
+    vmask[1, 1:2, :] .= true
+    vmask[:, 3, 2] .= true
+    vmap = DofMap(vmask)
+
+    @test ndofs(vmap) == count(vmask)
+    @test collect(vmap(grid.v)) == [1.0, 3.0, 7.0, 9.0, 11.0, 12.0]
+    vmap(grid.v) .= -1:-1:-ndofs(vmap)
+    @test collect(vmap(grid.v)) == collect(-1.0:-1.0:-Float64(ndofs(vmap)))
+
+    smask = falses(1, size(grid)...)
+    smask[1, 1, 1] = true
+    smask[1, 3, 2] = true
+    smap = DofMap(smask)
+
+    @test collect(smap(grid.u)) == [1.0, 6.0]
+    @test collect(smap(grid.s)) == [1.0, 6.0]
+
+    A = reshape(1.0:36.0, 6, 6)
+    @test extract(A, smap) == A[Tesserae.dofs(smap), Tesserae.dofs(smap)]
+    @test extract(A, :, smap) == A[:, Tesserae.dofs(smap)]
+    @test extract(view, A, smap, :) == view(A, Tesserae.dofs(smap), :)
+end
+
+@testset "Unstructured sparse matrix pattern" begin
+    cmesh = CartesianMesh(1, (0,1), (0,1))
+    quad4 = UnstructuredMesh(Tesserae.Quad4(), cmesh)
+    quad9 = UnstructuredMesh(Tesserae.Quad9(), cmesh)
+
+    A = create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
+    @test size(A) == (2length(quad9), length(quad4))
+    @test Tesserae.SparseArrays.nnz(A) == prod(size(A))
+
+    shifted = UnstructuredMesh(Tesserae.Quad4(), CartesianMesh(1, (2,3), (2,3)))
+    B = create_sparse_matrix((quad9, shifted); ndofs=(2, 1))
+    @test size(B) == (2length(quad9), length(shifted))
+    @test iszero(Tesserae.SparseArrays.nnz(B))
+end

@@ -8,6 +8,7 @@ include("partitioning.jl")
 include("sparray.jl")
 
 include("grid.jl")
+include("particles.jl")
 
 include("basis.jl")
 include("shapes.jl")
