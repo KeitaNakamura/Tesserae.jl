@@ -331,6 +331,7 @@ end
         x  :: Vec{2, Float64}
         m  :: Float64
         mv :: Vec{2, Float64}
+        v  :: Vec{2, Float64}
     end
     ParticleProp = @NamedTuple begin
         x :: Vec{2, Float64}
@@ -361,15 +362,20 @@ end
     @P2G dense_grid=>i particles=>p weights=>ip begin
         m[i] = @∑ w[ip] * m[p]
         mv[i] = @∑ w[ip] * m[p] * v[p]
+        invm = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+        v[i] = x[i] + mv[i] * invm
     end
 
     @P2G sp_grid=>i particles=>p weights=>ip begin
         m[i] = @∑ w[ip] * m[p]
         mv[i] = @∑ w[ip] * m[p] * v[p]
+        invm = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+        v[i] = x[i] + mv[i] * invm
     end
 
     @test sp_grid.m ≈ dense_grid.m
     @test sp_grid.mv ≈ dense_grid.mv
+    @test sp_grid.v ≈ dense_grid.v
     @test all(!iszero, map(Tesserae.storageindex, Tesserae.activeindices(sp_grid.m)))
 
     mesh_block3 = CartesianMesh(1.0, (0, 8), (0, 16); block_size_log2=Val(3))
