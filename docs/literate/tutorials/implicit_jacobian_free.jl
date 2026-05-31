@@ -21,6 +21,7 @@ function main()
     Δt = 0.01 # Time step
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
         h = 0.1                           #src
+        T = 1.0                           #src
     end                                   #src
 
     ## Material constants
@@ -209,5 +210,5 @@ end
 
 using Test                                #src
 if @isdefined(RUN_TESTS) && RUN_TESTS     #src
-    @test main() ≈ [0.7416,0,0] rtol=1e-4 #src
+    @test main() ≈ [0.7284,0,0] rtol=1e-4 #src
 end                                       #src

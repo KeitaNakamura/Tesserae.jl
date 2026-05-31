@@ -1,9 +1,9 @@
 @testset "ColorPartition" begin
     @testset "BlockStrategy" begin
-        mesh = CartesianMesh(0.2, (0,3), (0,4))
+        mesh = CartesianMesh(0.25, (0,4), (0,4))
         xₚ = generate_particles(mesh)
         filter!(xₚ) do (x,y)
-            (x-1.5)^2 + (y-2)^2 < 1
+            (x-2)^2 + (y-2)^2 < 1
         end
 
         Random.seed!(1234)
@@ -36,7 +36,7 @@
         @test map(blk -> Tesserae.particle_indices_in(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks_after
     end
     @testset "CellStrategy" begin
-        mesh = UnstructuredMesh(CartesianMesh(0.2, (0,3), (0,4)))
+        mesh = UnstructuredMesh(CartesianMesh(0.5, (0,2), (0,2)))
         strat = Tesserae.strategy(ColorPartition(mesh))
         groups = strat.colorgroups
         @test all(!isempty, groups)

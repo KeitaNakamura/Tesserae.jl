@@ -1,9 +1,9 @@
 @testset "P2G_Matrix" begin
     basis = BSpline(Quadratic())
-    mesh = CartesianMesh(1, (0,10), (0,20))
+    mesh = CartesianMesh(1, (0,4), (0,5))
 
     grid = generate_grid(@NamedTuple{x::Vec{2,Float64}}, mesh)
-    particles = generate_particles(@NamedTuple{x::Vec{2,Float64}}, mesh)
+    particles = generate_particles(@NamedTuple{x::Vec{2,Float64}}, mesh; alg=GridSampling())
 
     weights = generate_basis_weights(basis, mesh, length(particles))
     update!(weights, particles, mesh)

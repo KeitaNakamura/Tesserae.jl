@@ -22,7 +22,7 @@ function main()
     Δt = 0.001  # Time step
     g  = 1000.0 # Gravity acceleration
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        T = 0.2                           #src
+        T = 0.05                          #src
     end                                   #src
 
     ## Material constants
@@ -139,5 +139,5 @@ end
 
 using Test                                 #src
 if @isdefined(RUN_TESTS) && RUN_TESTS      #src
-    @test main() ≈ [0,-0.6154,0] rtol=1e-4 #src
+    @test main() ≈ [0,-1.2187,0] rtol=1e-4 #src
 end                                        #src

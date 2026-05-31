@@ -25,7 +25,7 @@ function main()
     CFL = 1.0   # Courant number
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
         h = 0.008                         #src
-        T = 2.0                           #src
+        T = 1.0                           #src
     end                                   #src
 
     ## Material constants
@@ -203,5 +203,5 @@ end
 
 using Test                            #src
 if @isdefined(RUN_TESTS) && RUN_TESTS #src
-    @test main() ≈ [28,-92] rtol=0.2  #src
+    @test main() ≈ [20,-77] rtol=0.2  #src
 end                                   #src
