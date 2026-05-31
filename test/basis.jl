@@ -353,58 +353,85 @@ end
 @testset "Polynomial" begin
     polynomial_point(::Type{T}, ::Val{dim}) where {T, dim} =
         Vec{dim, T}(i -> T(i) / T(dim + 2))
-    polynomial_value(poly, x) = only(values(Order(0), poly, x))
-    polynomial_gradient(poly, x) = gradient(y -> polynomial_value(poly, y), x)
-    polynomial_hessian(poly, x) = gradient(y -> polynomial_gradient(poly, y), x)
-    polynomial_third_derivative(poly, x) = gradient(y -> polynomial_hessian(poly, y), x)
 
-    function check_polynomial_eltypes(poly, ::Val{order}, ::Type{T}, ::Val{dim}) where {order, T, dim}
-        vals = values(Order(order), poly, polynomial_point(T, Val(dim)))
+    exponents(::Polynomial{Linear}, ::Val{1}) = ((0,), (1,))
+    exponents(::Polynomial{Linear}, ::Val{2}) = ((0,0), (1,0), (0,1))
+    exponents(::Polynomial{Linear}, ::Val{3}) = ((0,0,0), (1,0,0), (0,1,0), (0,0,1))
+    exponents(::Polynomial{Quadratic}, ::Val{1}) = ((0,), (1,), (2,))
+    exponents(::Polynomial{Quadratic}, ::Val{2}) = ((0,0), (1,0), (0,1), (1,1), (2,0), (0,2))
+    exponents(::Polynomial{Quadratic}, ::Val{3}) = ((0,0,0), (1,0,0), (0,1,0), (0,0,1), (1,1,0), (0,1,1), (1,0,1), (2,0,0), (0,2,0), (0,0,2))
+    exponents(::Polynomial{MultiLinear}, ::Val{1}) = exponents(Polynomial(Linear()), Val(1))
+    exponents(::Polynomial{MultiLinear}, ::Val{2}) = ((0,0), (1,0), (0,1), (1,1))
+    exponents(::Polynomial{MultiLinear}, ::Val{3}) = ((0,0,0), (1,0,0), (0,1,0), (0,0,1), (1,1,0), (0,1,1), (1,0,1), (1,1,1))
+    exponents(::Polynomial{Tesserae.MultiQuadratic}, ::Val{1}) = exponents(Polynomial(Quadratic()), Val(1))
+    exponents(::Polynomial{Tesserae.MultiQuadratic}, ::Val{2}) = ((0,0), (1,0), (0,1), (1,1), (2,0), (0,2), (2,1), (1,2), (2,2))
+    exponents(::Polynomial{Tesserae.MultiQuadratic}, ::Val{3}) = (
+        (0,0,0),
+        (1,0,0), (0,1,0), (0,0,1),
+        (1,1,0), (0,1,1), (1,0,1), (1,1,1),
+        (2,0,0), (0,2,0), (0,0,2),
+        (2,1,0), (2,0,1), (2,1,1),
+        (1,2,0), (0,2,1), (1,2,1),
+        (1,0,2), (0,1,2), (1,1,2),
+        (2,2,0), (0,2,2), (2,0,2),
+        (2,2,1), (1,2,2), (2,1,2), (2,2,2),
+    )
+
+    function monomial_derivative(exp::NTuple{dim,Int}, x::Vec{dim,T}, dirs::Tuple) where {dim,T}
+        powers = collect(exp)
+        value = one(T)
+        for d in dirs
+            iszero(powers[d]) && return zero(T)
+            value *= powers[d]
+            powers[d] -= 1
+        end
+        for d in 1:dim
+            value *= x[d]^powers[d]
+        end
+        value
+    end
+
+    function matches_polynomial_derivative(actual, exps, x)
+        all(CartesianIndices(size(actual))) do I
+            indices = Tuple(I)
+            term = first(indices)
+            dirs = indices[2:end]
+            actual[indices...] ≈ monomial_derivative(exps[term], x, dirs)
+        end
+    end
+
+    function check_polynomial(poly, ::Val{max_order}, ::Type{T}, ::Val{dim}; check_values=true) where {max_order,T,dim}
+        x = polynomial_point(T, Val(dim))
+        exps = exponents(poly, Val(dim))
+        vals = values(Order(max_order), poly, x)
         @test all(v -> eltype(v) == T, vals)
-        vals
+        check_values || return
+
+        for order in 0:max_order
+            @test matches_polynomial_derivative(vals[order+1], exps, x)
+        end
     end
 
     @testset "Linear" begin
         poly = Polynomial(Linear())
         for dim in (1,2,3)
-            vals = check_polynomial_eltypes(poly, Val(4), Float64, Val(dim))
-            xp = polynomial_point(Float64, Val(dim))
-            @test vals[2] ≈ polynomial_gradient(poly, xp)
-            @test iszero(vals[3])
-            @test iszero(vals[4])
-            @test iszero(vals[5])
-            check_polynomial_eltypes(poly, Val(4), Float32, Val(dim))
+            check_polynomial(poly, Val(4), Float64, Val(dim))
+            check_polynomial(poly, Val(4), Float32, Val(dim); check_values=false)
         end
     end
 
     @testset "MultiLinear" begin
         poly = Polynomial(MultiLinear())
         for dim in (1,2,3)
-            vals = check_polynomial_eltypes(poly, Val(4), Float64, Val(dim))
-            xp = polynomial_point(Float64, Val(dim))
-            @test vals[2] ≈ polynomial_gradient(poly, xp)
-            if dim ≥ 2
-                @test vals[3] ≈ polynomial_hessian(poly, xp)
-            else
-                @test iszero(vals[3])
-            end
-            if dim ≥ 3
-                @test vals[4] ≈ polynomial_third_derivative(poly, xp)
-            else
-                @test iszero(vals[4])
-            end
-            @test iszero(vals[5])
-            check_polynomial_eltypes(poly, Val(4), Float32, Val(dim))
+            check_polynomial(poly, Val(4), Float64, Val(dim))
+            check_polynomial(poly, Val(4), Float32, Val(dim); check_values=false)
         end
     end
 
     @testset "$poly" for poly in (Polynomial(Quadratic()), Polynomial(Tesserae.MultiQuadratic()))
         for dim in (1,2,3)
-            vals = check_polynomial_eltypes(poly, Val(2), Float64, Val(dim))
-            xp = polynomial_point(Float64, Val(dim))
-            @test vals[2] ≈ polynomial_gradient(poly, xp)
-            @test vals[3] ≈ polynomial_hessian(poly, xp)
-            check_polynomial_eltypes(poly, Val(2), Float32, Val(dim))
+            check_polynomial(poly, Val(2), Float64, Val(dim))
+            check_polynomial(poly, Val(2), Float32, Val(dim); check_values=false)
         end
     end
 end
