@@ -48,7 +48,7 @@ end
 function main()
 
     # Simulation parameters
-    T = 80e-6 # Time span
+    t_stop = 80e-6 # Final time
     CFL = 0.8 # Courant number
 
     # Material constants
@@ -117,10 +117,10 @@ function main()
     t = 0.0
     step = 0
     fps = 300e3
-    savepoints = collect(LinRange(t, T, round(Int, T*fps)+1))
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
     reset_timer!()
-    Tesserae.@showprogress while t &lt; T
+    Tesserae.@showprogress while t &lt; t_stop
 
         @timeit &quot;Update timestep&quot; begin
             @threaded for p in eachindex(particles)
@@ -242,4 +242,4 @@ Update timestep              1.83k    3.24s    0.8%  1.77ms   10.9MiB    0.1%  6
 Reorder particles               25    1.81s    0.4%  72.5ms   11.8GiB   55.7%   482MiB
 Update color partition       1.83k    1.79s    0.4%   976μs   59.1MiB    0.3%  33.0KiB
 Apply boundary conditions    1.83k    126ms    0.0%  69.1μs    229MiB    1.1%   128KiB
-──────────────────────────────────────────────────────────────────────────────────────</code></pre><h2 id="Scalability"><a class="docs-heading-anchor" href="#Scalability">Scalability</a><a id="Scalability-1"></a><a class="docs-heading-anchor-permalink" href="#Scalability" title="Permalink"></a></h2><img src="456c64d5.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../rigid_body_contact/">« Frictional contact with rigid body</a><a class="docs-footer-nextpage" href="../heat/">Heat problem using FEM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 31 May 2026 05:22">Sunday 31 May 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+──────────────────────────────────────────────────────────────────────────────────────</code></pre><h2 id="Scalability"><a class="docs-heading-anchor" href="#Scalability">Scalability</a><a id="Scalability-1"></a><a class="docs-heading-anchor-permalink" href="#Scalability" title="Permalink"></a></h2><img src="a0da3b78.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../rigid_body_contact/">« Frictional contact with rigid body</a><a class="docs-footer-nextpage" href="../heat/">Heat problem using FEM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 31 May 2026 07:03">Sunday 31 May 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
