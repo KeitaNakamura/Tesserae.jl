@@ -254,6 +254,20 @@ end
     end
     @test block_numbers == expected_numbers
     @test active_count[] == nactive
+
+    GridProp = @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}
+    grid = generate_grid(SpArray, GridProp, mesh)
+    update_sparsity!(grid, active)
+    for i in Tesserae.activeindices(grid.m)
+        grid.m[i] = Float64(Tesserae.storageindex(i))
+    end
+    bc = Broadcast.instantiate(Broadcast.broadcasted(*, grid.x, grid.m))
+    copy_kernel = Tesserae.gpukernel_copyto_sp_broadcast!(backend)
+    spinds = Tesserae.get_spinds(grid.v)
+    ndrange = Tesserae._spindex_ndrange(spinds)
+    copy_kernel(grid.v, bc, spinds; ndrange)
+    Tesserae.synchronize(backend)
+    @test all(i -> grid.v[i] == grid.x[i] * grid.m[i], Tesserae.activeindices(grid.v))
 end
 
 @testset "Array behavior" begin
@@ -290,7 +304,25 @@ end
     @test all(i->A[i] == 3, filter(i->Tesserae.isactive(A,i), eachindex(A)))
     @test all(i->iszero(A[i]), filter(i->!Tesserae.isactive(A,i), eachindex(A)))
 
-    # breadcast is tested on grid part
+    mesh = CartesianMesh(1.0, (0,8), (0,16))
+    grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)
+    update_sparsity!(grid, blkspy)
+    grid.m .= 2
+    @. grid.v = grid.x * grid.m
+    @test all(i -> grid.v[i] == grid.x[i] * grid.m[i], Tesserae.activeindices(grid.v))
+    @test all(i -> iszero(grid.v[i]), filter(i -> !Tesserae.isactive(grid.v, i), eachindex(grid.v)))
+    tmp = @. grid.x * grid.m
+    @test tmp isa Matrix{Vec{2,Float64}}
+    @test all(i -> tmp[i] == grid.x[i] * grid.m[i], eachindex(tmp))
+    same_spinds = Tesserae.SpArray(fill(3.0, length(Tesserae.get_data(grid.m))), Tesserae.get_spinds(grid.m), true)
+    sparse_tmp = grid.m .+ same_spinds
+    @test sparse_tmp isa SpArray
+    @test Tesserae.get_spinds(sparse_tmp) === Tesserae.get_spinds(grid.m)
+    @test all(i -> sparse_tmp[i] == grid.m[i] + same_spinds[i], Tesserae.activeindices(sparse_tmp))
+    @test grid.m .+ 1 isa Matrix{Float64}
+    other_spinds = SpArray{Float64}(undef, size(grid.m))
+    update_sparsity!(other_spinds, trues(Tesserae.nblocks(other_spinds)))
+    @test grid.m .+ other_spinds isa Matrix{Float64}
 end
 
 @testset "@P2G" begin
