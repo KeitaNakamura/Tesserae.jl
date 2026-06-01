@@ -23,7 +23,7 @@ function main()
     g   = 9.81 # Gravity acceleration
     CFL = 1.0  # Courant number
     if @isdefined(RUN_TESTS) && RUN_TESTS #src
-        h = 0.015                         #src
+        h = 0.02                          #src
         t_stop = 0.75                     #src
     end                                   #src
 
