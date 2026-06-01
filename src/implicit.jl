@@ -355,7 +355,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         end)
         push!(local_jdofs, :($J = vec(view($ldofs_j, :, $jp))))
         push!(local_idofs, :($I = vec(view($ldofs_i, :, $ip))))
-        push!(lmat_asm, :(@inbounds $lmat[$I,$J] .= $trySArray($rhs))) # converting `Tensor` to `SArray` is faster for setindex!
+        push!(lmat_asm, :(@inbounds $lmat[$I,$J] .= $rhs))
         push!(gdofs_extract, :(($dofs_i, $dofs_j) = $_get_dofs($gdofs_i, $gridindices_i, $gdofs_j, $gridindices_j)))
         if gi == i && gj == j
             push!(lmat2gmat, :(Tesserae.add!($gmat, $dofs_i, $dofs_j, $lmat)))
@@ -454,10 +454,6 @@ function check_arguments_for_P2G_Matrix(grid, particles, weights, partition)
     check_arguments_for_P2G(grid, particles, weights, partition)
     @assert get_device(grid) isa CPUDevice
 end
-
-@inline trySArray(x::Tensor) = SArray(x)
-@inline trySArray(x::AbstractArray) = x
-@inline trySArray(x::Real) = Scalar(x)
 
 """
     Tesserae.newton!(x::AbstractVector, f, ∇f,
