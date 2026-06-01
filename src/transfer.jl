@@ -232,7 +232,7 @@ end
 
 # CPU: sequential
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "@P2G: `ColorPartition` must be given for threaded computation" maxlog=1
+    scheduler == :nothing || @warn "@P2G: `ThreadPartition` must be given for threaded computation" maxlog=1
 
     for p in eachindex(particles)
         @inline f(grid, particles, weights, p)
@@ -240,22 +240,11 @@ function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothi
 end
 
 # CPU: multi-threading
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ColorPartition{<: BlockStrategy}) where {scheduler}
-    strat = strategy(partition)
-    for group in colorgroups(strat)
-        tforeach(group, scheduler) do blk
-            for p in particle_indices_in(strat, blk)
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition) where {scheduler}
+    for group in threadsafe_groups(partition)
+        tforeach(group, scheduler) do region
+            for p in particle_indices(partition, particles, region)
                 @inline f(grid, particles, weights, p)
-            end
-        end
-    end
-end
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ColorPartition{<: CellStrategy}) where {scheduler}
-    strat = strategy(partition)
-    for group in colorgroups(strat)
-        tforeach(group, scheduler) do cell
-            for p in 1:size(particles, 1)
-                @inline f(grid, particles, weights, CartesianIndex(p, cell))
             end
         end
     end
@@ -341,25 +330,25 @@ function check_arguments_for_P2G(grid, particles, weights, partition)
     check_partition_for_P2G(device, grid, weights, partition)
 end
 
-# ColorPartition is a CPU scheduling aid. GPU P2G uses particle-parallel kernels
+# ThreadPartition is a CPU scheduling aid. GPU P2G uses particle-parallel kernels
 # and SpGrid sparsity is updated separately from particle positions.
 check_partition_for_P2G(::CPUDevice, grid, weights, ::Nothing) = nothing
 check_partition_for_P2G(::GPUDevice, grid, weights, ::Nothing) = nothing
 function check_partition_for_P2G(::GPUDevice, grid, weights, partition)
-    error("@P2G: ColorPartition is only used on CPU. Use partitionless @P2G on GPU.")
+    error("@P2G: ThreadPartition is only used on CPU. Use partitionless @P2G on GPU.")
 end
-function check_partition_for_P2G(::CPUDevice, grid, weights, partition::ColorPartition)
+function check_partition_for_P2G(::CPUDevice, grid, weights, partition::ThreadPartition)
     check_partition_for_P2G(grid, weights, strategy(partition))
 end
 check_partition_for_P2G(grid, weights, strat) = nothing
 function check_partition_for_P2G(grid, weights, strat::BlockStrategy)
     @assert nblocks(get_mesh(grid)) == nblocks(strat)
-    if sum(length(particle_indices_in(strat, blk)) for blk in LinearIndices(nblocks(strat))) == 0
-        error("@P2G: No particles assigned to any block in ColorPartition")
+    if sum(length(particle_indices(strat, blk)) for blk in LinearIndices(nblocks(strat))) == 0
+        error("@P2G: No particles assigned to any block in ThreadPartition")
     end
     b = basis(first(weights))
     if kernel_support(b) > blockwidth(strat)
-        error("@P2G: Block size for `ColorPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
+        error("@P2G: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
     end
 end
 

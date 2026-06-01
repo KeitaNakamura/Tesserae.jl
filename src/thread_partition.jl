@@ -1,6 +1,6 @@
-abstract type ColoringStrategy end
+abstract type PartitionStrategy end
 
-struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: ColoringStrategy
+struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: PartitionStrategy
     mesh::Mesh
     particleindices::Vector{Int}
     stops::Array{Int, dim}
@@ -21,15 +21,15 @@ nblocks(bs::BlockStrategy) = size(bs.stops)
 block_size_log2(bs::BlockStrategy) = block_size_log2(bs.mesh)
 blockwidth(bs::BlockStrategy) = blockwidth(bs.mesh)
 
-@inline function particle_indices_in(bs::BlockStrategy, blk::Integer)
+@inline function particle_indices(bs::BlockStrategy, blk::Integer)
     @boundscheck checkbounds(LinearIndices(nblocks(bs)), blk)
-    @inbounds _particle_indices_in(bs.particleindices, bs.stops, blk)
+    @inbounds _particle_indices(bs.particleindices, bs.stops, blk)
 end
-@inline function particle_indices_in(bs::BlockStrategy, blk::CartesianIndex)
+@inline function particle_indices(bs::BlockStrategy, blk::CartesianIndex)
     @boundscheck checkbounds(CartesianIndices(nblocks(bs)), blk)
-    @inbounds particle_indices_in(bs, LinearIndices(nblocks(bs))[blk])
+    @inbounds particle_indices(bs, LinearIndices(nblocks(bs))[blk])
 end
-@inline function _particle_indices_in(particleindices, stops, blk::Integer)
+@inline function _particle_indices(particleindices, stops, blk::Integer)
     @_propagate_inbounds_meta
     stop = stops[blk]
     start = blk==1 ? 1 : stops[blk-1]+1
@@ -80,13 +80,13 @@ end
 @inline sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
 @inline sub2ind(::Dims, ::Nothing)::Int = 0
 
-function colorgroups(bs::BlockStrategy)
-    [filter(I -> !isempty(particle_indices_in(bs, I)), blocks) for blocks in threadsafe_blocks(nblocks(bs))]
+function threadsafe_groups(bs::BlockStrategy)
+    [filter(I -> !isempty(particle_indices(bs, I)), blocks) for blocks in threadsafe_blocks(nblocks(bs))]
 end
 
 function reorder_particles!(particles::AbstractVector, bs::BlockStrategy)
     # NOTE: Only `particleindices` is synced; `blockindices/localindices` are untouched.
-    perm = _reorder_particles!(particles, maparray(i -> particle_indices_in(bs, i), LinearIndices(nblocks(bs))))
+    perm = _reorder_particles!(particles, maparray(i -> particle_indices(bs, i), LinearIndices(nblocks(bs))))
     invp = invperm(perm)
     n_assigned = bs.stops[end]
     @inbounds for k in 1:n_assigned
@@ -213,11 +213,11 @@ function threadsafe_blocks(nblocks::NTuple{dim, Int}) where {dim}
     vec(map(st -> map(CartesianIndex{dim}, Iterators.product(StepRange.(st, 2, nblocks)...)), starts))
 end
 
-struct CellStrategy <: ColoringStrategy
-    colorgroups::Vector{Vector{Int}}
+struct CellStrategy <: PartitionStrategy
+    threadsafe_groups::Vector{Vector{Int}}
 end
 
-colorgroups(cs::CellStrategy) = cs.colorgroups
+threadsafe_groups(cs::CellStrategy) = cs.threadsafe_groups
 
 function CellStrategy(mesh::UnstructuredMesh)
     g = _cell_conflict_graph(mesh)
@@ -258,21 +258,21 @@ function _cell_conflict_graph(mesh::UnstructuredMesh)
 end
 
 """
-    ColorPartition(::CartesianMesh)
-    ColorPartition(::UnstructuredMesh)
+    ThreadPartition(::CartesianMesh)
+    ThreadPartition(::UnstructuredMesh)
 
-`ColorPartition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
-to avoid write conflicts during parallel particle-to-grid transfers.
+`ThreadPartition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
+to avoid write conflicts during threaded particle-to-grid transfers.
 
 !!! note
     The [`@threaded`](@ref) macro must be placed before [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) to enable parallel transfer.
 
 # Examples
 ```julia
-# Construct ColorPartition
-partition = ColorPartition(mesh)
+# Construct ThreadPartition
+partition = ThreadPartition(mesh)
 
-# Update coloring using current particle positions
+# Update partition using current particle positions
 update!(partition, particles.x) # Required for `CartesianMesh`; not needed for `UnstructuredMesh` (FEM).
 
 # P2G transfer
@@ -282,14 +282,20 @@ update!(partition, particles.x) # Required for `CartesianMesh`; not needed for `
 end
 ```
 """
-struct ColorPartition{Strategy <: ColoringStrategy}
+struct ThreadPartition{Strategy <: PartitionStrategy}
     strategy::Strategy
 end
 
-strategy(partition::ColorPartition) = partition.strategy
+strategy(partition::ThreadPartition) = partition.strategy
+threadsafe_groups(partition::ThreadPartition) = threadsafe_groups(strategy(partition))
 
-ColorPartition(mesh::CartesianMesh) = ColorPartition(BlockStrategy(mesh))
-ColorPartition(mesh::UnstructuredMesh) = ColorPartition(CellStrategy(mesh))
-update!(partition::ColorPartition, args...) = update!(strategy(partition), args...)
+particle_indices(partition::ThreadPartition, particles, region) =
+    particle_indices(strategy(partition), region)
+particle_indices(partition::ThreadPartition{<: CellStrategy}, particles, cell) =
+    (CartesianIndex(p, cell) for p in 1:size(particles, 1))
 
-reorder_particles!(particles::StructVector, partition::ColorPartition{<: BlockStrategy}) = reorder_particles!(particles, strategy(partition))
+ThreadPartition(mesh::CartesianMesh) = ThreadPartition(BlockStrategy(mesh))
+ThreadPartition(mesh::UnstructuredMesh) = ThreadPartition(CellStrategy(mesh))
+update!(partition::ThreadPartition, args...) = update!(strategy(partition), args...)
+
+reorder_particles!(particles::StructVector, partition::ThreadPartition{<: BlockStrategy}) = reorder_particles!(particles, strategy(partition))

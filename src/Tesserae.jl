@@ -35,8 +35,11 @@ export
 # utils
     fillzero!,
     @threaded,
-# ColorPartition
+# ThreadPartition
+    ThreadPartition,
     ColorPartition,
+    threadsafe_groups,
+    particle_indices,
 # SpArray
     SpArray,
     update_sparsity!,
@@ -112,7 +115,7 @@ include("utils.jl")
 include("shapes.jl")
 
 include("mesh.jl")
-include("partitioning.jl")
+include("thread_partition.jl")
 include("sparray.jl")
 include("hybridarray.jl")
 

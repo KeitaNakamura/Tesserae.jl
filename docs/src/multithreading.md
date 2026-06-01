@@ -16,10 +16,10 @@ end
 
 ### Scattering (`@P2G`, `@G2P2G` and `@P2G_Matrix`)
 
-For scattering operations, prefix `@P2G` with `@threaded` and use [`ColorPartition`](@ref) to avoid data races on the grid.
+For scattering operations, prefix `@P2G` with `@threaded` and use [`ThreadPartition`](@ref) to avoid data races on the grid.
 
 ```julia
-partition = ColorPartition(mesh)
+partition = ThreadPartition(mesh)
 update!(partition, particles.x)
 @threaded @P2G grid=>i particles=>p weights=>ip partition begin
     # your code here
@@ -40,10 +40,10 @@ end
 
 ### Reordering particles
 
-For `@P2G` and related scattering operations, using `reorder_particles!` together with `ColorPartition` can significantly improve cache efficiency and thread scaling:
+For `@P2G` and related scattering operations, using `reorder_particles!` together with `ThreadPartition` can significantly improve cache efficiency and thread scaling:
 
 ```julia
-partition = ColorPartition(mesh)
+partition = ThreadPartition(mesh)
 update!(partition, particles.x)
 reorder_particles!(particles, partition)
 ```
@@ -60,5 +60,5 @@ Reordering ensures that particles within the same grid block are stored contiguo
 
 ```@docs
 @threaded
-ColorPartition
+ThreadPartition
 ```

@@ -180,7 +180,7 @@ A macro similar to `Threads.@threads`, but also works with
 The optional `scheduler` can be `:static`, `:dynamic`, `:greedy`, or `:nothing`
 (sequential execution). The default is `:dynamic`.
 
-See also [`ColorPartition`](@ref).
+See also [`ThreadPartition`](@ref).
 
 !!! note
     If multi-threading is disabled or only one thread is available,
