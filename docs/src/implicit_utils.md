@@ -1,4 +1,6 @@
-# Functionalities for implicit methods
+# Utilities for implicit methods
+
+This page collects helper types and macros used by implicit tutorials, such as degree-of-freedom maps, sparse matrices, matrix assembly, and nonlinear solvers.
 
 ## Degrees of freedom (DoF) mapping
 

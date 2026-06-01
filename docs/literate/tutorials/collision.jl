@@ -8,7 +8,7 @@
 # | ----------- | ------------ | --------------------------- |
 # | 17k         | 2.9k         | 5 sec                       |
 #
-# In this example, the following velocity transfer schemes are demonstrated:
+# This tutorial compares several velocity transfer schemes on the collision of two elastic rings:
 #
 # * PIC--FLIP mixed transfer[^1]
 # * Affine PIC (APIC)[^2]
@@ -16,9 +16,9 @@
 # * eXtended PIC (XPIC)[^4]
 #
 # !!! info
-#     It is also recommended to refer to the manual [Transfer between grid and particles](@ref manual).
+#     See [Transfer between grid and particles](@ref manual) for the transfer macro syntax and shorter snippets.
 #
-# The problem involves the collision between two elastic rings, which is consistent with previous study[^5].
+# The setup follows a benchmark used in a previous study[^5].
 #
 # [^1]: [Stomakhin, A., Schroeder, C., Chai, L., Teran, J. and Selle, A., 2013. A material point method for snow simulation. ACM Transactions on Graphics (TOG), 32(4), pp.1-10.](https://doi.org/10.1145/2461912.2461948)
 # [^2]: [Jiang, C., Schroeder, C., Selle, A., Teran, J. and Stomakhin, A., 2015. The affine particle-in-cell method. ACM Transactions on Graphics (TOG), 34(4), pp.1-10.](https://doi.org/10.1145/2766996)

@@ -1,5 +1,8 @@
 # [Transfer between grid and particles](@id manual)
 
+Transfer macros express the two directions of MPM data movement: particle-to-grid scattering and grid-to-particle gathering.
+The same macro body can include the transfer itself and the local grid or particle calculations that follow it.
+
 ## Transfer macros
 
 ```@docs
@@ -11,9 +14,9 @@
 ## Code snippets
 
 !!! info
-    The following snippets are demonstrated in the tutorial [Transfer schemes](@ref).
+    These snippets are used in the tutorial [Transfer schemes](@ref).
 
-In this section, the following transfer schemes are presented:
+This section lists common velocity transfer schemes:
 
 * [PIC--FLIP mixed transfer](@ref)[^1]
 * [Affine PIC (APIC)](@ref)[^2]
@@ -27,7 +30,7 @@ As a rough guide, PIC--FLIP is the minimal baseline, APIC improves angular momen
 [^3]: [Nakamura, K., Matsumura, S. and Mizutani, T., 2023. Taylor particle-in-cell transfer and kernel correction for material point method. Computer Methods in Applied Mechanics and Engineering, 403, p.115720.](https://doi.org/10.1016/j.cma.2022.115720)
 [^4]: [Hammerquist, C.C. and Nairn, J.A., 2017. A new method for material point method particle updates that reduces noise and enhances stability. Computer methods in applied mechanics and engineering, 318, pp.724-738.](https://doi.org/10.1016/j.cma.2017.01.035)
 
-We assume that the grid and particle properties have following variables:
+The snippets below assume the following grid and particle fields:
 
 ```@example transfer
 using Tesserae #hide
@@ -141,7 +144,7 @@ end
 #### Overview of XPIC
 
 We assume that $\bm{\mathsf{S}}^+$ matrix maps particle velocities to the grid and $\bm{\mathsf{S}}$ matrix maps them back.
-In XPIC, a new effective acceleration for particles, $\mathbb{A}$, is employed to update the particle velocity $\bm{V}$ and position $\bm{X}$, respectively, as
+In XPIC, a new effective acceleration for particles, $\mathbb{A}$, is used to update the particle velocity $\bm{V}$ and position $\bm{X}$ as
 
 ```math
 \begin{aligned}
@@ -178,7 +181,7 @@ starting with $\bm{v}_1^*=\bm{v}^{(k)}$.
 
 #### Implementation using Tesserae
 
-Based on the above equations, we can derive the following:
+The equations above can be written as
 
 ```math
 \begin{aligned}

@@ -8,6 +8,8 @@
 # | ----------- | ------------ | ----------------------------|
 # | 14k         | 220k         | 6 min                       |
 #
+# This tutorial simulates a deformable ground layer interacting with a moving rigid disk.
+# The contact force is computed on particles and then coupled to the usual MPM update.
 
 using Tesserae
 

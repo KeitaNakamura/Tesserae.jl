@@ -7,6 +7,9 @@
 # | # Particles | # Iterations | Execution time (w/o output) |
 # | ----------- | ------------ | --------------------------- |
 # | 600         | 300          | 2 sec                       |
+#
+# This tutorial assembles the Jacobian matrix explicitly for an implicit MPM problem.
+# It is useful when the sparse matrix structure and boundary-condition handling should be visible.
 
 using Tesserae
 using LinearAlgebra
