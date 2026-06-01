@@ -129,12 +129,12 @@ This is required on Metal, where `Float64` cannot be used in GPU kernels.
 ## Transfers
 
 GPU `@P2G` uses particle-parallel kernels with atomic updates.
-Do not pass a [`ColorPartition`](@ref) to GPU transfers; `ColorPartition` is a CPU scheduling tool for threaded scattering.
+Do not pass a [`ThreadPartition`](@ref) to GPU transfers; `ThreadPartition` is a CPU scheduling tool for threaded scattering.
 
 CPU threaded scattering:
 
 ```julia
-partition = ColorPartition(grid.x)
+partition = ThreadPartition(grid.x)
 update!(partition, particles.x)
 
 @threaded @P2G grid=>i particles=>p weights=>ip partition begin

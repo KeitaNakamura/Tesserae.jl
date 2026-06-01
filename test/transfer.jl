@@ -299,7 +299,7 @@
         Δt = 0.01
         gravity = Vec(0.0, -9.81)
         grid, particles, weights = transfer_fixture()
-        partition = ColorPartition(grid.x)
+        partition = ThreadPartition(grid.x)
         update!(partition, particles.x)
 
         sequential_grid = deepcopy(grid)

@@ -380,7 +380,7 @@ end
 
     mesh_block3 = CartesianMesh(1.0, (0, 8), (0, 16); block_size_log2=Val(3))
     grid_block3 = generate_grid(SpArray, GridProp, mesh_block3)
-    partition_block3 = ColorPartition(mesh_block3)
+    partition_block3 = ThreadPartition(mesh_block3)
     @test Tesserae.block_size_log2(Tesserae.get_spinds(grid_block3)) === 3
     @test Tesserae.nblocks(Tesserae.get_spinds(grid_block3)) === Tesserae.nblocks(Tesserae.strategy(partition_block3))
 end

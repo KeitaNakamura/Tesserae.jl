@@ -34,12 +34,12 @@ For example, `A .= B .+ C` only materializes values on the active blocks of `A`;
 Because the active blocks define where values can be stored, update the sparsity pattern before using the grid in transfers:
 
 ```julia
-partition = ColorPartition(grid.x)
+partition = ThreadPartition(grid.x)
 update!(partition, particles.x)
 update_sparsity!(grid, partition)
 ```
 
-This is the usual CPU path when [`ColorPartition`](@ref) is already used for threaded scattering.
+This is the usual CPU path when [`ThreadPartition`](@ref) is already used for threaded scattering.
 The partition stores the particle lists needed by `@threaded @P2G`, and the same block information can be reused to activate the sparse grid.
 
 After that, the usual transfer macros can be used with the sparse grid:
@@ -62,7 +62,7 @@ This keeps all `SpArray` fields using the same active blocks.
 
 ## GPU usage
 
-On GPU, `ColorPartition` is not used.
+On GPU, `ThreadPartition` is not used.
 Move the grid, particles, and basis weights to the GPU, then update the sparse grid directly from particle positions:
 
 ```julia
@@ -90,14 +90,14 @@ The particle-to-grid scatter itself still performs work proportional to the numb
 ## Block size
 
 `SpArray` stores data block by block.
-The block size is controlled by the `block_size_log2` option of [`CartesianMesh`](@ref), and the same block decomposition is used by [`ColorPartition`](@ref):
+The block size is controlled by the `block_size_log2` option of [`CartesianMesh`](@ref), and the same block decomposition is used by [`ThreadPartition`](@ref):
 
 By default, `CartesianMesh` uses `block_size_log2=Val(Tesserae.BLOCK_SIZE_LOG2)`, so the block width is `2^Tesserae.BLOCK_SIZE_LOG2` grid indices per dimension.
 
 ```julia
 mesh = CartesianMesh(0.02, (-1, 1), (-1, 1); block_size_log2=Val(3))
 grid = generate_grid(SpArray, GridProp, mesh)
-partition = ColorPartition(grid.x)
+partition = ThreadPartition(grid.x)
 ```
 
 Larger blocks reduce sparsity bookkeeping, while smaller blocks follow the active domain more tightly.
