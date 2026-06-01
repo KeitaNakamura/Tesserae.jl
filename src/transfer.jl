@@ -11,6 +11,7 @@ is_sum(eq::TransferEquation) = eq.kind === :sum
 
 struct TransferProgram
     equations::Vector{TransferEquation}
+    interpolations::Vector{Pair{Symbol, Any}}
 end
 
 function split_sum_equations(program::TransferProgram, macroname::String)
@@ -140,6 +141,10 @@ for i in eachindex(grid)
 end
 ```
 
+Use `\$(expr)` inside transfer equations to evaluate an outer expression once
+before the generated transfer loops and use the captured value in the loop body.
+For example, `\$Δt` captures the current value of `Δt`.
+
 !!! warning
     In `@P2G`, `Calculation on grid` part must be placed after
     `Particle-to-grid transfer` part.
@@ -191,6 +196,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         end
     end
 
+    code = interpolate_transfer_values(code, program)
     esc(prettify(code; lines=true, alias=false))
 end
 
@@ -415,6 +421,10 @@ for p in eachindex(particles)
 end
 ```
 
+Use `\$(expr)` inside transfer equations to evaluate an outer expression once
+before the generated transfer loops and use the captured value in the loop body.
+For example, `\$Δt` captures the current value of `Δt`.
+
 !!! warning
     In `@G2P`, `Calculation on particles` part must be placed after
     `Grid-to-particle transfer` part.
@@ -448,6 +458,7 @@ function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pr
         end
     end
 
+    code = interpolate_transfer_values(code, program)
     esc(prettify(code; lines=true, alias=false))
 end
 
@@ -649,6 +660,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         end
     end
 
+    code = interpolate_transfer_values(code, program)
     esc(prettify(code; lines=true, alias=false))
 end
 
@@ -682,10 +694,13 @@ end
 function parse_transfer_program(expr::Expr)
     expr = MacroTools.prewalk(MacroTools.rmlines, expr)
     @capture(expr, begin exprs__ end) || error("expected a `begin ... end` block, got $expr")
+    interpolations = Pair{Symbol, Any}[]
     equations = map(exprs) do ex
         dict = MacroTools.trymatch(Expr(:op_, :lhs_, :rhs_), ex)
         dict === nothing && error("wrong expression: $ex")
         lhs, rhs, op = dict[:lhs], dict[:rhs], dict[:op]
+        has_transfer_interpolation(lhs) && error("transfer interpolation with `\$` is only allowed on the RHS, got LHS `$lhs`")
+        rhs = extract_transfer_interpolations(rhs, interpolations)
         if @capture(rhs, @∑ eq_)
             (op == :(=) || op == :(+=) || op == :(-=)) || error("@∑ is only allowed on the RHS of assignments with `=`, `+=`, or `-=`, got $ex")
             return TransferEquation(:sum, lhs, eq, op)
@@ -693,7 +708,34 @@ function parse_transfer_program(expr::Expr)
         has_sum_macro(rhs) && error("@∑ must appear alone as the entire RHS expression, got $ex")
         TransferEquation(:assign, lhs, rhs, op)
     end
-    TransferProgram(equations)
+    TransferProgram(equations, interpolations)
+end
+
+function has_transfer_interpolation(expr)
+    Meta.isexpr(expr, :$, 1) && return true
+    expr isa Expr || return false
+    any(has_transfer_interpolation, expr.args)
+end
+
+function extract_transfer_interpolations(expr, interpolations)
+    if Meta.isexpr(expr, :$, 1)
+        captured = gensym(:transfer_interp)
+        push!(interpolations, captured => only(expr.args))
+        return captured
+    elseif expr isa Expr
+        return Expr(expr.head, map(arg -> extract_transfer_interpolations(arg, interpolations), expr.args)...)
+    else
+        return expr
+    end
+end
+
+function interpolate_transfer_values(code, program::TransferProgram)
+    isempty(program.interpolations) && return code
+    bindings = map(program.interpolations) do captured_rhs
+        captured, rhs = captured_rhs
+        Expr(:(=), captured, rhs)
+    end
+    Expr(:let, Expr(:block, bindings...), code)
 end
 
 function resolve_refs(expr, scope::TransferScope)
