@@ -413,7 +413,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         end
     end
 
-    esc(body)
+    esc(interpolate_transfer_values(body, program))
 end
 
 @inline _get_supportnodes(bw_i, grid_i, bw_j, grid_j, ::Val{true}) = (@_propagate_inbounds_meta; (supportnodes(bw_i, grid_i), supportnodes(bw_j, grid_j)))

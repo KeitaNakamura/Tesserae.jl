@@ -213,6 +213,88 @@
         @test actual_grid.v ≈ expected_grid.v
     end
 
+    @testset "interpolation" begin
+        grid, particles, weights = transfer_fixture()
+
+        p2g_scale = 2.0
+        p2g_captures = Ref(0)
+        expected_grid = deepcopy(grid)
+        actual_grid = deepcopy(grid)
+
+        @P2G expected_grid=>i particles=>p weights=>ip begin
+            m[i] = @∑ w[ip] * m[p] * p2g_scale
+            v[i] = x[i] * (p2g_scale + 1)
+        end
+
+        @P2G actual_grid=>i particles=>p weights=>ip begin
+            m[i] = @∑ w[ip] * m[p] * $(begin
+                p2g_captures[] += 1
+                p2g_scale
+            end)
+            v[i] = x[i] * $(begin
+                p2g_captures[] += 1
+                p2g_scale + 1
+            end)
+        end
+
+        @test p2g_captures[] == 2
+        @test actual_grid.m ≈ expected_grid.m
+        @test actual_grid.v ≈ expected_grid.v
+
+        g2p_scale = 3.0
+        g2p_captures = Ref(0)
+        expected_particles = deepcopy(particles)
+        actual_particles = deepcopy(particles)
+
+        @G2P grid=>i expected_particles=>p weights=>ip begin
+            v[p] = @∑ w[ip] * v[i] * g2p_scale
+        end
+
+        @G2P grid=>i actual_particles=>p weights=>ip begin
+            v[p] = @∑ w[ip] * v[i] * $(begin
+                g2p_captures[] += 1
+                g2p_scale
+            end)
+        end
+
+        @test g2p_captures[] == 1
+        @test actual_particles.v ≈ expected_particles.v
+
+        g2p2g_scale = 4.0
+        g2p2g_captures = Ref(0)
+        expected_grid = deepcopy(grid)
+        expected_particles = deepcopy(particles)
+        actual_grid = deepcopy(grid)
+        actual_particles = deepcopy(particles)
+
+        @G2P2G expected_grid=>i expected_particles=>p weights=>ip begin
+            v[p] = @∑ w[ip] * v[i] * g2p2g_scale
+            m[i] = @∑ w[ip] * m[p] * g2p2g_scale
+        end
+
+        @G2P2G actual_grid=>i actual_particles=>p weights=>ip begin
+            v[p] = @∑ w[ip] * v[i] * $(begin
+                g2p2g_captures[] += 1
+                g2p2g_scale
+            end)
+            m[i] = @∑ w[ip] * m[p] * $(begin
+                g2p2g_captures[] += 1
+                g2p2g_scale
+            end)
+        end
+
+        @test g2p2g_captures[] == 2
+        @test actual_particles.v ≈ expected_particles.v
+        @test actual_grid.m ≈ expected_grid.m
+
+        ex = Meta.parse(raw"""
+            @P2G grid=>i particles=>p weights=>ip begin
+                $m[i] = @∑ w[ip] * m[p]
+            end
+        """)
+        @test_throws ErrorException macroexpand(@__MODULE__, ex)
+    end
+
     @testset "threaded matches sequential" begin
         Δt = 0.01
         gravity = Vec(0.0, -9.81)

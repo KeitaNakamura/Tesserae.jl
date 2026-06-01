@@ -147,6 +147,7 @@ function main()
             @threaded for p in eachindex(particles)
                 particles.c[p] = sqrt((λ+2μ) / (particles.m[p]/particles.V[p])) + norm(particles.v[p])
             end
+            ## `@timeit` can box variables assigned inside it; `::Float64` keeps `Δt` concrete below.
             Δt::Float64 = CFL * spacing(grid.x) / maximum(particles.c)
         end
 
