@@ -3,6 +3,15 @@
 !!! info
     Step-by-step instructions are provided after the code.
 
+Tesserae programs usually have the same few moving parts:
+
+1. A `mesh` stores the background node positions.
+2. A `grid` stores user-defined fields on that mesh, such as mass, momentum, force, and velocity.
+3. `particles` store material state, such as position, velocity, volume, deformation gradient, and stress.
+4. `weights` store the basis function values connecting each particle to nearby grid nodes.
+
+Each time step updates the weights, scatters particle quantities to the grid with [`@P2G`](@ref), computes grid quantities, gathers the result back to particles with [`@G2P`](@ref), and then updates the particle state.
+
 ```@example
 using Tesserae
 import Plots
@@ -20,6 +29,7 @@ function main()
     GridProp = @NamedTuple begin
         x  :: Vec{2, Float64} # Position
         m  :: Float64         # Mass
+        m⁻¹:: Float64         # Inverse mass
         mv :: Vec{2, Float64} # Momentum
         f  :: Vec{2, Float64} # Force
         v  :: Vec{2, Float64} # Velocity
@@ -78,8 +88,9 @@ function main()
             f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
         end
 
-        @. grid.vⁿ = grid.mv / grid.m
-        @. grid.v  = grid.vⁿ + (grid.f / grid.m) * Δt
+        @. grid.m⁻¹ = ifelse(iszero(grid.m), zero(grid.m), inv(grid.m))
+        @. grid.vⁿ = grid.mv * grid.m⁻¹
+        @. grid.v  = grid.vⁿ + (grid.f * grid.m⁻¹) * Δt
 
         @G2P grid=>i particles=>p weights=>ip begin
             v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
@@ -130,6 +141,7 @@ using Tesserae # hide
 GridProp = @NamedTuple begin
     x  :: Vec{2, Float64} # Position
     m  :: Float64         # Mass
+    m⁻¹:: Float64         # Inverse mass
     mv :: Vec{2, Float64} # Momentum
     f  :: Vec{2, Float64} # Force
     v  :: Vec{2, Float64} # Velocity
@@ -162,6 +174,7 @@ isbitstype(ParticleProp)
     struct GridProp
         x  :: Vec{2, Float64} # Position
         m  :: Float64         # Mass
+        m⁻¹:: Float64         # Inverse mass
         mv :: Vec{2, Float64} # Momentum
         f  :: Vec{2, Float64} # Force
         v  :: Vec{2, Float64} # Velocity
@@ -288,7 +301,7 @@ For the particle-to-grid transfer, the [`@P2G`](@ref) macro is useful:
 end
 ```
 
-This macro expands to roughly the following code:
+The [`@P2G`](@ref) macro expands to roughly the following code:
 
 ```julia
 @. grid.m  = zero(grid.m)
@@ -304,6 +317,15 @@ for p in eachindex(particles)
         grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * bw.∇w[ip]
     end
 end
+```
+
+Grid nodes outside the particle support have zero mass. Before dividing by mass, set an inverse mass that stays zero on those inactive nodes:
+
+```@example stepbystep
+@. grid.m⁻¹ = ifelse(iszero(grid.m), zero(grid.m), inv(grid.m))
+@. grid.vⁿ = grid.mv * grid.m⁻¹
+@. grid.v  = grid.vⁿ + (grid.f * grid.m⁻¹) * Δt
+nothing #hide
 ```
 
 ### Grid-to-particle transfer

@@ -72,7 +72,7 @@ openvtm("grid_and_particles") do vtm
         vtk["Force"] = grid.f
     end
     openvtk(vtm, particles.x) do vtk
-        vtk["Velocity"] = particles.x
+        vtk["Velocity"] = particles.v
     end
 end
 ```
@@ -90,7 +90,7 @@ for (step, t) in enumerate(range(0, 10, step=0.5))
     # Simulation...
 
     # Reopening and closing the file at each time step allows us
-    # to visualize intermediate results # without having to wait
+    # to visualize intermediate results without having to wait
     # for the simulation to finish.
     openpvd(filename; append=true) do pvd
         openvtm(string(filename, step)) do vtm

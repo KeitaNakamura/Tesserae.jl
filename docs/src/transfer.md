@@ -20,6 +20,8 @@ In this section, the following transfer schemes are presented:
 * [Taylor PIC (TPIC)](@ref)[^3]
 * [eXtended PIC (XPIC)](@ref)[^4]
 
+As a rough guide, PIC--FLIP is the minimal baseline, APIC improves angular momentum behavior by carrying an affine velocity field, TPIC carries a velocity gradient directly, and XPIC reduces transfer noise through a recursive correction.
+
 [^1]: [Stomakhin, A., Schroeder, C., Chai, L., Teran, J. and Selle, A., 2013. A material point method for snow simulation. ACM Transactions on Graphics (TOG), 32(4), pp.1-10.](https://doi.org/10.1145/2461912.2461948)
 [^2]: [Jiang, C., Schroeder, C., Selle, A., Teran, J. and Stomakhin, A., 2015. The affine particle-in-cell method. ACM Transactions on Graphics (TOG), 34(4), pp.1-10.](https://doi.org/10.1145/2766996)
 [^3]: [Nakamura, K., Matsumura, S. and Mizutani, T., 2023. Taylor particle-in-cell transfer and kernel correction for material point method. Computer Methods in Applied Mechanics and Engineering, 403, p.115720.](https://doi.org/10.1016/j.cma.2022.115720)
@@ -127,7 +129,7 @@ m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \nabla\bm{v}_p^n (\bm{x}
 end
 @G2P grid=>i particles=>p weights=>ip begin
     v[p]  = @∑ w[ip] * v[i]
-    ∇v[p] = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
 end
 ```
 

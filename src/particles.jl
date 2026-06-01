@@ -62,7 +62,7 @@ function generate_points(alg::PoissonDiskSampling, mesh::CartesianMesh{dim, T}) 
     l = T(alg.spacing) * spacing(mesh)
     domain = tuple.(Tuple(get_xmin(mesh)), Tuple(get_xmax(mesh)))
     d = poisson_disk_sampling_minimum_distance(l, domain)
-    reinterpret(Vec{dim, T}, poisson_disk_sampling(alg.rng, T, d, domain...; alg.threaded))
+    reinterpret(Vec{dim, T}, poisson_disk_sampling(alg.rng, T, d, domain...; threaded=alg.threaded))
 end
 
 function _generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}) where {ParticleProp}

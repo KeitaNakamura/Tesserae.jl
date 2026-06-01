@@ -183,7 +183,7 @@ It should not be expected to remove the main cost of `@P2G`, which is still prop
 ## Taylor impact on GPU
 
 The Taylor impact tutorial can be moved to GPU without changing the transfer equations.
-The material model `vonmises_model` is the same as in the [Taylor impact tutorial](@ref Multi-threading-simualtion); the main changes are removing CPU threading utilities, moving the simulation objects with `gpu_preserve`, rewriting the slip floor boundary condition as a broadcast, and copying data back with `cpu` before writing output.
+The material model `vonmises_model` is the same as in the [Taylor impact tutorial](@ref taylor_impact_tutorial); the main changes are removing CPU threading utilities, moving the simulation objects with `gpu_preserve`, rewriting the slip floor boundary condition as a broadcast, and copying data back with `cpu` before writing output.
 
 ```julia
 using Tesserae

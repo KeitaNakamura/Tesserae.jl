@@ -1,4 +1,4 @@
-# # Multi-threading simualtion
+# # [Multi-threading simulation](@id taylor_impact_tutorial)
 #
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/cd5b926f-4613-4dd5-ac54-181c80b9d8b7" width="400"/>
