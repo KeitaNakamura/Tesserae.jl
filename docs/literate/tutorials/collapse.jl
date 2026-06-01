@@ -60,7 +60,7 @@ function main()
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(h, (-3,3), (0,1)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (-3,3), (0,1); warn=false))
 
     ## Particles
     particles = generate_particles(ParticleProp, grid.x)

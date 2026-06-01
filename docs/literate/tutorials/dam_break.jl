@@ -90,7 +90,7 @@ function main(transfer = FLIP(1.0))
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(h, (0,3.22), (0,2.5)))
+    grid = generate_grid(GridProp, CartesianMesh(h, (0,3.22), (0,2.5); warn=false))
     for cell in CartesianIndices(size(grid).-1)
         for i in cellnodes(cell)
             grid.V[i] += (h/2)^2

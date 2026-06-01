@@ -62,9 +62,9 @@ function main()
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(R/12, (-3R,3R), (-3R,3R), (0,L+0.1L)))
+    grid = generate_grid(GridProp, CartesianMesh(R/12, (-3R,3R), (-3R,3R), (0,L+0.1L); warn=false))
     if @isdefined(RUN_TESTS) && RUN_TESTS                                                  #src
-        grid = generate_grid(GridProp, CartesianMesh(R/6, (-3R,3R), (-3R,3R), (0,L+0.1L))) #src
+        grid = generate_grid(GridProp, CartesianMesh(R/6, (-3R,3R), (-3R,3R), (0,L+0.1L); warn=false)) #src
     end                                                                                    #src
 
     ## Particles
