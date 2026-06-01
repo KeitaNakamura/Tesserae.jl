@@ -35,8 +35,11 @@ export
 # utils
     fillzero!,
     @threaded,
-# ColorPartition
+# ThreadPartition
+    ThreadPartition,
     ColorPartition,
+    threadsafe_groups,
+    particle_indices,
 # SpArray
     SpArray,
     update_sparsity!,

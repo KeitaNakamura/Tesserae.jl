@@ -1,4 +1,4 @@
-@testset "ColorPartition" begin
+@testset "ThreadPartition" begin
     @testset "BlockStrategy" begin
         mesh = CartesianMesh(0.25, (0,4), (0,4))
         xₚ = generate_particles(mesh)
@@ -13,14 +13,26 @@
         @test Tesserae.nblocks(bs) === Tesserae.nblocks(mesh)
         @test Tesserae.block_size_log2(bs) === Tesserae.block_size_log2(mesh)
         @test Tesserae.blockwidth(bs) === Tesserae.blockwidth(mesh)
-        @test all(blk -> isempty(Tesserae.particle_indices_in(bs, blk)), LinearIndices(Tesserae.nblocks(bs)))
+        @test all(blk -> isempty(Tesserae.particle_indices(bs, blk)), LinearIndices(Tesserae.nblocks(bs)))
         update!(bs, xₚ)
         ptsinblks = map(_->Int[], CartesianIndices(Tesserae.nblocks(mesh)))
         for p in eachindex(xₚ)
             I = Tesserae.findblock(xₚ[p], mesh)
             I === nothing || push!(ptsinblks[I], p)
         end
-        @test map(blk -> Tesserae.particle_indices_in(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks
+        @test map(blk -> Tesserae.particle_indices(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks
+        basis = BSpline(Cubic())
+        for group in Tesserae.threadsafe_groups(bs)
+            group_nodes = Set{CartesianIndex{2}}()
+            for blk in group
+                block_nodes = Set{CartesianIndex{2}}()
+                for p in Tesserae.particle_indices(bs, blk)
+                    union!(block_nodes, Tesserae.supportnodes(basis, xₚ[p], mesh))
+                end
+                @test isempty(intersect(group_nodes, block_nodes))
+                union!(group_nodes, block_nodes)
+            end
+        end
 
         # check reorder_particles
         reorder_particles!(xₚ, bs)
@@ -33,12 +45,13 @@
             I = Tesserae.findblock(xₚ[p], mesh)
             I === nothing || push!(ptsinblks_after[I], p)
         end
-        @test map(blk -> Tesserae.particle_indices_in(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks_after
+        @test map(blk -> Tesserae.particle_indices(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks_after
     end
     @testset "CellStrategy" begin
         mesh = UnstructuredMesh(CartesianMesh(0.5, (0,2), (0,2)))
-        strat = Tesserae.strategy(ColorPartition(mesh))
-        groups = strat.colorgroups
+        partition = ThreadPartition(mesh)
+        strat = Tesserae.strategy(partition)
+        groups = Tesserae.threadsafe_groups(strat)
         @test all(!isempty, groups)
         for group in groups
             for i in 1:length(group)-1, j in i+1:length(group)
@@ -51,6 +64,8 @@
         allcells = reduce(vcat, groups)
         @test length(allcells) == Tesserae.ncells(mesh)
         @test sort(allcells) == collect(1:Tesserae.ncells(mesh))
+        @test collect(Tesserae.particle_indices(partition, zeros(3, Tesserae.ncells(mesh)), first(first(groups)))) ==
+              [CartesianIndex(p, first(first(groups))) for p in 1:3]
     end
     @testset "Utilities" begin
         @test Tesserae.nodeindices_in_block(CartesianIndex(1,1), (20,20); block_size_log2=Val(2)) === CartesianIndices((1:5,1:5))

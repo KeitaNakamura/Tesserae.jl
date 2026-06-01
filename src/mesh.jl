@@ -16,7 +16,7 @@ end
 Construct a uniform Cartesian mesh with scalar spacing `h` (same in all directions).
 If an axis length is not divisible by `h`, the upper bound is expanded to cover the
 requested domain, and a warning is emitted.
-`block_size_log2` sets the block decomposition used by [`ColorPartition`](@ref) and [`SpArray`](@ref)
+`block_size_log2` sets the block decomposition used by [`ThreadPartition`](@ref) and [`SpArray`](@ref)
 grids generated from this mesh.
 
 # Examples

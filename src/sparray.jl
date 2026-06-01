@@ -406,7 +406,7 @@ end
 end
 
 # GPU particle-driven updates expand occupied blocks here instead of relying on
-# CPU ColorPartition scheduling. Multiple threads may write the same `true`;
+# CPU ThreadPartition scheduling. Multiple threads may write the same `true`;
 # only the final boolean state matters.
 @kernel function gpukernel_expand_occupied_blocks!(active_blocks, @Const(occupied_blocks))
     b = @index(Global)
@@ -430,7 +430,7 @@ function _activate_neighbor_blocks!(active, occupied, backend::GPU)
     active
 end
 
-function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, partition::ColorPartition{<: BlockStrategy}) where {dim}
+function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, partition::ThreadPartition{<: BlockStrategy}) where {dim}
     bs = strategy(partition)
     nblocks(spinds) == nblocks(bs) || throw(ArgumentError("blocks per dimension $(nblocks(spinds)) must match"))
     block_size_log2(spinds) == block_size_log2(bs) ||
@@ -439,7 +439,7 @@ function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, part
     activity = fillzero!(active_blocks(spinds))
     CI = CartesianIndices(activity)
     @inbounds for I in CI
-        if !isempty(particle_indices_in(bs, I))
+        if !isempty(particle_indices(bs, I))
             _activate_block_neighborhood!(activity, I, CI)
         end
     end

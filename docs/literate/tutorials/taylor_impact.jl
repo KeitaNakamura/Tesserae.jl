@@ -81,11 +81,11 @@ function main()
     ## Basis weights
     weights = generate_basis_weights(KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
 
-    ## Color partitioning for multi-threaded G2P transfer
+    ## Thread partitioning for multi-threaded P2G transfer
     if Threads.nthreads() == 1
         partition = nothing
     else
-        partition = ColorPartition(grid.x)
+        partition = ThreadPartition(grid.x)
     end
 
     ## Paraview output setup
@@ -117,7 +117,7 @@ function main()
         end
 
         if partition !== nothing
-            @timeit "Update color partition" begin
+            @timeit "Update thread partition" begin
                 update!(partition, particles.x)
             end
         end
@@ -275,7 +275,7 @@ end
 # Grid computation             1.83k    9.53s    2.3%  5.21ms     0.00B    0.0%    0.00B
 # Update timestep              1.83k    3.24s    0.8%  1.77ms   10.9MiB    0.1%  6.11KiB
 # Reorder particles               25    1.81s    0.4%  72.5ms   11.8GiB   55.7%   482MiB
-# Update color partition       1.83k    1.79s    0.4%   976μs   59.1MiB    0.3%  33.0KiB
+# Update thread partition      1.83k    1.79s    0.4%   976μs   59.1MiB    0.3%  33.0KiB
 # Apply boundary conditions    1.83k    126ms    0.0%  69.1μs    229MiB    1.1%   128KiB
 # ──────────────────────────────────────────────────────────────────────────────────────
 # ```

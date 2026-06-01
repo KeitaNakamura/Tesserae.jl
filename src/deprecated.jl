@@ -3,10 +3,13 @@
 Base.@deprecate_binding Interpolation Basis
 Base.@deprecate_binding InterpolationWeight BasisWeight
 Base.@deprecate_binding InterpolationWeightArray BasisWeightArray
+Base.@deprecate_binding ColorPartition ThreadPartition
 
 @deprecate generate_interpolation_weights(args...; kwargs...) generate_basis_weights(args...; kwargs...)
 @deprecate initial_neighboringnodes(args...) initial_supportnodes(args...)
 @deprecate neighboringnodes_storage(bw::BasisWeight) supportnodes_storage(bw)
+@deprecate colorgroups(args...) threadsafe_groups(args...)
+@deprecate particle_indices_in(args...) particle_indices(args...)
 
 @deprecate interpolation(bw::BasisWeight) (basis(bw)::Basis)
 @deprecate interpolation(weights::BasisWeightArray) (basis(weights)::Basis)
