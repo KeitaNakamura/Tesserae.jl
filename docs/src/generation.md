@@ -1,5 +1,8 @@
 # Grid and particle generation
 
+Grids and particles are generated from a mesh and a property type.
+For a grid, the first field is the coordinate field and is backed by the mesh itself.
+
 ```@docs
 generate_grid
 generate_particles

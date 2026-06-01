@@ -1,5 +1,8 @@
 # [Transfer between grid and particles](@id manual)
 
+Transfer macros express the two directions of MPM data movement: particle-to-grid scattering and grid-to-particle gathering.
+The same macro body can include the transfer itself and the local grid or particle calculations that follow it.
+
 ## Transfer macros
 
 ```@docs
@@ -11,21 +14,23 @@
 ## Code snippets
 
 !!! info
-    The following snippets are demonstrated in the tutorial [Transfer schemes](@ref).
+    These snippets are used in the tutorial [Transfer schemes](@ref).
 
-In this section, the following transfer schemes are presented:
+This section lists common velocity transfer schemes:
 
 * [PIC--FLIP mixed transfer](@ref)[^1]
 * [Affine PIC (APIC)](@ref)[^2]
 * [Taylor PIC (TPIC)](@ref)[^3]
 * [eXtended PIC (XPIC)](@ref)[^4]
 
+As a rough guide, PIC--FLIP is the minimal baseline, APIC improves angular momentum behavior by carrying an affine velocity field, TPIC carries a velocity gradient directly, and XPIC reduces transfer noise through a recursive correction.
+
 [^1]: [Stomakhin, A., Schroeder, C., Chai, L., Teran, J. and Selle, A., 2013. A material point method for snow simulation. ACM Transactions on Graphics (TOG), 32(4), pp.1-10.](https://doi.org/10.1145/2461912.2461948)
 [^2]: [Jiang, C., Schroeder, C., Selle, A., Teran, J. and Stomakhin, A., 2015. The affine particle-in-cell method. ACM Transactions on Graphics (TOG), 34(4), pp.1-10.](https://doi.org/10.1145/2766996)
 [^3]: [Nakamura, K., Matsumura, S. and Mizutani, T., 2023. Taylor particle-in-cell transfer and kernel correction for material point method. Computer Methods in Applied Mechanics and Engineering, 403, p.115720.](https://doi.org/10.1016/j.cma.2022.115720)
 [^4]: [Hammerquist, C.C. and Nairn, J.A., 2017. A new method for material point method particle updates that reduces noise and enhances stability. Computer methods in applied mechanics and engineering, 318, pp.724-738.](https://doi.org/10.1016/j.cma.2017.01.035)
 
-We assume that the grid and particle properties have following variables:
+The snippets below assume the following grid and particle fields:
 
 ```@example transfer
 using Tesserae #hide
@@ -127,7 +132,7 @@ m^n\bm{v}_i^n &= \sum_p w_{ip}^n m_p \left(\bm{v}_p^n + \nabla\bm{v}_p^n (\bm{x}
 end
 @G2P grid=>i particles=>p weights=>ip begin
     v[p]  = @∑ w[ip] * v[i]
-    ∇v[p] = @∑ w[ip] * v[i] ⊗ (x[i] - x[p])
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
 end
 ```
 
@@ -139,7 +144,7 @@ end
 #### Overview of XPIC
 
 We assume that $\bm{\mathsf{S}}^+$ matrix maps particle velocities to the grid and $\bm{\mathsf{S}}$ matrix maps them back.
-In XPIC, a new effective acceleration for particles, $\mathbb{A}$, is employed to update the particle velocity $\bm{V}$ and position $\bm{X}$, respectively, as
+In XPIC, a new effective acceleration for particles, $\mathbb{A}$, is used to update the particle velocity $\bm{V}$ and position $\bm{X}$ as
 
 ```math
 \begin{aligned}
@@ -176,7 +181,7 @@ starting with $\bm{v}_1^*=\bm{v}^{(k)}$.
 
 #### Implementation using Tesserae
 
-Based on the above equations, we can derive the following:
+The equations above can be written as
 
 ```math
 \begin{aligned}

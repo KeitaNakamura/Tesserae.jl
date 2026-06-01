@@ -63,11 +63,11 @@ This keeps all `SpArray` fields using the same active blocks.
 ## GPU usage
 
 On GPU, `ColorPartition` is not used.
-Move the grid, particles, and interpolation weights to the GPU, then update the sparse grid directly from particle positions:
+Move the grid, particles, and basis weights to the GPU, then update the sparse grid directly from particle positions:
 
 ```julia
 grid = generate_grid(SpArray, GridProp, mesh)
-weights = generate_interpolation_weights(Float32, BSpline(Quadratic()), grid.x, length(particles))
+weights = generate_basis_weights(Float32, BSpline(Quadratic()), grid.x, length(particles))
 
 grid, particles, weights = (grid, particles, weights) .|> gpu
 

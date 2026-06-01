@@ -8,7 +8,7 @@
 # | ----------- | ------------ | --------------------------- |
 # | 28k         | 3.5k         | 10 min                      |
 #
-# This example employs stabilized mixed MPM with the variational multiscale method[^1].
+# This tutorial uses stabilized mixed MPM with the variational multiscale method for incompressible fluid flow[^1].
 #
 # [^1]: [Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.](https://doi.org/10.1016/j.cma.2023.116644)
 

@@ -1,4 +1,4 @@
-# # Multi-threading simualtion
+# # [Multi-threading simulation](@id taylor_impact_tutorial)
 #
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/cd5b926f-4613-4dd5-ac54-181c80b9d8b7" width="400"/>
@@ -8,54 +8,15 @@
 # | ----------- | ------------ | ----------------------------|
 # | 1.5M        | 1.8k         | 6 min (8 threads)           |
 #
-# This example simulates a Taylor impact test using multi-threading.
+# This tutorial uses a Taylor impact test to demonstrate multi-threaded MPM simulation.
 #
+
+# ## Taylor impact simulation
 
 using Tesserae
 
 using StableRNGs
 using TimerOutputs
-
-function vonmises_model(Cᵖⁿ⁻¹, ε̄ᵖⁿ, F; λ, μ, H, τ̄y⁰)
-    κ = λ + 2μ/3                             # Bulk modulus
-    J = det(F)                               # Jacobian
-    p = κ * log(J) / J                       # Pressure
-    bᵉᵗʳ = symmetric(F * Cᵖⁿ⁻¹ * F')         # Trial left Cauchy-Green tensor
-    vals, vecs = eigen(bᵉᵗʳ)                 # Eigenvalue decomposition
-    λᵉᵗʳ = sqrt.(vals)                       # Trial stretches
-    nᵗʳₐ = (vecs[:,1], vecs[:,2], vecs[:,3]) # Principal directions
-    τ′ᵗʳ = @. 2μ*log(λᵉᵗʳ) - 2μ/3*log(J)     # Trial Kirchhoff stress
-
-    f(τ) = sqrt(3τ⋅τ/2) - (τ̄y⁰ + H*ε̄ᵖⁿ) # Yield function
-    dfdσ, fᵗʳ = gradient(f, τ′ᵗʳ, :all)
-    if fᵗʳ > 0
-        ν = τ′ᵗʳ / (sqrt(2/3) * norm(τ′ᵗʳ)) # Direction vector
-        Δγ = fᵗʳ / (3μ + H)                 # Incremental plastic multiplier
-        Δεᵖ = Δγ * dfdσ                     # Incremental logarithmic plastic stretch
-        λᵉ = @. exp(log(λᵉᵗʳ) - Δεᵖ)        # Elastic stretch
-        τ′ = τ′ᵗʳ - 2μ*Δεᵖ                  # Return map
-    else # Elastic response
-        Δγ = zero(H)
-        λᵉ = λᵉᵗʳ
-        τ′ = τ′ᵗʳ
-    end
-
-    ## Update inverse of elastic left Cauchy-Green tensor
-    nₐ = nᵗʳₐ
-    bᵉ = mapreduce((λᵉ,nₐ) -> λᵉ^2 * nₐ^⊗(2), +, λᵉ, nₐ)
-
-    ## Update stress
-    σ′ = τ′ / J    # Principal deviatoric Cauchy stress
-    σ  = @. σ′ + p # Principal Cauchy stress
-    σ  = mapreduce((σ,nₐ) -> σ * nₐ^⊗(2), +, σ, nₐ)
-
-    ## Update state variables
-    F⁻¹ = inv(F)
-    Cᵖ⁻¹ = symmetric(F⁻¹ * bᵉ * F⁻¹') # Update plastic right Cauchy-Green tensor
-    ε̄ᵖ = ε̄ᵖⁿ + Δγ                     # Update equivalent plastic strain
-
-    σ, Cᵖ⁻¹, ε̄ᵖ
-end
 
 function main()
 
@@ -230,6 +191,49 @@ function main()
     end
     print_timer()
     sum(particles.x) / length(particles) #src
+end
+
+# ## von Mises material model
+
+function vonmises_model(Cᵖⁿ⁻¹, ε̄ᵖⁿ, F; λ, μ, H, τ̄y⁰)
+    κ = λ + 2μ/3                             # Bulk modulus
+    J = det(F)                               # Jacobian
+    p = κ * log(J) / J                       # Pressure
+    bᵉᵗʳ = symmetric(F * Cᵖⁿ⁻¹ * F')         # Trial left Cauchy-Green tensor
+    vals, vecs = eigen(bᵉᵗʳ)                 # Eigenvalue decomposition
+    λᵉᵗʳ = sqrt.(vals)                       # Trial stretches
+    nᵗʳₐ = (vecs[:,1], vecs[:,2], vecs[:,3]) # Principal directions
+    τ′ᵗʳ = @. 2μ*log(λᵉᵗʳ) - 2μ/3*log(J)     # Trial Kirchhoff stress
+
+    f(τ) = sqrt(3τ⋅τ/2) - (τ̄y⁰ + H*ε̄ᵖⁿ) # Yield function
+    dfdσ, fᵗʳ = gradient(f, τ′ᵗʳ, :all)
+    if fᵗʳ > 0
+        ν = τ′ᵗʳ / (sqrt(2/3) * norm(τ′ᵗʳ)) # Direction vector
+        Δγ = fᵗʳ / (3μ + H)                 # Incremental plastic multiplier
+        Δεᵖ = Δγ * dfdσ                     # Incremental logarithmic plastic stretch
+        λᵉ = @. exp(log(λᵉᵗʳ) - Δεᵖ)        # Elastic stretch
+        τ′ = τ′ᵗʳ - 2μ*Δεᵖ                  # Return map
+    else # Elastic response
+        Δγ = zero(H)
+        λᵉ = λᵉᵗʳ
+        τ′ = τ′ᵗʳ
+    end
+
+    ## Update inverse of elastic left Cauchy-Green tensor
+    nₐ = nᵗʳₐ
+    bᵉ = mapreduce((λᵉ,nₐ) -> λᵉ^2 * nₐ^⊗(2), +, λᵉ, nₐ)
+
+    ## Update stress
+    σ′ = τ′ / J    # Principal deviatoric Cauchy stress
+    σ  = @. σ′ + p # Principal Cauchy stress
+    σ  = mapreduce((σ,nₐ) -> σ * nₐ^⊗(2), +, σ, nₐ)
+
+    ## Update state variables
+    F⁻¹ = inv(F)
+    Cᵖ⁻¹ = symmetric(F⁻¹ * bᵉ * F⁻¹') # Update plastic right Cauchy-Green tensor
+    ε̄ᵖ = ε̄ᵖⁿ + Δγ                     # Update equivalent plastic strain
+
+    σ, Cᵖ⁻¹, ε̄ᵖ
 end
 
 #

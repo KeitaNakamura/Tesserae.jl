@@ -8,72 +8,12 @@
 # | ----------- | ------------ | ----------------------------|
 # | 19k         | 8k           | 20 sec                      |
 #
-# ## Drucker--Prager model
-
-using Tesserae
-
-@kwdef struct DruckerPrager
-    λ  :: Float64            # Lame's first parameter
-    G  :: Float64            # Shear modulus
-    ϕ  :: Float64            # Internal friction angle
-    ψ  :: Float64 = ϕ        # Dilatancy angle
-    c  :: Float64 = 0.0      # Cohesion
-    pₜ :: Float64 = c/tan(ϕ) # Mean stress for tension limit
-    ## Assume plane strain condition
-    A  :: Float64 = 3√2c      / sqrt(9+12tan(ϕ)^2)
-    B  :: Float64 = 3√2tan(ϕ) / sqrt(9+12tan(ϕ)^2)
-    b  :: Float64 = 3√2tan(ψ) / sqrt(9+12tan(ψ)^2)
-end
-
-function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, ∇u::SecondOrderTensor{3})
-    δ = one(SymmetricSecondOrderTensor{3})
-    I = one(SymmetricFourthOrderTensor{3})
-
-    (; λ, G, A, B, b, pₜ) = model
-
-    f(σ) = norm(dev(σ)) - (A - B*tr(σ)/3) # Yield function
-    g(σ) = norm(dev(σ)) + b*tr(σ)/3       # Plastic potential function
-
-    ## Elastic predictor
-    cᵉ = λ*δ⊗δ + 2G*I
-    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(σⁿ * skew(∇u)) # Consider Jaumann stress-rate
-    dfdσ, fᵗʳ = gradient(f, σᵗʳ, :all)
-    fᵗʳ ≤ 0 && tr(σᵗʳ)/3 ≤ pₜ && return σᵗʳ
-
-    ## Plastic corrector
-    dgdσ = gradient(g, σᵗʳ)
-    Δλ = fᵗʳ / (dfdσ ⊡₂ cᵉ ⊡₂ dgdσ)
-    Δεᵖ = Δλ * dgdσ
-    σ = σᵗʳ - cᵉ ⊡₂ Δεᵖ
-
-    ## Simple tension cutoff
-    if !(tr(σ)/3 ≤ pₜ) # σᵗʳ is not in zone1
-        ##
-        ## \<- yield surface
-        ##  \         /
-        ##   \ zone1 /
-        ##    \     /   zone2
-        ##     \   /
-        ##      \ /______________
-        ##       |
-        ##       |      zone3
-        ##       |
-        ## ------------------------> p
-        ##       pₜ
-        ##
-        s = dev(σᵗʳ)
-        σ = pₜ*δ + s
-        if f(σ) > 0 # σ is in zone2
-            ## Map to corner
-            p = tr(σ) / 3
-            σ = pₜ*δ + (A-B*p)*normalize(s)
-        end
-    end
-
-    σ
-end
+# This tutorial simulates the collapse of a sand column using a Drucker--Prager material model.
+# The full simulation is shown first, followed by the material update used inside `main`.
 
 # ## Sand column collapse
+
+using Tesserae
 
 function main()
 
@@ -221,6 +161,69 @@ function main()
         end
     end
     sum(particles.x) / length(particles) #src
+end
+
+# ## Drucker--Prager model
+
+@kwdef struct DruckerPrager
+    λ  :: Float64            # Lame's first parameter
+    G  :: Float64            # Shear modulus
+    ϕ  :: Float64            # Internal friction angle
+    ψ  :: Float64 = ϕ        # Dilatancy angle
+    c  :: Float64 = 0.0      # Cohesion
+    pₜ :: Float64 = c/tan(ϕ) # Mean stress for tension limit
+    ## Assume plane strain condition
+    A  :: Float64 = 3√2c      / sqrt(9+12tan(ϕ)^2)
+    B  :: Float64 = 3√2tan(ϕ) / sqrt(9+12tan(ϕ)^2)
+    b  :: Float64 = 3√2tan(ψ) / sqrt(9+12tan(ψ)^2)
+end
+
+function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3}, ∇u::SecondOrderTensor{3})
+    δ = one(SymmetricSecondOrderTensor{3})
+    I = one(SymmetricFourthOrderTensor{3})
+
+    (; λ, G, A, B, b, pₜ) = model
+
+    f(σ) = norm(dev(σ)) - (A - B*tr(σ)/3) # Yield function
+    g(σ) = norm(dev(σ)) + b*tr(σ)/3       # Plastic potential function
+
+    ## Elastic predictor
+    cᵉ = λ*δ⊗δ + 2G*I
+    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(σⁿ * skew(∇u)) # Consider Jaumann stress-rate
+    dfdσ, fᵗʳ = gradient(f, σᵗʳ, :all)
+    fᵗʳ ≤ 0 && tr(σᵗʳ)/3 ≤ pₜ && return σᵗʳ
+
+    ## Plastic corrector
+    dgdσ = gradient(g, σᵗʳ)
+    Δλ = fᵗʳ / (dfdσ ⊡₂ cᵉ ⊡₂ dgdσ)
+    Δεᵖ = Δλ * dgdσ
+    σ = σᵗʳ - cᵉ ⊡₂ Δεᵖ
+
+    ## Simple tension cutoff
+    if !(tr(σ)/3 ≤ pₜ) # σᵗʳ is not in zone1
+        ##
+        ## \<- yield surface
+        ##  \         /
+        ##   \ zone1 /
+        ##    \     /   zone2
+        ##     \   /
+        ##      \ /______________
+        ##       |
+        ##       |      zone3
+        ##       |
+        ## ------------------------> p
+        ##       pₜ
+        ##
+        s = dev(σᵗʳ)
+        σ = pₜ*δ + s
+        if f(σ) > 0 # σ is in zone2
+            ## Map to corner
+            p = tr(σ) / 3
+            σ = pₜ*δ + (A-B*p)*normalize(s)
+        end
+    end
+
+    σ
 end
 
 using Test                             #src

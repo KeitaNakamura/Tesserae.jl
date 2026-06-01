@@ -8,8 +8,8 @@
 # | ----------- | ------------ | --------------------------- |
 # | 8k          | 27k          | 30 sec                      |
 #
-# This example demonstrates the total lagrangian material point method[^1].
-# The implementation solves generalized vortex problem[^1] using a linear kernel.
+# This tutorial demonstrates the total Lagrangian material point method[^1].
+# It solves the generalized vortex problem[^1] using a linear kernel.
 #
 # !!! note
 #     Currently, the Bernstein function used in the paper[^1] has not been implemented.

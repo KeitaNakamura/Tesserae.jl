@@ -1,12 +1,12 @@
 # Export
 
-In Tesserae, exporting VTK files for visualization is supported.
-These functionalities are built on the [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl) package.
+Tesserae supports VTK output for visualization.
+The export functions are built on the [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl) package.
 
 ## VTK file
 
-To export the mesh or particles, use `openvtk` and `closevtk` functions.
-First, we prepare following `grid` and `particles`:
+To export a mesh or particles, use `openvtk` and `closevtk`.
+First, prepare a `grid` and `particles`:
 
 ```@example vtk
 using Tesserae #hide
@@ -46,7 +46,7 @@ openvtk("grid", grid.x) do vtk
 end
 ```
 
-For `particles`, the same instruction is available:
+Particles can be exported in the same way:
 
 ```@example vtk
 # without do block
@@ -72,12 +72,12 @@ openvtm("grid_and_particles") do vtm
         vtk["Force"] = grid.f
     end
     openvtk(vtm, particles.x) do vtk
-        vtk["Velocity"] = particles.x
+        vtk["Velocity"] = particles.v
     end
 end
 ```
 
-## ParaView collection file 
+## ParaView collection file
 
 A ParaView collection file (`pvd`) represents a time series of VTK files.
 
@@ -90,7 +90,7 @@ for (step, t) in enumerate(range(0, 10, step=0.5))
     # Simulation...
 
     # Reopening and closing the file at each time step allows us
-    # to visualize intermediate results # without having to wait
+    # to visualize intermediate results without having to wait
     # for the simulation to finish.
     openpvd(filename; append=true) do pvd
         openvtm(string(filename, step)) do vtm

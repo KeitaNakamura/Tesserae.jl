@@ -3,6 +3,9 @@
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/74a9fad8-da97-4ce6-8217-838fe96660ac" width="400"/>
 # ```
+#
+# This short example solves a heat equation with the experimental FEM workflow.
+# It shows how to generate an unstructured mesh, assemble a scalar stiffness matrix, and export the result.
 
 using Tesserae
 using LinearAlgebra
