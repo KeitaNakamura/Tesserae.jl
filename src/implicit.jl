@@ -425,13 +425,24 @@ end
 
 @inline function matrix_supportnodes(bw, grid)
     @_propagate_inbounds_meta
-    nodes = supportnodes(bw, grid)
+    # Matrix assembly indexes global DOF tables, which are built on logical
+    # grid indices. For an SpGrid, supportnodes(bw, grid) returns SpIndex
+    # storage tokens instead. Using those here would require SpIndex to fully
+    # support AbstractArray indexing.
+    nodes = supportnodes(bw)
+    @boundscheck checkbounds(get_mesh(grid), nodes)
     nodes, nodes
 end
 
 @inline function matrix_supportnodes(bw_i, grid_i, bw_j, grid_j)
     @_propagate_inbounds_meta
-    supportnodes(bw_i, grid_i), supportnodes(bw_j, grid_j)
+    # See the single-grid method: matrix DOF tables need logical grid indices,
+    # not SpGrid storage tokens.
+    nodes_i = supportnodes(bw_i)
+    nodes_j = supportnodes(bw_j)
+    @boundscheck checkbounds(get_mesh(grid_i), nodes_i)
+    @boundscheck checkbounds(get_mesh(grid_j), nodes_j)
+    nodes_i, nodes_j
 end
 
 function matrix_dof_tables(gmat, row_grid, col_grid)
