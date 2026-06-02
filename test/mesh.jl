@@ -11,6 +11,8 @@
     @test size(covered_mesh) === (5,)
     @test covered_mesh[1] === Vec(0.0)
     @test covered_mesh[end] === Vec(1.2)
+    quiet_covered_mesh = @test_nowarn CartesianMesh(0.3, (0,1); warn=false)
+    @test quiet_covered_mesh == covered_mesh
     for n in (2, 3, 7, 10)
         L = 1.0
         exact_cover_mesh = @test_nowarn CartesianMesh(L/n, (0, L))

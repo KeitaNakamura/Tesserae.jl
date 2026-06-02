@@ -11,11 +11,11 @@ function _check_block_size_log2(::Val{L}) where {L}
 end
 
 """
-    CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...; block_size_log2=Val(2))
+    CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...; warn=true, block_size_log2=Val(2))
 
 Construct a uniform Cartesian mesh with scalar spacing `h` (same in all directions).
 If an axis length is not divisible by `h`, the upper bound is expanded to cover the
-requested domain, and a warning is emitted.
+requested domain. Set `warn=false` to suppress the expansion warning.
 `block_size_log2` sets the block decomposition used by [`ThreadPartition`](@ref) and [`SpArray`](@ref)
 grids generated from this mesh.
 
@@ -68,23 +68,23 @@ function CartesianMesh(axes::Vararg{AbstractRange{<: AbstractFloat}, dim}; block
     CartesianMesh(axes, h, inv(h); block_size_log2)
 end
 
-function _covered_axis(h::Real, lims::Tuple{Real, Real})
+function _covered_axis(h::Real, lims::Tuple{Real, Real}; warn::Bool)
     xmin, xmax = lims
     ax = range(xmin, xmax; step=h)
     n = length(ax)
     if !isapprox(last(ax), xmax)
         actual_xmax = xmin + n*h
         n += 1
-        @warn "CartesianMesh axis length is not divisible by spacing; expanding the upper bound to cover the requested domain" requested=lims actual=(xmin, actual_xmax) spacing=h
+        warn && @warn "CartesianMesh axis length is not divisible by spacing; expanding the upper bound to cover the requested domain" requested=lims actual=(xmin, actual_xmax) spacing=h
     end
     range(xmin; step=h, length=n)
 end
 
-function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}; pad::Int = 0, block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)) where {T, dim, L}
+function CartesianMesh(::Type{T}, h::Real, minmax::Vararg{Tuple{Real, Real}, dim}; pad::Int = 0, warn::Bool = true, block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)) where {T, dim, L}
     @assert all(x->x[1]<x[2], minmax)
 
     axes = map(minmax) do lims
-        ax = _covered_axis(h, lims)
+        ax = _covered_axis(h, lims; warn)
         pad == 0 && return Vector{T}(ax)
 
         start = first(ax) - pad*h
