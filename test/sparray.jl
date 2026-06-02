@@ -385,4 +385,49 @@ end
     @test Tesserae.nblocks(Tesserae.get_spinds(grid_block3)) === Tesserae.nblocks(Tesserae.strategy(partition_block3))
 end
 
+@testset "@P2G_Matrix" begin
+    basis = BSpline(Linear())
+    mesh = CartesianMesh(1.0, (0,31), (0,31); block_size_log2=Val(2))
+    GridProp = @NamedTuple{x::Vec{2, Float64}, m::Float64}
+    ParticleProp = @NamedTuple{x::Vec{2, Float64}}
+
+    dense_grid = generate_grid(GridProp, mesh)
+    sp_grid = generate_grid(SpArray, GridProp, mesh)
+    particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
+    filter!(particles) do p
+        x = p.x
+        (x[1] - 2)^2 + (x[2] - 2)^2 < 2
+    end
+    weights = generate_basis_weights(basis, mesh, length(particles))
+    update!(weights, particles, mesh)
+    update_sparsity!(sp_grid, particles.x)
+
+    @test length(collect(Tesserae.activeindices(Tesserae.get_spinds(sp_grid)))) < length(dense_grid)
+    @test eltype(supportnodes(weights[1], sp_grid)) <: Tesserae.SpIndex
+
+    A_dense = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+    A_sp = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+    A = A_dense
+    @P2G_Matrix dense_grid=>(i,j) particles=>p weights=>(ip,jp) begin
+        A[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+    end
+    A = A_sp
+    @P2G_Matrix sp_grid=>(i,j) particles=>p weights=>(ip,jp) begin
+        A[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+    end
+    @test A_sp ≈ A_dense
+
+    B_dense = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+    B_sp = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+    B = B_dense
+    @P2G_Matrix (dense_grid,dense_grid)=>(i,j) particles=>p (weights,weights)=>(ip,jp) begin
+        B[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+    end
+    B = B_sp
+    @P2G_Matrix (sp_grid,dense_grid)=>(i,j) particles=>p (weights,weights)=>(ip,jp) begin
+        B[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+    end
+    @test B_sp ≈ B_dense
+end
+
 end
