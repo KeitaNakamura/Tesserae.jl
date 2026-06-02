@@ -330,8 +330,6 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         ((gi == i && gj == j) || (gi == j && gj == i)) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
         gmat in gmats && error("@P2G_Matrix: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
 
-        is_transposed_lhs = gi == j && gj == i
-
         lmat = gensym(gmat)
         gdofs_i = gensym(Symbol(gmat, :gdofs_i))
         gdofs_j = gensym(Symbol(gmat, :gdofs_j))
@@ -346,17 +344,21 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         op == :(-=) && (rhs = :(-$rhs))
         lmat_dims = Symbol(lmat, :dims)
         push!(gmats, gmat)
-        push!(gdofs_init, :(($gdofs_i, $gdofs_j) = $_get_matrix_gdofs($gmat, $grid_i, $grid_j, Val($is_transposed_lhs))))
+        if gi == i && gj == j
+            push!(gdofs_init, :(($gdofs_i, $gdofs_j) = Tesserae.matrix_dof_tables($gmat, $grid_i, $grid_j)))
+        else
+            push!(gdofs_init, :(($gdofs_j, $gdofs_i) = Tesserae.matrix_dof_tables($gmat, $grid_j, $grid_i)))
+        end
         push!(lmat_init, quote
-            $ldofs_i = LinearIndices((size($gdofs_i, 1), size($gridindices_i)...))
-            $ldofs_j = LinearIndices((size($gdofs_j, 1), size($gridindices_j)...))
+            $ldofs_i = Tesserae.local_dof_table($gdofs_i, $gridindices_i)
+            $ldofs_j = Tesserae.local_dof_table($gdofs_j, $gridindices_j)
             $lmat_dims = length($ldofs_i), length($ldofs_j)
             $lmat = get!(()->Array{eltype($gmat)}(undef, $lmat_dims), $(Symbol(gmat,:dict))[], $lmat_dims)
         end)
-        push!(local_jdofs, :($J = vec(view($ldofs_j, :, $jp))))
-        push!(local_idofs, :($I = vec(view($ldofs_i, :, $ip))))
+        push!(local_jdofs, :($J = Tesserae.local_dofs($ldofs_j, $jp)))
+        push!(local_idofs, :($I = Tesserae.local_dofs($ldofs_i, $ip)))
         push!(lmat_asm, :(@inbounds $lmat[$I,$J] .= $rhs))
-        push!(gdofs_extract, :(($dofs_i, $dofs_j) = $_get_dofs($gdofs_i, $gridindices_i, $gdofs_j, $gridindices_j)))
+        push!(gdofs_extract, :(($dofs_i, $dofs_j) = Tesserae.support_dofs($gdofs_i, $gridindices_i, $gdofs_j, $gridindices_j)))
         if gi == i && gj == j
             push!(lmat2gmat, :(Tesserae.add!($gmat, $dofs_i, $dofs_j, $lmat)))
         else
@@ -364,11 +366,16 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         end
     end
 
-    coupling = grid_i != grid_j
+    supportnodes_expr = if grid_i == grid_j && weights_i == weights_j
+        :(($gridindices_i, $gridindices_j) = Tesserae.matrix_supportnodes($bw_i, $grid_i′))
+    else
+        :(($gridindices_i, $gridindices_j) = Tesserae.matrix_supportnodes($bw_i, $grid_i′, $bw_j, $grid_j′))
+    end
+
     body = quote
         $(replaced[3]...)
         $bw_i, $bw_j = $weights_i′[$p], $weights_j′[$p]
-        $gridindices_i, $gridindices_j = $_get_supportnodes($bw_i, $grid_i′, $bw_j, $grid_j′, Val($coupling))
+        $supportnodes_expr
         $(lmat_init...)
         for $jp in eachindex($gridindices_j)
             $j = $gridindices_j[$jp]
@@ -416,27 +423,41 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     esc(interpolate_transfer_values(body, program))
 end
 
-@inline _get_supportnodes(bw_i, grid_i, bw_j, grid_j, ::Val{true}) = (@_propagate_inbounds_meta; (supportnodes(bw_i, grid_i), supportnodes(bw_j, grid_j)))
-@inline _get_supportnodes(bw_i, grid_i, bw_j, grid_j, ::Val{false}) = (@_propagate_inbounds_meta; inds=supportnodes(bw_i, grid_i); (inds, inds))
-function _get_matrix_gdofs(gmat, grid_i, grid_j, ::Val{false})
-    gdofs_i = LinearIndices((size(gmat, 1) ÷ length(grid_i), size(grid_i)...))
-    gdofs_j = LinearIndices((size(gmat, 2) ÷ length(grid_j), size(grid_j)...))
-    @assert size(gmat) == (length(gdofs_i), length(gdofs_j))
-    gdofs_i, gdofs_j
-end
-function _get_matrix_gdofs(gmat, grid_i, grid_j, ::Val{true})
-    gdofs_i = LinearIndices((size(gmat, 2) ÷ length(grid_i), size(grid_i)...))
-    gdofs_j = LinearIndices((size(gmat, 1) ÷ length(grid_j), size(grid_j)...))
-    @assert size(gmat) == (length(gdofs_j), length(gdofs_i))
-    gdofs_i, gdofs_j
-end
-@inline function _get_dofs(gdofs_i, gridindices_i, gdofs_j, gridindices_j)
+@inline function matrix_supportnodes(bw, grid)
     @_propagate_inbounds_meta
-    if size(gdofs_i, 1) == size(gdofs_j, 1) && gridindices_i === gridindices_j
-        dofs = vec(gdofs_i[:, gridindices_i])
+    nodes = supportnodes(bw, grid)
+    nodes, nodes
+end
+
+@inline function matrix_supportnodes(bw_i, grid_i, bw_j, grid_j)
+    @_propagate_inbounds_meta
+    supportnodes(bw_i, grid_i), supportnodes(bw_j, grid_j)
+end
+
+function matrix_dof_tables(gmat, row_grid, col_grid)
+    row_table = LinearIndices((size(gmat, 1) ÷ length(row_grid), size(row_grid)...))
+    col_table = LinearIndices((size(gmat, 2) ÷ length(col_grid), size(col_grid)...))
+    @assert size(gmat) == (length(row_table), length(col_table))
+    row_table, col_table
+end
+
+@inline function local_dof_table(dof_table, nodes)
+    @_propagate_inbounds_meta
+    LinearIndices((size(dof_table, 1), size(nodes)...))
+end
+
+@inline function local_dofs(local_table, ip)
+    @_propagate_inbounds_meta
+    vec(view(local_table, :, ip))
+end
+
+@inline function support_dofs(table_i, nodes_i, table_j, nodes_j)
+    @_propagate_inbounds_meta
+    if size(table_i, 1) == size(table_j, 1) && nodes_i === nodes_j
+        dofs = vec(table_i[:, nodes_i])
         return dofs, dofs
     else
-        return vec(gdofs_i[:, gridindices_i]), vec(gdofs_j[:, gridindices_j])
+        return vec(table_i[:, nodes_i]), vec(table_j[:, nodes_j])
     end
 end
 
