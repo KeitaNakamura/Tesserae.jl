@@ -91,6 +91,8 @@ export
     @P2G,
     @G2P,
     @G2P2G,
+    @explain,
+    ExplainedCode,
 # implicit
     DofMap,
     ndofs,
@@ -134,6 +136,7 @@ include("fem.jl")
 
 include("transfer.jl")
 include("implicit.jl")
+include("explain.jl")
 
 include("export.jl")
 include("gpu.jl")

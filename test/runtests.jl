@@ -16,6 +16,7 @@ include("shapes.jl")
 
 include("transfer.jl")
 include("implicit.jl")
+include("explain.jl")
 
 include("export.jl")
 
