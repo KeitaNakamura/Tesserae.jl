@@ -226,7 +226,7 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
             $(sum_exprs...)
         end
     end
-    
+
     Expr(:block, fillzeros...), body
 end
 
@@ -518,6 +518,32 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     code
 end
 
+function basis_weight_symbols(expr, weights, p, grid)
+    bw = gridindices = nothing
+    MacroTools.postwalk(expr) do ex
+        if Meta.isexpr(ex, :(=), 2)
+            ex.args[2] == :($weights[$p]) && (bw = ex.args[1])
+            bw !== nothing && ex.args[2] == :(supportnodes($bw, $grid)) && (gridindices = ex.args[1])
+        end
+        ex
+    end
+    gridindices === nothing ? nothing : (bw, gridindices)
+end
+
+function reuse_basis_weight(expr::Expr, shared_basis_weight, weights, p, grid)
+    basis_weight = basis_weight_symbols(expr, weights, p, grid)
+    basis_weight === nothing && return expr
+
+    bw, gridindices = basis_weight
+    shared_bw, shared_gridindices = shared_basis_weight
+    MacroTools.prewalk(expr) do ex
+        Meta.isexpr(ex, :(=), 2) && ex.args[1] in (bw, gridindices) && return Expr(:block)
+        ex == bw && return shared_bw
+        ex == gridindices && return shared_gridindices
+        ex
+    end
+end
+
 """
     @G2P2G grid=>i particles=>p weights=>ip [partition] begin
         equations...
@@ -609,9 +635,11 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
     end
     body = Expr(:block)
+    shared_basis_weight = nothing
 
     if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
         expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum)
+        shared_basis_weight = basis_weight_symbols(expr, weights, p, grid)
         body = quote
             $body
             $expr
@@ -620,6 +648,9 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
 
     if !isempty(stages.p2g_sum)
         pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum)
+        if shared_basis_weight !== nothing
+            expr = reuse_basis_weight(expr, shared_basis_weight, weights, p, grid)
+        end
         code = quote
             $code
             $pre

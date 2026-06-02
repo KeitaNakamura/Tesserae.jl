@@ -211,6 +211,16 @@
         @test actual_particles.σ ≈ expected_particles.σ
         @test actual_grid.f ≈ expected_grid.f
         @test actual_grid.v ≈ expected_grid.v
+
+        expanded = sprint(show, MIME("text/plain"), macroexpand(@__MODULE__, quote
+            @G2P2G grid=>i particles=>p weights=>ip begin
+                a[p] = @∑ w[ip] * v[i]
+                v[p] += a[p] * Δt
+                m[i] = @∑ w[ip] * m[p]
+            end
+        end))
+        @test count(_ -> true, eachmatch(r"supportnodes", expanded)) == 1
+        @test count(_ -> true, eachmatch(r"weights\[p\]", expanded)) == 1
     end
 
     @testset "interpolation" begin
