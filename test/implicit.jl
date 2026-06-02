@@ -156,6 +156,40 @@
         @test Aplus ≈ Abase + Aterm
         @test Aminus ≈ Abase - Aterm
     end
+    @testset "matrix assembly helpers" begin
+        A = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        B = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
+
+        table_i, table_j = Tesserae.matrix_dof_tables(A, grid, grid)
+        @test size(table_i) == (2, size(grid)...)
+        @test size(table_j) == (1, size(grid)...)
+        @test size(A) == (length(table_i), length(table_j))
+
+        table_j_transposed, table_i_transposed = Tesserae.matrix_dof_tables(B, grid, grid)
+        @test size(table_i_transposed) == size(table_i)
+        @test size(table_j_transposed) == size(table_j)
+        @test size(B) == (length(table_j_transposed), length(table_i_transposed))
+
+        bw = first(weights)
+        nodes_i, nodes_j = Tesserae.matrix_supportnodes(bw, grid)
+        @test nodes_i === nodes_j
+        @test Tesserae.matrix_supportnodes(bw, grid, bw, grid) == (nodes_i, nodes_j)
+
+        local_i = Tesserae.local_dof_table(table_i, nodes_i)
+        local_j = Tesserae.local_dof_table(table_j, nodes_j)
+        ip = first(eachindex(nodes_i))
+        jp = first(eachindex(nodes_j))
+        @test Tesserae.local_dofs(local_i, ip) == vec(view(local_i, :, ip))
+        @test Tesserae.local_dofs(local_j, jp) == vec(view(local_j, :, jp))
+
+        dofs_i, dofs_j = Tesserae.support_dofs(table_i, nodes_i, table_j, nodes_j)
+        @test dofs_i == vec(table_i[:, nodes_i])
+        @test dofs_j == vec(table_j[:, nodes_j])
+
+        scalar_table_i, scalar_table_j = Tesserae.matrix_dof_tables(create_sparse_matrix(basis, mesh; ndofs=1), grid, grid)
+        scalar_dofs_i, scalar_dofs_j = Tesserae.support_dofs(scalar_table_i, nodes_i, scalar_table_j, nodes_j)
+        @test scalar_dofs_i === scalar_dofs_j
+    end
 end
 
 @testset "Backtracking" begin
