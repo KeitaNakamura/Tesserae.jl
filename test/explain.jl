@@ -30,6 +30,47 @@
         grid, particles, weights
     end
 
+    function spgrid_explain_setup()
+        T = Float64
+        GridProp = @NamedTuple begin
+            x  :: Vec{2,T}
+            m  :: T
+            mv :: Vec{2,T}
+            v  :: Vec{2,T}
+            vn :: Vec{2,T}
+        end
+        ParticleProp = @NamedTuple begin
+            x :: Vec{2,T}
+            m :: T
+            v :: Vec{2,T}
+            a :: Vec{2,T}
+        end
+
+        mesh = CartesianMesh(1.0, (0,31), (0,31); block_size_log2=Val(2))
+        grid = generate_grid(SpArray, GridProp, mesh)
+        particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
+        filter!(particles) do p
+            x = p.x
+            (x[1] - 2)^2 + (x[2] - 2)^2 < 2
+        end
+        weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))
+        update!(weights, particles, mesh)
+        update_sparsity!(grid, particles.x)
+
+        for p in eachindex(particles)
+            particles.m[p] = 1 + 0.1p
+            particles.v[p] = Vec(sin(p), cos(p))
+            particles.a[p] = Vec(0.01p, -0.02p)
+        end
+        for i in Tesserae.activeindices(Tesserae.get_spinds(grid))
+            x = grid.x[i]
+            grid.v[i] = Vec(0.1 * x[1], 0.2 * x[2])
+            grid.vn[i] = Vec(0.05 * x[1], 0.1 * x[2])
+        end
+
+        grid, particles, weights
+    end
+
     function explained_function(ex, argnames)
         eval(:(($(argnames...),) -> begin
             $(ex.code)
@@ -45,6 +86,39 @@
             $code
             nothing
         end))
+    end
+
+    run_displayed(ex, argnames, args...) = Base.invokelatest(displayed_function(ex, argnames), args...)
+
+    function test_grid_equal(actual, expected)
+        @test actual.m ≈ expected.m
+        @test actual.mv ≈ expected.mv
+        @test actual.vn ≈ expected.vn
+        @test actual.v ≈ expected.v
+    end
+
+    function test_particles_equal(actual, expected)
+        @test actual.x ≈ expected.x
+        @test actual.v ≈ expected.v
+        @test actual.a ≈ expected.a
+    end
+
+    function macroexpand_error(ex)
+        try
+            macroexpand(@__MODULE__, ex)
+        catch err
+            return sprint(showerror, err)
+        end
+        error("expected macro expansion to fail")
+    end
+
+    function test_rejected_by_actual_and_explain(actual, explained, needles)
+        actual_msg = macroexpand_error(actual)
+        explained_msg = macroexpand_error(explained)
+        for needle in needles
+            @test occursin(needle, actual_msg)
+            @test occursin(needle, explained_msg)
+        end
     end
 
     @testset "P2G" begin
@@ -262,6 +336,252 @@
         @test count(_ -> true, eachmatch(r"bw = weights\[p\]", shown)) == 1
         @test count(_ -> true, eachmatch(r"nodes = supportnodes\(bw, grid\)", shown)) == 1
         @test occursin("Threads.@threads :dynamic for region in group", sprint(show, MIME("text/plain"), ex_threaded))
+    end
+
+    @testset "Invalid transfer programs" begin
+        test_rejected_by_actual_and_explain(
+            quote
+                @P2G grid=>i particles=>p weights=>ip begin
+                    a[p] = @∑ w[ip] * v[p]
+                end
+            end,
+            quote
+                @explain @P2G grid=>i particles=>p weights=>ip begin
+                    a[p] = @∑ w[ip] * v[p]
+                end
+            end,
+            ("invalid LHS index", "must be [i]"),
+        )
+
+        test_rejected_by_actual_and_explain(
+            quote
+                @G2P grid=>i particles=>p weights=>ip begin
+                    v_pic = @∑ w[ip] * v[i]
+                end
+            end,
+            quote
+                @explain @G2P grid=>i particles=>p weights=>ip begin
+                    v_pic = @∑ w[ip] * v[i]
+                end
+            end,
+            ("invalid LHS", "v_pic"),
+        )
+
+        test_rejected_by_actual_and_explain(
+            quote
+                @G2P grid=>i particles=>p weights=>ip begin
+                    v[p] += a[p]
+                    a[p] = @∑ w[ip] * v[i]
+                end
+            end,
+            quote
+                @explain @G2P grid=>i particles=>p weights=>ip begin
+                    v[p] += a[p]
+                    a[p] = @∑ w[ip] * v[i]
+                end
+            end,
+            ("Equations without `@∑`", "must come after"),
+        )
+
+        test_rejected_by_actual_and_explain(
+            quote
+                @G2P2G grid=>i particles=>p weights=>ip begin
+                    m[i] = @∑ w[ip] * m[p]
+                    a[p] = @∑ w[ip] * v[i]
+                end
+            end,
+            quote
+                @explain @G2P2G grid=>i particles=>p weights=>ip begin
+                    m[i] = @∑ w[ip] * m[p]
+                    a[p] = @∑ w[ip] * v[i]
+                end
+            end,
+            ("particle `@∑` equations", "must come before"),
+        )
+
+        test_rejected_by_actual_and_explain(
+            quote
+                @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                    A[i,j] = 1
+                end
+            end,
+            quote
+                @explain @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                    A[i,j] = 1
+                end
+            end,
+            ("P2G_Matrix", "all equations must use `@∑`"),
+        )
+
+        test_rejected_by_actual_and_explain(
+            quote
+                @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                    A[i,k] = @∑ w[ip] * w[jp]
+                end
+            end,
+            quote
+                @explain @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                    A[i,k] = @∑ w[ip] * w[jp]
+                end
+            end,
+            ("P2G_Matrix", "A[i, k]"),
+        )
+    end
+
+    @testset "SpGrid" begin
+        Δt = 0.01
+        gravity = Vec(0.0, -9.81)
+
+        grid, particles, weights = spgrid_explain_setup()
+        @test length(collect(Tesserae.activeindices(Tesserae.get_spinds(grid)))) < prod(size(Tesserae.get_mesh(grid)))
+        @test eltype(supportnodes(weights[1], grid)) <: Tesserae.SpIndex
+
+        grid_display = deepcopy(grid)
+        grid_macro = deepcopy(grid)
+        ex = @explain @P2G grid=>i particles=>p weights=>ip begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            invm = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+            vn[i] = mv[i] * invm
+            v[i] = vn[i] + gravity * Δt
+        end
+        run_displayed(ex, (:grid, :particles, :weights, :gravity, :Δt), grid_display, particles, weights, gravity, Δt)
+        @P2G grid_macro=>i particles=>p weights=>ip begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            invm = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+            vn[i] = mv[i] * invm
+            v[i] = vn[i] + gravity * Δt
+        end
+        test_grid_equal(grid_display, grid_macro)
+
+        grid, particles, weights = spgrid_explain_setup()
+        partition = ThreadPartition(Tesserae.get_mesh(grid))
+        update!(partition, particles.x)
+        grid_threaded_display = deepcopy(grid)
+        grid_threaded_macro = deepcopy(grid)
+        ex_threaded = @explain @threaded @P2G grid=>i particles=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            invm = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+            vn[i] = mv[i] * invm
+            v[i] = vn[i] + gravity * Δt
+        end
+        run_displayed(ex_threaded, (:grid, :particles, :weights, :partition, :gravity, :Δt), grid_threaded_display, particles, weights, partition, gravity, Δt)
+        @threaded @P2G grid_threaded_macro=>i particles=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            invm = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+            vn[i] = mv[i] * invm
+            v[i] = vn[i] + gravity * Δt
+        end
+        test_grid_equal(grid_threaded_display, grid_threaded_macro)
+
+        grid, particles, weights = spgrid_explain_setup()
+        particles_display = deepcopy(particles)
+        particles_macro = deepcopy(particles)
+        ex = @explain @G2P grid=>i particles=>p weights=>ip begin
+            a[p] = @∑ w[ip] * ((v[i] - vn[i]) / Δt)
+            x[p] += @∑ w[ip] * v[i] * Δt
+            v[p] += a[p] * Δt
+        end
+        run_displayed(ex, (:grid, :particles, :weights, :Δt), grid, particles_display, weights, Δt)
+        @G2P grid=>i particles_macro=>p weights=>ip begin
+            a[p] = @∑ w[ip] * ((v[i] - vn[i]) / Δt)
+            x[p] += @∑ w[ip] * v[i] * Δt
+            v[p] += a[p] * Δt
+        end
+        test_particles_equal(particles_display, particles_macro)
+
+        grid, particles, weights = spgrid_explain_setup()
+        particles_threaded_display = deepcopy(particles)
+        particles_threaded_macro = deepcopy(particles)
+        ex_threaded = @explain @threaded @G2P grid=>i particles=>p weights=>ip begin
+            a[p] = @∑ w[ip] * ((v[i] - vn[i]) / Δt)
+            x[p] += @∑ w[ip] * v[i] * Δt
+            v[p] += a[p] * Δt
+        end
+        run_displayed(ex_threaded, (:grid, :particles, :weights, :Δt), grid, particles_threaded_display, weights, Δt)
+        @threaded @G2P grid=>i particles_threaded_macro=>p weights=>ip begin
+            a[p] = @∑ w[ip] * ((v[i] - vn[i]) / Δt)
+            x[p] += @∑ w[ip] * v[i] * Δt
+            v[p] += a[p] * Δt
+        end
+        test_particles_equal(particles_threaded_display, particles_threaded_macro)
+
+        grid, particles, weights = spgrid_explain_setup()
+        grid_display = deepcopy(grid)
+        grid_macro = deepcopy(grid)
+        particles_display = deepcopy(particles)
+        particles_macro = deepcopy(particles)
+        ex = @explain @G2P2G grid=>i particles=>p weights=>ip begin
+            a[p] = @∑ w[ip] * ((v[i] - vn[i]) / Δt)
+            v[p] += a[p] * Δt
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+        end
+        run_displayed(ex, (:grid, :particles, :weights, :Δt), grid_display, particles_display, weights, Δt)
+        @G2P2G grid_macro=>i particles_macro=>p weights=>ip begin
+            a[p] = @∑ w[ip] * ((v[i] - vn[i]) / Δt)
+            v[p] += a[p] * Δt
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+        end
+        test_grid_equal(grid_display, grid_macro)
+        test_particles_equal(particles_display, particles_macro)
+
+        grid, particles, weights = spgrid_explain_setup()
+        partition = ThreadPartition(Tesserae.get_mesh(grid))
+        update!(partition, particles.x)
+        grid_threaded_display = deepcopy(grid)
+        grid_threaded_macro = deepcopy(grid)
+        particles_threaded_display = deepcopy(particles)
+        particles_threaded_macro = deepcopy(particles)
+        ex_threaded = @explain @threaded @G2P2G grid=>i particles=>p weights=>ip partition begin
+            a[p] = @∑ w[ip] * ((v[i] - vn[i]) / Δt)
+            v[p] += a[p] * Δt
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+        end
+        run_displayed(ex_threaded, (:grid, :particles, :weights, :partition, :Δt), grid_threaded_display, particles_threaded_display, weights, partition, Δt)
+        @threaded @G2P2G grid_threaded_macro=>i particles_threaded_macro=>p weights=>ip partition begin
+            a[p] = @∑ w[ip] * ((v[i] - vn[i]) / Δt)
+            v[p] += a[p] * Δt
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+        end
+        test_grid_equal(grid_threaded_display, grid_threaded_macro)
+        test_particles_equal(particles_threaded_display, particles_threaded_macro)
+
+        grid, particles, weights = spgrid_explain_setup()
+        mesh = Tesserae.get_mesh(grid)
+        basis = BSpline(Linear())
+        A_display = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+        A_macro = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+        ex = @explain @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            A[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+        end
+        run_displayed(ex, (:A, :grid, :particles, :weights), A_display, grid, particles, weights)
+        A = A_macro
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            A[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+        end
+        @test A_display ≈ A_macro
+
+        grid, particles, weights = spgrid_explain_setup()
+        partition = ThreadPartition(Tesserae.get_mesh(grid))
+        update!(partition, particles.x)
+        A_threaded_display = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+        A_threaded_macro = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+        ex_threaded = @explain @threaded @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
+            A[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+        end
+        run_displayed(ex_threaded, (:A, :grid, :particles, :weights, :partition), A_threaded_display, grid, particles, weights, partition)
+        A = A_threaded_macro
+        @threaded @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
+            A[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+        end
+        @test A_threaded_display ≈ A_threaded_macro
     end
 
     @testset "P2G_Matrix" begin
