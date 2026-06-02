@@ -11,6 +11,39 @@ The same macro body can include the transfer itself and the local grid or partic
 @G2P2G
 ```
 
+## Inspecting transfer code
+
+```@docs
+@explain
+ExplainedCode
+```
+
+Transfer macros hide the explicit loops over particles, support nodes, and grid nodes.
+To inspect that structure, prefix a transfer macro with [`@explain`](@ref):
+
+```julia
+@explain @P2G grid=>i particles=>p weights=>ip begin
+    m[i] = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+end
+```
+
+This prints readable CPU reference code for understanding and debugging.
+It is not the optimized lowering used by the transfer macro.
+
+The same form works for [`@G2P`](@ref), [`@G2P2G`](@ref), and [`@P2G_Matrix`](@ref).
+For threaded transfers, place [`@explain`](@ref) before [`@threaded`](@ref):
+
+```julia
+@explain @threaded @P2G grid=>i particles=>p weights=>ip partition begin
+    m[i] = @∑ w[ip] * m[p]
+end
+```
+
+For scattering transfers such as [`@P2G`](@ref), [`@G2P2G`](@ref), and [`@P2G_Matrix`](@ref), the threaded reference code follows the same [`ThreadPartition`](@ref) structure as the actual CPU transfer:
+it loops over `threadsafe_groups(partition)` and then over the particle indices assigned to each thread-safe region.
+Without a partition, the reference code shows the sequential fallback.
+
 ## Code snippets
 
 !!! info
