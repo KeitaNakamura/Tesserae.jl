@@ -33,100 +33,77 @@ end
 # Fast calculations for value, gradient and hessian
 # `x` must be normalized by `h`
 
-# constant
-@inline _value1d(::Order{0}, ::AbstractBSpline{Constant}, (ξ,)::Tuple{V}) where {V} = V((1,))
-@inline _value1d(::Order,    ::AbstractBSpline{Constant}, (ξ,)::Tuple{V}) where {V} = V((0,))
-@generated function values1d(::Order{k}, spline::AbstractBSpline{Constant}, x::Real) where {k}
-    quote
-        T  = typeof(x)
-        x′ = fract(x - T(0.5))
-        ξ  = (x′ - T(0.5),)
-        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,))
+function _bspline_local_coeffs(degree::Int)
+    scale = 1 // factorial(degree)
+    # A degree-n B-spline has n + 1 local support nodes.
+    map(0:degree) do node
+        # Coefficients are stored in ascending powers for evalpoly.
+        map(0:degree) do power
+            binomial(degree, power) * scale * sum(0:(degree - node)) do shift
+                (-1)^shift * binomial(degree + 1, shift) *
+                (degree - node - shift)^(degree - power)
+            end
+        end
     end
 end
 
-# linear
-@inline _value1d(::Order{0}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = @. muladd($V((-1,1)), ξ, $V((1,1)))
-@inline _value1d(::Order{1}, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((-1,1))
-@inline _value1d(::Order, ::AbstractBSpline{Linear}, (ξ,)::Tuple{V}) where {V} = V((0,0))
-@generated function values1d(::Order{k}, spline::AbstractBSpline{Linear}, x::Real) where {k}
-    quote
-        T = typeof(x)
-        x′ = fract(x)
-        ξ = @. x′ - T((0,1))
-        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,))
+function _derivative_coeffs(coeffs, order)
+    degree = length(coeffs) - 1
+    order == 0 && return coeffs
+    order > degree && return [0//1]
+    map(0:(degree - order)) do power
+        factor = factorial(power + order) // factorial(power)
+        coeffs[power + order + 1] * factor
     end
 end
 
-# quadratic
-@inline _value1d(::Order{0}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = @. muladd($V((0.5,-1.0,0.5)), ξ², muladd($V((-1.5,0.0,1.5)), ξ, $V((1.125,0.75,1.125))))
-@inline _value1d(::Order{1}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = @. muladd($V((1.0,-2.0,1.0)), ξ, $V((-1.5,0.0,1.5)))
-@inline _value1d(::Order{2}, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((1.0,-2.0,1.0))
-@inline _value1d(::Order, ::AbstractBSpline{Quadratic}, (ξ,ξ²)::NTuple{2,V}) where {V} = V((0,0,0))
-@generated function values1d(::Order{k}, spline::AbstractBSpline{Quadratic}, x::Real) where {k}
-    quote
-        T = typeof(x)
-        x′ = fract(x - T(0.5))
-        ξ = @. x′ - T((-0.5,0.5,1.5))
-        ξ² = @. ξ * ξ
-        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,ξ²))
+function _right_coeffs(coeffs)
+    degree = length(coeffs) - 1
+    map(0:degree) do power
+        (-1)^power * sum(p -> coeffs[p + 1] * binomial(p, power), power:degree)
     end
 end
 
-# cubic
-@inline _value1d(::Order{0}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-1/6,0.5,-0.5,1/6)), ξ³, muladd($V((1,-1,-1,1)), ξ², muladd($V((-2,0,0,2)), ξ, $V((4/3,2/3,2/3,4/3)))))
-@inline _value1d(::Order{1}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-0.5,1.5,-1.5,0.5)), ξ², muladd($V((2,-2,-2,2)), ξ, $V((-2,0,0,2))))
-@inline _value1d(::Order{2}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = @. muladd($V((-1,3,-3,1)), ξ, $V((2,-2,-2,2)))
-@inline _value1d(::Order{3}, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((-1,3,-3,1))
-@inline _value1d(::Order, ::AbstractBSpline{Cubic}, (ξ,ξ²,ξ³)::NTuple{3,V}) where {V} = V((0,0,0,0))
-@generated function values1d(::Order{k}, spline::AbstractBSpline{Cubic}, x::Real) where {k}
-    quote
-        T = typeof(x)
-        x′ = fract(x)
-        ξ = @. x′ - T((-1,0,1,2))
-        ξ² = @. ξ * ξ
-        ξ³ = @. ξ² * ξ
-        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,ξ²,ξ³))
+function _evalpoly_expr(coeffs, var)
+    last_nonzero = findlast(!iszero, coeffs)
+    last_nonzero === nothing && return :(zero(x))
+    typed_coeffs = map(coeffs[1:last_nonzero]) do c
+        denominator(c) == 1 ? :(T($(numerator(c)))) : :(T($(numerator(c))) / T($(denominator(c))))
+    end
+    :(evalpoly($var, ($(typed_coeffs...),)))
+end
+
+function _bspline_node_expr(coeffs, node, degree)
+    if 2node ≥ degree
+        return _evalpoly_expr(coeffs, :left)
+    else
+        return _evalpoly_expr(_right_coeffs(coeffs), :right)
     end
 end
 
-# quartic
-@inline _value1d(::Order{0}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/24,-1/6,1/4,-1/6,1/24)), ξ⁴, muladd($V((-5/12,5/6,0,-5/6,5/12)), ξ³, muladd($V((25/16,-5/4,-5/8,-5/4,25/16)), ξ², muladd($V((-125/48,5/24,0,-5/24,125/48)), ξ, $V((625/384,55/96,115/192,55/96,625/384))))))
-@inline _value1d(::Order{1}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/6,-2/3,1,-2/3,1/6)), ξ³, muladd($V((-5/4,5/2,0,-5/2,5/4)), ξ², muladd($V((25/8,-5/2,-5/4,-5/2,25/8)), ξ, $V((-125/48,5/24,0,-5/24,125/48)))))
-@inline _value1d(::Order{2}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1/2,-2,3,-2,1/2)), ξ², muladd($V((-5/2,5,0,-5,5/2)), ξ, $V((25/8,-5/2,-5/4,-5/2,25/8))))
-@inline _value1d(::Order{3}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = @. muladd($V((1,-4,6,-4,1)), ξ, $V((-5/2,5,0,-5,5/2)))
-@inline _value1d(::Order{4}, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((1,-4,6,-4,1))
-@inline _value1d(::Order, ::AbstractBSpline{Quartic}, (ξ,ξ²,ξ³,ξ⁴)::NTuple{4,V}) where {V} = V((0,0,0,0,0))
-@generated function values1d(::Order{k}, spline::AbstractBSpline{Quartic}, x::Real) where {k}
-    quote
-        T = typeof(x)
-        x′ = fract(x - T(0.5))
-        ξ = @. x′ - T((-1.5,-0.5,0.5,1.5,2.5))
-        ξ² = @. ξ * ξ
-        ξ³ = @. ξ² * ξ
-        ξ⁴ = @. ξ² * ξ²
-        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,ξ²,ξ³,ξ⁴))
+function _bspline_order_expr(coeffs, order, degree)
+    entries = map(0:degree, coeffs) do node, node_coeffs
+        _bspline_node_expr(_derivative_coeffs(node_coeffs, order), node, degree)
     end
+    Expr(:tuple, entries...)
 end
 
-# quintic
-@inline _value1d(::Order{0}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/120,1/24,-1/12,1/12,-1/24,1/120)), ξ⁵, muladd($V((1/8,-3/8,1/4,1/4,-3/8,1/8)), ξ⁴, muladd($V((-3/4,5/4,0,0,-5/4,3/4)), ξ³, muladd($V((9/4,-7/4,-1/2,-1/2,-7/4,9/4)), ξ², muladd($V((-27/8,5/8,0,0,-5/8,27/8)), ξ, $V((81/40,17/40,11/20,11/20,17/40,81/40)))))))
-@inline _value1d(::Order{1}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/24,5/24,-5/12,5/12,-5/24,1/24)), ξ⁴, muladd($V((1/2,-3/2,1,1,-3/2,1/2)), ξ³, muladd($V((-9/4,15/4,0,0,-15/4,9/4)), ξ², muladd($V((9/2,-7/2,-1,-1,-7/2,9/2)), ξ, $V((-27/8,5/8,0,0,-5/8,27/8))))))
-@inline _value1d(::Order{2}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/6,5/6,-5/3,5/3,-5/6,1/6)), ξ³, muladd($V((3/2,-9/2,3,3,-9/2,3/2)), ξ², muladd($V((-9/2,15/2,0,0,-15/2,9/2)), ξ, $V((9/2,-7/2,-1,-1,-7/2,9/2)))))
-@inline _value1d(::Order{3}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1/2,5/2,-5,5,-5/2,1/2)), ξ², muladd($V((3,-9,6,6,-9,3)), ξ, $V((-9/2,15/2,0,0,-15/2,9/2))))
-@inline _value1d(::Order{4}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = @. muladd($V((-1,5,-10,10,-5,1)), ξ, $V((3,-9,6,6,-9,3)))
-@inline _value1d(::Order{5}, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((-1,5,-10,10,-5,1))
-@inline _value1d(::Order, ::AbstractBSpline{Quintic}, (ξ,ξ²,ξ³,ξ⁴,ξ⁵)::NTuple{5,V}) where {V} = V((0,0,0,0,0,0))
-@generated function values1d(::Order{k}, spline::AbstractBSpline{Quintic}, x::Real) where {k}
+function _bspline_values1d_expr(k::Int, degree::Int)
+    coeffs = _bspline_local_coeffs(degree)
+    values = map(order -> _bspline_order_expr(coeffs, order, degree), 0:k)
+    Expr(:tuple, values...)
+end
+
+@generated function values1d(::Order{k}, spline::AbstractBSpline{Degree{n}}, x::Real) where {k, n}
+    0 ≤ n || error("B-spline degree must be non-negative")
+    left_expr = isodd(n) ? :(fract(x)) : :(fract(x - T(0.5)))
+    values_expr = _bspline_values1d_expr(k, n)
     quote
+        @_inline_meta
         T = typeof(x)
-        x′ = fract(x)
-        ξ = @. x′ - T((-2,-1,0,1,2,3))
-        ξ² = @. ξ * ξ
-        ξ³ = @. ξ² * ξ
-        ξ⁴ = @. ξ² * ξ²
-        ξ⁵ = @. ξ² * ξ³
-        @ntuple $(k+1) a -> _value1d(Order(a-1), spline, (ξ,ξ²,ξ³,ξ⁴,ξ⁵))
+        left = $left_expr
+        right = one(x) - left
+        $values_expr
     end
 end
 
