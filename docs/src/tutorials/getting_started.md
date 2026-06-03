@@ -298,30 +298,18 @@ active = findall(m -> !iszero(m), grid.m)
 plot_state(mesh, mesh[active])
 ```
 
-The [`@P2G`](@ref) macro expands to roughly the following code:
+When learning or debugging a transfer block, prefix the transfer macro with [`@explain`](@ref) to print readable CPU reference code.
+For the block above, it prints:
 
-```julia
-@. grid.m  = zero(grid.m)
-@. grid.mv = zero(grid.mv)
-@. grid.f  = zero(grid.f)
+```@example stepbystep
+@explain @P2G grid=>i particles=>p weights=>ip begin
+    m[i]  = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
 
-# Particle-to-grid transfer
-for p in eachindex(particles)
-    bw = weights[p]
-    nodeindices = supportnodes(bw)
-    for ip in eachindex(nodeindices)
-        i = nodeindices[ip]
-        grid.m[i]  += bw.w[ip] * particles.m[p]
-        grid.mv[i] += bw.w[ip] * particles.m[p] * particles.v[p]
-        grid.f[i]  += -particles.V⁰[p] * det(particles.F[p]) * particles.σ[p] * bw.∇w[ip]
-    end
-end
-
-# Grid-node calculation
-for i in eachindex(grid)
-    mᵢ⁻¹ = iszero(grid.m[i]) ? zero(grid.m[i]) : inv(grid.m[i])
-    grid.vⁿ[i] = grid.mv[i] * mᵢ⁻¹
-    grid.v[i]  = grid.vⁿ[i] + (grid.f[i] * mᵢ⁻¹) * Δt
+    mᵢ⁻¹ = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+    vⁿ[i] = mv[i] * mᵢ⁻¹
+    v[i]  = vⁿ[i] + (f[i] * mᵢ⁻¹) * Δt
 end
 ```
 
@@ -345,30 +333,18 @@ end
 
 Equations using `@∑` gather grid quantities to each particle. The following equations are particle calculations, executed after the gathered values have been stored.
 
-This macro expands to roughly the following code:
+You can inspect this loop structure with [`@explain`](@ref) in the same way as for [`@P2G`](@ref).
+For the block above, it prints:
 
-```julia
-# Grid-to-particle transfer
-for p in eachindex(particles)
-    bw = weights[p]
-    nodeindices = supportnodes(bw)
-    Δvₚ = zero(eltype(particles.v))
-    ∇vₚ = zero(eltype(particles.∇v))
-    Δxₚ = zero(eltype(particles.x))
-    for ip in eachindex(nodeindices)
-        i = nodeindices[ip]
-        Δvₚ += bw.w[ip] * (grid.v[i] - grid.vⁿ[i])
-        ∇vₚ += grid.v[i] ⊗ bw.∇w[ip]
-        Δxₚ += bw.w[ip] * grid.v[i] * Δt
-    end
-    particles.v[p] += Δvₚ
-    particles.∇v[p] = ∇vₚ
-    particles.x[p] += Δxₚ
+```@example stepbystep
+@explain @G2P grid=>i particles=>p weights=>ip begin
+    v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+    x[p] += @∑ w[ip] * v[i] * Δt
 
-    # Particle calculation
-    Δεₚ = symmetric(particles.∇v[p]) * Δt
-    particles.F[p]  = (I + particles.∇v[p]*Δt) * particles.F[p]
-    particles.σ[p] += λ*tr(Δεₚ)*I + 2μ*Δεₚ # Linear elastic material
+    Δεₚ = symmetric(∇v[p]) * Δt
+    F[p]  = (I + ∇v[p]*Δt) * F[p]
+    σ[p] += λ*tr(Δεₚ)*I + 2μ*Δεₚ
 end
 ```
 
