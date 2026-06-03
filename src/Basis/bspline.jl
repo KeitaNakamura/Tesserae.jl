@@ -91,18 +91,6 @@ end
     end
 end
 
-@generated function Base.values(order::Order{k}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh{dim}) where {k, dim}
-    quote
-        @_inline_meta
-        xmin = get_xmin(mesh)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - xmin) * h⁻¹
-        vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals1d...)
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
-end
-
 @inline function update_property!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     if has_full_support(bw, indices)
@@ -119,8 +107,76 @@ function update_property_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt
         set_values!(bw, ip, values(derivative_order(bw), spline, getx(pt), mesh, i))
     end
 end
-@inline function update_property_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
-    set_values!(bw, values(derivative_order(bw), spline, getx(pt), mesh))
+@inline function update_property_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+    direct_set_values!(bw, derivative_order(bw), spline, getx(pt), mesh)
+end
+
+_bspline_var(r, d) = Symbol(:v, r, :_, d)
+
+_bspline_value_type(::Val{1}, dim) = Vec{dim}
+_bspline_value_type(::Val{k}, dim) where {k} = Tensor{Tuple{@Symmetry{fill(dim, k)...}}}
+
+# Build the scalar product for one tensor-product component.
+function _bspline_product_expr(terms)
+    @assert !isempty(terms)
+    length(terms) == 1 && return only(terms)
+    Expr(:call, :*, terms...)
+end
+
+# A component index such as CartesianIndex(2, 1, 1) means ∂/∂x₁ for dim == 3.
+function _bspline_derivative_expr(component::CartesianIndex, dim)
+    counts = map(d -> count(==(d), Tuple(component)), 1:dim)
+    terms = map(d -> _bspline_var(counts[d], d), 1:dim)
+    _bspline_product_expr(terms)
+end
+
+# Store only independent components for symmetric derivative tensors.
+_bspline_component_indices(::Val{1}, dim) = map(CartesianIndex, 1:dim)
+function _bspline_component_indices(::Val{k}, dim) where {k}
+    TT = _bspline_value_type(Val(k), dim)
+    Array(CartesianIndices(size(TT))[Tensorial.independent_to_component_map(TT)])
+end
+
+# Generate one value to write into the BasisWeight property arrays.
+function _bspline_value_expr(::Val{0}, dim)
+    _bspline_product_expr(map(d -> _bspline_var(0, d), 1:dim))
+end
+function _bspline_value_expr(::Val{k}, dim) where {k}
+    TT = _bspline_value_type(Val(k), dim)
+    hpow = Symbol(:hpow_, k)
+    entries = map(J -> :($(_bspline_derivative_expr(J, dim)) * $hpow),
+                  _bspline_component_indices(Val(k), dim))
+    :($TT(($(entries...),)))
+end
+
+# Fill the full-support BasisWeight arrays directly, avoiding prod_each_dimension
+# and the following copyto! into BasisWeight storage.
+@generated function direct_set_values!(bw::BasisWeight, order::Order{k}, spline::AbstractBSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
+    dims = ntuple(_ -> n + 1, dim)
+    node_assignments = map(enumerate(CartesianIndices(dims))) do (i, I)
+        # Load all 1D basis values needed at this support node.
+        loads = [:($(_bspline_var(r, d)) = vals1d[$d][$(r + 1)][$(I[d])]) for d in 1:dim for r in 0:k]
+        # Write value, gradient, Hessian, ... directly into each stored array.
+        assignments = [:($(Symbol(:vals_, r))[$i] = $(_bspline_value_expr(Val(r), dim))) for r in 0:k]
+        quote
+            $(loads...)
+            $(assignments...)
+        end
+    end
+
+    quote
+        @_inline_meta
+        xmin = get_xmin(mesh)
+        h⁻¹ = spacing_inv(mesh)
+        ξ = (x - xmin) * h⁻¹
+        vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
+        @nexprs $(k + 1) r -> vals_{r-1} = values(bw, r)
+        @nexprs $k r -> hpow_r = h⁻¹^r
+        @inbounds begin
+            $(node_assignments...)
+        end
+        bw
+    end
 end
 
 """
