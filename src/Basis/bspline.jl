@@ -91,18 +91,6 @@ end
     end
 end
 
-@generated function Base.values(order::Order{k}, spline::AbstractBSpline, x::Vec, mesh::CartesianMesh{dim}) where {k, dim}
-    quote
-        @_inline_meta
-        xmin = get_xmin(mesh)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - xmin) * h⁻¹
-        vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals1d...)
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
-end
-
 @inline function update_property!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     if has_full_support(bw, indices)
