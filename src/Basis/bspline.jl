@@ -57,52 +57,36 @@ function _derivative_coeffs(coeffs, order)
     end
 end
 
-function _right_coeffs(coeffs)
-    degree = length(coeffs) - 1
-    map(0:degree) do power
-        (-1)^power * sum(p -> coeffs[p + 1] * binomial(p, power), power:degree)
-    end
-end
-
-function _evalpoly_expr(coeffs, var)
+function _evalpoly_expr(coeffs)
     last_nonzero = findlast(!iszero, coeffs)
     last_nonzero === nothing && return :(zero(x))
     typed_coeffs = map(coeffs[1:last_nonzero]) do c
         denominator(c) == 1 ? :(T($(numerator(c)))) : :(T($(numerator(c))) / T($(denominator(c))))
     end
-    :(evalpoly($var, ($(typed_coeffs...),)))
+    :(evalpoly(ξ, ($(typed_coeffs...),)))
 end
 
-function _bspline_node_expr(coeffs, node, degree)
-    if 2node ≥ degree
-        return _evalpoly_expr(coeffs, :left)
-    else
-        return _evalpoly_expr(_right_coeffs(coeffs), :right)
-    end
-end
-
-function _bspline_order_expr(coeffs, order, degree)
-    entries = map(0:degree, coeffs) do node, node_coeffs
-        _bspline_node_expr(_derivative_coeffs(node_coeffs, order), node, degree)
+function _bspline_order_expr(coeffs, order)
+    entries = map(coeffs) do node_coeffs
+        _evalpoly_expr(_derivative_coeffs(node_coeffs, order))
     end
     Expr(:tuple, entries...)
 end
 
 function _bspline_values1d_expr(k::Int, degree::Int)
     coeffs = _bspline_local_coeffs(degree)
-    values = map(order -> _bspline_order_expr(coeffs, order, degree), 0:k)
+    values = map(order -> _bspline_order_expr(coeffs, order), 0:k)
     Expr(:tuple, values...)
 end
 
 @generated function values1d(::Order{k}, spline::AbstractBSpline{Degree{n}}, x::Real) where {k, n}
     0 ≤ n || error("B-spline degree must be non-negative")
-    left_expr = isodd(n) ? :(fract(x)) : :(fract(x - T(0.5)))
+    ξ_expr = isodd(n) ? :(fract(x)) : :(fract(x - T(0.5)))
     values_expr = _bspline_values1d_expr(k, n)
     quote
         @_inline_meta
         T = typeof(x)
-        left = $left_expr
-        right = one(x) - left
+        ξ = $ξ_expr
         $values_expr
     end
 end
