@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Getting started · Tesserae.jl</title><meta name="title" content="Getting started · Tesserae.jl"/><meta property="og:title" content="Getting started · Tesserae.jl"/><meta property="twitter:title" content="Getting started · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Tesserae.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li class="is-active"><a class="tocitem" href>Getting started</a><ul class="internal"><li><a class="tocitem" href="#Simulation-loop-at-a-glance"><span>Simulation loop at a glance</span></a></li><li><a class="tocitem" href="#Grid-and-particle-generation"><span>Grid and particle generation</span></a></li><li><a class="tocitem" href="#Basis-function-values"><span>Basis function values</span></a></li><li><a class="tocitem" href="#Transfer-between-grid-and-particles"><span>Transfer between grid and particles</span></a></li><li><a class="tocitem" href="#Complete-script"><span>Complete script</span></a></li></ul></li><li><a class="tocitem" href="../collision/">Transfer schemes</a></li><li><a class="tocitem" href="../cpdi/">CPDI</a></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox"/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../implicit/">Implicit formulation</a></li><li><a class="tocitem" href="../implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../dam_break/">Incompressible fluid flow</a></li><li><a class="tocitem" href="../rigid_body_contact/">Frictional contact with rigid body</a></li><li><a class="tocitem" href="../taylor_impact/">Multi-threading simulation</a></li><li><input class="collapse-toggle" id="menuitem-2-10" type="checkbox"/><label class="tocitem" for="menuitem-2-10"><span class="docs-label">FEM (experimental)</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../heat/">Heat problem using FEM</a></li></ul></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../mesh/">Mesh</a></li><li><a class="tocitem" href="../../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../../basis/">Basis Functions</a></li><li><a class="tocitem" href="../../transfer/">Transfer between grid and particles</a></li><li><a class="tocitem" href="../../implicit_utils/">Utilities for implicit methods</a></li><li><a class="tocitem" href="../../multithreading/">Multi-threading</a></li><li><a class="tocitem" href="../../gpu/">GPU computing</a></li><li><a class="tocitem" href="../../sparray/">SpArray</a></li><li><a class="tocitem" href="../../export/">Export</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Getting started</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Getting started</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/src/tutorials/getting_started.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Getting-started"><a class="docs-heading-anchor" href="#Getting-started">Getting started</a><a id="Getting-started-1"></a><a class="docs-heading-anchor-permalink" href="#Getting-started" title="Permalink"></a></h1><div class="admonition is-info" id="Info-e027314548725fc2"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-e027314548725fc2" title="Permalink"></a></header><div class="admonition-body"><p>This tutorial builds a two-disk MPM simulation step by step. A runnable script is shown at the end.</p></div></div><p>The simulation in this tutorial uses four core objects:</p><ol><li>A <code>mesh</code> stores the background node positions.</li><li>A <code>grid</code> stores user-defined fields on that mesh, such as mass, momentum, force, and velocity.</li><li><code>particles</code> store material state, such as position, velocity, volume, deformation gradient, and stress.</li><li><code>weights</code> store the basis function values connecting each particle to nearby grid nodes.</li></ol><p>At each time step, we update the weights, use <a href="../../transfer/#Tesserae.@P2G"><code>@P2G</code></a> for particle-to-grid transfer and grid-node calculations, and then use <a href="../../transfer/#Tesserae.@G2P"><code>@G2P</code></a> for grid-to-particle transfer and particle calculations.</p><h2 id="Simulation-loop-at-a-glance"><a class="docs-heading-anchor" href="#Simulation-loop-at-a-glance">Simulation loop at a glance</a><a id="Simulation-loop-at-a-glance-1"></a><a class="docs-heading-anchor-permalink" href="#Simulation-loop-at-a-glance" title="Permalink"></a></h2><p>The full simulation loop has this shape:</p><pre><code class="language-julia hljs">for each time step
+    update basis function values
+    @P2G ...      # particles -&gt; grid, then grid nodes
+    @G2P ...      # grid -&gt; particles, then particles
+end</code></pre><h2 id="Grid-and-particle-generation"><a class="docs-heading-anchor" href="#Grid-and-particle-generation">Grid and particle generation</a><a id="Grid-and-particle-generation-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-and-particle-generation" title="Permalink"></a></h2><h3 id="1.-Simulation-constants"><a class="docs-heading-anchor" href="#1.-Simulation-constants">1. Simulation constants</a><a id="1.-Simulation-constants-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Simulation-constants" title="Permalink"></a></h3><p>Start by importing Tesserae and defining the constants used later:</p><pre><code class="language-julia hljs">using Tesserae
+Δt = 0.001                  # Time step size
+E  = 1000.0                 # Young&#39;s modulus
+ν  = 0.3                    # Poisson&#39;s ratio
+λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame&#39;s first parameter
+μ  = E / 2(1 + ν)           # Shear modulus
+ρ⁰ = 1000.0                 # Initial density</code></pre><h3 id="2.-Grid-and-particle-properties"><a class="docs-heading-anchor" href="#2.-Grid-and-particle-properties">2. Grid and particle properties</a><a id="2.-Grid-and-particle-properties-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Grid-and-particle-properties" title="Permalink"></a></h3><p>Before generating the grid and particles, define the fields stored on each grid node and particle:</p><pre><code class="language-julia hljs">struct GridProp
+    x  :: Vec{2, Float64} # Position
+    m  :: Float64         # Mass
+    mv :: Vec{2, Float64} # Momentum
+    f  :: Vec{2, Float64} # Force
+    v  :: Vec{2, Float64} # Velocity
+    vⁿ :: Vec{2, Float64} # Velocity at t = tⁿ
+end
+struct ParticleProp
+    x  :: Vec{2, Float64}                           # Position
+    m  :: Float64                                   # Mass
+    V⁰ :: Float64                                   # Initial volume
+    v  :: Vec{2, Float64}                           # Velocity
+    ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
+    F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
+    σ  :: SymmetricSecondOrderTensor{2, Float64, 3} # Cauchy stress
+end</code></pre><p>These properties are customizable: add the variables you want to store on each grid node or particle, using field types such as numbers, <code>Vec</code>s, and tensors. The first field must be the position; these position values are automatically set during grid and particle generation.</p><div class="admonition is-info" id="Info-a05d47026998b10e"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-a05d47026998b10e" title="Permalink"></a></header><div class="admonition-body"><p>The same property layout can also be written with <code>@NamedTuple</code>. An <code>@NamedTuple</code> definition can be placed inside a function as a local binding, while <code>struct</code> definitions are global. For this reason, tutorials in this manual generally use <code>@NamedTuple</code> for property definitions.</p><pre><code class="language-julia hljs">GridProp = @NamedTuple begin
+    x  :: Vec{2, Float64} # Position
+    m  :: Float64         # Mass
+    mv :: Vec{2, Float64} # Momentum
+    f  :: Vec{2, Float64} # Force
+    v  :: Vec{2, Float64} # Velocity
+    vⁿ :: Vec{2, Float64} # Velocity at t = tⁿ
+end</code></pre></div></div><div class="admonition is-info" id="Info-b5f701286747f4cb"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-b5f701286747f4cb" title="Permalink"></a></header><div class="admonition-body"><p>The property type must satisfy <code>isbitstype</code>, so avoid fields such as <code>Vector</code>, <code>String</code>, <code>Dict</code>, or <code>Any</code> here.</p><pre><code class="language-julia hljs">(isbitstype(GridProp), isbitstype(ParticleProp))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(true, true)</code></pre></div></div><h3 id="3.-Mesh-and-grid-generation"><a class="docs-heading-anchor" href="#3.-Mesh-and-grid-generation">3. Mesh and grid generation</a><a id="3.-Mesh-and-grid-generation-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Mesh-and-grid-generation" title="Permalink"></a></h3><p>A mesh stores only node positions. A grid attaches the user-defined fields from <code>GridProp</code> to that mesh.</p><p>Create a Cartesian mesh with <code>CartesianMesh(spacing, (xmin, xmax), (ymin, ymax)...)</code>:</p><pre><code class="language-julia hljs">mesh = CartesianMesh(0.05, (0,1), (0,1))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">21×21 CartesianMesh{2, Float64, Vector{Float64}, 2}:
+ [0.0, 0.0]   [0.0, 0.05]   [0.0, 0.1]   …  [0.0, 0.95]   [0.0, 1.0]
+ [0.05, 0.0]  [0.05, 0.05]  [0.05, 0.1]     [0.05, 0.95]  [0.05, 1.0]
+ [0.1, 0.0]   [0.1, 0.05]   [0.1, 0.1]      [0.1, 0.95]   [0.1, 1.0]
+ [0.15, 0.0]  [0.15, 0.05]  [0.15, 0.1]     [0.15, 0.95]  [0.15, 1.0]
+ [0.2, 0.0]   [0.2, 0.05]   [0.2, 0.1]      [0.2, 0.95]   [0.2, 1.0]
+ [0.25, 0.0]  [0.25, 0.05]  [0.25, 0.1]  …  [0.25, 0.95]  [0.25, 1.0]
+ [0.3, 0.0]   [0.3, 0.05]   [0.3, 0.1]      [0.3, 0.95]   [0.3, 1.0]
+ [0.35, 0.0]  [0.35, 0.05]  [0.35, 0.1]     [0.35, 0.95]  [0.35, 1.0]
+ [0.4, 0.0]   [0.4, 0.05]   [0.4, 0.1]      [0.4, 0.95]   [0.4, 1.0]
+ [0.45, 0.0]  [0.45, 0.05]  [0.45, 0.1]     [0.45, 0.95]  [0.45, 1.0]
+ ⋮                                       ⋱                ⋮
+ [0.6, 0.0]   [0.6, 0.05]   [0.6, 0.1]      [0.6, 0.95]   [0.6, 1.0]
+ [0.65, 0.0]  [0.65, 0.05]  [0.65, 0.1]     [0.65, 0.95]  [0.65, 1.0]
+ [0.7, 0.0]   [0.7, 0.05]   [0.7, 0.1]      [0.7, 0.95]   [0.7, 1.0]
+ [0.75, 0.0]  [0.75, 0.05]  [0.75, 0.1]  …  [0.75, 0.95]  [0.75, 1.0]
+ [0.8, 0.0]   [0.8, 0.05]   [0.8, 0.1]      [0.8, 0.95]   [0.8, 1.0]
+ [0.85, 0.0]  [0.85, 0.05]  [0.85, 0.1]     [0.85, 0.95]  [0.85, 1.0]
+ [0.9, 0.0]   [0.9, 0.05]   [0.9, 0.1]      [0.9, 0.95]   [0.9, 1.0]
+ [0.95, 0.0]  [0.95, 0.05]  [0.95, 0.1]     [0.95, 0.95]  [0.95, 1.0]
+ [1.0, 0.0]   [1.0, 0.05]   [1.0, 0.1]   …  [1.0, 0.95]   [1.0, 1.0]</code></pre><p>To keep the plotting examples short, use this helper to show the background mesh and, when provided, points on top of it:</p><pre><code class="language-julia hljs">import Plots
+
+function plot_state(mesh, xs=nothing)
+    xmin, ymin = mesh[begin]
+    xmax, ymax = mesh[end]
+    pad = 0.1 * max(xmax - xmin, ymax - ymin)
+    plt = Plots.plot(
+        xlims = (xmin - pad, xmax + pad),
+        ylims = (ymin - pad, ymax + pad),
+        aspect_ratio = :equal,
+        label = false,
+    )
+    for i in axes(mesh, 1)
+        Plots.plot!(plt, Tuple.(mesh[i, :]); color=:lightgray, linewidth=0.5, label=false)
+    end
+    for j in axes(mesh, 2)
+        Plots.plot!(plt, Tuple.(mesh[:, j]); color=:lightgray, linewidth=0.5, label=false)
+    end
+    if !isnothing(xs)
+        Plots.scatter!(plt, Tuple.(xs); markersize=3, label=false)
+    end
+    plt
+end</code></pre><p>This shows the background mesh used for transfers:</p><pre><code class="language-julia hljs">plot_state(mesh)</code></pre><img src="a941327d.svg" alt="Example block output"/><p>Generate the grid from this mesh with:</p><pre><code class="language-julia hljs">grid = generate_grid(GridProp, mesh)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">21×21 StructArray(::CartesianMesh{2, Float64, Vector{Float64}, 2}, ::Matrix{Float64}, ::Matrix{Vec{2, Float64}}, ::Matrix{Vec{2, Float64}}, ::Matrix{Vec{2, Float64}}, ::Matrix{Vec{2, Float64}}) with eltype Main.GridProp:
+ GridProp([0.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])   …  GridProp([0.0, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.05, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])     GridProp([0.05, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.1, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])      GridProp([0.1, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.15, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])     GridProp([0.15, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.2, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])      GridProp([0.2, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.25, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])  …  GridProp([0.25, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.3, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])      GridProp([0.3, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.35, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])     GridProp([0.35, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.4, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])      GridProp([0.4, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.45, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])     GridProp([0.45, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ ⋮                                                                           ⋱  ⋮
+ GridProp([0.6, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])      GridProp([0.6, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.65, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])     GridProp([0.65, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.7, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])      GridProp([0.7, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.75, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])  …  GridProp([0.75, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.8, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])      GridProp([0.8, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.85, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])     GridProp([0.85, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.9, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])      GridProp([0.9, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([0.95, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])     GridProp([0.95, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])
+ GridProp([1.0, 0.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])   …  GridProp([1.0, 1.0], 0.0, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0])</code></pre><p>This <code>grid</code> is a <a href="https://github.com/JuliaArrays/StructArrays.jl"><code>StructArray</code></a> with an element type of <code>GridProp</code>. Each field defined in <code>GridProp</code> can be accessed with dot notation:</p><pre><code class="language-julia hljs">grid.v</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">21×21 Matrix{Vec{2, Float64}}:
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  …  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  …  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ ⋮                                   ⋱                          ⋮
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  …  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]     [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]
+ [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]  …  [0.0, 0.0]  [0.0, 0.0]  [0.0, 0.0]</code></pre><div class="admonition is-info" id="Info-e83c3bba2fa8984f"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-e83c3bba2fa8984f" title="Permalink"></a></header><div class="admonition-body"><p>Since the first field of <code>GridProp</code> is named <code>x</code>, Tesserae treats it as the grid-node position field. For this grid, those positions are given by the mesh itself.</p><pre><code class="language-julia hljs">grid.x === mesh</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre></div></div><h3 id="4.-Particle-generation"><a class="docs-heading-anchor" href="#4.-Particle-generation">4. Particle generation</a><a id="4.-Particle-generation-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Particle-generation" title="Permalink"></a></h3><p>Generate particles with <code>generate_particles</code>:</p><pre><code class="language-julia hljs">pts = generate_particles(ParticleProp, mesh; alg=GridSampling())</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1600-element StructArray(::Vector{Vec{2, Float64}}, ::Vector{Float64}, ::Vector{Float64}, ::Vector{Vec{2, Float64}}, ::Vector{Tensor{Tuple{2, 2}, Float64, 2, 4}}, ::Vector{Tensor{Tuple{2, 2}, Float64, 2, 4}}, ::Vector{SymmetricSecondOrderTensor{2, Float64, 3}}) with eltype Main.ParticleProp:
+ Main.ParticleProp([0.0125, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.0375, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.0625, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.0875, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.1125, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.1375, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.1625, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.1875, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.2125, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.2375, 0.0125], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ ⋮
+ Main.ParticleProp([0.7875, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.8125, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.8375, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.8625, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.8875, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.9125, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.9375, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.9625, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])
+ Main.ParticleProp([0.9875, 0.9875], 0.0, 0.0, [0.0, 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0], [0.0 0.0; 0.0 0.0])</code></pre><p>The generated particles cover the full mesh:</p><pre><code class="language-julia hljs">plot_state(mesh, pts.x)</code></pre><img src="3a5d8f40.svg" alt="Example block output"/><p>Like <code>grid</code>, <code>pts</code> is also a <a href="https://github.com/JuliaArrays/StructArrays.jl"><code>StructArray</code></a>.</p><p>Particles are generated over the entire <code>mesh</code> domain, so set their initial volume before removing the particles outside the two disks:</p><pre><code class="language-julia hljs">pts.V⁰ .= volume(mesh) / length(pts)</code></pre><p>Then keep the left and right disks, and set their initial velocities:</p><pre><code class="language-julia hljs">r = 0.2 # Radius
+lhs = findall(x -&gt; norm(@. x-r    ) &lt; r, pts.x)
+rhs = findall(x -&gt; norm(@. x-(1-r)) &lt; r, pts.x)
+
+pts.v[lhs] .= Ref(Vec( 0.1, 0.1))
+pts.v[rhs] .= Ref(Vec(-0.1,-0.1))
+
+particles = pts[[lhs; rhs]]</code></pre><p>The remaining particles form the two disks:</p><pre><code class="language-julia hljs">plot_state(mesh, particles.x)</code></pre><img src="0282205f.svg" alt="Example block output"/><p>Set the mass and initial deformation gradient on each particle:</p><pre><code class="language-julia hljs">@. particles.m = ρ⁰ * particles.V⁰
+@. particles.F = one(particles.F)</code></pre><h2 id="Basis-function-values"><a class="docs-heading-anchor" href="#Basis-function-values">Basis function values</a><a id="Basis-function-values-1"></a><a class="docs-heading-anchor-permalink" href="#Basis-function-values" title="Permalink"></a></h2><p>In Tesserae, basis function values are stored in a <code>BasisWeight</code>. For a linear basis, construct one as follows:</p><pre><code class="language-julia hljs">bw = BasisWeight(BSpline(Linear()), mesh)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">BasisWeight: 
+  Basis: BSpline(Linear())
+  Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
+  Support nodes: CartesianIndices((1:0, 1:0))</code></pre><p>Update it at a particle position with <code>update!</code>:</p><pre><code class="language-julia hljs">update!(bw, particles.x[1], mesh)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">BasisWeight: 
+  Basis: BSpline(Linear())
+  Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
+  Support nodes: CartesianIndices((3:4, 1:2))</code></pre><div class="admonition is-info" id="Info-51af285cf824aa68"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-51af285cf824aa68" title="Permalink"></a></header><div class="admonition-body"><p>After updating <code>bw</code>, you can check the partition of unity <span>$\sum_i w_{ip} = 1$</span>:</p><pre><code class="language-julia hljs">sum(bw.w) ≈ 1</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><p>and the linear field reproduction <span>$\sum_i w_{ip} \bm{x}_i = \bm{x}_p$</span>:</p><pre><code class="language-julia hljs">nodeindices = supportnodes(bw)
+x = sum(eachindex(nodeindices)) do ip
+    i = nodeindices[ip]
+    bw.w[ip] * mesh[i]
+end
+x ≈ particles.x[1]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre></div></div><p>The <code>bw</code> above is useful for looking at one particle. In a simulation, however, the transfer step needs basis function values for all particles. Prepare one <code>BasisWeight</code> per particle so each particle has its own storage:</p><pre><code class="language-julia hljs">weights = map(p -&gt; BasisWeight(BSpline(Linear()), mesh), eachindex(particles))</code></pre><div class="admonition is-info" id="Info-b4766f8fd9fc4404"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-b4766f8fd9fc4404" title="Permalink"></a></header><div class="admonition-body"><p>You can also construct <code>BasisWeight</code>s with structure-of-arrays (SoA) layout using <code>generate_basis_weights</code>.</p><pre><code class="language-julia hljs">soa_weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">416-element BasisWeightVector: 
+  Basis: BSpline(Linear())
+  Property names: w, ∇w</code></pre><p>This SoA layout is generally preferred for performance, although it cannot be resized.</p></div></div><h2 id="Transfer-between-grid-and-particles"><a class="docs-heading-anchor" href="#Transfer-between-grid-and-particles">Transfer between grid and particles</a><a id="Transfer-between-grid-and-particles-1"></a><a class="docs-heading-anchor-permalink" href="#Transfer-between-grid-and-particles" title="Permalink"></a></h2><h3 id="Particle-to-grid-transfer"><a class="docs-heading-anchor" href="#Particle-to-grid-transfer">Particle-to-grid transfer</a><a id="Particle-to-grid-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Particle-to-grid-transfer" title="Permalink"></a></h3><p>Before transferring quantities, update the basis function values at the current particle positions:</p><pre><code class="language-julia hljs">for p in eachindex(particles)
+    update!(weights[p], particles.x[p], mesh)
+end</code></pre><div class="admonition is-info" id="Info-673fe9dffaea692f"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-673fe9dffaea692f" title="Permalink"></a></header><div class="admonition-body"><p>The same update can also be written in one line. This form uses Tesserae&#39;s backend-aware implementation, so it works with CPU threading and GPU arrays.</p><pre><code class="language-julia hljs">update!(weights, particles, mesh)</code></pre></div></div><p>Use <a href="../../transfer/#Tesserae.@P2G"><code>@P2G</code></a> for particle-to-grid transfer and grid-node calculations:</p><pre><code class="language-julia hljs">@P2G grid=&gt;i particles=&gt;p weights=&gt;ip begin
+    # Particle-to-grid transfer
+    m[i]  = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
+
+    # Grid-node calculation
+    mᵢ⁻¹ = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+    vⁿ[i] = mv[i] * mᵢ⁻¹
+    v[i]  = vⁿ[i] + (f[i] * mᵢ⁻¹) * Δt
+end</code></pre><p>Equations using <code>@∑</code> perform the particle-to-grid scatter. The following equations are grid-node calculations, executed after the scatter for each grid node.</p><p>After this block, only grid nodes near the particles have nonzero mass:</p><pre><code class="language-julia hljs">active = findall(m -&gt; !iszero(m), grid.m)
+plot_state(mesh, mesh[active])</code></pre><img src="c930d240.svg" alt="Example block output"/><p>When learning or debugging a transfer block, prefix the transfer macro with <a href="../../transfer/#Tesserae.@explain"><code>@explain</code></a> to print readable CPU reference code. For the block above, it prints:</p><pre><code class="language-julia hljs">@explain @P2G grid=&gt;i particles=&gt;p weights=&gt;ip begin
+    m[i]  = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+    f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
+
+    mᵢ⁻¹ = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+    vⁿ[i] = mv[i] * mᵢ⁻¹
+    v[i]  = vⁿ[i] + (f[i] * mᵢ⁻¹) * Δt
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"># Reference expansion of @P2G.
+# Runnable CPU code for understanding/debugging.
+# This is not the optimized lowering used by the macro.
+
+fillzero!(grid.m)
+fillzero!(grid.mv)
+fillzero!(grid.f)
+for p in eachindex(particles)
+    bw = weights[p]
+    nodes = supportnodes(bw, grid)
+    for ip in eachindex(nodes)
+        i = nodes[ip]
+        grid.m[i] += bw.w[ip] * particles.m[p]
+        grid.mv[i] += bw.w[ip] * particles.m[p] * particles.v[p]
+        grid.f[i] += -(particles.V⁰[p]) * det(particles.F[p]) * particles.σ[p] * bw.∇w[ip]
+    end
+end
+for i in eachindex(grid)
+    mᵢ⁻¹ = if iszero(grid.m[i])
+        zero(grid.m[i])
+    else
+        inv(grid.m[i])
+    end
+    grid.vⁿ[i] = grid.mv[i] * mᵢ⁻¹
+    grid.v[i] = grid.vⁿ[i] + (grid.f[i] * mᵢ⁻¹) * Δt
+end</code></pre><h3 id="Grid-to-particle-transfer"><a class="docs-heading-anchor" href="#Grid-to-particle-transfer">Grid-to-particle transfer</a><a id="Grid-to-particle-transfer-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-to-particle-transfer" title="Permalink"></a></h3><p>Use <a href="../../transfer/#Tesserae.@G2P"><code>@G2P</code></a> for grid-to-particle transfer and particle calculations:</p><pre><code class="language-julia hljs">@G2P grid=&gt;i particles=&gt;p weights=&gt;ip begin
+    # Grid-to-particle transfer
+    v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+    x[p] += @∑ w[ip] * v[i] * Δt
+
+    # Particle calculation
+    Δεₚ = symmetric(∇v[p]) * Δt
+    F[p]  = (I + ∇v[p]*Δt) * F[p]
+    σ[p] += λ*tr(Δεₚ)*I + 2μ*Δεₚ # Linear elastic material
+end</code></pre><p>Equations using <code>@∑</code> gather grid quantities to each particle. The following equations are particle calculations, executed after the gathered values have been stored.</p><p>You can inspect this loop structure with <a href="../../transfer/#Tesserae.@explain"><code>@explain</code></a> in the same way as for <a href="../../transfer/#Tesserae.@P2G"><code>@P2G</code></a>. For the block above, it prints:</p><pre><code class="language-julia hljs">@explain @G2P grid=&gt;i particles=&gt;p weights=&gt;ip begin
+    v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+    x[p] += @∑ w[ip] * v[i] * Δt
+
+    Δεₚ = symmetric(∇v[p]) * Δt
+    F[p]  = (I + ∇v[p]*Δt) * F[p]
+    σ[p] += λ*tr(Δεₚ)*I + 2μ*Δεₚ
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"># Reference expansion of @G2P.
+# Runnable CPU code for understanding/debugging.
+# This is not the optimized lowering used by the macro.
+
+for p in eachindex(particles)
+    v_sum = zero(eltype(particles.v))
+    ∇v_sum = zero(eltype(particles.∇v))
+    x_sum = zero(eltype(particles.x))
+    bw = weights[p]
+    nodes = supportnodes(bw, grid)
+    for ip in eachindex(nodes)
+        i = nodes[ip]
+        v_sum += bw.w[ip] * (grid.v[i] - grid.vⁿ[i])
+        ∇v_sum += grid.v[i] ⊗ bw.∇w[ip]
+        x_sum += bw.w[ip] * grid.v[i] * Δt
+    end
+    particles.v[p] += v_sum
+    particles.∇v[p] = ∇v_sum
+    particles.x[p] += x_sum
+    Δεₚ = symmetric(particles.∇v[p]) * Δt
+    particles.F[p] = (I + particles.∇v[p] * Δt) * particles.F[p]
+    particles.σ[p] += λ * tr(Δεₚ) * I + (2μ) * Δεₚ
+end</code></pre><h2 id="Complete-script"><a class="docs-heading-anchor" href="#Complete-script">Complete script</a><a id="Complete-script-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-script" title="Permalink"></a></h2><p>Putting the pieces together gives the following runnable script:</p><pre><code class="language-julia hljs">using Tesserae
+import Plots
+
+function main()
+
+    # Material constants and time step
+    Δt = 0.001                  # Time step size
+    E  = 1000.0                 # Young&#39;s modulus
+    ν  = 0.3                    # Poisson&#39;s ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame&#39;s first parameter
+    μ  = E / 2(1 + ν)           # Shear modulus
+    ρ⁰ = 1000.0                 # Initial density
+
+    # Grid and particle properties
+    GridProp = @NamedTuple begin
+        x  :: Vec{2, Float64} # Position
+        m  :: Float64         # Mass
+        mv :: Vec{2, Float64} # Momentum
+        f  :: Vec{2, Float64} # Force
+        v  :: Vec{2, Float64} # Velocity
+        vⁿ :: Vec{2, Float64} # Velocity at t = tⁿ
+    end
+    ParticleProp = @NamedTuple begin
+        x  :: Vec{2, Float64}                           # Position
+        m  :: Float64                                   # Mass
+        V⁰ :: Float64                                   # Initial volume
+        v  :: Vec{2, Float64}                           # Velocity
+        ∇v :: SecondOrderTensor{2, Float64, 4}          # Velocity gradient
+        F  :: SecondOrderTensor{2, Float64, 4}          # Deformation gradient
+        σ  :: SymmetricSecondOrderTensor{2, Float64, 3} # Cauchy stress
+    end
+
+    # Mesh
+    mesh = CartesianMesh(0.05, (0,1), (0,1))
+
+    # Background grid
+    grid = generate_grid(GridProp, mesh)
+
+    # Particles
+    particles = let
+        pts = generate_particles(ParticleProp, mesh; alg=GridSampling())
+        pts.V⁰ .= volume(mesh) / length(pts) # Set initial volume
+
+        # Left and right disks
+        r = 0.2 # Radius
+        lhs = findall(x -&gt; norm(@. x-r    ) &lt; r, pts.x)
+        rhs = findall(x -&gt; norm(@. x-(1-r)) &lt; r, pts.x)
+
+        # Set initial velocities
+        pts.v[lhs] .= Ref(Vec( 0.1, 0.1))
+        pts.v[rhs] .= Ref(Vec(-0.1,-0.1))
+
+        pts[[lhs; rhs]]
+    end
+    @. particles.m = ρ⁰ * particles.V⁰
+    @. particles.F = one(particles.F)
+
+    # Basis weights
+    weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))
+
+    # Create animation with `Plots.@gif`
+    Plots.@gif for t in range(0, 4, step=Δt)
+
+        # Update basis function values
+        update!(weights, particles, mesh)
+
+        @P2G grid=&gt;i particles=&gt;p weights=&gt;ip begin
+            # Particle-to-grid transfer
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            f[i]  = @∑ -V⁰[p] * det(F[p]) * σ[p] * ∇w[ip]
+
+            # Grid-node calculation
+            mᵢ⁻¹ = iszero(m[i]) ? zero(m[i]) : inv(m[i])
+            vⁿ[i] = mv[i] * mᵢ⁻¹
+            v[i]  = vⁿ[i] + (f[i] * mᵢ⁻¹) * Δt
+        end
+
+        @G2P grid=&gt;i particles=&gt;p weights=&gt;ip begin
+            # Grid-to-particle transfer
+            v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+            x[p] += @∑ w[ip] * v[i] * Δt
+
+            # Particle calculation
+            Δεₚ = symmetric(∇v[p]) * Δt
+            F[p]  = (I + ∇v[p]*Δt) * F[p]
+            σ[p] += λ*tr(Δεₚ)*I + 2μ*Δεₚ # Linear elastic material
+        end
+
+        # Plot the current particle positions
+        plot_state(mesh, particles.x)
+    end every 100
+
+end
+
+function plot_state(mesh, xs=nothing)
+    xmin, ymin = mesh[begin]
+    xmax, ymax = mesh[end]
+    pad = 0.1 * max(xmax - xmin, ymax - ymin)
+    plt = Plots.plot(
+        xlims = (xmin - pad, xmax + pad),
+        ylims = (ymin - pad, ymax + pad),
+        aspect_ratio = :equal,
+        label = false,
+    )
+    for i in axes(mesh, 1)
+        Plots.plot!(plt, Tuple.(mesh[i, :]); color=:lightgray, linewidth=0.5, label=false)
+    end
+    for j in axes(mesh, 2)
+        Plots.plot!(plt, Tuple.(mesh[:, j]); color=:lightgray, linewidth=0.5, label=false)
+    end
+    if !isnothing(xs)
+        Plots.scatter!(plt, Tuple.(xs); markersize=3, label=false)
+    end
+    plt
+end
+
+main()</code></pre><img src="30748483.gif" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../collision/">Transfer schemes »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 4 June 2026 01:54">Thursday 4 June 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
