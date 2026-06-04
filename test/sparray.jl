@@ -389,8 +389,10 @@ end
     bad_activity = falses(Tesserae.nblocks(Tesserae.get_spinds(bad_grid)))
     bad_activity[1,1] = true
     update_sparsity!(bad_grid, bad_activity)
-    bad_nodes = supportnodes(bad_weights[1], bad_grid)
-    bad_node = bad_nodes[findfirst(i -> !Tesserae.isactive(i), bad_nodes)]
+    @inbounds bad_nodes = view(Tesserae.get_spinds(bad_grid), supportnodes(bad_weights[1]))
+    bad_node_index = findfirst(i -> !Tesserae.isactive(i), bad_nodes)
+    @test !isnothing(bad_node_index)
+    bad_node = bad_nodes[bad_node_index]
     @test_throws ErrorException Tesserae.p2g_write_index(bad_grid, bad_node)
 
     mesh_block3 = CartesianMesh(1.0, (0, 8), (0, 16); block_size_log2=Val(3))
