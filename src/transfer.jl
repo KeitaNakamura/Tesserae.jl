@@ -201,7 +201,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
 end
 
 function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
-    @gensym bw gridindices
+    @gensym bw gridindices gridwriteindex
 
     scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
@@ -213,7 +213,7 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         (; lhs, rhs, op) = eq
         op == :(=)  && push_unique!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
         op == :(-=) && (rhs = :(-$rhs))
-        push!(sum_exprs, :(Tesserae.add!($(lhs.args...), $rhs)))
+        push!(sum_exprs, p2g_sum_add_expr(lhs, gridwriteindex, rhs))
     end
 
     body = quote
@@ -222,6 +222,7 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         $gridindices = supportnodes($bw, $grid)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
+            $gridwriteindex = Tesserae.p2g_write_index($grid, $i)
             $(cached_replacements(scope, 1, 3)...)
             $(sum_exprs...)
         end
@@ -229,6 +230,17 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
 
     Expr(:block, fillzeros...), body
 end
+
+function p2g_sum_add_expr(lhs, index, rhs)
+    Meta.isexpr(lhs, :ref, 2) || error("@P2G: invalid resolved LHS in `@∑` equation: $lhs")
+    array, _ = lhs.args
+    :(Tesserae.add!($array, $index, $rhs))
+end
+
+Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) = get_spinds(grid)[Tuple(i)...]
+Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i) = i
+Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
+Base.@propagate_inbounds p2g_write_index(grid, i) = i
 
 # CPU: sequential
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
