@@ -378,6 +378,23 @@ end
     @test sp_grid.v ≈ dense_grid.v
     @test all(!iszero, map(Tesserae.storageindex, Tesserae.activeindices(sp_grid.m)))
 
+    bad_mesh = CartesianMesh(1.0, (0,31), (0,31); block_size_log2=Val(2))
+    bad_grid = generate_grid(SpArray, GridProp, bad_mesh)
+    bad_particles = generate_particles(ParticleProp, bad_mesh; alg=GridSampling())
+    filter!(bad_particles) do p
+        p.x[1] > 28 && p.x[2] > 28
+    end
+    bad_weights = generate_basis_weights(BSpline(Linear()), bad_mesh, length(bad_particles))
+    update!(bad_weights, bad_particles, bad_mesh)
+    bad_activity = falses(Tesserae.nblocks(Tesserae.get_spinds(bad_grid)))
+    bad_activity[1,1] = true
+    update_sparsity!(bad_grid, bad_activity)
+    @inbounds bad_nodes = view(Tesserae.get_spinds(bad_grid), supportnodes(bad_weights[1]))
+    bad_node_index = findfirst(i -> !Tesserae.isactive(i), bad_nodes)
+    @test !isnothing(bad_node_index)
+    bad_node = bad_nodes[bad_node_index]
+    @test_throws ErrorException Tesserae.p2g_write_index(bad_grid, bad_node)
+
     mesh_block3 = CartesianMesh(1.0, (0, 8), (0, 16); block_size_log2=Val(3))
     grid_block3 = generate_grid(SpArray, GridProp, mesh_block3)
     partition_block3 = ThreadPartition(mesh_block3)
