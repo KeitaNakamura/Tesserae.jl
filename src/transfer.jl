@@ -237,10 +237,28 @@ function p2g_sum_add_expr(lhs, index, rhs)
     :(Tesserae.add!($array, $index, $rhs))
 end
 
-Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) = get_spinds(grid)[Tuple(i)...]
-Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i) = i
-Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
+struct P2GSpGridStorageIndex
+    i::Int
+end
+
 Base.@propagate_inbounds p2g_write_index(grid, i) = i
+Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
+Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) =
+    p2g_write_index(grid, get_spinds(grid)[Tuple(i)...])
+@inline function p2g_write_index(::SpGrid, i::SpIndex)
+    si = storageindex(i)
+    @boundscheck iszero(si) && error("@P2G: inactive SpGrid support node. Call update_sparsity! before @P2G.")
+    P2GSpGridStorageIndex(si)
+end
+
+@inline function add!(A::SpArray{T}, i::P2GSpGridStorageIndex, v::T) where {T}
+    @_propagate_inbounds_meta
+    @debug checkbounds(get_data(A), i.i)
+    @inbounds get_data(A)[i.i] += v
+    A
+end
+
+@inline _atomic_index(A::HybridArray{<:Any, <:Any, <:SpArray}, i::P2GSpGridStorageIndex) = i.i
 
 # CPU: sequential
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
