@@ -178,6 +178,16 @@ end # BasisWeight
             F = one(Mat{dim,dim})
             x = interior_point(Val(dim))
             check_update!(bw, (;x,l,F), x, mesh; partition=true, reproduces_linear=true)
+
+            GridProp = NamedTuple{(:x, :m), Tuple{Vec{dim, Float64}, Float64}}
+            spgrid = generate_grid(SpArray, GridProp, mesh)
+            err = try
+                supportnodes(bw, spgrid)
+                nothing
+            catch err
+                sprint(showerror, err)
+            end
+            @test err isa String && occursin("CPDI is currently supported only on dense Grid, not SpGrid", err)
         end
     end
 

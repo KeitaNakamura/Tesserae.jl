@@ -319,6 +319,7 @@ function check_arguments_for_P2G(grid, particles, weights, partition)
     get_mesh(grid) isa AbstractMesh || error("@P2G: grid must have a mesh")
     eltype(weights) <: BasisWeight || error("@P2G: invalid `BasisWeight`s, got type $(typeof(weights))")
     if grid isa SpGrid
+        eltype(weights) <: BasisWeight{CPDI} && _cpdi_spgrid_error("@P2G")
         if length(propertynames(grid)) > 1
             isempty(get_data(getproperty(grid, 2))) && error("@P2G: SpGrid indices not activated")
         end
@@ -787,6 +788,7 @@ function check_arguments_for_G2P(grid, particles, weights)
     get_mesh(grid) isa AbstractMesh || error("@G2P: grid must have a mesh")
     eltype(weights) <: BasisWeight || error("@G2P: invalid `BasisWeight`s, got type $(typeof(weights))")
     if grid isa SpGrid
+        eltype(weights) <: BasisWeight{CPDI} && _cpdi_spgrid_error("@G2P")
         if length(propertynames(grid)) > 1
             isempty(get_data(getproperty(grid, 2))) && error("@G2P: SpGrid indices not activated")
         end
