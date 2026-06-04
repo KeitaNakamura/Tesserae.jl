@@ -26,6 +26,9 @@ grid = generate_grid(SpArray, GridProp, mesh)
 The first field, usually `x`, remains the mesh.
 The other grid fields are stored as `SpArray`s and share the same sparsity pattern.
 
+!!! warning
+    [`CPDI`](@ref) is currently supported only with dense grids, because its support follows the deformed particle domain.
+
 ## Updating sparsity
 
 Inactive entries are treated as structural zeros: they read as zero, and writes to inactive entries are ignored.

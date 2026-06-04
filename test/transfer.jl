@@ -28,6 +28,36 @@
         grid, particles, weights
     end
 
+    function cpdi_spgrid_fixture()
+        mesh = CartesianMesh(1.0, (0,2), (0,2))
+        GridProp = @NamedTuple begin
+            x :: Vec{2, Float64}
+            m :: Float64
+            v :: Vec{2, Float64}
+        end
+        ParticleProp = @NamedTuple begin
+            x :: Vec{2, Float64}
+            m :: Float64
+            v :: Vec{2, Float64}
+            F :: SecondOrderTensor{2, Float64, 4}
+            l :: Float64
+        end
+
+        grid = generate_grid(SpArray, GridProp, mesh)
+        particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
+        weights = generate_basis_weights(CPDI(), mesh, length(particles))
+        grid, particles, weights
+    end
+
+    function error_message(f)
+        try
+            f()
+            nothing
+        catch err
+            sprint(showerror, err)
+        end
+    end
+
     function initialize_mpm_state!(grid, particles)
         for p in eachindex(particles)
             particles.m[p] = 1.0 + 0.05p
@@ -158,6 +188,24 @@
         @test actual.f ≈ expected.f
         @test actual.vⁿ ≈ expected.vⁿ
         @test actual.v ≈ expected.v
+    end
+
+    @testset "CPDI rejects SpGrid" begin
+        grid, particles, weights = cpdi_spgrid_fixture()
+
+        p2g_err = error_message() do
+            @P2G grid=>i particles=>p weights=>ip begin
+                m[i] = @∑ w[ip] * m[p]
+            end
+        end
+        @test p2g_err isa String && occursin("@P2G: CPDI is currently supported only on dense Grid, not SpGrid", p2g_err)
+
+        g2p_err = error_message() do
+            @G2P grid=>i particles=>p weights=>ip begin
+                v[p] = @∑ w[ip] * v[i]
+            end
+        end
+        @test g2p_err isa String && occursin("@G2P: CPDI is currently supported only on dense Grid, not SpGrid", g2p_err)
     end
 
     @testset "@G2P" begin
