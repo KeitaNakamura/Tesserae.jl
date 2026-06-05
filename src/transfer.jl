@@ -206,18 +206,22 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
     replaced = scope.replacements
+    inner_symbols = p2g_cached_symbols(replaced, 1, 3)
 
     fillzeros = Any[]
+    hoist_exprs = Any[]
     sum_exprs = Any[]
     for eq in sum_equations
         (; lhs, rhs, op) = eq
         op == :(=)  && push_unique!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
         op == :(-=) && (rhs = :(-$rhs))
+        rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         push!(sum_exprs, p2g_sum_add_expr(lhs, gridwriteindex, rhs))
     end
 
     body = quote
         $(replaced[2]...)
+        $(hoist_exprs...)
         $bw = $weights[$p]
         $gridindices = supportnodes($bw, $grid)
         for $ip in eachindex($gridindices)
@@ -229,6 +233,70 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     end
 
     Expr(:block, fillzeros...), body
+end
+
+function p2g_cached_symbols(replaced::Vector{Vector{Expr}}, groups::Integer...)
+    symbols = Set{Symbol}()
+    for ex in Iterators.flatten(replaced[group] for group in groups)
+        Meta.isexpr(ex, :(=), 2) && ex.args[1] isa Symbol && push!(symbols, ex.args[1])
+    end
+    symbols
+end
+
+function p2g_has_symbol(expr, symbols=nothing)
+    if expr isa Symbol
+        return symbols === nothing || expr in symbols
+    elseif expr isa Expr
+        return any(arg -> p2g_has_symbol(arg, symbols), expr.args)
+    else
+        return false
+    end
+end
+
+function p2g_simple_factor(expr)
+    expr isa Union{Symbol, Number, QuoteNode} && return true
+    if Meta.isexpr(expr, :call, 2) && expr.args[1] in (:-, :+)
+        return p2g_simple_factor(expr.args[2])
+    end
+    false
+end
+
+function p2g_product_expr(args::Vector)
+    length(args) == 1 && return only(args)
+    Expr(:call, :*, args...)
+end
+
+function hoist_p2g_rhs!(hoist_exprs::Vector, inner_symbols::Set{Symbol}, expr)
+    MacroTools.postwalk(expr) do ex
+        if Meta.isexpr(ex, :call) && first(ex.args) === :*
+            return hoist_p2g_product_edges!(hoist_exprs, inner_symbols, Any[ex.args[2:end]...])
+        end
+        ex
+    end
+end
+
+function hoist_p2g_product_edges!(hoist_exprs::Vector, inner_symbols::Set{Symbol}, args::Vector)
+    first_inner = findfirst(arg -> p2g_has_symbol(arg, inner_symbols), args)
+    first_inner === nothing && return p2g_product_expr(args)
+    last_inner = findlast(arg -> p2g_has_symbol(arg, inner_symbols), args)
+
+    newargs = Any[]
+    append_p2g_hoisted_edge!(newargs, hoist_exprs, args[1:first_inner-1])
+    append!(newargs, args[first_inner:last_inner])
+    append_p2g_hoisted_edge!(newargs, hoist_exprs, args[last_inner+1:end])
+    p2g_product_expr(newargs)
+end
+
+function append_p2g_hoisted_edge!(newargs::Vector, hoist_exprs::Vector, args)
+    if length(args) > 1 && all(p2g_simple_factor, args) && any(p2g_has_symbol, args)
+        sym = gensym(:p2g_rhs)
+        rhs = p2g_product_expr(Any[args...])
+        push!(hoist_exprs, :($sym = $rhs))
+        push!(newargs, sym)
+    else
+        append!(newargs, args)
+    end
+    newargs
 end
 
 function p2g_sum_add_expr(lhs, index, rhs)
