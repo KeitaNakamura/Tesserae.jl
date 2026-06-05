@@ -1,97 +1,275 @@
 abstract type PartitionStrategy end
 
+# Scratch buffers reused by BlockStrategy.update!:
+#   * per-chunk block histograms
+#   * per-particle block ids and chunk-local ranks
+#   * touched/active block lists used to avoid full block-array clears/scans
+struct BlockUpdateWorkspace{dim}
+    chunk_counts::Vector{Array{Int, dim}}
+    particle_blocks::Vector{Int}
+    particle_local_indices::Vector{Int}
+    activeblocks::Vector{Int}
+    touchedblocks::Vector{Vector{Int}}
+    active_epoch_marks::Vector{Int}
+    active_epoch::Base.RefValue{Int}
+end
+
+function BlockUpdateWorkspace(blkdims::Dims{dim}) where {dim}
+    BlockUpdateWorkspace{dim}(
+        [zeros(Int, blkdims) for _ in 1:Threads.nthreads()],
+        Int[],
+        Int[],
+        Int[],
+        [Int[] for _ in 1:Threads.nthreads()],
+        zeros(Int, prod(blkdims)),
+        Ref(0),
+    )
+end
+
 struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: PartitionStrategy
     mesh::Mesh
     particleindices::Vector{Int}
+    starts::Array{Int, dim}
     stops::Array{Int, dim}
-    nparticles_chunks::Vector{Array{Int, dim}}
-    blockindices::Vector{Int}
-    localindices::Vector{Int}
+    nassigned::Base.RefValue{Int}
+    activegroups::Vector{Vector{CartesianIndex{dim}}}
+    blockcolors::Array{Int, dim}
+    update_workspace::BlockUpdateWorkspace{dim}
 end
 
 function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
     blkdims = nblocks(mesh)
-    nparticles_chunks = [zeros(Int, blkdims) for _ in 1:Threads.nthreads()]
     particleindices = Int[]
+    starts = zeros(Int, blkdims)
     stops = zeros(Int, blkdims)
-    BlockStrategy{dim, typeof(mesh)}(mesh, particleindices, stops, nparticles_chunks, Int[], Int[])
+    activegroups = [CartesianIndex{dim}[] for _ in 1:(1 << dim)]
+    blockcolors = zeros(Int, blkdims)
+    for blk in CartesianIndices(blkdims)
+        blockcolors[blk] = block_color(blk)
+    end
+    BlockStrategy{dim, typeof(mesh)}(
+        mesh,
+        particleindices,
+        starts,
+        stops,
+        Ref(0),
+        activegroups,
+        blockcolors,
+        BlockUpdateWorkspace(blkdims),
+    )
 end
 
 nblocks(bs::BlockStrategy) = size(bs.stops)
 block_size_log2(bs::BlockStrategy) = block_size_log2(bs.mesh)
 blockwidth(bs::BlockStrategy) = blockwidth(bs.mesh)
+nassigned(bs::BlockStrategy) = bs.nassigned[]
 
+@inline function _particle_indices(particleindices, starts, stops, blk::Integer)
+    @_propagate_inbounds_meta
+    start = starts[blk]
+    stop = stops[blk]
+    (iszero(start) || stop < start) && return view(particleindices, 1:0)
+    view(particleindices, start:stop)
+end
 @inline function particle_indices(bs::BlockStrategy, blk::Integer)
     @boundscheck checkbounds(LinearIndices(nblocks(bs)), blk)
-    @inbounds _particle_indices(bs.particleindices, bs.stops, blk)
+    @inbounds _particle_indices(bs.particleindices, bs.starts, bs.stops, blk)
 end
 @inline function particle_indices(bs::BlockStrategy, blk::CartesianIndex)
     @boundscheck checkbounds(CartesianIndices(nblocks(bs)), blk)
     @inbounds particle_indices(bs, LinearIndices(nblocks(bs))[blk])
 end
-@inline function _particle_indices(particleindices, stops, blk::Integer)
-    @_propagate_inbounds_meta
-    stop = stops[blk]
-    start = blk==1 ? 1 : stops[blk-1]+1
-    view(particleindices, start:stop)
+function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
+    nₚ = length(xₚ)
+    chunksize = prepare_partition_update!(bs, nₚ)
+    blocklin = LinearIndices(nblocks(bs))
+
+    # Count particles by chunk/block and remember each particle's rank within
+    # that chunk's block. Those ranks let the scatter pass write without atomics.
+    count_particles_by_block!(bs, xₚ, chunksize, blocklin)
+
+    # Merge per-chunk touched block lists into one unique active block list.
+    activate_touched_blocks!(bs)
+
+    # Cache the nonempty color groups used by threaded P2G.
+    update_threadsafe_groups!(bs)
+
+    # Assign active block ranges in P2G color-group order.
+    build_chunk_offsets_and_ranges!(bs)
+
+    # Scatter particle ids into the block-contiguous index array.
+    scatter_particle_indices!(bs, nₚ, chunksize)
+    bs
 end
 
-function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
-    n = length(xₚ)
-    resize!(bs.particleindices, n)
-    resize!(bs.blockindices, n)
-    resize!(bs.localindices, n)
-    foreach(fillzero!, bs.nparticles_chunks)
+function prepare_partition_update!(bs::BlockStrategy, nₚ::Integer)
+    ws = bs.update_workspace
+    resize!(bs.particleindices, nₚ)
+    resize!(ws.particle_blocks, nₚ)
+    resize!(ws.particle_local_indices, nₚ)
+    reset_touched_blocks!(bs)
 
-    nchunks = length(bs.nparticles_chunks)
-    chunksize = max(1, cld(n, nchunks))
-    chunks = [((i-1)*chunksize + 1) : min(i*chunksize, n) for i in 1:nchunks]
+    # Each chunk owns one histogram and touched-block list, so the counting pass
+    # can update those buffers without atomics.
+    nchunks = length(ws.chunk_counts)
+    max(1, cld(nₚ, nchunks))
+end
 
-    @threaded for chunk_id in 1:nchunks
-        @inbounds for p in chunks[chunk_id]
-            blk = sub2ind(nblocks(bs), findblock(xₚ[p], bs.mesh))
-            bs.blockindices[p] = blk
+function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
+    ws = bs.update_workspace
+    nₚ = length(xₚ)
+
+    @threaded for chunk_id in eachindex(ws.chunk_counts)
+        counts = ws.chunk_counts[chunk_id]
+        touched = ws.touchedblocks[chunk_id]
+        firstp = (chunk_id - 1) * chunksize + 1
+        lastp = min(chunk_id * chunksize, nₚ)
+
+        @inbounds for p in firstp:lastp
+            blk = sub2ind(blocklin, findblock(xₚ[p], bs.mesh))
+            ws.particle_blocks[p] = blk
             if !iszero(blk)
-                bs.localindices[p] = (bs.nparticles_chunks[chunk_id][blk] += 1)
-            end
-        end
-    end
-    for i in 1:nchunks-1
-        broadcast!(+, bs.nparticles_chunks[i+1], bs.nparticles_chunks[i+1], bs.nparticles_chunks[i])
-    end
-    nptsinblks = last(bs.nparticles_chunks) # last entry has a complete list
-
-    cumsum!(vec(bs.stops), vec(nptsinblks))
-    @threaded for chunk_id in 1:nchunks
-        @inbounds for p in chunks[chunk_id]
-            blk = bs.blockindices[p]
-            if !iszero(blk)
-                offset = chunk_id==1 ? 0 : bs.nparticles_chunks[chunk_id-1][blk]
-                i = offset + bs.localindices[p]
-                stop = bs.stops[blk]
-                len = nptsinblks[blk]
-                bs.particleindices[stop-len+i] = p
+                # Record the block once per chunk; activate_touched_blocks!
+                # merges these lists without scanning every block.
+                iszero(counts[blk]) && push!(touched, blk)
+                ws.particle_local_indices[p] = (counts[blk] += 1)
             end
         end
     end
 
     bs
 end
-@inline sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
-@inline sub2ind(::Dims, ::Nothing)::Int = 0
 
-function threadsafe_groups(bs::BlockStrategy)
-    [filter(I -> !isempty(particle_indices(bs, I)), blocks) for blocks in threadsafe_blocks(nblocks(bs))]
+function build_chunk_offsets_and_ranges!(bs::BlockStrategy)
+    ws = bs.update_workspace
+    nchunks = length(ws.chunk_counts)
+    blocklin = LinearIndices(nblocks(bs))
+
+    # Turn per-chunk counts into cumulative counts. For a block, counts
+    # [4, 2, 5] become [4, 6, 11], so the previous chunk gives the scatter
+    # offset and the final chunk gives the block length.
+    @inbounds begin
+        for chunk_id in 2:nchunks
+            counts = ws.chunk_counts[chunk_id]
+            prev_counts = ws.chunk_counts[chunk_id - 1]
+            for blk in ws.activeblocks
+                counts[blk] += prev_counts[blk]
+            end
+        end
+
+        assigned = 0
+        last_counts = ws.chunk_counts[nchunks]
+        for group in bs.activegroups
+            for region in group
+                blk = blocklin[region]
+                bs.starts[blk] = assigned + 1
+                count = last_counts[blk]
+                assigned += count
+                bs.stops[blk] = assigned
+            end
+        end
+        bs.nassigned[] = assigned
+    end
+
+    bs
 end
 
+function scatter_particle_indices!(bs::BlockStrategy, nₚ::Integer, chunksize)
+    ws = bs.update_workspace
+
+    @threaded for chunk_id in eachindex(ws.chunk_counts)
+        firstp = (chunk_id - 1) * chunksize + 1
+        lastp = min(chunk_id * chunksize, nₚ)
+
+        @inbounds for p in firstp:lastp
+            blk = ws.particle_blocks[p]
+            if !iszero(blk)
+                chunk_offset = isone(chunk_id) ? 0 : ws.chunk_counts[chunk_id - 1][blk]
+                local_index = chunk_offset + ws.particle_local_indices[p]
+                # starts[blk] is the block's global range start; local_index is
+                # this particle's 1-based position inside that block.
+                bs.particleindices[bs.starts[blk] + local_index - 1] = p
+            end
+        end
+    end
+
+    bs
+end
+
+@inline sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
+@inline sub2ind(::Dims, ::Nothing)::Int = 0
+@inline sub2ind(lin::LinearIndices, I::CartesianIndex)::Int = @inbounds lin[I]
+@inline sub2ind(::LinearIndices, ::Nothing)::Int = 0
+
+@inline function block_color(I::CartesianIndex{dim}) where {dim}
+    color = 1
+    @inbounds for d in 1:dim
+        color += ((I[d] - 1) & 1) << (d - 1)
+    end
+    color
+end
+
+@inline function reset_touched_blocks!(bs::BlockStrategy)
+    ws = bs.update_workspace
+    # Counts are cumulative after update!, so a block touched by one chunk can
+    # leave nonzero entries in later chunks. Clear previous active blocks across
+    # all chunks before collecting the next sparse active set.
+    @inbounds for counts in ws.chunk_counts
+        for blk in ws.activeblocks
+            counts[blk] = 0
+        end
+    end
+    for touched in ws.touchedblocks
+        empty!(touched)
+    end
+    @inbounds for blk in ws.activeblocks
+        bs.starts[blk] = 0
+        bs.stops[blk] = 0
+    end
+    empty!(ws.activeblocks)
+    bs
+end
+
+@inline function activate_touched_blocks!(bs::BlockStrategy)
+    ws = bs.update_workspace
+    epoch = ws.active_epoch[] + 1
+    if epoch == typemax(Int)
+        fill!(ws.active_epoch_marks, 0)
+        epoch = 1
+    end
+    ws.active_epoch[] = epoch
+    marks = ws.active_epoch_marks
+    # Epoch marks deduplicate block ids without clearing a full block-sized
+    # boolean array every step.
+    for touched in ws.touchedblocks
+        @inbounds for blk in touched
+            if marks[blk] != epoch
+                marks[blk] = epoch
+                push!(ws.activeblocks, blk)
+            end
+        end
+    end
+    ws.activeblocks
+end
+
+function update_threadsafe_groups!(bs::BlockStrategy)
+    for active in bs.activegroups
+        empty!(active)
+    end
+    cart = CartesianIndices(nblocks(bs))
+    @inbounds for blk in bs.update_workspace.activeblocks
+        region = cart[blk]
+        push!(bs.activegroups[bs.blockcolors[blk]], region)
+    end
+    bs.activegroups
+end
+threadsafe_groups(bs::BlockStrategy) = bs.activegroups
+
 function reorder_particles!(particles::AbstractVector, bs::BlockStrategy)
-    # NOTE: Only `particleindices` is synced; `blockindices/localindices` are untouched.
-    perm = _reorder_particles!(particles, maparray(i -> particle_indices(bs, i), LinearIndices(nblocks(bs))))
-    invp = invperm(perm)
-    n_assigned = bs.stops[end]
+    n_assigned = nassigned(bs)
+    _reorder_particles!(particles, bs.particleindices, n_assigned)
     @inbounds for k in 1:n_assigned
-        p_old = bs.particleindices[k]
-        bs.particleindices[k] = invp[p_old]
+        bs.particleindices[k] = k
     end
     particles
 end
@@ -99,6 +277,43 @@ end
 function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
     _reorder_particles!(particles, ptsinblks)
     particles
+end
+
+function _reorder_particles!(particles::AbstractVector, particleindices::AbstractVector{Int}, nₚ_assigned::Integer)
+    nₚ = length(particles)
+
+    (firstindex(particles) == 1 && lastindex(particles) == nₚ) || throw(ArgumentError("reorder_particles!: particles must be 1-based indexed (`Vector`-like)."))
+    nₚ_assigned > nₚ && error("reorder_particles!: The block assignment contains more particle IDs than exist (assigned=$nₚ_assigned, total=$nₚ).")
+
+    perm = Vector{Int}(undef, nₚ)
+    !iszero(nₚ_assigned) && copyto!(perm, 1, particleindices, 1, nₚ_assigned)
+
+    if nₚ_assigned != nₚ
+        seen = falses(nₚ)
+        for i in 1:nₚ_assigned
+            p = perm[i]
+            1 ≤ p ≤ nₚ || error("reorder_particles!: particle ID $p is out of range (valid: 1:$nₚ).")
+            @inbounds begin
+                seen[p] && error("reorder_particles!: particle $p is duplicated in the block assignment.")
+                seen[p] = true
+            end
+        end
+
+        @warn "reorder_particles!: Some particles are outside of the grid and were not assigned to any block. They will be kept at the end of the array." maxlog=1
+        k = nₚ_assigned
+        @inbounds for p in 1:nₚ
+            if !seen[p]
+                k += 1
+                perm[k] = p
+            end
+        end
+        @assert k == nₚ
+    end
+
+    particles_copied = @inbounds particles[perm]
+    copyto!(particles, 1, particles_copied, 1, nₚ)
+
+    perm
 end
 
 function _reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
@@ -128,7 +343,6 @@ function _reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray
         end
     end
 
-    # keep missing particles aside
     if nₚ_assigned != nₚ
         @warn "reorder_particles!: Some particles are outside of the grid and were not assigned to any block. They will be kept at the end of the array." maxlog=1
         k = nₚ_assigned
@@ -138,11 +352,10 @@ function _reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray
                 perm[k] = p
             end
         end
-        @assert k == nₚ # check just in case
+        @assert k == nₚ
     end
 
-    # reorder particles
-    particles_copied = @inbounds particles[perm] # checked in `seen`
+    particles_copied = @inbounds particles[perm]
     copyto!(particles, 1, particles_copied, 1, nₚ)
 
     perm

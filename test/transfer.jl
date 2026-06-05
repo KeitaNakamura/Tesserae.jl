@@ -421,6 +421,17 @@
         @test threaded_particles.F ≈ sequential_particles.F
     end
 
+    @testset "threaded P2G requires updated Cartesian partition" begin
+        grid, particles, weights = transfer_fixture()
+        partition = ThreadPartition(grid.x)
+        err = error_message() do
+            @threaded :static @P2G grid=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+            end
+        end
+        @test occursin("@P2G: No particles assigned to any block in ThreadPartition", err)
+    end
+
     @testset "ordering errors" begin
         ex = quote
             @P2G grid=>i particles=>p weights=>ip begin
