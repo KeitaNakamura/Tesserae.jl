@@ -445,7 +445,7 @@ end
 check_partition_for_P2G(grid, weights, strat) = nothing
 function check_partition_for_P2G(grid, weights, strat::BlockStrategy)
     @assert nblocks(get_mesh(grid)) == nblocks(strat)
-    if sum(length(particle_indices(strat, blk)) for blk in LinearIndices(nblocks(strat))) == 0
+    if nassigned(strat) == 0
         error("@P2G: No particles assigned to any block in ThreadPartition")
     end
     b = basis(first(weights))

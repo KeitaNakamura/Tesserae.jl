@@ -14,13 +14,30 @@
         @test Tesserae.block_size_log2(bs) === Tesserae.block_size_log2(mesh)
         @test Tesserae.blockwidth(bs) === Tesserae.blockwidth(mesh)
         @test all(blk -> isempty(Tesserae.particle_indices(bs, blk)), LinearIndices(Tesserae.nblocks(bs)))
-        update!(bs, xₚ)
-        ptsinblks = map(_->Int[], CartesianIndices(Tesserae.nblocks(mesh)))
-        for p in eachindex(xₚ)
-            I = Tesserae.findblock(xₚ[p], mesh)
-            I === nothing || push!(ptsinblks[I], p)
+        function check_group_order(bs)
+            ordered = Int[]
+            for group in Tesserae.threadsafe_groups(bs), blk in group
+                append!(ordered, Tesserae.particle_indices(bs, blk))
+            end
+            @test ordered == bs.particleindices[1:Tesserae.nassigned(bs)]
         end
-        @test map(blk -> Tesserae.particle_indices(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks
+        function check_particle_blocks(bs, mesh, xₚ)
+            expected = map(_ -> Int[], CartesianIndices(Tesserae.nblocks(mesh)))
+            n_assigned = 0
+            for p in eachindex(xₚ)
+                I = Tesserae.findblock(xₚ[p], mesh)
+                if I !== nothing
+                    push!(expected[I], p)
+                    n_assigned += 1
+                end
+            end
+            actual = map(blk -> collect(Tesserae.particle_indices(bs, blk)), LinearIndices(Tesserae.nblocks(bs)))
+            @test actual == expected
+            @test Tesserae.nassigned(bs) == n_assigned
+        end
+        update!(bs, xₚ)
+        check_group_order(bs)
+        check_particle_blocks(bs, mesh, xₚ)
         basis = BSpline(Cubic())
         for group in Tesserae.threadsafe_groups(bs)
             group_nodes = Set{CartesianIndex{2}}()
@@ -34,18 +51,43 @@
             end
         end
 
-        # check reorder_particles
+        # Reordering should keep block ranges and P2G color-group order valid.
         reorder_particles!(xₚ, bs)
 
-        n_assigned = bs.stops[end]
+        n_assigned = Tesserae.nassigned(bs)
         @test bs.particleindices[1:n_assigned] == collect(1:n_assigned)
+        check_group_order(bs)
 
-        ptsinblks_after = map(_->Int[], CartesianIndices(Tesserae.nblocks(mesh)))
-        for p in eachindex(xₚ)
-            I = Tesserae.findblock(xₚ[p], mesh)
-            I === nothing || push!(ptsinblks_after[I], p)
-        end
-        @test map(blk -> Tesserae.particle_indices(bs, blk), LinearIndices(Tesserae.nblocks(bs))) == ptsinblks_after
+        update!(bs, xₚ)
+        check_group_order(bs)
+        reorder_particles!(xₚ, bs)
+        n_assigned = Tesserae.nassigned(bs)
+        @test bs.particleindices[1:n_assigned] == collect(1:n_assigned)
+        check_group_order(bs)
+
+        check_particle_blocks(bs, mesh, xₚ)
+
+        moving_bs = Tesserae.BlockStrategy(mesh)
+        moving_xₚ = [Vec(0.125, 0.125), Vec(0.375, 0.375), Vec(3.625, 3.625), Vec(3.875, 3.875)]
+        update!(moving_bs, moving_xₚ)
+        check_group_order(moving_bs)
+        check_particle_blocks(moving_bs, mesh, moving_xₚ)
+
+        moving_xₚ = [Vec(0.125, 0.125), Vec(0.375, 0.375)]
+        update!(moving_bs, moving_xₚ)
+        check_group_order(moving_bs)
+        check_particle_blocks(moving_bs, mesh, moving_xₚ)
+
+        moving_xₚ = [Vec(0.125, 0.125), Vec(10.0, 10.0), Vec(3.875, 0.125)]
+        update!(moving_bs, moving_xₚ)
+        check_group_order(moving_bs)
+        check_particle_blocks(moving_bs, mesh, moving_xₚ)
+        @test_logs (:warn, r"Some particles are outside of the grid") reorder_particles!(moving_xₚ, moving_bs)
+        n_assigned = Tesserae.nassigned(moving_bs)
+        @test moving_bs.particleindices[1:n_assigned] == collect(1:n_assigned)
+        @test Tesserae.findblock(moving_xₚ[end], mesh) === nothing
+        check_group_order(moving_bs)
+        check_particle_blocks(moving_bs, mesh, moving_xₚ)
     end
     @testset "CellStrategy" begin
         mesh = UnstructuredMesh(CartesianMesh(0.5, (0,2), (0,2)))
