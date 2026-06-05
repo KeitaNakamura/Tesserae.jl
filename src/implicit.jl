@@ -314,10 +314,12 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         TransferEquation(eq.kind, eq.lhs, resolve_refs(eq.rhs, scope), eq.op)
     end
     replaced = scope.replacements
+    inner_symbols = p2g_cached_symbols(replaced, 1, 2, 4, 5)
 
     fillzeros = Any[]
     gmats = Any[]
     gdofs_init = Any[]
+    hoist_exprs = Any[]
     lmat_init = Any[]
     local_jdofs = Any[]
     local_idofs = Any[]
@@ -342,6 +344,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
 
         op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($gmat)))
         op == :(-=) && (rhs = :(-$rhs))
+        rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         lmat_dims = Symbol(lmat, :dims)
         push!(gmats, gmat)
         if gi == i && gj == j
@@ -374,6 +377,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
 
     body = quote
         $(replaced[3]...)
+        $(hoist_exprs...)
         $bw_i, $bw_j = $weights_i′[$p], $weights_j′[$p]
         $supportnodes_expr
         $(lmat_init...)

@@ -269,25 +269,29 @@ end
 function hoist_p2g_rhs!(hoist_exprs::Vector, inner_symbols::Set{Symbol}, expr)
     MacroTools.postwalk(expr) do ex
         if Meta.isexpr(ex, :call) && first(ex.args) === :*
-            return hoist_p2g_product_edges!(hoist_exprs, inner_symbols, Any[ex.args[2:end]...])
+            return hoist_p2g_product_runs!(hoist_exprs, inner_symbols, Any[ex.args[2:end]...])
         end
         ex
     end
 end
 
-function hoist_p2g_product_edges!(hoist_exprs::Vector, inner_symbols::Set{Symbol}, args::Vector)
-    first_inner = findfirst(arg -> p2g_has_symbol(arg, inner_symbols), args)
-    first_inner === nothing && return p2g_product_expr(args)
-    last_inner = findlast(arg -> p2g_has_symbol(arg, inner_symbols), args)
-
+function hoist_p2g_product_runs!(hoist_exprs::Vector, inner_symbols::Set{Symbol}, args::Vector)
     newargs = Any[]
-    append_p2g_hoisted_edge!(newargs, hoist_exprs, args[1:first_inner-1])
-    append!(newargs, args[first_inner:last_inner])
-    append_p2g_hoisted_edge!(newargs, hoist_exprs, args[last_inner+1:end])
+    run = Any[]
+    for arg in args
+        if p2g_simple_factor(arg) && !p2g_has_symbol(arg, inner_symbols)
+            push!(run, arg)
+        else
+            append_p2g_hoisted_run!(newargs, hoist_exprs, run)
+            empty!(run)
+            push!(newargs, arg)
+        end
+    end
+    append_p2g_hoisted_run!(newargs, hoist_exprs, run)
     p2g_product_expr(newargs)
 end
 
-function append_p2g_hoisted_edge!(newargs::Vector, hoist_exprs::Vector, args)
+function append_p2g_hoisted_run!(newargs::Vector, hoist_exprs::Vector, args)
     if length(args) > 1 && all(p2g_simple_factor, args) && any(p2g_has_symbol, args)
         sym = gensym(:p2g_rhs)
         rhs = p2g_product_expr(Any[args...])

@@ -190,6 +190,15 @@
         @test actual.v ≈ expected.v
     end
 
+    @testset "P2G RHS product hoisting" begin
+        hoist_exprs = Any[]
+        rhs = Tesserae.hoist_p2g_rhs!(hoist_exprs, Set([:wi, :∇wi]), :(a * b * wi * c * d * ∇wi * e * f))
+        hoisted_symbols = map(ex -> ex.args[1], hoist_exprs)
+
+        @test map(ex -> ex.args[2], hoist_exprs) == [:(a * b), :(c * d), :(e * f)]
+        @test rhs == Expr(:call, :*, hoisted_symbols[1], :wi, hoisted_symbols[2], :∇wi, hoisted_symbols[3])
+    end
+
     @testset "CPDI rejects SpGrid" begin
         grid, particles, weights = cpdi_spgrid_fixture()
 
