@@ -298,9 +298,7 @@ threadsafe_groups(bs::BlockStrategy) = bs.activegroups
 function reorder_particles!(particles::AbstractVector, bs::BlockStrategy)
     n_assigned = nassigned(bs)
     _reorder_particles!(particles, bs.particleindices, n_assigned)
-    @inbounds for k in 1:n_assigned
-        bs.particleindices[k] = k
-    end
+    copyto!(bs.particleindices, 1:n_assigned)
     particles
 end
 
@@ -315,30 +313,41 @@ function _reorder_particles!(particles::AbstractVector, particleindices::Abstrac
     (firstindex(particles) == 1 && lastindex(particles) == nₚ) || throw(ArgumentError("reorder_particles!: particles must be 1-based indexed (`Vector`-like)."))
     nₚ_assigned > nₚ && error("reorder_particles!: The block assignment contains more particle IDs than exist (assigned=$nₚ_assigned, total=$nₚ).")
 
-    perm = Vector{Int}(undef, nₚ)
-    !iszero(nₚ_assigned) && copyto!(perm, 1, particleindices, 1, nₚ_assigned)
-
-    if nₚ_assigned != nₚ
-        seen = falses(nₚ)
-        for i in 1:nₚ_assigned
-            p = perm[i]
-            1 ≤ p ≤ nₚ || error("reorder_particles!: particle ID $p is out of range (valid: 1:$nₚ).")
-            @inbounds begin
-                seen[p] && error("reorder_particles!: particle $p is duplicated in the block assignment.")
-                seen[p] = true
-            end
-        end
-
-        @warn "reorder_particles!: Some particles are outside of the grid and were not assigned to any block. They will be kept at the end of the array." maxlog=1
-        k = nₚ_assigned
-        @inbounds for p in 1:nₚ
-            if !seen[p]
-                k += 1
-                perm[k] = p
-            end
-        end
-        @assert k == nₚ
+    # Common case: every particle is inside the mesh, so the flat block-ordered
+    # particleindices array is already the complete reorder permutation.
+    if nₚ_assigned == nₚ
+        particle_order = view(particleindices, 1:nₚ)
+        particles_copied = @inbounds particles[particle_order]
+        particles .= particles_copied
+        return particle_order
     end
+
+    perm = Vector{Int}(undef, nₚ)
+    # Only the first nₚ_assigned entries are valid; the rest may contain stale
+    # ids from a previous partition update.
+    copyto!(perm, 1, particleindices, 1, nₚ_assigned)
+
+    # Fallback: keep particles outside the mesh after the assigned particles,
+    # preserving their original relative order.
+    seen = falses(nₚ)
+    for i in 1:nₚ_assigned
+        p = perm[i]
+        1 ≤ p ≤ nₚ || error("reorder_particles!: particle ID $p is out of range (valid: 1:$nₚ).")
+        @inbounds begin
+            seen[p] && error("reorder_particles!: particle $p is duplicated in the block assignment.")
+            seen[p] = true
+        end
+    end
+
+    @warn "reorder_particles!: Some particles are outside of the grid and were not assigned to any block. They will be kept at the end of the array." maxlog=1
+    k = nₚ_assigned
+    @inbounds for p in 1:nₚ
+        if !seen[p]
+            k += 1
+            perm[k] = p
+        end
+    end
+    @assert k == nₚ
 
     particles_copied = @inbounds particles[perm]
     copyto!(particles, 1, particles_copied, 1, nₚ)
