@@ -1,13 +1,15 @@
 @testset "ThreadPartition" begin
     @testset "BlockStrategy" begin
         mesh = CartesianMesh(0.25, (0,4), (0,4))
-        xₚ = generate_particles(mesh)
-        filter!(xₚ) do (x,y)
+        particles = generate_particles(@NamedTuple{x::Vec{2, Float64}}, mesh)
+        filter!(particles) do particle
+            x, y = particle.x
             (x-2)^2 + (y-2)^2 < 1
         end
 
         Random.seed!(1234)
-        shuffle!(xₚ)
+        shuffle!(particles)
+        xₚ = particles.x
 
         bs = (@inferred Tesserae.BlockStrategy(mesh))
         @test Tesserae.nblocks(bs) === Tesserae.nblocks(mesh)
@@ -52,7 +54,7 @@
         end
 
         # Reordering should keep block ranges and P2G color-group order valid.
-        reorder_particles!(xₚ, bs)
+        reorder_particles!(particles, bs)
 
         n_assigned = Tesserae.nassigned(bs)
         @test bs.particleindices[1:n_assigned] == collect(1:n_assigned)
@@ -60,7 +62,7 @@
 
         update!(bs, xₚ)
         check_group_order(bs)
-        reorder_particles!(xₚ, bs)
+        reorder_particles!(particles, bs)
         n_assigned = Tesserae.nassigned(bs)
         @test bs.particleindices[1:n_assigned] == collect(1:n_assigned)
         check_group_order(bs)
@@ -78,11 +80,14 @@
         check_group_order(moving_bs)
         check_particle_blocks(moving_bs, mesh, moving_xₚ)
 
-        moving_xₚ = [Vec(0.125, 0.125), Vec(10.0, 10.0), Vec(3.875, 0.125)]
+        moving_particles = generate_particles(@NamedTuple{x::Vec{2, Float64}}, mesh)
+        resize!(moving_particles, 3)
+        moving_particles.x .= [Vec(0.125, 0.125), Vec(10.0, 10.0), Vec(3.875, 0.125)]
+        moving_xₚ = moving_particles.x
         update!(moving_bs, moving_xₚ)
         check_group_order(moving_bs)
         check_particle_blocks(moving_bs, mesh, moving_xₚ)
-        @test_logs (:warn, r"Some particles are outside of the grid") reorder_particles!(moving_xₚ, moving_bs)
+        @test_logs (:warn, r"Some particles are outside of the grid") reorder_particles!(moving_particles, moving_bs)
         n_assigned = Tesserae.nassigned(moving_bs)
         @test moving_bs.particleindices[1:n_assigned] == collect(1:n_assigned)
         @test Tesserae.findblock(moving_xₚ[end], mesh) === nothing
