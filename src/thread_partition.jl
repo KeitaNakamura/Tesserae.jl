@@ -1,9 +1,26 @@
 abstract type PartitionStrategy end
 
-# Scratch buffers reused by BlockStrategy.update!:
+struct ParticleReorderBuffers
+    by_component_type::Dict{DataType, Any}
+end
+ParticleReorderBuffers() = ParticleReorderBuffers(Dict{DataType, Any}())
+
+const THREADED_COMPONENT_REORDER_MIN_LENGTH = 2^16
+
+function buffer_for_component!(buffers::ParticleReorderBuffers, component::T) where {T}
+    buffer = get(buffers.by_component_type, T, nothing)
+    if !(buffer isa T) || length(buffer) != length(component)
+        buffer = similar(component, length(component))
+        buffers.by_component_type[T] = buffer
+    end
+    buffer::T
+end
+
+# Reusable buffers owned by BlockStrategy:
 #   * per-chunk block histograms
 #   * per-particle packed block ids and 1-based numbers within each chunk/block
 #   * touched/active block lists used to avoid full block-array clears/scans
+#   * particle reorder buffers for StructVector component arrays
 struct BlockUpdateWorkspace{dim}
     chunk_counts::Vector{Array{Int, dim}}
     packed_particle_blocks::Vector{UInt64}
@@ -11,6 +28,7 @@ struct BlockUpdateWorkspace{dim}
     touchedblocks::Vector{Vector{Int}}
     active_epoch_marks::Vector{Int}
     active_epoch::Base.RefValue{Int}
+    particle_reorder_buffers::ParticleReorderBuffers
 end
 
 function BlockUpdateWorkspace(blkdims::Dims{dim}) where {dim}
@@ -21,6 +39,7 @@ function BlockUpdateWorkspace(blkdims::Dims{dim}) where {dim}
         [Int[] for _ in 1:Threads.nthreads()],
         zeros(Int, prod(blkdims)),
         Ref(0),
+        ParticleReorderBuffers(),
     )
 end
 
@@ -295,9 +314,9 @@ function update_threadsafe_groups!(bs::BlockStrategy)
 end
 threadsafe_groups(bs::BlockStrategy) = bs.activegroups
 
-function reorder_particles!(particles::AbstractVector, bs::BlockStrategy)
+function reorder_particles!(particles::StructVector, bs::BlockStrategy)
     n_assigned = nassigned(bs)
-    _reorder_particles!(particles, bs.particleindices, n_assigned)
+    _reorder_particles!(particles, bs.particleindices, n_assigned, bs.update_workspace.particle_reorder_buffers)
     copyto!(bs.particleindices, 1:n_assigned)
     particles
 end
@@ -307,7 +326,39 @@ function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{
     particles
 end
 
-function _reorder_particles!(particles::AbstractVector, particleindices::AbstractVector{Int}, nₚ_assigned::Integer)
+function _permute_particles!(particles::StructVector, perm, buffers::ParticleReorderBuffers)
+    for component in StructArrays.components(particles)
+        buffer = buffer_for_component!(buffers, component)
+        _permute_component!(component, perm, buffer)
+    end
+    particles
+end
+
+function _permute_component!(component, perm, buffer)
+    n = length(component)
+    # _reorder_particles! passes a full-length valid permutation; the buffer has
+    # the same length as the component, so the gather loop can skip bounds checks.
+    if Threads.nthreads() == 1 || n < THREADED_COMPONENT_REORDER_MIN_LENGTH
+        @inbounds for k in 1:n
+            buffer[k] = component[perm[k]]
+        end
+    else
+        nchunks = Threads.nthreads()
+        chunksize = cld(n, nchunks)
+        tforeach(1:nchunks) do chunk_id
+            firstp = (chunk_id - 1) * chunksize + 1
+            lastp = min(chunk_id * chunksize, n)
+            @inbounds for k in firstp:lastp
+                buffer[k] = component[perm[k]]
+            end
+        end
+    end
+
+    copyto!(component, buffer)
+    component
+end
+
+function _reorder_particles!(particles::StructVector, particleindices::AbstractVector{Int}, nₚ_assigned::Integer, buffers::ParticleReorderBuffers=ParticleReorderBuffers())
     nₚ = length(particles)
 
     (firstindex(particles) == 1 && lastindex(particles) == nₚ) || throw(ArgumentError("reorder_particles!: particles must be 1-based indexed (`Vector`-like)."))
@@ -317,8 +368,7 @@ function _reorder_particles!(particles::AbstractVector, particleindices::Abstrac
     # particleindices array is already the complete reorder permutation.
     if nₚ_assigned == nₚ
         particle_order = view(particleindices, 1:nₚ)
-        particles_copied = @inbounds particles[particle_order]
-        particles .= particles_copied
+        _permute_particles!(particles, particle_order, buffers)
         return particle_order
     end
 
@@ -349,8 +399,7 @@ function _reorder_particles!(particles::AbstractVector, particleindices::Abstrac
     end
     @assert k == nₚ
 
-    particles_copied = @inbounds particles[perm]
-    copyto!(particles, 1, particles_copied, 1, nₚ)
+    _permute_particles!(particles, perm, buffers)
 
     perm
 end
