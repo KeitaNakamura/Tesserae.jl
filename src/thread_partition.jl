@@ -2,7 +2,7 @@ abstract type PartitionStrategy end
 
 # Scratch buffers reused by BlockStrategy.update!:
 #   * per-chunk block histograms
-#   * per-particle block ids and chunk-local ranks
+#   * per-particle block ids and 1-based numbers within each chunk/block
 #   * touched/active block lists used to avoid full block-array clears/scans
 struct BlockUpdateWorkspace{dim}
     chunk_counts::Vector{Array{Int, dim}}
@@ -84,8 +84,10 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
     chunksize = prepare_partition_update!(bs, nₚ)
     blocklin = LinearIndices(nblocks(bs))
 
-    # Count particles by chunk/block and remember each particle's rank within
-    # that chunk's block. Those ranks let the scatter pass write without atomics.
+    # Particles are split into fixed chunks by index. For each chunk, count how
+    # many particles fall in each block, and remember each particle's block plus
+    # its 1-based number within that chunk/block. The scatter pass derives the
+    # chunk from the same index ranges, so no per-particle chunk id is needed.
     count_particles_by_block!(bs, xₚ, chunksize, blocklin)
 
     # Merge per-chunk touched block lists into one unique active block list.
@@ -127,12 +129,16 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
 
         @inbounds for p in firstp:lastp
             blk = sub2ind(blocklin, findblock(xₚ[p], bs.mesh))
-            ws.particle_blocks[p] = blk
-            if !iszero(blk)
+            if iszero(blk)
+                ws.particle_blocks[p] = 0
+            else
                 # Record the block once per chunk; activate_touched_blocks!
                 # merges these lists without scanning every block.
-                iszero(counts[blk]) && push!(touched, blk)
-                ws.particle_local_indices[p] = (counts[blk] += 1)
+                count = counts[blk] + 1
+                isone(count) && push!(touched, blk)
+                counts[blk] = count
+                ws.particle_blocks[p] = blk
+                ws.particle_local_indices[p] = count
             end
         end
     end
