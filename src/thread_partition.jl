@@ -118,6 +118,10 @@ end
 function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
     ws = bs.update_workspace
     nₚ = length(xₚ)
+    xmin = get_xmin(bs.mesh)
+    h_inv = spacing_inv(bs.mesh)
+    dims = size(bs.mesh)
+    block_size = Val(block_size_log2(bs))
 
     @threaded for chunk_id in eachindex(ws.chunk_counts)
         counts = ws.chunk_counts[chunk_id]
@@ -126,7 +130,7 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
         lastp = min(chunk_id * chunksize, nₚ)
 
         @inbounds for p in firstp:lastp
-            blk = sub2ind(blocklin, findblock(xₚ[p], bs.mesh))
+            blk = sub2ind(blocklin, _findblock(xₚ[p], xmin, h_inv, dims, block_size))
             if iszero(blk)
                 ws.packed_particle_blocks[p] = 0
             else
@@ -441,10 +445,21 @@ julia> Tesserae.findblock(Vec(8.5, 1.5), mesh)
 CartesianIndex(3, 1)
 ```
 """
-@inline function findblock(x::Vec, mesh::CartesianMesh{dim, T, V, L}) where {dim, T, V, L}
-    I = findcell(x, mesh)
-    I === nothing && return nothing
-    CartesianIndex(@. (I.I-1) >> L + 1)
+@inline function findblock(x::Vec{dim}, mesh::CartesianMesh{dim, T, V, L}) where {dim, T, V, L}
+    _findblock(x, get_xmin(mesh), spacing_inv(mesh), size(mesh), Val(L))
+end
+
+# Same boundary rule as findcell, but return the block index directly.
+# cell0_d is the 0-based cell index in direction d. It is converted to a
+# 1-based block index by shifting by block_size_log2 and adding 1.
+@generated function _findblock(x::Vec{dim}, xmin::Vec{dim}, h_inv, dims::Dims{dim}, ::Val{L}) where {dim, L}
+    quote
+        @_inline_meta
+        @nexprs $dim d -> cell0_d = unsafe_trunc(Int, floor((x[d] - xmin[d]) * h_inv))
+        inside = @nall $dim d -> 0 ≤ cell0_d ≤ dims[d] - 2
+        inside || return nothing
+        CartesianIndex(@ntuple $dim d -> (cell0_d >> $L) + 1)
+    end
 end
 
 function threadsafe_blocks(nblocks::NTuple{dim, Int}) where {dim}
