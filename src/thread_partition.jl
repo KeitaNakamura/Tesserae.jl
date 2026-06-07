@@ -2,12 +2,11 @@ abstract type PartitionStrategy end
 
 # Scratch buffers reused by BlockStrategy.update!:
 #   * per-chunk block histograms
-#   * per-particle block ids and chunk-local ranks
+#   * per-particle packed block ids and 1-based numbers within each chunk/block
 #   * touched/active block lists used to avoid full block-array clears/scans
 struct BlockUpdateWorkspace{dim}
     chunk_counts::Vector{Array{Int, dim}}
-    particle_blocks::Vector{Int}
-    particle_local_indices::Vector{Int}
+    packed_particle_blocks::Vector{UInt64}
     activeblocks::Vector{Int}
     touchedblocks::Vector{Vector{Int}}
     active_epoch_marks::Vector{Int}
@@ -17,8 +16,7 @@ end
 function BlockUpdateWorkspace(blkdims::Dims{dim}) where {dim}
     BlockUpdateWorkspace{dim}(
         [zeros(Int, blkdims) for _ in 1:Threads.nthreads()],
-        Int[],
-        Int[],
+        UInt64[],
         Int[],
         [Int[] for _ in 1:Threads.nthreads()],
         zeros(Int, prod(blkdims)),
@@ -84,8 +82,10 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
     chunksize = prepare_partition_update!(bs, nₚ)
     blocklin = LinearIndices(nblocks(bs))
 
-    # Count particles by chunk/block and remember each particle's rank within
-    # that chunk's block. Those ranks let the scatter pass write without atomics.
+    # Particles are split into fixed chunks by index. For each chunk, count how
+    # many particles fall in each block, and remember each particle's block plus
+    # its 1-based number within that chunk/block. The scatter pass derives the
+    # chunk from the same index ranges, so no per-particle chunk id is needed.
     count_particles_by_block!(bs, xₚ, chunksize, blocklin)
 
     # Merge per-chunk touched block lists into one unique active block list.
@@ -105,8 +105,8 @@ end
 function prepare_partition_update!(bs::BlockStrategy, nₚ::Integer)
     ws = bs.update_workspace
     resize!(bs.particleindices, nₚ)
-    resize!(ws.particle_blocks, nₚ)
-    resize!(ws.particle_local_indices, nₚ)
+    resize!(ws.packed_particle_blocks, nₚ)
+    check_packed_block_number_limits!(bs, nₚ)
     reset_touched_blocks!(bs)
 
     # Each chunk owns one histogram and touched-block list, so the counting pass
@@ -118,6 +118,10 @@ end
 function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
     ws = bs.update_workspace
     nₚ = length(xₚ)
+    xmin = get_xmin(bs.mesh)
+    h_inv = spacing_inv(bs.mesh)
+    dims = size(bs.mesh)
+    block_size = Val(block_size_log2(bs))
 
     @threaded for chunk_id in eachindex(ws.chunk_counts)
         counts = ws.chunk_counts[chunk_id]
@@ -126,13 +130,16 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
         lastp = min(chunk_id * chunksize, nₚ)
 
         @inbounds for p in firstp:lastp
-            blk = sub2ind(blocklin, findblock(xₚ[p], bs.mesh))
-            ws.particle_blocks[p] = blk
-            if !iszero(blk)
+            blk = sub2ind(blocklin, _findblock(xₚ[p], xmin, h_inv, dims, block_size))
+            if iszero(blk)
+                ws.packed_particle_blocks[p] = 0
+            else
                 # Record the block once per chunk; activate_touched_blocks!
                 # merges these lists without scanning every block.
-                iszero(counts[blk]) && push!(touched, blk)
-                ws.particle_local_indices[p] = (counts[blk] += 1)
+                count = counts[blk] + 1
+                isone(count) && push!(touched, blk)
+                counts[blk] = count
+                ws.packed_particle_blocks[p] = pack_block_number(blk, count)
             end
         end
     end
@@ -174,6 +181,28 @@ function build_chunk_offsets_and_ranges!(bs::BlockStrategy)
     bs
 end
 
+const PACKED_BLOCK_NUMBER_BITS = 32
+const PACKED_BLOCK_NUMBER_MASK = (UInt64(1) << PACKED_BLOCK_NUMBER_BITS) - UInt64(1)
+
+function check_packed_block_number_limits!(bs::BlockStrategy, nₚ::Integer)
+    block_count = foldl((count, n) -> count * UInt64(n), nblocks(bs); init = UInt64(1))
+    block_count <= PACKED_BLOCK_NUMBER_MASK ||
+        throw(ArgumentError("ThreadPartition block count exceeds packed block id capacity."))
+    UInt64(nₚ) <= PACKED_BLOCK_NUMBER_MASK ||
+        throw(ArgumentError("ThreadPartition particle count exceeds packed per-block number capacity."))
+    nothing
+end
+
+# packed_particle_blocks[p] stores two values in one UInt64:
+#   upper 32 bits: linear block id
+#   lower 32 bits: 1-based number within that particle's chunk/block
+# The chunk id is not stored because count and scatter use the same fixed
+# particle index ranges.
+@inline pack_block_number(block::Integer, number::Integer) =
+    (UInt64(block) << PACKED_BLOCK_NUMBER_BITS) | UInt64(number)
+@inline packed_block(packed::UInt64) = Int(packed >> PACKED_BLOCK_NUMBER_BITS)
+@inline packed_number(packed::UInt64) = Int(packed & PACKED_BLOCK_NUMBER_MASK)
+
 function scatter_particle_indices!(bs::BlockStrategy, nₚ::Integer, chunksize)
     ws = bs.update_workspace
 
@@ -182,13 +211,14 @@ function scatter_particle_indices!(bs::BlockStrategy, nₚ::Integer, chunksize)
         lastp = min(chunk_id * chunksize, nₚ)
 
         @inbounds for p in firstp:lastp
-            blk = ws.particle_blocks[p]
-            if !iszero(blk)
+            packed = ws.packed_particle_blocks[p]
+            if !iszero(packed)
+                blk = packed_block(packed)
                 chunk_offset = isone(chunk_id) ? 0 : ws.chunk_counts[chunk_id - 1][blk]
-                local_index = chunk_offset + ws.particle_local_indices[p]
-                # starts[blk] is the block's global range start; local_index is
-                # this particle's 1-based position inside that block.
-                bs.particleindices[bs.starts[blk] + local_index - 1] = p
+                number = chunk_offset + packed_number(packed)
+                # starts[blk] is the block's global range start; number is this
+                # particle's 1-based number inside that block after previous chunks.
+                bs.particleindices[bs.starts[blk] + number - 1] = p
             end
         end
     end
@@ -415,10 +445,21 @@ julia> Tesserae.findblock(Vec(8.5, 1.5), mesh)
 CartesianIndex(3, 1)
 ```
 """
-@inline function findblock(x::Vec, mesh::CartesianMesh{dim, T, V, L}) where {dim, T, V, L}
-    I = findcell(x, mesh)
-    I === nothing && return nothing
-    CartesianIndex(@. (I.I-1) >> L + 1)
+@inline function findblock(x::Vec{dim}, mesh::CartesianMesh{dim, T, V, L}) where {dim, T, V, L}
+    _findblock(x, get_xmin(mesh), spacing_inv(mesh), size(mesh), Val(L))
+end
+
+# Same boundary rule as findcell, but return the block index directly.
+# cell0_d is the 0-based cell index in direction d. It is converted to a
+# 1-based block index by shifting by block_size_log2 and adding 1.
+@generated function _findblock(x::Vec{dim}, xmin::Vec{dim}, h_inv, dims::Dims{dim}, ::Val{L}) where {dim, L}
+    quote
+        @_inline_meta
+        @nexprs $dim d -> cell0_d = unsafe_trunc(Int, floor((x[d] - xmin[d]) * h_inv))
+        inside = @nall $dim d -> 0 ≤ cell0_d ≤ dims[d] - 2
+        inside || return nothing
+        CartesianIndex(@ntuple $dim d -> (cell0_d >> $L) + 1)
+    end
 end
 
 function threadsafe_blocks(nblocks::NTuple{dim, Int}) where {dim}
