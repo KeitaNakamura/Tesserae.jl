@@ -371,11 +371,6 @@ function _reorder_partition_particles!(particles::StructVector, bs::BlockStrateg
     particles
 end
 
-function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
-    _reorder_particles!(particles, ptsinblks)
-    true
-end
-
 function _permute_particles!(particles::StructVector, perm, buffers::ParticleReorderBuffers)
     for component in StructArrays.components(particles)
         buffer = buffer_for_component!(buffers, component)
@@ -450,51 +445,6 @@ function _reorder_particles!(particles::StructVector, particleindices::AbstractV
     @assert k == nₚ
 
     _permute_particles!(particles, perm, buffers)
-
-    perm
-end
-
-function _reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
-    ptsinblks = vec(ptsinblks)
-    lens = length.(ptsinblks)
-    nₚ = length(particles)
-    nₚ_assigned = sum(lens)
-
-    (firstindex(particles) == 1 && lastindex(particles) == nₚ) || throw(ArgumentError("reorder_particles!: particles must be 1-based indexed (`Vector`-like)."))
-    nₚ_assigned > nₚ && error("reorder_particles!: The block assignment contains more particle IDs than exist (assigned=$nₚ_assigned, total=$nₚ).")
-
-    offsets = cumsum([0; lens[1:end-1]])
-    perm = Vector{Int}(undef, nₚ)
-    @threaded for blockindex in eachindex(ptsinblks)
-        n = lens[blockindex]
-        rng = offsets[blockindex]+1 : offsets[blockindex]+n
-        perm[rng] .= ptsinblks[blockindex]
-    end
-
-    seen = falses(nₚ)
-    for i in 1:nₚ_assigned
-        p = perm[i]
-        1 ≤ p ≤ nₚ || error("reorder_particles!: particle ID $p is out of range (valid: 1:$nₚ).")
-        @inbounds begin
-            seen[p] && error("reorder_particles!: particle $p is duplicated in the block assignment.")
-            seen[p] = true
-        end
-    end
-
-    if nₚ_assigned != nₚ
-        @warn "reorder_particles!: Some particles are outside of the grid and were not assigned to any block. They will be kept at the end of the array." maxlog=1
-        k = nₚ_assigned
-        @inbounds for p in 1:nₚ
-            if !seen[p]
-                k += 1
-                perm[k] = p
-            end
-        end
-        @assert k == nₚ
-    end
-
-    particles_copied = @inbounds particles[perm]
-    copyto!(particles, 1, particles_copied, 1, nₚ)
 
     perm
 end
