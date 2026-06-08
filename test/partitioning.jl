@@ -54,15 +54,18 @@
         end
 
         # Reordering should keep block ranges and P2G color-group order valid.
-        reorder_particles!(particles, bs)
+        @test reorder_particles!(particles, bs)
 
         n_assigned = Tesserae.nassigned(bs)
         @test bs.particleindices[1:n_assigned] == collect(1:n_assigned)
+        @test Tesserae.block_ordered_particle_contiguity(bs) == 1.0
+        @test !reorder_particles!(particles, bs; threshold=0.85)
+        @test reorder_particles!(particles, bs; threshold=1.0)
         check_group_order(bs)
 
         update!(bs, xₚ)
         check_group_order(bs)
-        reorder_particles!(particles, bs)
+        @test !reorder_particles!(particles, bs; threshold=0.85)
         n_assigned = Tesserae.nassigned(bs)
         @test bs.particleindices[1:n_assigned] == collect(1:n_assigned)
         check_group_order(bs)
@@ -87,9 +90,14 @@
         update!(moving_bs, moving_xₚ)
         check_group_order(moving_bs)
         check_particle_blocks(moving_bs, mesh, moving_xₚ)
-        @test_logs (:warn, r"Some particles are outside of the grid") reorder_particles!(moving_particles, moving_bs)
+        @test Tesserae.block_ordered_particle_contiguity(moving_bs) == 0.0
+        @test !reorder_particles!(moving_particles, moving_bs; threshold=0.0)
+        @test_logs (:warn, r"Some particles are outside of the grid") begin
+            @test reorder_particles!(moving_particles, moving_bs; threshold=0.5)
+        end
         n_assigned = Tesserae.nassigned(moving_bs)
         @test moving_bs.particleindices[1:n_assigned] == collect(1:n_assigned)
+        @test Tesserae.block_ordered_particle_contiguity(moving_bs) == 1.0
         @test Tesserae.findblock(moving_xₚ[end], mesh) === nothing
         check_group_order(moving_bs)
         check_particle_blocks(moving_bs, mesh, moving_xₚ)
