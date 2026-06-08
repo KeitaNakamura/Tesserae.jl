@@ -49,11 +49,21 @@ reorder_particles!(particles, partition)
 ```
 
 Reordering ensures that particles within the same grid block are stored contiguously in memory, reducing random memory access during parallel execution.
+When reordering is checked every step, use an adaptive threshold such as `threshold=0.85`:
+
+```julia
+update!(partition, particles.x)
+reorder_particles!(particles, partition; threshold=0.85)
+```
+
+For `0 ≤ threshold ≤ 1`, larger values reorder more often. Particles are reordered when [`Tesserae.block_ordered_particle_contiguity`](@ref) is below `threshold`.
+
+At the endpoints, `threshold=0` never reorders and `threshold=1` always reorders.
 
 !!! warning
     `reorder_particles!` can be expensive for large systems.
     It is usually sufficient to reorder particles only when their spatial distribution has changed significantly.
-    Avoid calling it on every step.
+    Avoid forcing it on every step unless the P2G speedup is worth the reorder cost.
 
 
 ## Multi-threading API
@@ -61,4 +71,6 @@ Reordering ensures that particles within the same grid block are stored contiguo
 ```@docs
 @threaded
 ThreadPartition
+reorder_particles!
+Tesserae.block_ordered_particle_contiguity
 ```

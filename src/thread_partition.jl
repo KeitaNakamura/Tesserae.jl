@@ -314,15 +314,60 @@ function update_threadsafe_groups!(bs::BlockStrategy)
 end
 threadsafe_groups(bs::BlockStrategy) = bs.activegroups
 
-function reorder_particles!(particles::StructVector, bs::BlockStrategy)
+"""
+    Tesserae.block_ordered_particle_contiguity(partition)
+
+Return how contiguous the block-ordered particle list is in memory order.
+The score is `1` just after `reorder_particles!` and decreases as particles
+move across blocks.
+
+The score is the fraction of neighboring entries in the current block-ordered
+particle index array that are also consecutive in memory. For example, a
+block-ordered list `[1, 2, 3, 8]` has two consecutive pairs out of three.
+"""
+function block_ordered_particle_contiguity(bs::BlockStrategy)
+    n_assigned = nassigned(bs)
+    n_assigned ≤ 1 && return 1.0
+
+    # After reorder, the block-ordered particle list is 1, 2, 3, ...
+    # This score drops as particles move across blocks and memory order diverges.
+    consecutive = 0
+    @inbounds for i in 2:n_assigned
+        consecutive += bs.particleindices[i] == bs.particleindices[i-1] + 1
+    end
+    consecutive / (n_assigned - 1)
+end
+
+"""
+    reorder_particles!(particles, partition; threshold=1)
+
+Reorder particles by the current block partition.
+
+For `0 ≤ threshold ≤ 1`, larger values reorder more often. Particles are
+reordered when [`Tesserae.block_ordered_particle_contiguity`](@ref) is below
+`threshold`.
+
+At the endpoints, `threshold=0` never reorders and `threshold=1` always
+reorders.
+
+A practical value for adaptive reordering is `threshold=0.85`.
+
+Returns `true` when particles were reordered.
+"""
+function reorder_particles!(particles::StructVector, bs::BlockStrategy; threshold=1)
+    0 ≤ threshold ≤ 1 || throw(ArgumentError("threshold must be in [0, 1]."))
+    iszero(threshold) && return false
+    if threshold == 1 || block_ordered_particle_contiguity(bs) < threshold
+        _reorder_partition_particles!(particles, bs)
+        return true
+    end
+    return false
+end
+
+function _reorder_partition_particles!(particles::StructVector, bs::BlockStrategy)
     n_assigned = nassigned(bs)
     _reorder_particles!(particles, bs.particleindices, n_assigned, bs.update_workspace.particle_reorder_buffers)
     copyto!(bs.particleindices, 1:n_assigned)
-    particles
-end
-
-function reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
-    _reorder_particles!(particles, ptsinblks)
     particles
 end
 
@@ -400,51 +445,6 @@ function _reorder_particles!(particles::StructVector, particleindices::AbstractV
     @assert k == nₚ
 
     _permute_particles!(particles, perm, buffers)
-
-    perm
-end
-
-function _reorder_particles!(particles::AbstractVector, ptsinblks::AbstractArray{<: AbstractVector{Int}})
-    ptsinblks = vec(ptsinblks)
-    lens = length.(ptsinblks)
-    nₚ = length(particles)
-    nₚ_assigned = sum(lens)
-
-    (firstindex(particles) == 1 && lastindex(particles) == nₚ) || throw(ArgumentError("reorder_particles!: particles must be 1-based indexed (`Vector`-like)."))
-    nₚ_assigned > nₚ && error("reorder_particles!: The block assignment contains more particle IDs than exist (assigned=$nₚ_assigned, total=$nₚ).")
-
-    offsets = cumsum([0; lens[1:end-1]])
-    perm = Vector{Int}(undef, nₚ)
-    @threaded for blockindex in eachindex(ptsinblks)
-        n = lens[blockindex]
-        rng = offsets[blockindex]+1 : offsets[blockindex]+n
-        perm[rng] .= ptsinblks[blockindex]
-    end
-
-    seen = falses(nₚ)
-    for i in 1:nₚ_assigned
-        p = perm[i]
-        1 ≤ p ≤ nₚ || error("reorder_particles!: particle ID $p is out of range (valid: 1:$nₚ).")
-        @inbounds begin
-            seen[p] && error("reorder_particles!: particle $p is duplicated in the block assignment.")
-            seen[p] = true
-        end
-    end
-
-    if nₚ_assigned != nₚ
-        @warn "reorder_particles!: Some particles are outside of the grid and were not assigned to any block. They will be kept at the end of the array." maxlog=1
-        k = nₚ_assigned
-        @inbounds for p in 1:nₚ
-            if !seen[p]
-                k += 1
-                perm[k] = p
-            end
-        end
-        @assert k == nₚ
-    end
-
-    particles_copied = @inbounds particles[perm]
-    copyto!(particles, 1, particles_copied, 1, nₚ)
 
     perm
 end
@@ -610,4 +610,7 @@ ThreadPartition(mesh::CartesianMesh) = ThreadPartition(BlockStrategy(mesh))
 ThreadPartition(mesh::UnstructuredMesh) = ThreadPartition(CellStrategy(mesh))
 update!(partition::ThreadPartition, args...) = update!(strategy(partition), args...)
 
-reorder_particles!(particles::StructVector, partition::ThreadPartition{<: BlockStrategy}) = reorder_particles!(particles, strategy(partition))
+reorder_particles!(particles::StructVector, partition::ThreadPartition{<: BlockStrategy}; kwargs...) =
+    reorder_particles!(particles, strategy(partition); kwargs...)
+block_ordered_particle_contiguity(partition::ThreadPartition{<: BlockStrategy}) =
+    block_ordered_particle_contiguity(strategy(partition))

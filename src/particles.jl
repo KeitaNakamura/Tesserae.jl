@@ -135,7 +135,6 @@ function generate_particles(
     points = generate_points(alg, mesh)
     particles = _generate_particles(ParticleProp, points)
     particles
-    # _reorder_particles!(particles, mesh)
 end
 
 function generate_particles(
@@ -144,18 +143,8 @@ function generate_particles(
     points = generate_points(alg, mesh)
     particles = _generate_particles(ParticleProp, points)
     particles
-    # _reorder_particles!(particles, mesh)
 end
 
 function generate_particles(mesh::CartesianMesh{dim, T}; alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
     generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; alg).x
-end
-
-function _reorder_particles!(particles::AbstractVector, mesh::CartesianMesh)
-    ptsinblks = map(_->Int[], CartesianIndices(nblocks(mesh)))
-    for p in eachindex(particles)
-        I = findblock(getx(particles)[p], mesh)
-        I === nothing || push!(ptsinblks[I], p)
-    end
-    reorder_particles!(particles, ptsinblks)
 end
