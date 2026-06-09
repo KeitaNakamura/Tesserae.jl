@@ -19,15 +19,10 @@ end
 # Reusable buffers owned by BlockStrategy:
 #   * per-chunk block histograms
 #   * per-particle packed block ids and 1-based numbers within each chunk/block
-#   * touched/active block lists used to avoid full block-array clears/scans
 #   * particle reorder buffers for StructVector component arrays
 struct BlockUpdateWorkspace{dim}
     chunk_counts::Vector{Array{Int, dim}}
     packed_particle_blocks::Vector{UInt64}
-    activeblocks::Vector{Int}
-    touchedblocks::Vector{Vector{Int}}
-    active_epoch_marks::Vector{Int}
-    active_epoch::Base.RefValue{Int}
     particle_reorder_buffers::ParticleReorderBuffers
 end
 
@@ -35,10 +30,6 @@ function BlockUpdateWorkspace(blkdims::Dims{dim}) where {dim}
     BlockUpdateWorkspace{dim}(
         [zeros(Int, blkdims) for _ in 1:Threads.nthreads()],
         UInt64[],
-        Int[],
-        [Int[] for _ in 1:Threads.nthreads()],
-        zeros(Int, prod(blkdims)),
-        Ref(0),
         ParticleReorderBuffers(),
     )
 end
@@ -107,14 +98,13 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
     # chunk from the same index ranges, so no per-particle chunk id is needed.
     count_particles_by_block!(bs, xₚ, chunksize, blocklin)
 
-    # Merge per-chunk touched block lists into one unique active block list.
-    activate_touched_blocks!(bs)
-
-    # Cache the nonempty color groups used by threaded P2G.
+    # Accumulate dense block histograms, then scan blocks in linear order to
+    # cache the nonempty color groups used by threaded P2G.
+    accumulate_chunk_counts!(bs)
     update_threadsafe_groups!(bs)
 
     # Assign active block ranges in P2G color-group order.
-    build_chunk_offsets_and_ranges!(bs)
+    assign_block_ranges!(bs)
 
     # Scatter particle ids into the block-contiguous index array.
     scatter_particle_indices!(bs, nₚ, chunksize)
@@ -126,10 +116,10 @@ function prepare_partition_update!(bs::BlockStrategy, nₚ::Integer)
     resize!(bs.particleindices, nₚ)
     resize!(ws.packed_particle_blocks, nₚ)
     check_packed_block_number_limits!(bs, nₚ)
-    reset_touched_blocks!(bs)
+    foreach(fillzero!, ws.chunk_counts)
+    fillzero!(bs.starts)
+    fillzero!(bs.stops)
 
-    # Each chunk owns one histogram and touched-block list, so the counting pass
-    # can update those buffers without atomics.
     nchunks = length(ws.chunk_counts)
     max(1, cld(nₚ, nchunks))
 end
@@ -144,7 +134,6 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
 
     @threaded for chunk_id in eachindex(ws.chunk_counts)
         counts = ws.chunk_counts[chunk_id]
-        touched = ws.touchedblocks[chunk_id]
         firstp = (chunk_id - 1) * chunksize + 1
         lastp = min(chunk_id * chunksize, nₚ)
 
@@ -153,10 +142,7 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
             if iszero(blk)
                 ws.packed_particle_blocks[p] = 0
             else
-                # Record the block once per chunk; activate_touched_blocks!
-                # merges these lists without scanning every block.
                 count = counts[blk] + 1
-                isone(count) && push!(touched, blk)
                 counts[blk] = count
                 ws.packed_particle_blocks[p] = pack_block_number(blk, count)
             end
@@ -166,25 +152,26 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
     bs
 end
 
-function build_chunk_offsets_and_ranges!(bs::BlockStrategy)
+function accumulate_chunk_counts!(bs::BlockStrategy)
     ws = bs.update_workspace
     nchunks = length(ws.chunk_counts)
+
+    @inbounds for chunk_id in 2:nchunks
+        counts = ws.chunk_counts[chunk_id]
+        prev_counts = ws.chunk_counts[chunk_id - 1]
+        broadcast!(+, counts, counts, prev_counts)
+    end
+
+    bs
+end
+
+function assign_block_ranges!(bs::BlockStrategy)
+    ws = bs.update_workspace
     blocklin = LinearIndices(nblocks(bs))
+    last_counts = ws.chunk_counts[end]
 
-    # Turn per-chunk counts into cumulative counts. For a block, counts
-    # [4, 2, 5] become [4, 6, 11], so the previous chunk gives the scatter
-    # offset and the final chunk gives the block length.
     @inbounds begin
-        for chunk_id in 2:nchunks
-            counts = ws.chunk_counts[chunk_id]
-            prev_counts = ws.chunk_counts[chunk_id - 1]
-            for blk in ws.activeblocks
-                counts[blk] += prev_counts[blk]
-            end
-        end
-
         assigned = 0
-        last_counts = ws.chunk_counts[nchunks]
         for group in bs.activegroups
             for region in group
                 blk = blocklin[region]
@@ -258,57 +245,18 @@ end
     color
 end
 
-@inline function reset_touched_blocks!(bs::BlockStrategy)
-    ws = bs.update_workspace
-    # Counts are cumulative after update!, so a block touched by one chunk can
-    # leave nonzero entries in later chunks. Clear previous active blocks across
-    # all chunks before collecting the next sparse active set.
-    @inbounds for counts in ws.chunk_counts
-        for blk in ws.activeblocks
-            counts[blk] = 0
-        end
-    end
-    for touched in ws.touchedblocks
-        empty!(touched)
-    end
-    @inbounds for blk in ws.activeblocks
-        bs.starts[blk] = 0
-        bs.stops[blk] = 0
-    end
-    empty!(ws.activeblocks)
-    bs
-end
-
-@inline function activate_touched_blocks!(bs::BlockStrategy)
-    ws = bs.update_workspace
-    epoch = ws.active_epoch[] + 1
-    if epoch == typemax(Int)
-        fill!(ws.active_epoch_marks, 0)
-        epoch = 1
-    end
-    ws.active_epoch[] = epoch
-    marks = ws.active_epoch_marks
-    # Epoch marks deduplicate block ids without clearing a full block-sized
-    # boolean array every step.
-    for touched in ws.touchedblocks
-        @inbounds for blk in touched
-            if marks[blk] != epoch
-                marks[blk] = epoch
-                push!(ws.activeblocks, blk)
-            end
-        end
-    end
-    ws.activeblocks
-end
-
 function update_threadsafe_groups!(bs::BlockStrategy)
     for active in bs.activegroups
         empty!(active)
     end
+    ws = bs.update_workspace
+    counts = ws.chunk_counts[end]
     cart = CartesianIndices(nblocks(bs))
-    @inbounds for blk in bs.update_workspace.activeblocks
-        region = cart[blk]
-        push!(bs.activegroups[bs.blockcolors[blk]], region)
+    @inbounds for blk in eachindex(counts)
+        if !iszero(counts[blk])
+            region = cart[blk]
+            push!(bs.activegroups[bs.blockcolors[blk]], region)
+        end
     end
     bs.activegroups
 end
@@ -518,11 +466,6 @@ end
         inside || return nothing
         CartesianIndex(@ntuple $dim d -> (cell0_d >> $L) + 1)
     end
-end
-
-function threadsafe_blocks(nblocks::NTuple{dim, Int}) where {dim}
-    starts = collect(Iterators.product(ntuple(i->1:2, Val(dim))...))
-    vec(map(st -> map(CartesianIndex{dim}, Iterators.product(StepRange.(st, 2, nblocks)...)), starts))
 end
 
 struct CellStrategy <: PartitionStrategy

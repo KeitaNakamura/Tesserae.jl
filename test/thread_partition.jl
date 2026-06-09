@@ -12,6 +12,8 @@
         xₚ = particles.x
 
         bs = (@inferred Tesserae.BlockStrategy(mesh))
+        partition = (@inferred ThreadPartition(mesh))
+        @test Tesserae.strategy(partition) isa Tesserae.BlockStrategy
         @test Tesserae.nblocks(bs) === Tesserae.nblocks(mesh)
         @test Tesserae.block_size_log2(bs) === Tesserae.block_size_log2(mesh)
         @test Tesserae.blockwidth(bs) === Tesserae.blockwidth(mesh)
