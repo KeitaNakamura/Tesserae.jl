@@ -192,20 +192,77 @@
     end
 end
 
+@testset "Newton" begin
+    @testset "Initial nonfinite residual preserves x" begin
+        f(v) = fill(Inf, length(v))
+        J(v) = Matrix{Float64}(I, length(v), length(v))
+
+        x = [1.0, 2.0, 4.0, 8.0]
+        x0 = copy(x)
+        solved = Tesserae.newton!(x, f, J; verbose=false)
+
+        @test !solved
+        @test x == x0
+    end
+
+    @testset "Maxiter preserves finite last iterate" begin
+        f(v) = [v[1]^2 - 2]
+        J(v) = reshape([2v[1]], 1, 1)
+
+        x = [2.0]
+        solved = Tesserae.newton!(x, f, J; rtol=0.0, atol=0.0, maxiter=1, verbose=false)
+
+        @test !solved
+        @test x == [1.5]
+    end
+end
+
 @testset "Backtracking" begin
+    @testset "Rejects non-descent direction before trial" begin
+        visits = Float64[]
+        f(v) = (push!(visits, v[1]); [v[1] - 1])
+        J(v) = reshape([1.0], 1, 1)
+        linsolve(δx, A, b) = (δx .= -b; δx)
+
+        x = [0.0]
+        solved = Tesserae.newton!(x, f, J; linsolve=linsolve, backtracking=true, verbose=false)
+
+        @test !solved
+        @test x == [0.0]
+        @test visits == [0.0]
+    end
+
+    @testset "Failed line search restores accepted state" begin
+        visits = Float64[]
+        state = Ref(NaN)
+        f(v) = (state[] = v[1]; push!(visits, v[1]); [1.0])
+        J(v) = reshape([1.0], 1, 1)
+
+        x = [2.0]
+        solved = Tesserae.newton!(x, f, J; backtracking=true, verbose=false)
+
+        @test !solved
+        @test x == [2.0]
+        @test state[] == 2.0
+        @test visits[1] == 2.0
+        @test visits[end] == 2.0
+        @test length(visits) > 2
+        @test any(v -> v != 2.0, visits)
+    end
+
     @testset "Scalar cubic: backtracking stabilizes" begin
-        F(v) = [v[1]^3 - 1e6]
-        ∇F(v) = reshape([3v[1]^2], 1, 1)
+        f(v) = [v[1]^3 - 1e6]
+        J(v) = reshape([3v[1]^2], 1, 1)
         x0 = [1.0]
 
         # without backtracking
         x = copy(x0)
-        solved = Tesserae.newton!(x, F, ∇F; rtol=0.0, atol=1e-12, maxiter=10, backtracking=false, verbose=false)
+        solved = Tesserae.newton!(x, f, J; rtol=0.0, atol=1e-12, maxiter=10, backtracking=false, verbose=false)
         @test !solved || abs(x[1] - (1e6)^(1/3)) > 1e-3
 
         # with backtracking
         x = copy(x0)
-        solved = Tesserae.newton!(x, F, ∇F; rtol=0.0, atol=1e-12, maxiter=100, backtracking=true, verbose=false)
+        solved = Tesserae.newton!(x, f, J; rtol=0.0, atol=1e-12, maxiter=100, backtracking=true, verbose=false)
         @test solved
         @test isapprox(x[1], (1e6)^(1/3); rtol=0.0, atol=1e-12)
     end
