@@ -492,35 +492,45 @@ function check_arguments_for_P2G_Matrix(grid, particles, weights, partition)
 end
 
 """
-    Tesserae.newton!(x::AbstractVector, f, ∇f,
+    Tesserae.newton!(x::AbstractVector, f, J,
                      maxiter = 100, atol = zero(eltype(x)), rtol = sqrt(eps(eltype(x))),
-                     linsolve = (x,A,b) -> copyto!(x, A\\b), verbose = false)
+                     linsolve = (x,A,b) -> copyto!(x, A\\b),
+                     backtracking = false, verbose = false)
 
 A simple implementation of Newton's method.
-The functions `f(x)` and `∇f(x)` should return the residual vector and its Jacobian, respectively.
+The functions `f(x)` and `J(x)` should return the residual vector and its Jacobian, respectively.
 
-```jldoctest
-julia> function f(x)
-           [(x[1]+3)*(x[2]^3-7)+18,
-            sin(x[2]*exp(x[1])-1)]
-       end
-f (generic function with 1 method)
+Evaluation order:
 
-julia> function ∇f(x)
-           u = exp(x[1])*cos(x[2]*exp(x[1])-1)
-           [x[2]^3-7 3*x[2]^2*(x[1]+3)
-            x[2]*u   u]
-       end
-∇f (generic function with 1 method)
+```julia
+r = f(x)              # update state/caches derived from x and return residual
+while not converged
+    x_old = x
+    Jx = J(x)         # compute from x or reuse caches from f(x)
+    δx = solve(Jx, r)
 
-julia> x = [0.1, 1.2];
-
-julia> issuccess = Tesserae.newton!(x, f, ∇f)
-true
-
-julia> x ≈ [0,1]
-true
+    if backtracking
+        ϕ′0 = -dot(r, Jx, δx)
+        ϕ′0 < 0 || fail
+        for α in trial_steps
+            x = x_old - α * δx
+            r = f(x)  # update trial state
+            accept && break
+        end
+    else
+        x = x_old - δx
+        r = f(x)
+    end
+end
 ```
+
+If backtracking fails, `x` is restored to the last accepted iterate and `f(x)` is called once more to restore the corresponding state.
+
+!!! tip
+    At each iteration, `newton!` evaluates `J(x)` only after `f(x)` has already been evaluated at the same `x`.
+    In simulation codes, residual and tangent/Jacobian assembly often share intermediate quantities.
+    These quantities may be stored in caller-owned state while evaluating `f(x)`, so that the following `J(x)` call can reuse them without recomputing them.
+    This is optional: `J(x)` may also assemble the Jacobian directly from `x`.
 """
 function newton!(
         x::AbstractVector, f, J;
