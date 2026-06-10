@@ -492,97 +492,113 @@ function check_arguments_for_P2G_Matrix(grid, particles, weights, partition)
 end
 
 """
-    Tesserae.newton!(x::AbstractVector, f, ∇f,
+    Tesserae.newton!(x::AbstractVector, f, J,
                      maxiter = 100, atol = zero(eltype(x)), rtol = sqrt(eps(eltype(x))),
-                     linsolve = (x,A,b) -> copyto!(x, A\\b), verbose = false)
+                     linsolve = (x,A,b) -> copyto!(x, A\\b),
+                     backtracking = false, verbose = false)
 
 A simple implementation of Newton's method.
-The functions `f(x)` and `∇f(x)` should return the residual vector and its Jacobian, respectively.
+The functions `f(x)` and `J(x)` should return the residual vector and its Jacobian, respectively.
 
-```jldoctest
-julia> function f(x)
-           [(x[1]+3)*(x[2]^3-7)+18,
-            sin(x[2]*exp(x[1])-1)]
-       end
-f (generic function with 1 method)
+Evaluation order:
 
-julia> function ∇f(x)
-           u = exp(x[1])*cos(x[2]*exp(x[1])-1)
-           [x[2]^3-7 3*x[2]^2*(x[1]+3)
-            x[2]*u   u]
-       end
-∇f (generic function with 1 method)
+```julia
+r = f(x)              # update state/caches derived from x and return residual
+while not converged
+    x_old = x
+    Jx = J(x)         # compute from x or reuse caches from f(x)
+    δx = solve(Jx, r)
 
-julia> x = [0.1, 1.2];
-
-julia> issuccess = Tesserae.newton!(x, f, ∇f)
-true
-
-julia> x ≈ [0,1]
-true
+    if backtracking
+        ϕ′0 = -dot(r, Jx, δx)
+        ϕ′0 < 0 || fail
+        for α in trial_steps
+            x = x_old - α * δx
+            r = f(x)  # update trial state
+            accept && break
+        end
+    else
+        x = x_old - δx
+        r = f(x)
+    end
+end
 ```
+
+If backtracking fails, `x` is restored to the last accepted iterate and `f(x)` is called once more to restore the corresponding state.
+
+!!! tip
+    At each iteration, `newton!` evaluates `J(x)` only after `f(x)` has already been evaluated at the same `x`.
+    In simulation codes, residual and tangent/Jacobian assembly often share intermediate quantities.
+    These quantities may be stored in caller-owned state while evaluating `f(x)`, so that the following `J(x)` call can reuse them without recomputing them.
+    This is optional: `J(x)` may also assemble the Jacobian directly from `x`.
 """
 function newton!(
-        x::AbstractVector, F, ∇F;
+        x::AbstractVector, f, J;
         maxiter::Int=100, atol::Real=zero(eltype(x)), rtol::Real=sqrt(eps(eltype(x))),
         linsolve=(x,A,b)->copyto!(x,A\b), backtracking::Bool=false, verbose::Bool=false)
 
     T = eltype(x)
 
-    Fx = F(x)
-    fx = f0 = norm(Fx)
+    r = f(x)
+    rnorm = rnorm0 = norm(r)
     δx = similar(x)
 
-    # previous step values
-    x_prev, Fx_prev, fx_prev = similar(x), similar(Fx), fx
+    # old accepted step values
+    x_old, rnorm_old = similar(x), rnorm
 
     iter = 0
-    solved = f0 ≤ atol
-    giveup = !isfinite(fx)
+    solved = rnorm0 ≤ atol
+    giveup = !isfinite(rnorm)
 
     if verbose
         newton_print_header(maxiter, atol, rtol)
-        newton_print_row(maxiter, iter, fx, fx/f0)
+        newton_print_row(maxiter, iter, rnorm, newton_residual_ratio(rnorm, rnorm0))
     end
 
     while !(solved || giveup)
-        @. x_prev = x
-        @. Fx_prev = Fx
-        fx_prev = fx
+        @. x_old = x
+        rnorm_old = rnorm
 
-        linsolve(fillzero!(δx), ∇F(x), Fx)
+        Jx = J(x)
+        linsolve(fillzero!(δx), Jx, r)
 
         if backtracking
-            ϕ0 = fx_prev * fx_prev / 2
-            ϕ′0 = -fx_prev * fx_prev
-            _, ok = newton_backtracking(one(T), ϕ0, ϕ′0) do α
-                @. x = x_prev - α * δx # update `x`
-                Fx .= F(x) # update Fx in backtracking process
-                y = norm(Fx)
+            ϕ0 = rnorm_old * rnorm_old / 2
+            ϕ′0 = -dot(r, Jx, δx)
+            if !(isfinite(ϕ′0) && ϕ′0 < 0)
+                giveup = true
+                break
+            end
+            accepted = newton_backtracking(one(T), ϕ0, ϕ′0) do α
+                @. x = x_old - α * δx # update `x`
+                r .= f(x) # update r in backtracking process
+                y = norm(r)
                 y * y / 2
             end
-            ok || (giveup = true; break)
+            if !accepted
+                @. x = x_old
+                f(x) # restore state derived from x_old
+                giveup = true
+                break
+            end
         else
-            @. x = x_prev - δx
+            @. x = x_old - δx
+            r .= f(x)
         end
 
-        Fx .= F(x)
-        fx = norm(Fx)
-        solved = fx ≤ max(atol, rtol*f0)
-        giveup = ((iter += 1) ≥ maxiter || !isfinite(fx))
+        rnorm = norm(r)
+        solved = rnorm ≤ max(atol, rtol*rnorm0)
+        iter += 1
+        giveup = !isfinite(rnorm) || iter ≥ maxiter
 
-        verbose && newton_print_row(maxiter, iter, fx, fx/f0)
+        verbose && newton_print_row(maxiter, iter, rnorm, newton_residual_ratio(rnorm, rnorm0))
     end
     verbose && println()
 
-    if giveup
-        @. x = x_prev
-        F(x)
-        ∇F(x)
-    end
-
     solved
 end
+
+newton_residual_ratio(rnorm, rnorm0) = iszero(rnorm0) ? zero(rnorm0) : rnorm/rnorm0
 
 function newton_print_header(maxiter, atol, rtol)
     n = ndigits(maxiter)
@@ -596,22 +612,22 @@ end
 
 function newton_backtracking(ϕ, α::T, ϕ0::T, ϕ′0::T; c::T = T(1e-4), ρ_hi::T = T(0.5), ρ_lo::T = T(0.1), maxiter::Int=1000) where {T <: Real}
     @assert 0 < ρ_lo < ρ_hi < 1
-    converged = false
-    ϕα = ϕ(α)
-    α_prev, ϕα_prev = α, ϕα
-    for step in 1:maxiter
-        ϕα ≤ ϕ0 + c*α*ϕ′0 && (converged = true; break)
+    local α_prev, ϕα_prev
+    for trial in 1:maxiter
+        ϕα = ϕ(α)
+        ϕα ≤ ϕ0 + c*α*ϕ′0 && return true
+        abs(α) < eps(T)^T(2/3) && return false
 
-        α_new = step == 1 ? quad_step(α, ϕα, ϕ0, ϕ′0, ρ_hi, ρ_lo) :
-                            cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+        if trial == 1
+            α_new = quad_step(α, ϕα, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+        else
+            α_new = cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+        end
         α_new = clamp(α_new, α*ρ_lo, α*ρ_hi)
         α_prev, ϕα_prev = α, ϕα
         α = α_new
-        ϕα = ϕ(α)
-
-        abs(α) < eps(T)^T(2/3) && break
     end
-    α, converged
+    false
 end
 
 function quad_step(α, ϕα, ϕ0, ϕ′0, ρ_hi, ρ_lo)
@@ -640,7 +656,10 @@ function cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_hi, ρ_lo)
 
         # cubic
         d = b^2 - 3a*ϕ′0
-        d ≥ 0 && return (-b + sqrt(d)) / 3a
+        if isfinite(d) && d ≥ 0 && !iszero(a)
+            α_new = (-b + sqrt(d)) / 3a
+            isfinite(α_new) && α_new > 0 && return α_new
+        end
     end
     ρ_lo * α
 end
