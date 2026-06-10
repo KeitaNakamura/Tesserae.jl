@@ -227,8 +227,6 @@ function threaded_expr(schedule::QuoteNode, expr::Expr)
     end
 end
 
-const SHOWPROGRESS = Preferences.@load_preference("enable_showprogress_macro", true)
-
 #########
 # tmul! #
 #########
@@ -256,43 +254,3 @@ function tmul!(C::StridedVecOrMat{T}, A::SparseMatrixCSC{T}, B::StridedVecOrMat{
     C
 end
 tmul!(C::StridedVecOrMat, A::SparseMatrixCSC, B::StridedVecOrMat) = tmul!(C, A, B, true, false)
-
-"""
-```
-@showprogress while t < t_stop
-    # computation...
-end
-```
-
-displays progress of `while` loop.
-"""
-macro showprogress(expr)
-    SHOWPROGRESS || return esc(expr)
-    @assert Meta.isexpr(expr, :while)
-    cnd, blk = expr.args[1], expr.args[2]
-    @assert Meta.isexpr(cnd, :call) && cnd.args[1] == :<
-    thresh = 10000
-    t, t_stop = esc(cnd.args[2]), esc(cnd.args[3])
-    map!(esc, cnd.args, cnd.args)
-    map!(esc, blk.args, blk.args)
-    inner = quote
-        count += 1
-        t_current = time()
-        elapsed = t_current - prog.tinit
-        speed = t_current - t_last
-        ProgressMeter.update!(prog,
-                              min(floor(Int, ($t/$t_stop)*$thresh), $thresh);
-                              showvalues = [(:Elapsed, ProgressMeter.durationstring(elapsed)),
-                                            (:Iterations, commas(count)),
-                                            (:Speed, lstrip(ProgressMeter.speedstring(speed)))])
-        t_last = time()
-    end
-    push!(blk.args, inner)
-    quote
-        prog = ProgressMeter.Progress($thresh)
-        count = 0
-        t_last = time()
-        $expr
-        ProgressMeter.finish!(prog)
-    end
-end
