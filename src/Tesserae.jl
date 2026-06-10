@@ -19,7 +19,6 @@ import Random
 
 # others
 import Preferences
-import ProgressMeter
 
 # multithreading
 using Graphs
@@ -35,6 +34,7 @@ export
 # utils
     fillzero!,
     @threaded,
+    @showprogress,
 # ThreadPartition
     ThreadPartition,
     ColorPartition,
@@ -113,6 +113,8 @@ export
 
 include("devices.jl")
 include("utils.jl")
+include("progress.jl")
+import .Progress: @showprogress
 
 include("shapes.jl")
 
