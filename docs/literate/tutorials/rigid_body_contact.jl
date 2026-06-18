@@ -12,6 +12,7 @@
 # The contact force is computed on particles and then coupled to the usual MPM update.
 
 using Tesserae
+using StableRNGs                      #src
 
 mutable struct Disk{dim, T}
     x::Vec{dim, T}
@@ -88,6 +89,11 @@ function main()
 
     ## Particles
     particles = generate_particles(ParticleProp, grid.x)
+    if @isdefined(RUN_TESTS) && RUN_TESTS                         #src
+        rng = StableRNG(1234)                                     #src
+        alg = PoissonDiskSampling(; rng)                          #src
+        particles = generate_particles(ParticleProp, grid.x; alg) #src
+    end                                                           #src
     disk_points = filter(particles.x) do (x,y) # Points representing a disk just for visualization
         x^2 + (y-7.5D)^2 < (D/2)^2
     end
@@ -205,5 +211,5 @@ end
 
 using Test                            #src
 if @isdefined(RUN_TESTS) && RUN_TESTS #src
-    @test main() ≈ [20,-77] rtol=0.2  #src
+    @test main() ≈ [23,-80] rtol=0.1  #src
 end                                   #src
