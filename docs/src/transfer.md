@@ -9,7 +9,29 @@ The same macro body can include the transfer itself and the local grid or partic
 @P2G
 @G2P
 @G2P2G
+@foreach
 ```
+
+## Backend-aware local loops
+
+Use [`@foreach`](@ref) for local grid or particle updates that are not transfers.
+It follows the same `collection=>i` field-access convention as transfer macros:
+
+```julia
+@foreach grid=>i begin
+    m⁻¹[i] = ifelse(iszero(m[i]), zero(m[i]), inv(m[i]))
+    v[i] = mv[i] * m⁻¹[i]
+end
+
+@foreach particles=>p begin
+    x[p] += v[p] * Δt
+end
+```
+
+On dense grids, [`@foreach`](@ref) visits all grid nodes.
+On `SpGrid`, it visits only active sparse nodes.
+When the collection is on GPU, the loop is dispatched as a GPU kernel.
+Prefix it with [`@threaded`](@ref) to parallelize CPU loops.
 
 ## Inspecting transfer code
 

@@ -5,8 +5,9 @@ All notable changes to Tesserae.jl will be documented in this file.
 ## v0.7.0 - Unreleased
 
 v0.7.0 focuses on larger and more inspectable MPM workflows: sparse-grid GPU
-execution, clearer threaded CPU scattering, more predictable particle
-generation, and better tools for understanding transfer macros.
+execution, backend-aware local loops, clearer threaded CPU scattering, more
+predictable particle generation, and better tools for understanding transfer
+macros.
 
 ### Highlights
 
@@ -20,6 +21,8 @@ generation, and better tools for understanding transfer macros.
   spacing. (#113)
 - `@explain` now prints readable CPU reference code for transfer macros,
   including threaded transfers and matrix assembly. (#126)
+- `@foreach` provides backend-aware loops over grids, particles, and active
+  sparse grid nodes without abusing transfer macros as generic loop kernels.
 - P2G and basis-weight updates are faster across dense and sparse grid paths.
   (#124, #129, #131, #132, #133)
 
@@ -54,6 +57,8 @@ generation, and better tools for understanding transfer macros.
 - Added `@showprogress` for Tesserae's progress display. (#139)
 - Added `@explain` and `ExplainedCode` for inspecting transfer macro structure.
   (#126)
+- Added `@foreach` for CPU/GPU loops over grids, particles, and active `SpGrid`
+  nodes.
 - Added transfer interpolation with `$(expr)` inside transfer macro right-hand
   sides, allowing an outer expression to be evaluated once before generated
   transfer loops. (#118)

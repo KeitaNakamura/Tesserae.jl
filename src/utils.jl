@@ -219,7 +219,7 @@ function threaded_expr(schedule::QuoteNode, expr::Expr)
             end
         end
     elseif Meta.isexpr(expr, :macrocall) &&
-           (expr.args[1] in (Symbol("@P2G"), Symbol("@G2P"), Symbol("@G2P2G"), Symbol("@P2G_Matrix")))
+           (expr.args[1] in (Symbol("@P2G"), Symbol("@G2P"), Symbol("@G2P2G"), Symbol("@P2G_Matrix"), Symbol("@foreach")))
         insert!(expr.args, 3, schedule)
         esc(expr)
     else

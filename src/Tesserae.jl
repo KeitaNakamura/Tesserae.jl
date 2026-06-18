@@ -34,6 +34,7 @@ export
 # utils
     fillzero!,
     @threaded,
+    @foreach,
     @showprogress,
 # ThreadPartition
     ThreadPartition,
@@ -137,6 +138,7 @@ include("Basis/kernelcorrection.jl")
 include("fem.jl")
 
 include("transfer.jl")
+include("foreach.jl")
 include("implicit.jl")
 include("explain.jl")
 
