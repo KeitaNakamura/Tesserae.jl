@@ -1,4 +1,4 @@
-@testset "explain" begin
+@testset "Explain macro" begin
     function explain_setup()
         T = Float64
         GridProp = @NamedTuple begin
