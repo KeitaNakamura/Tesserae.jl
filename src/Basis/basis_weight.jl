@@ -138,11 +138,21 @@ Base.propertynames(bw::BasisWeight) = propertynames(getfield(bw, :prop))
 @inline function Base.getproperty(bw::BasisWeight, name::Symbol)
     getproperty(getfield(bw, :prop), name)
 end
-@inline function Base.values(bw::BasisWeight, i::Int)
-    getfield(bw, :prop)[i]
+
+"""
+    basis_values(weight, order)
+
+Return the array that stores the basis values (`Order(0)`) or derivatives of
+the requested `order`.
+
+This array may be larger than `supportnodes(weight)`. After an update, only
+entries corresponding to `eachindex(supportnodes(weight))` are valid.
+"""
+@inline function basis_values(bw::BasisWeight, ::Order{k}) where {k}
+    getfield(bw, :prop)[k+1]
 end
 
-@inline scalartype(bw::BasisWeight) = eltype(values(bw, 1))
+@inline scalartype(bw::BasisWeight) = eltype(basis_values(bw, Order(0)))
 
 """
     basis(weight)
@@ -204,13 +214,13 @@ end
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        @nexprs $N i -> values(bw, i)[ip] = vals[i]
+        @nexprs $N i -> basis_values(bw, Order(i-1))[ip] = vals[i]
     end
 end
 @generated function set_values!(bw::BasisWeight, vals::Tuple{Vararg{Any, N}}) where {N}
     quote
         @_inline_meta
-        @nexprs $N i -> copyto!(values(bw, i), vals[i])
+        @nexprs $N i -> copyto!(basis_values(bw, Order(i-1)), vals[i])
     end
 end
 
@@ -324,7 +334,7 @@ end
     true
 end
 
-@inline has_full_support(bw::BasisWeight, indices) = size(values(bw, 1)) == size(indices)
+@inline has_full_support(bw::BasisWeight, indices) = size(basis_values(bw, Order(0))) == size(indices)
 @inline has_full_support(bw::BasisWeight, indices, ::Trues) = has_full_support(bw, indices)
 @inline has_full_support(bw::BasisWeight, indices, filter::AbstractArray{Bool}) = has_full_support(bw, indices) && alltrue(filter, indices)
 

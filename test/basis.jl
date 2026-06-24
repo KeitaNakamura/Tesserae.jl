@@ -264,7 +264,7 @@ end
                 i = nodeindices[ip]
                 vals = Tesserae.basis_jet(Order(k), spline, xp, mesh, i)
                 for a in 0:k
-                    @test values(bw, a+1)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
+                    @test Tesserae.basis_values(bw, Order(a))[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end
             end
         end

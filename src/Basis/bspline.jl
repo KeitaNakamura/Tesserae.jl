@@ -168,7 +168,7 @@ end
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - xmin) * h⁻¹
         vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
-        @nexprs $(k + 1) r -> vals_{r-1} = values(bw, r)
+        @nexprs $(k + 1) r -> vals_{r-1} = basis_values(bw, Order(r-1))
         @nexprs $k r -> hpow_r = h⁻¹^r
         @inbounds begin
             $(node_assignments...)

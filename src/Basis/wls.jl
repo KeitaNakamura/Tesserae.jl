@@ -29,7 +29,7 @@ end
     if has_full_support(bw, indices, filter)
         kernel = get_kernel(wls)
         @inbounds for ip in eachindex(indices)
-            values(bw,1)[ip] = only(basis_jet(Order(0), kernel, pt, mesh, indices[ip]))
+            basis_values(bw, Order(0))[ip] = only(basis_jet(Order(0), kernel, pt, mesh, indices[ip]))
         end
         update_property_after_moment_matrix!(bw, wls, pt, mesh, moment_matrix_inv(kernel, mesh))
     else
@@ -49,7 +49,7 @@ end
         @inbounds begin
             i = indices[ip]
             xᵢ = mesh[i]
-            w = values(bw,1)[ip] = only(basis_jet(Order(0), kernel, pt, mesh, i)) * filter[i]
+            w = basis_values(bw, Order(0))[ip] = only(basis_jet(Order(0), kernel, pt, mesh, i)) * filter[i]
             P = value(poly, xᵢ - xₚ)
             w * P ⊗ P
         end
@@ -67,7 +67,7 @@ end
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]
-        w = values(bw,1)[ip]
+        w = basis_values(bw, Order(0))[ip]
         P = value(poly, xᵢ - xₚ)
         wq = w * (M⁻¹ * P)
         set_values!(bw, ip, map(P₀->wq⊡P₀, P₀__))
@@ -106,7 +106,7 @@ function update_property!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic},
     end
 end
 @inline function _extract_scalar_values(::Order{k}, bw) where {k}
-    ntuple(a -> map(only, Tuple(values(bw, a))), Val(k+1))
+    ntuple(a -> map(only, Tuple(basis_values(bw, Order(a-1)))), Val(k+1))
 end
 @generated function _prod_each_dimension(::Order{k}, vals) where {k}
     quote
