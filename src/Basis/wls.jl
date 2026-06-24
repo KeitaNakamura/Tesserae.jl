@@ -29,7 +29,7 @@ end
     if has_full_support(bw, indices, filter)
         kernel = get_kernel(wls)
         @inbounds for ip in eachindex(indices)
-            values(bw,1)[ip] = value(kernel, pt, mesh, indices[ip])
+            values(bw,1)[ip] = only(basis_jet(Order(0), kernel, pt, mesh, indices[ip]))
         end
         update_property_after_moment_matrix!(bw, wls, pt, mesh, moment_matrix_inv(kernel, mesh))
     else
@@ -49,7 +49,7 @@ end
         @inbounds begin
             i = indices[ip]
             xᵢ = mesh[i]
-            w = values(bw,1)[ip] = value(kernel, pt, mesh, i) * filter[i]
+            w = values(bw,1)[ip] = only(basis_jet(Order(0), kernel, pt, mesh, i)) * filter[i]
             P = value(poly, xᵢ - xₚ)
             w * P ⊗ P
         end

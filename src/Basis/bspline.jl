@@ -27,8 +27,6 @@ end
 @inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{4}}) where {T} = T(1.5)
 @inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{5}}) where {T} = T(2.0)
 
-@inline value(spline::AbstractBSpline, pt, mesh::CartesianMesh, i) = only(basis_jet(Order(0), spline, pt, mesh, i))
-
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
 # `x` must be normalized by `h`
