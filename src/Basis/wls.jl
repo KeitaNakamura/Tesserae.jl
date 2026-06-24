@@ -88,7 +88,7 @@ function update_property!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic},
             order = derivative_order(bw)
             vals_axes = ntuple(Val(dim)) do d
                 mesh_1d = axismesh(mesh, d)
-                prop_1d = create_property(MArray, Vec{1,T}, wls_1d; derivative=order)
+                prop_1d = create_static_property(Vec{1,T}, wls_1d; derivative=order)
                 indices_1d = CartesianIndices((supportnodes(bw).indices[d],))
                 bw_1d = BasisWeight(wls_1d, prop_1d, Scalar(indices_1d))
                 # Must be inlined: creates/updates a small StaticArray (MVector/MArray) on the GPU.

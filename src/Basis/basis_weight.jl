@@ -38,16 +38,21 @@ To create a new basis, following methods need to be implemented.
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 initial_supportnodes(shape::Shape, mesh::UnstructuredMesh) = zero(SVector{nlocalnodes(shape), Int})
 
-propsize(basis::Basis, ::Val{dim}) where{dim} = nfill(kernel_support(basis), Val(dim))
-propsize(shape::Shape, ::Val)  = (nlocalnodes(shape),)
 function create_property(::Type{Vec{dim, T}}, basis; derivative::Order{k}=Order(1), name=nothing) where {dim, T, k}
-    map(Array, create_property(MArray, Vec{dim, T}, basis; derivative, name))
+    map(Array, create_static_property(Vec{dim, T}, basis; derivative, name))
 end
-@generated function create_property(::Type{MArray}, ::Type{Vec{dim, T}}, basis; derivative::Order{k}=Order(1), name=nothing) where {dim, T, k}
+function create_static_property(::Type{Vec{dim, T}}, basis::Basis; kwargs...) where {dim, T}
+    A = MArray{Tuple{nfill(kernel_support(basis), Val(dim))...}}
+    _create_property(A, Vec{dim, T}; kwargs...)
+end
+function create_static_property(::Type{Vec{dim, T}}, shape::Shape; kwargs...) where {dim, T}
+    A = MArray{Tuple{nlocalnodes(shape)}}
+    _create_property(A, Vec{dim, T}; kwargs...)
+end
+@generated function _create_property(::Type{A}, ::Type{Vec{dim, T}}; derivative::Order{k}=Order(1), name=nothing) where {A, dim, T, k}
     quote
-        arrdims = propsize(basis, Val(dim))
         names = @ntuple $(k+1) i -> create_name(Order(i-1), name)
-        vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), MArray{Tuple{arrdims...}})
+        vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), A)
         NamedTuple{names}(vals)
     end
 end
