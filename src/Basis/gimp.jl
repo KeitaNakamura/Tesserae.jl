@@ -39,7 +39,7 @@ end
     reverse(∂{k}(ξ -> value(gimp, ξ, l), ξ, :all))
 end
 
-@generated function Base.values(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function basis_jet(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
@@ -52,12 +52,12 @@ end
     end
 end
 
-@inline value(gimp::uGIMP, pt, mesh::CartesianMesh, i) = only(values(Order(0), gimp, pt, mesh, i))
+@inline value(gimp::uGIMP, pt, mesh::CartesianMesh, i) = only(basis_jet(Order(0), gimp, pt, mesh, i))
 
 @inline function update_property!(bw::BasisWeight, gimp::uGIMP, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        set_values!(bw, ip, values(derivative_order(bw), gimp, pt, mesh, i))
+        set_values!(bw, ip, basis_jet(derivative_order(bw), gimp, pt, mesh, i))
     end
 end

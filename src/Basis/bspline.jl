@@ -27,7 +27,7 @@ end
 @inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{4}}) where {T} = T(1.5)
 @inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{5}}) where {T} = T(2.0)
 
-@inline value(spline::AbstractBSpline, pt, mesh::CartesianMesh, i) = only(values(Order(0), spline, pt, mesh, i))
+@inline value(spline::AbstractBSpline, pt, mesh::CartesianMesh, i) = only(basis_jet(Order(0), spline, pt, mesh, i))
 
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
@@ -104,7 +104,7 @@ function update_property_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt
     indices = supportnodes(bw)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        set_values!(bw, ip, values(derivative_order(bw), spline, getx(pt), mesh, i))
+        set_values!(bw, ip, basis_jet(derivative_order(bw), spline, getx(pt), mesh, i))
     end
 end
 @inline function update_property_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
@@ -231,7 +231,7 @@ end
     reverse(∂{k}(ξ -> value(spline, ξ), ξ, :all))
 end
 
-@generated function Base.values(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function basis_jet(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
@@ -301,7 +301,7 @@ end
     reverse(∂{k}(ξ -> value(spline, ξ, pos), ξ, :all))
 end
 
-@generated function Base.values(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function basis_jet(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)

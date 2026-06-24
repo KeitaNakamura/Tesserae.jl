@@ -12,6 +12,14 @@ Abstract subtype for compact-support kernels.
 """
 abstract type Kernel <: Basis end
 
+"""
+    basis_jet(order, basis, pt, mesh, i)
+
+Return the value and spatial derivatives up to `order` of the `i`th basis
+function evaluated at `pt`.
+"""
+function basis_jet end
+
 #=
 To create a new basis, following methods need to be implemented.
 * Tesserae.create_property(::Type{Vec{dim, T}}, basis; kwargs...) -> NamedTuple
