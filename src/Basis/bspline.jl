@@ -1,11 +1,11 @@
 abstract type AbstractBSpline{D <: Degree} <: Kernel end
 
-kernel_support(::AbstractBSpline{Degree{0}}) = 1
-kernel_support(::AbstractBSpline{Degree{1}}) = 2
-kernel_support(::AbstractBSpline{Degree{2}}) = 3
-kernel_support(::AbstractBSpline{Degree{3}}) = 4
-kernel_support(::AbstractBSpline{Degree{4}}) = 5
-kernel_support(::AbstractBSpline{Degree{5}}) = 6
+support_width(::AbstractBSpline{Degree{0}}) = 1
+support_width(::AbstractBSpline{Degree{1}}) = 2
+support_width(::AbstractBSpline{Degree{2}}) = 3
+support_width(::AbstractBSpline{Degree{3}}) = 4
+support_width(::AbstractBSpline{Degree{4}}) = 5
+support_width(::AbstractBSpline{Degree{5}}) = 6
 
 @inline function supportnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
@@ -13,7 +13,7 @@ kernel_support(::AbstractBSpline{Degree{5}}) = 6
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
     offset = _supportnodes_offset(eltype(x), spline)
-    r = kernel_support(spline) - 1
+    r = support_width(spline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
     stop = @. start + r
     imin = Tuple(@. max(start, 1))

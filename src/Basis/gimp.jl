@@ -15,7 +15,7 @@ end
 """
 struct uGIMP <: Kernel end
 
-kernel_support(::uGIMP) = 3
+support_width(::uGIMP) = 3
 
 @inline function supportnodes(::uGIMP, pt, mesh::CartesianMesh)
     h⁻¹ = spacing_inv(mesh)

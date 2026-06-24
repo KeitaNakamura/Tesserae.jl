@@ -449,7 +449,7 @@ function check_partition_for_P2G(grid, weights, strat::BlockStrategy)
         error("@P2G: No particles assigned to any block in ThreadPartition")
     end
     b = basis(first(weights))
-    if kernel_support(b) > blockwidth(strat)
+    if support_width(b) > blockwidth(strat)
         error("@P2G: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
     end
 end

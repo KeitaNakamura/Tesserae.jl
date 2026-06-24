@@ -152,7 +152,7 @@ function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}
     end
 
     for i in CI
-        unit = (kernel_support(basis) - 1) * oneunit(i)
+        unit = (support_width(basis) - 1) * oneunit(i)
         indices = intersect((i-unit):(i+unit), CI)
         idofs = gendofs(LI[i], row_ndofs)
         for j in indices

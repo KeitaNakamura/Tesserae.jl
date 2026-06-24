@@ -16,7 +16,7 @@ WLS(k::Kernel) = WLS(k, Polynomial(Linear()))
 
 get_kernel(wls::WLS) = wls.kernel
 get_polynomial(wls::WLS) = wls.poly
-kernel_support(wls::WLS) = kernel_support(get_kernel(wls))
+support_width(wls::WLS) = support_width(get_kernel(wls))
 @inline supportnodes(wls::WLS, pt, mesh::CartesianMesh) = supportnodes(get_kernel(wls), pt, mesh)
 
 @inline function update_basis_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))

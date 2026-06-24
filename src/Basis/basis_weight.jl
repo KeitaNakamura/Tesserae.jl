@@ -31,6 +31,7 @@ function jet end
 #=
 Basis extension points:
 * Tesserae.initial_supportnodes(basis, mesh)
+* Tesserae.support_width(basis)
 * Tesserae.supportnodes(basis, pt, mesh)
 * Tesserae.allocate_basis_values(::Type{Vec{dim, T}}, basis; kwargs...) -> NamedTuple
 * Tesserae.update_basis_values!(bw::BasisWeight, basis, pt, mesh)
@@ -46,7 +47,7 @@ function allocate_basis_values(::Type{Vec{dim, T}}, basis; derivative::Order{k}=
     map(Array, allocate_static_basis_values(Vec{dim, T}, basis; derivative, name))
 end
 function allocate_static_basis_values(::Type{Vec{dim, T}}, basis::Basis; kwargs...) where {dim, T}
-    A = MArray{Tuple{nfill(kernel_support(basis), Val(dim))...}}
+    A = MArray{Tuple{nfill(support_width(basis), Val(dim))...}}
     _allocate_basis_values(A, Vec{dim, T}; kwargs...)
 end
 function allocate_static_basis_values(::Type{Vec{dim, T}}, shape::Shape; kwargs...) where {dim, T}
