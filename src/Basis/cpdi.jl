@@ -33,7 +33,7 @@ Base.size(x::CPDISupportNodes) = (x.len,)
     @inbounds x.indices[i]
 end
 
-@generated function create_property(::Type{Vec{dim, T}}, ::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
+@generated function allocate_basis_values(::Type{Vec{dim, T}}, ::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
     w = sym
     ∇w = Symbol(:∇, sym)
     quote
@@ -61,8 +61,8 @@ function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{1})
     spline = BSpline(Linear())
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        w₁ = value(spline, x₁, mesh, i)
-        w₂ = value(spline, x₂, mesh, i)
+        w₁ = only(basis_jet(Order(0), spline, x₁, mesh, i))
+        w₂ = only(basis_jet(Order(0), spline, x₂, mesh, i))
         w = (w₁ + w₂) / 2
         ∇w = Vec(w₂ - w₁) / Vₚ
         set_values!(bw, ip, (w,∇w))
@@ -87,10 +87,10 @@ function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
     spline = BSpline(Linear())
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        w₁ = value(spline, x₁, mesh, i)
-        w₂ = value(spline, x₂, mesh, i)
-        w₃ = value(spline, x₃, mesh, i)
-        w₄ = value(spline, x₄, mesh, i)
+        w₁ = only(basis_jet(Order(0), spline, x₁, mesh, i))
+        w₂ = only(basis_jet(Order(0), spline, x₂, mesh, i))
+        w₃ = only(basis_jet(Order(0), spline, x₃, mesh, i))
+        w₄ = only(basis_jet(Order(0), spline, x₄, mesh, i))
         w = (w₁ + w₂ + w₃ + w₄) / 4
         ∇w = ((w₁-w₃)*a + (w₂-w₄)*b) / Vₚ
         set_values!(bw, ip, (w,∇w))
@@ -119,14 +119,14 @@ function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{3})
     spline = BSpline(Linear())
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        w₁ = value(spline, x₁, mesh, i)
-        w₂ = value(spline, x₂, mesh, i)
-        w₃ = value(spline, x₃, mesh, i)
-        w₄ = value(spline, x₄, mesh, i)
-        w₅ = value(spline, x₅, mesh, i)
-        w₆ = value(spline, x₆, mesh, i)
-        w₇ = value(spline, x₇, mesh, i)
-        w₈ = value(spline, x₈, mesh, i)
+        w₁ = only(basis_jet(Order(0), spline, x₁, mesh, i))
+        w₂ = only(basis_jet(Order(0), spline, x₂, mesh, i))
+        w₃ = only(basis_jet(Order(0), spline, x₃, mesh, i))
+        w₄ = only(basis_jet(Order(0), spline, x₄, mesh, i))
+        w₅ = only(basis_jet(Order(0), spline, x₅, mesh, i))
+        w₆ = only(basis_jet(Order(0), spline, x₆, mesh, i))
+        w₇ = only(basis_jet(Order(0), spline, x₇, mesh, i))
+        w₈ = only(basis_jet(Order(0), spline, x₈, mesh, i))
         w = (w₁ + w₂ + w₃ + w₄ + w₅ + w₆ + w₇ + w₈) / 8
         ∇w = A * Vec(-w₁+w₂+w₃-w₄-w₅+w₆+w₇-w₈, -w₁-w₂+w₃+w₄-w₅-w₆+w₇+w₈, -w₁-w₂-w₃-w₄+w₅+w₆+w₇+w₈)
         set_values!(bw, ip, (w,∇w))

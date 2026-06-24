@@ -75,14 +75,14 @@ end
 # BasisWeightArray
 function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
-    prop = map(a -> adapt(to, a), getfield(weights, :prop))
+    vals = map(a -> adapt(to, a), getfield(weights, :vals))
     indices = adapt(to, getfield(weights, :indices))
-    BasisWeightArray(b, prop, indices)
+    BasisWeightArray(b, vals, indices)
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
-    prop = getfield(weights, :prop)
-    backend = get_backend(first(values(prop)))
-    @assert all(==(backend), map(get_backend, prop))
+    vals = getfield(weights, :vals)
+    backend = get_backend(first(values(vals)))
+    @assert all(==(backend), map(get_backend, vals))
     @assert get_backend(getfield(weights, :indices)) == backend
     backend
 end

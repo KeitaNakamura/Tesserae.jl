@@ -1,4 +1,4 @@
-@inline function Base.values(::Order{1}, shape::Shape, x::Vec)
+@inline function jet(::Order{1}, shape::Shape, x::Vec)
     grads, vals = gradient(x -> Tensor(value(shape, x)), x, :all)
     SVector(Tuple(vals)), _reinterpret_to_vec(grads)
 end
@@ -17,7 +17,7 @@ function feupdate!(
     @assert size(mesh) == size(nodes)
     @assert size(weights) == (length(qpts), ncells(mesh))
     @assert isnothing(volume) || size(weights) == size(volume)
-    valgrads = values.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
+    valgrads = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
     for c in 1:ncells(mesh)
         indices = cellnodeindices(mesh, c)
         x = nodes[indices]
@@ -47,7 +47,7 @@ function feupdate!(
     @assert size(weights) == (length(qpts), ncells(mesh))
     @assert isnothing(area) || size(weights) == size(area)
     @assert isnothing(normal) || size(weights) == size(normal)
-    valgrads = values.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
+    valgrads = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
     for c in 1:ncells(mesh)
         indices = cellnodeindices(mesh, c)
         x = nodes[indices]

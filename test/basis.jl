@@ -262,9 +262,9 @@ end
             nodeindices = supportnodes(bw)
             for ip in eachindex(nodeindices)
                 i = nodeindices[ip]
-                vals = values(Order(k), spline, xp, mesh, i)
+                vals = Tesserae.basis_jet(Order(k), spline, xp, mesh, i)
                 for a in 0:k
-                    @test values(bw, a+1)[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
+                    @test Tesserae.nodal_basis_values(bw, Order(a))[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end
             end
         end
@@ -413,7 +413,7 @@ end
     function check_polynomial(poly, ::Val{max_order}, ::Type{T}, ::Val{dim}; check_values=true) where {max_order,T,dim}
         x = polynomial_point(T, Val(dim))
         exps = exponents(poly, Val(dim))
-        vals = values(Order(max_order), poly, x)
+        vals = Tesserae.jet(Order(max_order), poly, x)
         @test all(v -> eltype(v) == T, vals)
         check_values || return
 

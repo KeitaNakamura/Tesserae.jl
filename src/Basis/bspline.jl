@@ -1,11 +1,11 @@
 abstract type AbstractBSpline{D <: Degree} <: Kernel end
 
-kernel_support(::AbstractBSpline{Degree{0}}) = 1
-kernel_support(::AbstractBSpline{Degree{1}}) = 2
-kernel_support(::AbstractBSpline{Degree{2}}) = 3
-kernel_support(::AbstractBSpline{Degree{3}}) = 4
-kernel_support(::AbstractBSpline{Degree{4}}) = 5
-kernel_support(::AbstractBSpline{Degree{5}}) = 6
+support_width(::AbstractBSpline{Degree{0}}) = 1
+support_width(::AbstractBSpline{Degree{1}}) = 2
+support_width(::AbstractBSpline{Degree{2}}) = 3
+support_width(::AbstractBSpline{Degree{3}}) = 4
+support_width(::AbstractBSpline{Degree{4}}) = 5
+support_width(::AbstractBSpline{Degree{5}}) = 6
 
 @inline function supportnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
@@ -13,7 +13,7 @@ kernel_support(::AbstractBSpline{Degree{5}}) = 6
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
     offset = _supportnodes_offset(eltype(x), spline)
-    r = kernel_support(spline) - 1
+    r = support_width(spline) - 1
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
     stop = @. start + r
     imin = Tuple(@. max(start, 1))
@@ -26,8 +26,6 @@ end
 @inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{3}}) where {T} = T(1.0)
 @inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{4}}) where {T} = T(1.5)
 @inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{5}}) where {T} = T(2.0)
-
-@inline value(spline::AbstractBSpline, pt, mesh::CartesianMesh, i) = only(values(Order(0), spline, pt, mesh, i))
 
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
@@ -91,23 +89,23 @@ end
     end
 end
 
-@inline function update_property!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+@inline function update_basis_values!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     if has_full_support(bw, indices)
-        update_property_full!(bw, spline, pt, mesh)
+        update_basis_values_full!(bw, spline, pt, mesh)
     else
-        update_property_truncated!(bw, spline, pt, mesh)
+        update_basis_values_truncated!(bw, spline, pt, mesh)
     end
 end
 
-function update_property_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
+function update_basis_values_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
     indices = supportnodes(bw)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        set_values!(bw, ip, values(derivative_order(bw), spline, getx(pt), mesh, i))
+        set_values!(bw, ip, basis_jet(derivative_order(bw), spline, getx(pt), mesh, i))
     end
 end
-@inline function update_property_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+@inline function update_basis_values_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     direct_set_values!(bw, derivative_order(bw), spline, getx(pt), mesh)
 end
 
@@ -170,7 +168,7 @@ end
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - xmin) * h⁻¹
         vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
-        @nexprs $(k + 1) r -> vals_{r-1} = values(bw, r)
+        @nexprs $(k + 1) r -> vals_{r-1} = nodal_basis_values(bw, Order(r-1))
         @nexprs $k r -> hpow_r = h⁻¹^r
         @inbounds begin
             $(node_assignments...)
@@ -227,17 +225,17 @@ end
     ξ < 3 ? ((3-ξ)^5) / 120                          : zero(ξ)
 end
 
-@inline function Base.values(::Order{k}, spline::BSpline, ξ::Real) where {k}
+@inline function jet(::Order{k}, spline::BSpline, ξ::Real) where {k}
     reverse(∂{k}(ξ -> value(spline, ξ), ξ, :all))
 end
 
-@generated function Base.values(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function basis_jet(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
-        vals1d = @ntuple $dim d -> values(order, spline, ξ[d])
+        vals1d = @ntuple $dim d -> jet(order, spline, ξ[d])
         vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
@@ -297,18 +295,18 @@ function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
     end
 end
 
-@inline function Base.values(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
+@inline function jet(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
     reverse(∂{k}(ξ -> value(spline, ξ, pos), ξ, :all))
 end
 
-@generated function Base.values(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function basis_jet(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
         pos = node_position(mesh, i)
-        vals1d = @ntuple $dim d -> values(order, spline, ξ[d], pos[d])
+        vals1d = @ntuple $dim d -> jet(order, spline, ξ[d], pos[d])
         vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
