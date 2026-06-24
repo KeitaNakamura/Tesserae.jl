@@ -52,7 +52,7 @@ end
     end
 end
 
-@inline function update_property!(bw::BasisWeight, gimp::uGIMP, pt, mesh::CartesianMesh)
+@inline function update_basis_values!(bw::BasisWeight, gimp::uGIMP, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]

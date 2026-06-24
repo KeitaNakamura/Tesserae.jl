@@ -89,23 +89,23 @@ end
     end
 end
 
-@inline function update_property!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+@inline function update_basis_values!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     if has_full_support(bw, indices)
-        update_property_full!(bw, spline, pt, mesh)
+        update_basis_values_full!(bw, spline, pt, mesh)
     else
-        update_property_truncated!(bw, spline, pt, mesh)
+        update_basis_values_truncated!(bw, spline, pt, mesh)
     end
 end
 
-function update_property_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
+function update_basis_values_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
     indices = supportnodes(bw)
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         set_values!(bw, ip, basis_jet(derivative_order(bw), spline, getx(pt), mesh, i))
     end
 end
-@inline function update_property_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+@inline function update_basis_values_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     direct_set_values!(bw, derivative_order(bw), spline, getx(pt), mesh)
 end
 
@@ -168,7 +168,7 @@ end
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - xmin) * h⁻¹
         vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
-        @nexprs $(k + 1) r -> vals_{r-1} = basis_values(bw, Order(r-1))
+        @nexprs $(k + 1) r -> vals_{r-1} = nodal_basis_values(bw, Order(r-1))
         @nexprs $k r -> hpow_r = h⁻¹^r
         @inbounds begin
             $(node_assignments...)

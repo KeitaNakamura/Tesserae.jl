@@ -29,27 +29,31 @@ reference coordinate system.
 function jet end
 
 #=
-To create a new basis, following methods need to be implemented.
-* Tesserae.create_property(::Type{Vec{dim, T}}, basis; kwargs...) -> NamedTuple
+Basis extension points:
 * Tesserae.initial_supportnodes(basis, mesh)
-* Tesserae.update_property!(bw::BasisWeight, basis, pt, mesh)
+* Tesserae.supportnodes(basis, pt, mesh)
+* Tesserae.allocate_basis_values(::Type{Vec{dim, T}}, basis; kwargs...) -> NamedTuple
+* Tesserae.update_basis_values!(bw::BasisWeight, basis, pt, mesh)
+
+Use `basis_jet` for physical mesh-node evaluation, and `jet` for local or
+reference-coordinate evaluation.
 =#
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 initial_supportnodes(shape::Shape, mesh::UnstructuredMesh) = zero(SVector{nlocalnodes(shape), Int})
 
-function create_property(::Type{Vec{dim, T}}, basis; derivative::Order{k}=Order(1), name=nothing) where {dim, T, k}
-    map(Array, create_static_property(Vec{dim, T}, basis; derivative, name))
+function allocate_basis_values(::Type{Vec{dim, T}}, basis; derivative::Order{k}=Order(1), name=nothing) where {dim, T, k}
+    map(Array, allocate_static_basis_values(Vec{dim, T}, basis; derivative, name))
 end
-function create_static_property(::Type{Vec{dim, T}}, basis::Basis; kwargs...) where {dim, T}
+function allocate_static_basis_values(::Type{Vec{dim, T}}, basis::Basis; kwargs...) where {dim, T}
     A = MArray{Tuple{nfill(kernel_support(basis), Val(dim))...}}
-    _create_property(A, Vec{dim, T}; kwargs...)
+    _allocate_basis_values(A, Vec{dim, T}; kwargs...)
 end
-function create_static_property(::Type{Vec{dim, T}}, shape::Shape; kwargs...) where {dim, T}
+function allocate_static_basis_values(::Type{Vec{dim, T}}, shape::Shape; kwargs...) where {dim, T}
     A = MArray{Tuple{nlocalnodes(shape)}}
-    _create_property(A, Vec{dim, T}; kwargs...)
+    _allocate_basis_values(A, Vec{dim, T}; kwargs...)
 end
-@generated function _create_property(::Type{A}, ::Type{Vec{dim, T}}; derivative::Order{k}=Order(1), name=nothing) where {A, dim, T, k}
+@generated function _allocate_basis_values(::Type{A}, ::Type{Vec{dim, T}}; derivative::Order{k}=Order(1), name=nothing) where {A, dim, T, k}
     quote
         names = @ntuple $(k+1) i -> create_name(Order(i-1), name)
         vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), A)
@@ -110,7 +114,7 @@ julia> bw = BasisWeight(BSpline(Quadratic()), mesh);
 julia> update!(bw, xₚ, mesh) # update `bw` at position `xₚ` in `mesh`
 BasisWeight:
   Basis: BSpline(Quadratic())
-  Property names: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
+  Basis values: w::Matrix{Float64}, ∇w::Matrix{Vec{2, Float64}}
   Support nodes: CartesianIndices((2:4, 3:5))
 
 julia> sum(bw.w) ≈ 1 # partition of unity
@@ -126,17 +130,17 @@ julia> sum(eachindex(nodeindices)) do ip # linear field reproduction
 true
 ```
 """
-struct BasisWeight{B, Prop <: NamedTuple, Indices <: AbstractArray{<: Any}}
+struct BasisWeight{B, Vals <: NamedTuple, Indices <: AbstractArray{<: Any}}
     basis::B
-    prop::Prop
+    vals::Vals
     indices::Indices
 end
 
 # AbstractMesh
 function _basis_weight(::Type{T}, basis, mesh::AbstractMesh{dim}; kwargs...) where {T, dim}
-    prop = create_property(Vec{dim, T}, basis; kwargs...)
+    vals = allocate_basis_values(Vec{dim, T}, basis; kwargs...)
     indices = initial_supportnodes(basis, mesh)
-    BasisWeight(basis, prop, fill(indices))
+    BasisWeight(basis, vals, fill(indices))
 end
 
 # CartesianMesh
@@ -147,25 +151,25 @@ BasisWeight(basis::Basis, mesh::CartesianMesh; kwargs...) = _basis_weight(Float6
 BasisWeight(::Type{T}, mesh::UnstructuredMesh; kwargs...) where {T} = _basis_weight(T, cellshape(mesh), mesh; kwargs...)
 BasisWeight(mesh::UnstructuredMesh; kwargs...) = BasisWeight(Float64, mesh; kwargs...)
 
-Base.propertynames(bw::BasisWeight) = propertynames(getfield(bw, :prop))
+Base.propertynames(bw::BasisWeight) = propertynames(getfield(bw, :vals))
 @inline function Base.getproperty(bw::BasisWeight, name::Symbol)
-    getproperty(getfield(bw, :prop), name)
+    getproperty(getfield(bw, :vals), name)
 end
 
 """
-    basis_values(weight, order)
+    nodal_basis_values(weight, order)
 
-Return the array that stores the basis values (`Order(0)`) or derivatives of
-the requested `order`.
+Return the array that stores nodal basis values (`Order(0)`) or their
+derivatives of the requested `order`.
 
 This array may be larger than `supportnodes(weight)`. After an update, only
 entries corresponding to `eachindex(supportnodes(weight))` are valid.
 """
-@inline function basis_values(bw::BasisWeight, ::Order{k}) where {k}
-    getfield(bw, :prop)[k+1]
+@inline function nodal_basis_values(bw::BasisWeight, ::Order{k}) where {k}
+    getfield(bw, :vals)[k+1]
 end
 
-@inline scalartype(bw::BasisWeight) = eltype(basis_values(bw, Order(0)))
+@inline scalartype(bw::BasisWeight) = eltype(nodal_basis_values(bw, Order(0)))
 
 """
     basis(weight)
@@ -208,15 +212,15 @@ end
 @inline supportnodes_storage(bw::BasisWeight) = getfield(bw, :indices)
 
 @inline function derivative_order(bw::BasisWeight)
-    @debug check_weight_prop(bw)
+    @debug check_weight_values(bw)
     k = length(propertynames(bw)) - 1
     Order(k)
 end
-@inline function check_weight_prop(bw::BasisWeight)
+@inline function check_weight_values(bw::BasisWeight)
     k = length(propertynames(bw)) - 1
-    _check_weight_prop(bw, Val(k))
+    _check_weight_values(bw, Val(k))
 end
-@generated function _check_weight_prop(bw::BasisWeight, ::Val{k}) where {k}
+@generated function _check_weight_values(bw::BasisWeight, ::Val{k}) where {k}
     quote
         @_inline_meta
         @assert @nall $(k+1) i -> create_name(Order(i-1), Val(propertynames(bw)[1])) === propertynames(bw)[i]
@@ -227,20 +231,20 @@ end
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        @nexprs $N i -> basis_values(bw, Order(i-1))[ip] = vals[i]
+        @nexprs $N i -> nodal_basis_values(bw, Order(i-1))[ip] = vals[i]
     end
 end
 @generated function set_values!(bw::BasisWeight, vals::Tuple{Vararg{Any, N}}) where {N}
     quote
         @_inline_meta
-        @nexprs $N i -> copyto!(basis_values(bw, Order(i-1)), vals[i])
+        @nexprs $N i -> copyto!(nodal_basis_values(bw, Order(i-1)), vals[i])
     end
 end
 
 function Base.show(io::IO, bw::BasisWeight)
     print(io, "BasisWeight: \n")
     print(io, "  Basis: ", basis(bw), "\n")
-    print(io, "  Property names: ")
+    print(io, "  Basis values: ")
     print(io, join(map(propertynames(bw)) do name
         string(name, "::", typeof(getproperty(bw, name)))
     end, ", "), "\n")
@@ -253,24 +257,24 @@ end
 Structure-of-arrays storage for multiple [`BasisWeight`](@ref)s.
 Use [`generate_basis_weights`](@ref) to construct a `BasisWeightArray`.
 """
-struct BasisWeightArray{B, Prop <: NamedTuple, Indices, ElType <: BasisWeight{B}, N} <: AbstractArray{ElType, N}
+struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}, N} <: AbstractArray{ElType, N}
     basis::B
-    prop::Prop
+    vals::Vals
     indices::Indices
 end
 
-function BasisWeightArray(basis::B, prop::Prop, indices::Indices) where {B, Prop <: NamedTuple, N, Indices <: AbstractArray{<: Any, N}}
-    ElType = Base._return_type(_getindex, Tuple{B, Prop, Indices, Vararg{Int, N}})
-    BasisWeightArray{B, Prop, Indices, ElType, N}(basis, prop, indices)
+function BasisWeightArray(basis::B, vals::Vals, indices::Indices) where {B, Vals <: NamedTuple, N, Indices <: AbstractArray{<: Any, N}}
+    ElType = Base._return_type(_getindex, Tuple{B, Vals, Indices, Vararg{Int, N}})
+    BasisWeightArray{B, Vals, Indices, ElType, N}(basis, vals, indices)
 end
 
 # AbstractMesh
 function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh{dim}, dims::Dims{N}; kwargs...) where {T, dim, N}
-    prop = map(create_property(Vec{dim, T}, basis; kwargs...)) do prop
-        fill(zero(eltype(prop)), size(prop)..., dims...)
+    vals = map(allocate_basis_values(Vec{dim, T}, basis; kwargs...)) do vals
+        fill(zero(eltype(vals)), size(vals)..., dims...)
     end
     indices = map(p->initial_supportnodes(basis, mesh), CartesianIndices(dims))
-    BasisWeightArray(basis, prop, indices)
+    BasisWeightArray(basis, vals, indices)
 end
 
 _todims(x::Tuple{Vararg{Int}}) = x
@@ -295,19 +299,19 @@ generate_basis_weights(mesh::UnstructuredMesh, dims...; kwargs...) = _generate_b
 
 Base.size(x::BasisWeightArray) = size(getfield(x, :indices))
 
-Base.propertynames(x::BasisWeightArray) = propertynames(getfield(x, :prop))
+Base.propertynames(x::BasisWeightArray) = propertynames(getfield(x, :vals))
 @inline function Base.getproperty(x::BasisWeightArray, name::Symbol)
-    getproperty(getfield(x, :prop), name)
+    getproperty(getfield(x, :vals), name)
 end
 
 @inline basis(x::BasisWeightArray) = getfield(x, :basis)
 
 @inline function Base.getindex(x::BasisWeightArray{<: Any, <: Any, <: Any, <: Any, N}, I::Vararg{Integer, N}) where {N}
     @boundscheck checkbounds(x, I...)
-    @inbounds _getindex(getfield(x, :basis), getfield(x, :prop), getfield(x, :indices), I...)
+    @inbounds _getindex(getfield(x, :basis), getfield(x, :vals), getfield(x, :indices), I...)
 end
-@generated function _getindex(basis, prop::NamedTuple{names}, indices::AbstractArray{<: Any, N}, I::Vararg{Integer, N}) where {names, N}
-    exps = [:(viewcol(prop.$name, I...)) for name in names]
+@generated function _getindex(basis, vals::NamedTuple{names}, indices::AbstractArray{<: Any, N}, I::Vararg{Integer, N}) where {names, N}
+    exps = [:(viewcol(vals.$name, I...)) for name in names]
     quote
         @_inline_meta
         @_propagate_inbounds_meta
@@ -325,7 +329,7 @@ function _show_basis_weight_array(io::IO, weights::BasisWeightArray)
     bw = first(weights)
     print(io, Base.dims2string(size(weights)), " ", ndims(weights)==1 ? "BasisWeightVector" : "BasisWeightArray", ": \n")
     print(io, "  Basis: ", basis(weights), "\n")
-    print(io, "  Property names: ", join(propertynames(bw), ", "))
+    print(io, "  Basis values: ", join(propertynames(bw), ", "))
 end
 
 Base.show(io::IO, ::MIME"text/plain", weights::BasisWeightArray) = _show_basis_weight_array(io, weights)
@@ -347,27 +351,27 @@ end
     true
 end
 
-@inline has_full_support(bw::BasisWeight, indices) = size(basis_values(bw, Order(0))) == size(indices)
+@inline has_full_support(bw::BasisWeight, indices) = size(nodal_basis_values(bw, Order(0))) == size(indices)
 @inline has_full_support(bw::BasisWeight, indices, ::Trues) = has_full_support(bw, indices)
 @inline has_full_support(bw::BasisWeight, indices, filter::AbstractArray{Bool}) = has_full_support(bw, indices) && alltrue(filter, indices)
 
 @inline function update!(bw::BasisWeight, pt, mesh::AbstractMesh)
     b = basis(bw)
     supportnodes_storage(bw)[] = supportnodes(b, pt, mesh)
-    update_property!(bw, b, pt, mesh)
+    update_basis_values!(bw, b, pt, mesh)
     bw
 end
 @inline function update!(bw::BasisWeight, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @assert size(mesh) == size(filter)
     b = basis(bw)
     supportnodes_storage(bw)[] = supportnodes(b, pt, mesh)
-    update_property!(bw, b, pt, mesh, filter)
+    update_basis_values!(bw, b, pt, mesh, filter)
     bw
 end
 @inline update!(bw::BasisWeight, pt, mesh::AbstractMesh, ::Trues) = update!(bw, pt, mesh)
-@inline function update_property!(bw::BasisWeight, basis, pt, mesh::AbstractMesh, filter)
+@inline function update_basis_values!(bw::BasisWeight, basis, pt, mesh::AbstractMesh, filter)
     @assert filter isa Trues
-    update_property!(bw, basis, pt, mesh)
+    update_basis_values!(bw, basis, pt, mesh)
 end
 
 # accelerations
