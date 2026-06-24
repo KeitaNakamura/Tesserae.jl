@@ -29,15 +29,20 @@ reference coordinate system.
 function jet end
 
 #=
-Basis extension points:
-* Tesserae.initial_supportnodes(basis, mesh)
+Standard Cartesian basis extension:
 * Tesserae.support_width(basis)
 * Tesserae.supportnodes(basis, pt, mesh)
-* Tesserae.allocate_basis_values(::Type{Vec{dim, T}}, basis; kwargs...) -> NamedTuple
 * Tesserae.update_basis_values!(bw::BasisWeight, basis, pt, mesh)
 
-Use `basis_jet` for physical mesh-node evaluation, and `jet` for local or
-reference-coordinate evaluation.
+By default, `BasisWeight` uses `support_width(basis)` to allocate arrays for
+`w`, `∇w`, ... with the same width in each Cartesian axis. Override
+`allocate_basis_values` only when a basis does not fit this fixed Cartesian
+storage layout.
+
+Specialized bases may instead define `update!` for their own `BasisWeight`;
+for example, CPDI defines `update!(bw::BasisWeight{CPDI}, pt, mesh)`.
+Such methods must update `supportnodes(bw)` and `nodal_basis_values(bw, order)`
+with matching local indices.
 =#
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
