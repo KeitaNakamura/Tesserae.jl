@@ -63,7 +63,7 @@ end
     poly = get_polynomial(wls)
     xₚ = getx(pt)
 
-    P₀__ = values(derivative_order(bw), poly, zero(xₚ))
+    P₀__ = jet(derivative_order(bw), poly, zero(xₚ))
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
         xᵢ = mesh[i]

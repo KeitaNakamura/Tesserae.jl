@@ -20,6 +20,14 @@ function evaluated at `pt`.
 """
 function basis_jet end
 
+"""
+    jet(order, object, x, args...)
+
+Return the value and derivatives up to `order` in `object`'s natural local or
+reference coordinate system.
+"""
+function jet end
+
 #=
 To create a new basis, following methods need to be implemented.
 * Tesserae.create_property(::Type{Vec{dim, T}}, basis; kwargs...) -> NamedTuple

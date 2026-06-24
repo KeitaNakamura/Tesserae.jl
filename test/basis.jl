@@ -413,7 +413,7 @@ end
     function check_polynomial(poly, ::Val{max_order}, ::Type{T}, ::Val{dim}; check_values=true) where {max_order,T,dim}
         x = polynomial_point(T, Val(dim))
         exps = exponents(poly, Val(dim))
-        vals = values(Order(max_order), poly, x)
+        vals = Tesserae.jet(Order(max_order), poly, x)
         @test all(v -> eltype(v) == T, vals)
         check_values || return
 

@@ -7,14 +7,14 @@ end
 Base.show(io::IO, poly::Polynomial) = print(io, Polynomial, "(", poly.degree, ")")
 
 @inline value(p::Polynomial, x::Vec) = _value(Order(0), p, x)
-@generated function Base.values(::Order{k}, p::Polynomial, x::Vec) where {k}
+@generated function jet(::Order{k}, p::Polynomial, x::Vec) where {k}
     quote
         @_inline_meta
         @ntuple $(k+1) i -> _value(Order(i-1), p, x)
     end
 end
 
-@inline Base.values(::Order{k}, p::Polynomial{<: Union{Quadratic, MultiQuadratic}}, x::Vec) where {k} = reverse(∂{k}(x->value(p,x), x, :all))
+@inline jet(::Order{k}, p::Polynomial{<: Union{Quadratic, MultiQuadratic}}, x::Vec) where {k} = reverse(∂{k}(x->value(p,x), x, :all))
 
 @inline _value(::Order{0}, ::Polynomial{Linear}, x::Vec) = vcat(one(eltype(x)), x)
 @inline _value(::Order{1}, ::Polynomial{Linear}, x::Vec{dim, T}) where {dim, T} = vcat(zero(Mat{1, dim, T}), one(Mat{dim, dim, T}))

@@ -225,7 +225,7 @@ end
     ξ < 3 ? ((3-ξ)^5) / 120                          : zero(ξ)
 end
 
-@inline function Base.values(::Order{k}, spline::BSpline, ξ::Real) where {k}
+@inline function jet(::Order{k}, spline::BSpline, ξ::Real) where {k}
     reverse(∂{k}(ξ -> value(spline, ξ), ξ, :all))
 end
 
@@ -235,7 +235,7 @@ end
         x = getx(pt)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
-        vals1d = @ntuple $dim d -> values(order, spline, ξ[d])
+        vals1d = @ntuple $dim d -> jet(order, spline, ξ[d])
         vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
@@ -295,7 +295,7 @@ function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
     end
 end
 
-@inline function Base.values(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
+@inline function jet(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
     reverse(∂{k}(ξ -> value(spline, ξ, pos), ξ, :all))
 end
 
@@ -306,7 +306,7 @@ end
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
         pos = node_position(mesh, i)
-        vals1d = @ntuple $dim d -> values(order, spline, ξ[d], pos[d])
+        vals1d = @ntuple $dim d -> jet(order, spline, ξ[d], pos[d])
         vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end

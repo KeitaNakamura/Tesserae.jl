@@ -35,7 +35,7 @@ end
     ξ < 1+l/2 ? (1+l/2-ξ)^2 / 2l  : zero(ξ)
 end
 
-@inline function Base.values(::Order{k}, gimp::uGIMP, ξ::Real, l::Real) where {k}
+@inline function jet(::Order{k}, gimp::uGIMP, ξ::Real, l::Real) where {k}
     reverse(∂{k}(ξ -> value(gimp, ξ, l), ξ, :all))
 end
 
@@ -46,7 +46,7 @@ end
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
         l = pt.l * h⁻¹
-        vals′ = @ntuple $dim d -> values(order, spline, ξ[d], l)
+        vals′ = @ntuple $dim d -> jet(order, spline, ξ[d], l)
         vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals′...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
