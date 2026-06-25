@@ -480,7 +480,7 @@ function CellStrategy(mesh::UnstructuredMesh)
     coloring = Graphs.degree_greedy_color(g)
 
     groups = [Int[] for _ in 1:coloring.num_colors]
-    @inbounds for cell in 1:ncells(mesh)
+    @inbounds for cell in cells(mesh)
         push!(groups[coloring.colors[cell]], cell)
     end
 
@@ -493,8 +493,8 @@ function _cell_conflict_graph(mesh::UnstructuredMesh)
     graph = SimpleGraph(nc)
 
     node2cells = [Int[] for _ in 1:nn]
-    @inbounds for cell in 1:nc
-        for i in cellnodeindices(mesh, cell)
+    @inbounds for cell in cells(mesh)
+        for i in supportnodes(mesh, cell)
             push!(node2cells[i], cell)
         end
     end

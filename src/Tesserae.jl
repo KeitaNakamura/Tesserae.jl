@@ -51,6 +51,7 @@ export
     findcell,
     extract,
     UnstructuredMesh,
+    cells,
 # Grid
     Grid,
     SpGrid,

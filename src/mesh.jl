@@ -231,7 +231,7 @@ end
 struct UnstructuredMesh{S <: Shape, dim, T, L} <: AbstractMesh{dim, T, 1}
     shape::S
     nodes::Vector{Vec{dim, T}}
-    cellnodeindices::Vector{SVector{L, Int}}
+    cellsupports::Vector{SVector{L, Int}}
 end
 
 Base.size(mesh::UnstructuredMesh) = size(mesh.nodes)
@@ -247,9 +247,10 @@ end
 end
 
 cellshape(mesh::UnstructuredMesh) = mesh.shape
-ncells(mesh::UnstructuredMesh) = length(mesh.cellnodeindices)
+ncells(mesh::UnstructuredMesh) = length(mesh.cellsupports)
+cells(mesh::UnstructuredMesh) = eachindex(mesh.cellsupports)
 
-@inline cellnodeindices(mesh::UnstructuredMesh, c::Int) = (@_propagate_inbounds_meta; mesh.cellnodeindices[c])
+@inline supportnodes(mesh::UnstructuredMesh, cell::Int) = (@_propagate_inbounds_meta; mesh.cellsupports[cell])
 
 UnstructuredMesh(mesh::CartesianMesh) = UnstructuredMesh(default_cellshape(mesh), mesh)
 default_cellshape(::CartesianMesh{1}) = Line2()
@@ -314,29 +315,29 @@ end
 
 function extract(mesh::UnstructuredMesh, nodeindices::AbstractVector{Int})
     shape = cellshape(mesh)
-    cells = SVector{nlocalnodes(shape), Int}[]
-    for c in 1:ncells(mesh)
-        indices = cellnodeindices(mesh, c)
+    supports = SVector{nlocalnodes(shape), Int}[]
+    for cell in cells(mesh)
+        indices = supportnodes(mesh, cell)
         if all(in.(indices, Ref(nodeindices)))
-            push!(cells, indices)
+            push!(supports, indices)
         end
     end
-    UnstructuredMesh(shape, mesh.nodes, cells)
+    UnstructuredMesh(shape, mesh.nodes, supports)
 end
 
 function extract_face(mesh::UnstructuredMesh, nodeindices::AbstractVector{Int})
     shape = faceshape(cellshape(mesh))
-    cells = SVector{nlocalnodes(shape), Int}[]
-    for c in 1:ncells(mesh)
-        indices = cellnodeindices(mesh, c)
+    supports = SVector{nlocalnodes(shape), Int}[]
+    for cell in cells(mesh)
+        indices = supportnodes(mesh, cell)
         for conn in faces(cellshape(mesh))
             faceindices = indices[conn]
             if all(in.(faceindices, Ref(nodeindices)))
-                push!(cells, faceindices)
+                push!(supports, faceindices)
             end
         end
     end
-    UnstructuredMesh(shape, mesh.nodes, unique(cells))
+    UnstructuredMesh(shape, mesh.nodes, unique(supports))
 end
 
 function Base.merge!(dest::UnstructuredMesh{S}, src::UnstructuredMesh{S}) where {S}
@@ -355,12 +356,12 @@ function Base.merge!(dest::UnstructuredMesh{S}, src::UnstructuredMesh{S}) where 
         end
     end
 
-    sortedinds_src = map(inds -> sort(nodemap[inds]), src.cellnodeindices)
-    sortedinds_dst = map(sort, dest.cellnodeindices)
-    for c in 1:ncells(src)
-        inds_src = sortedinds_src[c]
+    sortedinds_src = map(inds -> sort(nodemap[inds]), src.cellsupports)
+    sortedinds_dst = map(sort, dest.cellsupports)
+    for cell in cells(src)
+        inds_src = sortedinds_src[cell]
         if all(inds_dest -> inds_src !== inds_dest, sortedinds_dst)
-            push!(dest.cellnodeindices, nodemap[cellnodeindices(src, c)])
+            push!(dest.cellsupports, nodemap[supportnodes(src, cell)])
         end
     end
     dest
@@ -369,6 +370,6 @@ function Base.merge!(dest::UnstructuredMesh{S}, src1::UnstructuredMesh{S}, src2:
     merge!(merge!(dest, src1), src2, others...)
 end
 function Base.merge(x::UnstructuredMesh{S}, y::UnstructuredMesh{S}, z::UnstructuredMesh{S}...) where {S}
-    dest = UnstructuredMesh(cellshape(x), copy(x.nodes), copy(x.cellnodeindices))
+    dest = UnstructuredMesh(cellshape(x), copy(x.nodes), copy(x.cellsupports))
     merge!(dest, y, z...)
 end

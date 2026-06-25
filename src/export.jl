@@ -51,13 +51,13 @@ end
 
 function _vtk_grid(vtk, mesh::UnstructuredMesh; kwargs...)
     shape = cellshape(mesh)
-    cells = WriteVTK.MeshCell[]
+    vtk_cells = WriteVTK.MeshCell[]
     celltype = to_vtk_celltype(shape)
-    for c in 1:ncells(mesh)
-        indices = cellnodeindices(mesh, c)
-        push!(cells, WriteVTK.MeshCell(celltype, indices[to_vtk_connectivity(shape)]))
+    for cell in cells(mesh)
+        indices = supportnodes(mesh, cell)
+        push!(vtk_cells, WriteVTK.MeshCell(celltype, indices[to_vtk_connectivity(shape)]))
     end
-    WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh), cells; kwargs...)
+    WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh), vtk_cells; kwargs...)
 end
 
 # add_field_data
