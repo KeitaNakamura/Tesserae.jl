@@ -75,6 +75,8 @@ end
     mesh = UnstructuredMesh(cmesh)
     @test length(mesh) == 35
     @test Tesserae.ncells(mesh) == 24
+    @test collect(cells(mesh)) == collect(1:Tesserae.ncells(mesh))
+    @test supportnodes(mesh, 1) === mesh.cellsupports[1]
     @test mesh == vec(cmesh)
     cmesh′ = CartesianMesh(0.5, (1,3), (1,4))
     mesh .= vec(cmesh′) # test setindex!

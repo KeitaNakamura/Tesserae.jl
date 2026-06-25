@@ -26,12 +26,12 @@ function generate_points(alg::CellSampling, mesh::UnstructuredMesh{<: Any, dim, 
     shape = cellshape(mesh)
 
     points = Matrix{Vec{dim, T}}(undef, length(qpts), ncells(mesh))
-    for c in 1:ncells(mesh)
-        indices = cellnodeindices(mesh, c)
+    for cell in cells(mesh)
+        indices = supportnodes(mesh, cell)
         x = mesh[indices]
         for (i, qpt) in enumerate(qpts)
             N = value(shape, qpt)
-            points[i,c] = sum(N .* x)
+            points[i,cell] = sum(N .* x)
         end
     end
     points

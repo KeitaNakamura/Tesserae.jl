@@ -113,8 +113,8 @@
         for group in groups
             for i in 1:length(group)-1, j in i+1:length(group)
                 cell1, cell2 = group[i], group[j]
-                nodes1 = Tesserae.cellnodeindices(mesh, cell1)
-                nodes2 = Tesserae.cellnodeindices(mesh, cell2)
+                nodes1 = supportnodes(mesh, cell1)
+                nodes2 = supportnodes(mesh, cell2)
                 @test isempty(intersect(Set(nodes1), Set(nodes2)))
             end
         end

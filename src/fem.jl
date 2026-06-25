@@ -18,16 +18,16 @@ function feupdate!(
     @assert size(weights) == (length(qpts), ncells(mesh))
     @assert isnothing(volume) || size(weights) == size(volume)
     valgrads = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
-    for c in 1:ncells(mesh)
-        indices = cellnodeindices(mesh, c)
+    for cell in cells(mesh)
+        indices = supportnodes(mesh, cell)
         x = nodes[indices]
         for p in eachindex(qpts, qwts)
             N, dNdξ = valgrads[p]
             J = sum(x .⊗ dNdξ)
-            set_values!(weights[p,c], (N, dNdξ .⊡ Ref(inv(J))))
-            supportnodes_storage(weights[p,c])[] = indices
+            set_values!(weights[p,cell], (N, dNdξ .⊡ Ref(inv(J))))
+            supportnodes_storage(weights[p,cell])[] = indices
             if volume !== nothing
-                volume[p,c] = qwts[p] * det(J)
+                volume[p,cell] = qwts[p] * det(J)
             end
         end
     end
@@ -48,21 +48,21 @@ function feupdate!(
     @assert isnothing(area) || size(weights) == size(area)
     @assert isnothing(normal) || size(weights) == size(normal)
     valgrads = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
-    for c in 1:ncells(mesh)
-        indices = cellnodeindices(mesh, c)
+    for cell in cells(mesh)
+        indices = supportnodes(mesh, cell)
         x = nodes[indices]
         for p in eachindex(qpts, qwts)
             N, dNdξ = valgrads[p]
             J = sum(x .⊗ dNdξ)
             n = _get_normal(J)
             n_norm = norm(n)
-            set_values!(weights[p,c], (N,))
-            supportnodes_storage(weights[p,c])[] = indices
+            set_values!(weights[p,cell], (N,))
+            supportnodes_storage(weights[p,cell])[] = indices
             if area !== nothing
-                area[p,c] = qwts[p] * n_norm
+                area[p,cell] = qwts[p] * n_norm
             end
             if normal !== nothing
-                normal[p,c] = n / n_norm
+                normal[p,cell] = n / n_norm
             end
         end
     end
