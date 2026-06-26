@@ -13,21 +13,28 @@ function feupdate!(
         quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
     ) where {dim, S <: Shape{dim}}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
-    @assert length(qpts) == length(qwts)
+    qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
+    _feupdate_volume!(weights, mesh, nodes, volume, qdata, qwts)
+end
+
+@inline _basis_values_and_gradients(mesh::UnstructuredMesh, qdata, cell, p) = qdata[p]
+@inline _quadrature_weight(mesh::UnstructuredMesh, qdata, qwts, cell, p) = qwts[p]
+
+function _feupdate_volume!(weights, mesh::AbstractMesh, nodes, volume, qdata, qwts)
+    @assert length(qdata) == length(qwts)
     @assert size(mesh) == size(nodes)
-    @assert size(weights) == (length(qpts), ncells(mesh))
+    @assert size(weights) == (length(qdata), ncells(mesh))
     @assert isnothing(volume) || size(weights) == size(volume)
-    valgrads = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
     for cell in cells(mesh)
         indices = supportnodes(mesh, cell)
         x = nodes[indices]
-        for p in eachindex(qpts, qwts)
-            N, dNdξ = valgrads[p]
+        for p in eachindex(qdata, qwts)
+            N, dNdξ = _basis_values_and_gradients(mesh, qdata, cell, p)
             J = sum(x .⊗ dNdξ)
             set_values!(weights[p,cell], (N, dNdξ .⊡ Ref(inv(J))))
             supportnodes_storage(weights[p,cell])[] = indices
             if volume !== nothing
-                volume[p,cell] = qwts[p] * det(J)
+                volume[p,cell] = _quadrature_weight(mesh, qdata, qwts, cell, p) * det(J)
             end
         end
     end
@@ -42,24 +49,28 @@ function feupdate!(
         quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
     ) where {S <: Shape, dim}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
-    @assert length(qpts) == length(qwts)
+    qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
+    _feupdate_area!(weights, mesh, nodes, area, normal, qdata, qwts)
+end
+
+function _feupdate_area!(weights, mesh::AbstractMesh, nodes, area, normal, qdata, qwts)
+    @assert length(qdata) == length(qwts)
     @assert size(mesh) == size(nodes)
-    @assert size(weights) == (length(qpts), ncells(mesh))
+    @assert size(weights) == (length(qdata), ncells(mesh))
     @assert isnothing(area) || size(weights) == size(area)
     @assert isnothing(normal) || size(weights) == size(normal)
-    valgrads = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
     for cell in cells(mesh)
         indices = supportnodes(mesh, cell)
         x = nodes[indices]
-        for p in eachindex(qpts, qwts)
-            N, dNdξ = valgrads[p]
+        for p in eachindex(qdata, qwts)
+            N, dNdξ = _basis_values_and_gradients(mesh, qdata, cell, p)
             J = sum(x .⊗ dNdξ)
             n = _get_normal(J)
             n_norm = norm(n)
             set_values!(weights[p,cell], (N,))
             supportnodes_storage(weights[p,cell])[] = indices
             if area !== nothing
-                area[p,cell] = qwts[p] * n_norm
+                area[p,cell] = _quadrature_weight(mesh, qdata, qwts, cell, p) * n_norm
             end
             if normal !== nothing
                 normal[p,cell] = n / n_norm
