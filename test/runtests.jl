@@ -20,5 +20,6 @@ include("implicit.jl")
 include("explain.jl")
 
 include("export.jl")
+include("gmsh.jl")
 
 include("tutorials.jl")
