@@ -180,7 +180,7 @@ end
 Read all physical groups from the current Gmsh model and return a dictionary
 from physical group name to `UnstructuredMesh`.
 """
-function read_gmsh_physical_groups(; reorient_boundary=true)
+function read_gmsh_physical_groups(; reorient_boundary=false)
     nodes, nodeindices = read_gmsh_nodes()
     meshes = Dict{String, Tesserae.UnstructuredMesh}()
     for (dim, physical_tag) in Gmsh.gmsh.model.getPhysicalGroups()
@@ -193,7 +193,7 @@ function read_gmsh_physical_groups(; reorient_boundary=true)
     meshes
 end
 
-function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=true)
+function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=false)
     initialized = Gmsh.initialize(gmsh_argv; finalize_atexit=false)
     try
         Gmsh.gmsh.open(filename)

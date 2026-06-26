@@ -24,12 +24,12 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
     @test Tesserae.cellshape(boundary) == Tesserae.Line2()
     @test Tesserae.ncells(boundary) == 2
     @test sort([cellcoordinates(boundary, cell) for cell in cells(boundary)]) == [
-        ((0.0, 1.0), (0.0, 0.0)),
+        ((0.0, 0.0), (0.0, 1.0)),
         ((1.0, 0.0), (1.0, 1.0)),
     ]
-    raw_boundary = readtestmsh("square.msh"; reorient_boundary=false)["boundary"]
-    @test sort([cellcoordinates(raw_boundary, cell) for cell in cells(raw_boundary)]) == [
-        ((0.0, 0.0), (0.0, 1.0)),
+    reoriented_boundary = readtestmsh("square.msh"; reorient_boundary=true)["boundary"]
+    @test sort([cellcoordinates(reoriented_boundary, cell) for cell in cells(reoriented_boundary)]) == [
+        ((0.0, 1.0), (0.0, 0.0)),
         ((1.0, 0.0), (1.0, 1.0)),
     ]
 
@@ -80,10 +80,10 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
     @test_throws ErrorException readtestmsh("duplicate_names.msh")
     @test !Bool(Gmsh.gmsh.isInitialized())
 
-    @test_logs (:warn, r"no matching volume face") readtestmsh("unmatched_boundary.msh")
+    @test_logs (:warn, r"no matching volume face") readtestmsh("unmatched_boundary.msh"; reorient_boundary=true)
     @test !Bool(Gmsh.gmsh.isInitialized())
 
-    @test_logs (:warn, r"multiple matching volume faces") readtestmsh("ambiguous_boundary.msh")
+    @test_logs (:warn, r"multiple matching volume faces") readtestmsh("ambiguous_boundary.msh"; reorient_boundary=true)
     @test !Bool(Gmsh.gmsh.isInitialized())
 
     Gmsh.initialize(GMSH_TEST_ARGS; finalize_atexit=false)
