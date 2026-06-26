@@ -88,6 +88,31 @@ function read_gmsh_elements(dim, entity_tag, nodeindices)
     elements
 end
 
+"""
+    read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
+
+Read a Gmsh physical group and return `name => mesh`, where `mesh` is an
+`UnstructuredMesh` built from the group's elements.
+"""
+function read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
+    elements = Dict{Tesserae.Shape, Vector}()
+    entity_tags = Gmsh.gmsh.model.getEntitiesForPhysicalGroup(dim, physical_tag)
+    for entity_tag in entity_tags
+        entity_elements = read_gmsh_elements(dim, entity_tag, nodeindices)
+        for (shape, connectivities) in entity_elements
+            append!(get!(elements, shape, eltype(connectivities)[]), connectivities)
+        end
+    end
+
+    name = Gmsh.gmsh.model.getPhysicalName(dim, physical_tag)
+    if length(elements) != 1
+        shapes = join(string.(collect(keys(elements))), ", ")
+        error("physical group \"$name\" must contain exactly one cell shape; found $(length(elements)): $shapes")
+    end
+    shape, connectivities = only(elements)
+    name => Tesserae.UnstructuredMesh(shape, nodes, connectivities)
+end
+
 function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[])
     initialized = Gmsh.initialize(gmsh_argv; finalize_atexit=false)
     try
