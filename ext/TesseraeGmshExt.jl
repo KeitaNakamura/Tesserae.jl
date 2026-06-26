@@ -113,11 +113,29 @@ function read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
     name => Tesserae.UnstructuredMesh(shape, nodes, connectivities)
 end
 
+"""
+    read_gmsh_physical_groups()
+
+Read all physical groups from the current Gmsh model and return a dictionary
+from physical group name to `UnstructuredMesh`.
+"""
+function read_gmsh_physical_groups()
+    nodes, nodeindices = read_gmsh_nodes()
+    meshes = Dict{String, Tesserae.UnstructuredMesh}()
+    for (dim, physical_tag) in Gmsh.gmsh.model.getPhysicalGroups()
+        name, mesh = read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
+        isempty(name) && (name = "physical_group[$dim,$physical_tag]")
+        haskey(meshes, name) && error("physical group name \"$name\" is not unique")
+        meshes[name] = mesh
+    end
+    meshes
+end
+
 function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[])
     initialized = Gmsh.initialize(gmsh_argv; finalize_atexit=false)
     try
         Gmsh.gmsh.open(filename)
-        nothing
+        read_gmsh_physical_groups()
     finally
         initialized && Gmsh.finalize()
     end
