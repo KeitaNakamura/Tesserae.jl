@@ -1,0 +1,20 @@
+$MeshFormat
+2.2 0 8
+$EndMeshFormat
+$PhysicalNames
+2
+1 2 "boundary"
+2 1 "domain"
+$EndPhysicalNames
+$Nodes
+4
+1 0.0 0.0 0.0
+2 1.0 0.0 0.0
+3 0.0 1.0 0.0
+4 2.0 0.0 0.0
+$EndNodes
+$Elements
+2
+1 1 2 2 11 2 4
+2 2 2 1 21 1 2 3
+$EndElements

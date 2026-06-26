@@ -23,6 +23,8 @@ macros.
   including threaded transfers and matrix assembly. (#126)
 - `@foreach` provides backend-aware loops over grids, particles, and active
   sparse grid nodes without abusing transfer macros as generic loop kernels.
+- Gmsh `.msh` files can now be read directly as physical-group meshes through
+  `readmsh`, with boundary-cell reorientation against volume faces. (#146)
 - P2G and basis-weight updates are faster across dense and sparse grid paths.
   (#124, #129, #131, #132, #133)
 
