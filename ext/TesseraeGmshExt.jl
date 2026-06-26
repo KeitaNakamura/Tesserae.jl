@@ -52,7 +52,7 @@ function read_gmsh_nodes()
     sizehint!(nodeindices, length(node_tags))
     @inbounds for i in eachindex(node_tags)
         offset = GMSH_COORD_DIM * (i - 1)
-        nodes[i] = Vec{dim, Float64}(ntuple(j -> coords[offset + j], dim))
+        nodes[i] = Vec{dim, Float64}(j -> coords[offset + j])
         nodeindices[node_tags[i]] = i
     end
     nodes, nodeindices
@@ -113,13 +113,74 @@ function read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
     name => Tesserae.UnstructuredMesh(shape, nodes, connectivities)
 end
 
+function _cellshape_dim(mesh)
+    Tesserae.get_dimension(Tesserae.cellshape(mesh))
+end
+
+function _nodekey(nodes)
+    Tuple(sort!(collect(nodes)))
+end
+
+function _facekey(shape, nodes)
+    typeof(shape) => _nodekey(nodes)
+end
+
+function _volume_face_map(meshes, volume_dim)
+    faces = Dict{Pair{DataType, Tuple{Vararg{Int}}}, Vector}()
+    for mesh in values(meshes)
+        _cellshape_dim(mesh) == volume_dim || continue
+        shape = Tesserae.cellshape(mesh)
+        faceshape = Tesserae.faceshape(shape)
+        for cell in cells(mesh)
+            support = supportnodes(mesh, cell)
+            for face in Tesserae.faces(shape)
+                facesupport = support[face]
+                push!(get!(faces, _facekey(faceshape, facesupport), typeof(facesupport)[]), facesupport)
+            end
+        end
+    end
+    faces
+end
+
+function reorient_boundary_meshes!(meshes)
+    volume_dim = maximum(_cellshape_dim, values(meshes); init=0)
+    volume_dim > 1 || return meshes
+    volume_faces = _volume_face_map(meshes, volume_dim)
+    isempty(volume_faces) && return meshes
+
+    boundary_dim = volume_dim - 1
+    for (name, mesh) in meshes
+        _cellshape_dim(mesh) == boundary_dim || continue
+        shape = Tesserae.cellshape(mesh)
+        unmatched = 0
+        ambiguous = 0
+        for cell in cells(mesh)
+            matches = get(volume_faces, _facekey(shape, supportnodes(mesh, cell)), nothing)
+            if isnothing(matches)
+                unmatched += 1
+            elseif length(matches) == 1
+                mesh.cellsupports[cell] = only(matches)
+            else
+                ambiguous += 1
+            end
+        end
+        if unmatched > 0
+            @warn "Could not reorient boundary cells because no matching volume face was found" physical_group=name cells=unmatched
+        end
+        if ambiguous > 0
+            @warn "Could not reorient boundary cells because multiple matching volume faces were found" physical_group=name cells=ambiguous
+        end
+    end
+    meshes
+end
+
 """
     read_gmsh_physical_groups()
 
 Read all physical groups from the current Gmsh model and return a dictionary
 from physical group name to `UnstructuredMesh`.
 """
-function read_gmsh_physical_groups()
+function read_gmsh_physical_groups(; reorient_boundary=true)
     nodes, nodeindices = read_gmsh_nodes()
     meshes = Dict{String, Tesserae.UnstructuredMesh}()
     for (dim, physical_tag) in Gmsh.gmsh.model.getPhysicalGroups()
@@ -128,14 +189,15 @@ function read_gmsh_physical_groups()
         haskey(meshes, name) && error("physical group name \"$name\" is not unique")
         meshes[name] = mesh
     end
+    reorient_boundary && reorient_boundary_meshes!(meshes)
     meshes
 end
 
-function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[])
+function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=true)
     initialized = Gmsh.initialize(gmsh_argv; finalize_atexit=false)
     try
         Gmsh.gmsh.open(filename)
-        read_gmsh_physical_groups()
+        read_gmsh_physical_groups(; reorient_boundary)
     finally
         initialized && Gmsh.finalize()
     end

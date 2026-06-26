@@ -3,7 +3,7 @@ using Gmsh
 const GMSH_TEST_ARGS = ["-v", "0"]
 
 mshpath(name) = joinpath(@__DIR__, "fixtures", name)
-readtestmsh(name) = readmsh(mshpath(name); gmsh_argv=GMSH_TEST_ARGS)
+readtestmsh(name; kwargs...) = readmsh(mshpath(name); gmsh_argv=GMSH_TEST_ARGS, kwargs...)
 cellcoordinates(mesh, cell) = Tuple(Tuple(mesh[i]) for i in supportnodes(mesh, cell))
 nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
 
@@ -27,6 +27,11 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
         ((0.0, 1.0), (0.0, 0.0)),
         ((1.0, 0.0), (1.0, 1.0)),
     ]
+    raw_boundary = readtestmsh("square.msh"; reorient_boundary=false)["boundary"]
+    @test sort([cellcoordinates(raw_boundary, cell) for cell in cells(raw_boundary)]) == [
+        ((0.0, 0.0), (0.0, 1.0)),
+        ((1.0, 0.0), (1.0, 1.0)),
+    ]
 
     @test nodecoordinates(domain) == [
         (0.0, 0.0),
@@ -35,34 +40,34 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
         (1.0, 1.0),
     ]
 
-    meshes = readtestmsh("high_order.msh")
+    meshes = readtestmsh("high_order.msh"; reorient_boundary=false)
 
     tri6 = meshes["tri6"]
     @test Tesserae.cellshape(tri6) == Tesserae.Tri6()
     @test Tesserae.ncells(tri6) == 1
     @test cellcoordinates(tri6, 1) == (
+        (0.0, 0.0, 0.0),
         (1.0, 0.0, 0.0),
-        (2.0, 0.0, 0.0),
-        (3.0, 0.0, 0.0),
-        (4.0, 0.0, 0.0),
-        (6.0, 0.0, 0.0),
-        (5.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.5, 0.0, 0.0),
+        (0.0, 0.5, 0.0),
+        (0.5, 0.5, 0.0),
     )
 
     tet10 = meshes["tet10"]
     @test Tesserae.cellshape(tet10) == Tesserae.Tet10()
     @test Tesserae.ncells(tet10) == 1
     @test cellcoordinates(tet10, 1) == (
+        (0.0, 0.0, 0.0),
         (1.0, 0.0, 0.0),
-        (2.0, 0.0, 0.0),
-        (3.0, 0.0, 0.0),
-        (4.0, 0.0, 0.0),
-        (5.0, 0.0, 0.0),
-        (7.0, 0.0, 0.0),
-        (8.0, 0.0, 0.0),
-        (6.0, 0.0, 0.0),
-        (9.0, 0.0, 0.0),
-        (10.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (0.5, 0.0, 0.0),
+        (0.0, 0.5, 0.0),
+        (0.0, 0.0, 0.5),
+        (0.5, 0.5, 0.0),
+        (0.0, 0.5, 0.5),
+        (0.5, 0.0, 0.5),
     )
 
     meshes = readtestmsh("unnamed_physical_group.msh")
@@ -73,6 +78,12 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
     @test !Bool(Gmsh.gmsh.isInitialized())
 
     @test_throws ErrorException readtestmsh("duplicate_names.msh")
+    @test !Bool(Gmsh.gmsh.isInitialized())
+
+    @test_logs (:warn, r"no matching volume face") readtestmsh("unmatched_boundary.msh")
+    @test !Bool(Gmsh.gmsh.isInitialized())
+
+    @test_logs (:warn, r"multiple matching volume faces") readtestmsh("ambiguous_boundary.msh")
     @test !Bool(Gmsh.gmsh.isInitialized())
 
     Gmsh.initialize(GMSH_TEST_ARGS; finalize_atexit=false)
