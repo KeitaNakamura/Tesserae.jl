@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>GPU computing · Tesserae.jl</title><meta name="title" content="GPU computing · Tesserae.jl"/><meta property="og:title" content="GPU computing · Tesserae.jl"/><meta property="twitter:title" content="GPU computing · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.svg" alt="Tesserae.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../tutorials/getting_started/">Getting started</a></li><li><a class="tocitem" href="../tutorials/collision/">Transfer schemes</a></li><li><a class="tocitem" href="../tutorials/cpdi/">CPDI</a></li><li><a class="tocitem" href="../tutorials/tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox"/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../implicit/">Implicit formulation</a></li><li><a class="tocitem" href="../tutorials/implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../tutorials/implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../tutorials/collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../tutorials/dam_break/">Incompressible fluid flow</a></li><li><a class="tocitem" href="../tutorials/rigid_body_contact/">Frictional contact with rigid body</a></li><li><a class="tocitem" href="../tutorials/taylor_impact/">Multi-threading simulation</a></li><li><input class="collapse-toggle" id="menuitem-2-10" type="checkbox"/><label class="tocitem" for="menuitem-2-10"><span class="docs-label">FEM (experimental)</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../tutorials/heat/">Heat problem using FEM</a></li></ul></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../mesh/">Mesh</a></li><li><a class="tocitem" href="../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../basis/">Basis Functions</a></li><li><a class="tocitem" href="../transfer/">Transfer between grid and particles</a></li><li><a class="tocitem" href="../implicit_utils/">Utilities for implicit methods</a></li><li><a class="tocitem" href="../multithreading/">Multi-threading</a></li><li class="is-active"><a class="tocitem" href>GPU computing</a><ul class="internal"><li><a class="tocitem" href="#Basic-workflow"><span>Basic workflow</span></a></li><li><a class="tocitem" href="#GPU-arrays"><span>GPU arrays</span></a></li><li><a class="tocitem" href="#Floating-point-type"><span>Floating-point type</span></a></li><li><a class="tocitem" href="#Transfers"><span>Transfers</span></a></li><li><a class="tocitem" href="#SpArray-on-GPU"><span>SpArray on GPU</span></a></li><li><a class="tocitem" href="#Taylor-impact-on-GPU"><span>Taylor impact on GPU</span></a></li></ul></li><li><a class="tocitem" href="../sparray/">SpArray</a></li><li><a class="tocitem" href="../export/">Export</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li class="is-active"><a href>GPU computing</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>GPU computing</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/src/gpu.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="GPU-computing"><a class="docs-heading-anchor" href="#GPU-computing">GPU computing</a><a id="GPU-computing-1"></a><a class="docs-heading-anchor-permalink" href="#GPU-computing" title="Permalink"></a></h1><p>Tesserae can move grids, particles, basis weights, and meshes to a GPU with <code>gpu</code>. The transfer macros then dispatch to GPU kernels when all inputs live on the same GPU backend.</p><p>Load the GPU backend package together with Tesserae:</p><pre><code class="language-julia hljs">using Tesserae
+using CUDA # or Metal</code></pre><h2 id="Basic-workflow"><a class="docs-heading-anchor" href="#Basic-workflow">Basic workflow</a><a id="Basic-workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-workflow" title="Permalink"></a></h2><p>Choose the floating-point type first, then build the mesh, grid, particles, and weights from that type. This keeps the code close to the CPU version while avoiding mixed precision inside GPU kernels.</p><pre><code class="language-julia hljs">using Tesserae
+using CUDA
+
+const T = Float32
+
+GridProp = @NamedTuple begin
+    x  :: Vec{2,T}
+    m  :: T
+    m⁻¹:: T
+    mv :: Vec{2,T}
+    v  :: Vec{2,T}
+end
+
+ParticleProp = @NamedTuple begin
+    x :: Vec{2,T}
+    m :: T
+    v :: Vec{2,T}
+end
+
+mesh = CartesianMesh(T, T(0.02), (-1, 1), (0, 3))
+grid = generate_grid(GridProp, mesh)
+particles = generate_particles(ParticleProp, grid.x)
+@. particles.m = 1
+@. particles.v = zero(particles.v)
+weights = generate_basis_weights(T, BSpline(Quadratic()), grid.x, length(particles))
+
+grid_gpu = gpu(grid)
+particles_gpu = gpu(particles)
+weights_gpu = gpu(weights)</code></pre><p>After that, the transfer code is the same as the CPU version:</p><pre><code class="language-julia hljs">dt = T(1.0e-4)
+
+update!(weights_gpu, particles_gpu, grid_gpu.x)
+
+@P2G grid_gpu=&gt;i particles_gpu=&gt;p weights_gpu=&gt;ip begin
+    m[i]  = @∑ w[ip] * m[p]
+    mv[i] = @∑ w[ip] * m[p] * v[p]
+    m⁻¹[i] = ifelse(iszero(m[i]), zero(m[i]), inv(m[i]))
+    v[i] = mv[i] * m⁻¹[i]
+end
+
+@G2P grid_gpu=&gt;i particles_gpu=&gt;p weights_gpu=&gt;ip begin
+    v[p] = @∑ v[i] * w[ip]
+    x[p] += v[p] * dt
+end</code></pre><p>Use <code>cpu</code> to copy GPU data back to CPU memory, for example for output:</p><pre><code class="language-julia hljs">x = cpu(particles_gpu.x)</code></pre><h2 id="GPU-arrays"><a class="docs-heading-anchor" href="#GPU-arrays">GPU arrays</a><a id="GPU-arrays-1"></a><a class="docs-heading-anchor-permalink" href="#GPU-arrays" title="Permalink"></a></h2><p>After calling <code>gpu</code>, grid fields, particle fields, basis weights, and mesh coordinates in the returned objects are GPU arrays. Scalar indexing from CPU code is not allowed:</p><pre><code class="language-julia hljs">julia&gt; x = gpu(rand(3))
+3-element CuArray{Float32, 1, CUDA.DeviceMemory}:
+ 0.7683449
+ 0.4430822
+ 0.88063353
+
+julia&gt; x[1]
+ERROR: Scalar indexing is disallowed.</code></pre><p>The same rule applies to fields such as <code>grid_gpu.v</code>, <code>particles_gpu.x</code>, and <code>weights_gpu</code>. Use array operations such as broadcasting or <code>map!</code>, or write the operation inside a transfer macro or a GPU kernel. Indexing inside <code>@P2G</code> and <code>@G2P</code> is fine because the generated code runs in GPU kernels. This is also how boundary conditions should be applied on GPU. For example, on a 3D grid, a CPU slip floor boundary condition can be written as</p><pre><code class="language-julia hljs">for i in eachindex(grid)[:, :, begin]
+    grid.v[i] = grid.v[i] .* (true, true, false)
+end</code></pre><p>On GPU, write the same operation as a broadcast:</p><pre><code class="language-julia hljs">slip_floor(v) = v .* (true, true, false)
+
+@. grid_gpu.v[:, :, begin] = slip_floor(grid_gpu.v[:, :, begin])</code></pre><h2 id="Floating-point-type"><a class="docs-heading-anchor" href="#Floating-point-type">Floating-point type</a><a id="Floating-point-type-1"></a><a class="docs-heading-anchor-permalink" href="#Floating-point-type" title="Permalink"></a></h2><p><code>gpu</code> returns GPU arrays and, by default, converts floating-point arrays to <code>Float32</code>. Use <code>gpu_preserve</code> instead when the original floating-point type should be preserved on the GPU. The conversion applies to arrays and adapted Tesserae objects. It does not rewrite scalar constants captured by a kernel, so constants used in GPU code should be written with the intended type:</p><pre><code class="language-diff hljs">- dt = 1.0e-4
+- gravity = Vec(0, -9.81)
++ T = Float32
++ dt = T(1.0e-4)
++ gravity = Vec(T(0), T(-9.81))</code></pre><p>This is required on Metal, where <code>Float64</code> cannot be used in GPU kernels.</p><h2 id="Transfers"><a class="docs-heading-anchor" href="#Transfers">Transfers</a><a id="Transfers-1"></a><a class="docs-heading-anchor-permalink" href="#Transfers" title="Permalink"></a></h2><p>GPU <code>@P2G</code> uses particle-parallel kernels with atomic updates. Do not pass a <a href="../multithreading/#Tesserae.ThreadPartition"><code>ThreadPartition</code></a> to GPU transfers; <code>ThreadPartition</code> is a CPU scheduling tool for threaded scattering.</p><p>CPU threaded scattering:</p><pre><code class="language-julia hljs">partition = ThreadPartition(grid.x)
+update!(partition, particles.x)
+
+@threaded @P2G grid=&gt;i particles=&gt;p weights=&gt;ip partition begin
+    m[i] = @∑ w[ip] * m[p]
+end</code></pre><p>GPU scattering:</p><pre><code class="language-julia hljs">@P2G grid_gpu=&gt;i particles_gpu=&gt;p weights_gpu=&gt;ip begin
+    m[i] = @∑ w[ip] * m[p]
+end</code></pre><p><code>@G2P</code> is also dispatched to GPU kernels when the grid, particles, and weights are GPU objects.</p><h2 id="SpArray-on-GPU"><a class="docs-heading-anchor" href="#SpArray-on-GPU">SpArray on GPU</a><a id="SpArray-on-GPU-1"></a><a class="docs-heading-anchor-permalink" href="#SpArray-on-GPU" title="Permalink"></a></h2><p><a href="../sparray/#SpArray"><code>SpArray</code></a> can also be used on GPU. Create the sparse grid on CPU, move it to the GPU, and update its sparsity directly from particle positions. The same scalar-indexing rule applies: use <code>SpArray</code> through <code>update_sparsity!</code>, transfer macros, broadcasts, or GPU kernels rather than CPU loops over individual entries.</p><pre><code class="language-julia hljs">grid = generate_grid(SpArray, GridProp, mesh)
+weights = generate_basis_weights(T, BSpline(Quadratic()), grid.x, length(particles))
+
+grid_gpu = gpu(grid)
+particles_gpu = gpu(particles)
+weights_gpu = gpu(weights)
+
+update_sparsity!(grid_gpu, particles_gpu.x)
+update!(weights_gpu, particles_gpu, grid_gpu.x)
+
+@P2G grid_gpu=&gt;i particles_gpu=&gt;p weights_gpu=&gt;ip begin
+    m[i] = @∑ w[ip] * m[p]
+end</code></pre><p>Call <code>update_sparsity!(grid_gpu, particles_gpu.x)</code> again after particle positions have moved and before the next transfer. This keeps the active blocks large enough for the particle support nodes.</p><p>On GPU, <code>SpArray</code> mainly reduces grid-field storage and grid-wide operations over inactive regions. It should not be expected to remove the main cost of <code>@P2G</code>, which is still proportional to the number of particles times the number of support nodes.</p><h2 id="Taylor-impact-on-GPU"><a class="docs-heading-anchor" href="#Taylor-impact-on-GPU">Taylor impact on GPU</a><a id="Taylor-impact-on-GPU-1"></a><a class="docs-heading-anchor-permalink" href="#Taylor-impact-on-GPU" title="Permalink"></a></h2><p>The Taylor impact tutorial can be moved to GPU without changing the transfer equations. The material model <code>vonmises_model</code> is the same as in the <a href="../tutorials/taylor_impact/#taylor_impact_tutorial">Taylor impact tutorial</a>; the main changes are removing CPU threading utilities, moving the simulation objects with <code>gpu_preserve</code>, rewriting the slip floor boundary condition as a broadcast, and copying data back with <code>cpu</code> before writing output.</p><pre><code class="language-julia hljs">using Tesserae
+using CUDA
+
+function main()
+    T = Float64
+
+    ## Simulation parameters
+    t_stop = T(80e-6) # Final time
+    CFL = T(0.8)     # Courant number
+
+    ## Material constants
+    E  = T(117e9)               # Young&#39;s modulus
+    ν  = T(0.35)                # Poisson&#39;s ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame&#39;s first parameter
+    μ  = E / 2(1 + ν)           # Shear modulus
+    ρ⁰ = T(8.93e3)              # Initial density
+    H  = T(0.1e9)               # Hardening parameter
+    τ̄y⁰ = T(0.4e9)              # Initial yield stress
+
+    ## Geometry parameters for rod
+    R = T(0.0032)
+    L = T(0.0324)
+
+    GridProp = @NamedTuple begin
+        x  :: Vec{3, T}
+        m  :: T
+        v  :: Vec{3, T}
+        vⁿ :: Vec{3, T}
+        mv :: Vec{3, T}
+        f  :: Vec{3, T}
+    end
+    ParticleProp = @NamedTuple begin
+        x  :: Vec{3, T}
+        m  :: T
+        V  :: T
+        v  :: Vec{3, T}
+        ∇v :: SecondOrderTensor{3, T, 9}
+        σ  :: SymmetricSecondOrderTensor{3, T, 6}
+        F  :: SecondOrderTensor{3, T, 9}
+        c  :: T
+        ε̄ᵖ :: T
+        Cᵖ⁻¹ :: SymmetricSecondOrderTensor{3, T, 6}
+    end
+
+    ## Background grid
+    grid = generate_grid(GridProp, CartesianMesh(R/12, (-3R,3R), (-3R,3R), (0,L+0.1L)))
+
+    ## Particles
+    block = extract(grid.x, (-R,R), (-R,R), (0,L))
+    particles = generate_particles(ParticleProp, block; alg=PoissonDiskSampling(spacing=1/3))
+    particles.V .= volume(block) / length(particles)
+    filter!(pt -&gt; pt.x[1]^2 + pt.x[2]^2 &lt; R^2, particles)
+    @. particles.m = ρ⁰ * particles.V
+    @. particles.F = one(particles.F)
+    @. particles.Cᵖ⁻¹ = one(particles.Cᵖ⁻¹)
+    particles.v .= Ref(Vec(0.0, 0.0, -227.0)) # Set initial velocity
+
+    ## Basis weights
+    weights = generate_basis_weights(T, KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+
+    ## Paraview output setup
+    outdir = mkpath(joinpath(&quot;output&quot;, &quot;taylor_impact_gpu&quot;))
+    pvdfile = joinpath(outdir, &quot;paraview&quot;)
+    closepvd(openpvd(pvdfile)) # create file
+
+    t = zero(T)
+    step = 0
+    fps = T(300e3)
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
+
+    reset_timer!()
+
+    # Move the simulation state to the GPU after CPU-side setup; the time loop below stays on GPU.
+    let (grid, particles, weights) = (grid, particles, weights) .|&gt; gpu_preserve
+
+        Tesserae.@showprogress while t &lt; t_stop
+
+            @timeit &quot;Update timestep&quot; begin
+                @. particles.c = sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v)
+                Δt = CFL * spacing(grid.x) / maximum(particles.c)
+            end
+
+            @timeit &quot;Update basis weights&quot; begin
+                update!(weights, particles, grid.x)
+            end
+
+            @timeit &quot;P2G transfer&quot; begin
+                @P2G grid=&gt;i particles=&gt;p weights=&gt;ip begin
+                    m[i]  = @∑ w[ip] * m[p]
+                    mv[i] = @∑ w[ip] * m[p] * v[p]
+                    f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
+                end
+            end
+
+            @timeit &quot;Grid computation&quot; begin
+                @. grid.vⁿ = grid.mv / grid.m * !iszero(grid.m)
+                @. grid.v  = grid.vⁿ + Δt * grid.f / grid.m * !iszero(grid.m)
+                CUDA.synchronize() # wait for broadcast kernels before stopping @timeit
+            end
+
+            @timeit &quot;Apply boundary conditions&quot; begin
+                slip_floor(v) = v .* (true, true, false)
+                @. grid.v[:, :, begin] = slip_floor(grid.v[:, :, begin])
+                CUDA.synchronize() # wait for broadcast kernels before stopping @timeit
+            end
+
+            @timeit &quot;G2P transfer&quot; begin
+                @G2P grid=&gt;i particles=&gt;p weights=&gt;ip begin
+                    v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+                    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                    x[p] += @∑ w[ip] * v[i] * Δt
+                end
+            end
+
+            @timeit &quot;Particle computation&quot; begin
+                # Reuse @G2P only as a particle-parallel GPU loop; this block does not interpolate from grid to particles.
+                @G2P grid=&gt;i particles=&gt;p weights=&gt;ip begin
+                    ΔFₚ = I + Δt * ∇v[p]
+                    Fₚ = ΔFₚ * F[p]
+                    σₚ, Cᵖ⁻¹ₚ, ε̄ᵖₚ = vonmises_model(Cᵖ⁻¹[p], ε̄ᵖ[p], Fₚ; λ, μ, H, τ̄y⁰)
+                    σ[p] = σₚ
+                    F[p] = Fₚ
+                    V[p] = det(ΔFₚ) * V[p]
+                    Cᵖ⁻¹[p] = Cᵖ⁻¹ₚ
+                    ε̄ᵖ[p] = ε̄ᵖₚ
+                end
+            end
+
+            t += Δt
+            step += 1
+
+            if t &gt; first(savepoints)
+                @timeit &quot;Write results&quot; begin
+                    popfirst!(savepoints)
+                    openpvd(pvdfile; append=true) do pvd
+                        openvtm(string(pvdfile, step)) do vtm
+                            openvtk(vtm, cpu(particles.x)) do vtk
+                                vtk[&quot;velocity&quot;] = cpu(particles.v)
+                                vtk[&quot;plastic strain&quot;] = cpu(particles.ε̄ᵖ)
+                            end
+                            openvtk(vtm, cpu(grid.x)) do vtk
+                                vtk[&quot;velocity&quot;] = cpu(grid.v)
+                            end
+                            pvd[t] = vtm
+                        end
+                    end
+                end
+            end
+        end
+    end
+    print_timer()
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../multithreading/">« Multi-threading</a><a class="docs-footer-nextpage" href="../sparray/">SpArray »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 26 June 2026 11:21">Friday 26 June 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
