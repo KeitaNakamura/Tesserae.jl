@@ -58,6 +58,36 @@ function read_gmsh_nodes()
     nodes, nodeindices
 end
 
+"""
+    read_gmsh_elements(dim, entity_tag, nodeindices)
+
+Read elements in a Gmsh entity and return a dictionary from Tesserae cell shape
+to connectivities. The returned connectivities use Tesserae node indices and
+Tesserae local node ordering.
+"""
+function read_gmsh_elements(dim, entity_tag, nodeindices)
+    element_types, _element_tags, node_tags = Gmsh.gmsh.model.mesh.getElements(dim, entity_tag)
+    elements = Dict{Tesserae.Shape, Vector}()
+    for (element_type, tags) in zip(element_types, node_tags)
+        element_name, element_dim, _order, numnodes, _local_coords, _num_primary_nodes = Gmsh.gmsh.model.mesh.getElementProperties(element_type)
+        @assert dim == element_dim
+
+        shape = from_gmsh_shape(element_name)
+        @assert numnodes == Tesserae.nlocalnodes(shape)
+
+        permutation = from_gmsh_connectivity(shape)
+        connectivities = get!(elements, shape) do
+            SVector{Tesserae.nlocalnodes(shape), Int}[]
+        end
+
+        @inbounds for offset in 0:numnodes:length(tags)-numnodes
+            connectivity = SVector(ntuple(i -> nodeindices[tags[offset + permutation[i]]], numnodes))
+            push!(connectivities, connectivity)
+        end
+    end
+    elements
+end
+
 function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[])
     initialized = Gmsh.initialize(gmsh_argv; finalize_atexit=false)
     try
