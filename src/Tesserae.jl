@@ -108,6 +108,7 @@ export
     closevtk,
     closevtm,
     closepvd,
+    readmsh,
 # GPU
     cpu,
     gpu,
@@ -137,6 +138,7 @@ include("Basis/wls.jl")
 include("Basis/kernelcorrection.jl")
 
 include("fem.jl")
+include("gmsh.jl")
 
 include("transfer.jl")
 include("foreach.jl")
