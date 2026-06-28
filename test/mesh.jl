@@ -77,6 +77,8 @@ end
     @test Tesserae.ncells(mesh) == 24
     @test collect(cells(mesh)) == collect(1:Tesserae.ncells(mesh))
     @test supportnodes(mesh, 1) === mesh.cellsupports[1]
+    @test supportnodes(mesh) === mesh.usednodes
+    @test supportnodes(mesh) == collect(eachindex(mesh))
     @test mesh == vec(cmesh)
     cmesh′ = CartesianMesh(0.5, (1,3), (1,4))
     mesh .= vec(cmesh′) # test setindex!
@@ -84,6 +86,14 @@ end
     @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2)))) == Tesserae.Line2()
     @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2), (0,3)))) == Tesserae.Quad4()
     @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2), (0,3), (0,4)))) == Tesserae.Hex8()
+
+    mesh_with_unused_node = Tesserae.UnstructuredMesh(
+        Tesserae.Line2(),
+        [Vec(0.0), Vec(1.0), Vec(2.0)],
+        [Tesserae.SVector(1, 3)],
+    )
+    @test length(mesh_with_unused_node) == 3
+    @test supportnodes(mesh_with_unused_node) == [1, 3]
 
     function compute_volume(mesh)
         dim = Tesserae.get_dimension(Tesserae.cellshape(mesh))

@@ -276,7 +276,7 @@
                 m[i] = @∑ w[ip] * m[p]
             end
         end))
-        @test count(_ -> true, eachmatch(r"supportnodes", expanded)) == 1
+        @test count(_ -> true, eachmatch(r"\bsupportnodes\(", expanded)) == 1
         @test count(_ -> true, eachmatch(r"weights\[p\]", expanded)) == 1
     end
 

@@ -15,6 +15,7 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
     domain = meshes["domain"]
     @test Tesserae.cellshape(domain) == Tesserae.Tri3()
     @test Tesserae.ncells(domain) == 2
+    @test supportnodes(domain) == [1, 2, 3, 4]
     @test sort([cellcoordinates(domain, cell) for cell in cells(domain)]) == [
         ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0)),
         ((0.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
@@ -23,6 +24,7 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
     boundary = meshes["boundary"]
     @test Tesserae.cellshape(boundary) == Tesserae.Line2()
     @test Tesserae.ncells(boundary) == 2
+    @test supportnodes(boundary) == [1, 2, 3, 4]
     @test sort([cellcoordinates(boundary, cell) for cell in cells(boundary)]) == [
         ((0.0, 0.0), (0.0, 1.0)),
         ((1.0, 0.0), (1.0, 1.0)),

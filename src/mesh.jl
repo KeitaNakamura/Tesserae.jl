@@ -228,10 +228,37 @@ end
     end
 end
 
+"""
+    UnstructuredMesh(shape, nodes, cellsupports)
+
+Create an unstructured finite-element mesh.
+"""
 struct UnstructuredMesh{S <: Shape, dim, T, L} <: AbstractMesh{dim, T, 1}
     shape::S
     nodes::Vector{Vec{dim, T}}
     cellsupports::Vector{SVector{L, Int}}
+    usednodes::Vector{Int}
+end
+
+function UnstructuredMesh(shape::S, nodes::Vector{Vec{dim, T}}, cellsupports::Vector{SVector{L, Int}}) where {S <: Shape, dim, T, L}
+    UnstructuredMesh{S, dim, T, L}(shape, nodes, cellsupports, _collect_supportnodes(cellsupports))
+end
+
+function _collect_supportnodes(cellsupports)
+    nodes = Int[]
+    if !isempty(cellsupports)
+        sizehint!(nodes, length(cellsupports) * length(first(cellsupports)))
+    end
+    for indices in cellsupports
+        append!(nodes, indices)
+    end
+    unique!(sort!(nodes))
+end
+
+function _refresh_supportnodes!(mesh::UnstructuredMesh)
+    empty!(mesh.usednodes)
+    append!(mesh.usednodes, _collect_supportnodes(mesh.cellsupports))
+    mesh
 end
 
 Base.size(mesh::UnstructuredMesh) = size(mesh.nodes)
@@ -250,6 +277,14 @@ cellshape(mesh::UnstructuredMesh) = mesh.shape
 ncells(mesh::UnstructuredMesh) = length(mesh.cellsupports)
 cells(mesh::UnstructuredMesh) = eachindex(mesh.cellsupports)
 
+"""
+    supportnodes(mesh::UnstructuredMesh)
+    supportnodes(mesh::UnstructuredMesh, cell::Int)
+
+Return the sorted node indices used by `mesh`, or the local support node
+indices of `cell`.
+"""
+@inline supportnodes(mesh::UnstructuredMesh) = mesh.usednodes
 @inline supportnodes(mesh::UnstructuredMesh, cell::Int) = (@_propagate_inbounds_meta; mesh.cellsupports[cell])
 
 UnstructuredMesh(mesh::CartesianMesh) = UnstructuredMesh(default_cellshape(mesh), mesh)
@@ -364,7 +399,7 @@ function Base.merge!(dest::UnstructuredMesh{S}, src::UnstructuredMesh{S}) where 
             push!(dest.cellsupports, nodemap[supportnodes(src, cell)])
         end
     end
-    dest
+    _refresh_supportnodes!(dest)
 end
 function Base.merge!(dest::UnstructuredMesh{S}, src1::UnstructuredMesh{S}, src2::UnstructuredMesh{S}, others::UnstructuredMesh{S}...) where {S}
     merge!(merge!(dest, src1), src2, others...)
