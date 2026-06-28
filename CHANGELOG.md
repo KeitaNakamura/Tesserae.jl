@@ -39,6 +39,8 @@ macros.
   initial particles. (#113)
 - `CPDI` on `SpGrid` is now rejected explicitly; use a dense grid for CPDI.
   (#130)
+- `feupdate!` now uses a single `measure` output keyword for domain and boundary
+  integration. The old `volume` and `area` output keywords were removed.
 
 ### Deprecations and Migration
 

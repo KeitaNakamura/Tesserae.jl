@@ -93,12 +93,13 @@ end
         end
         particles = generate_particles(ParticleProp, mesh)
         weights = generate_basis_weights(mesh, size(particles))
-        feupdate!(weights, mesh; volume = particles.detJdV)
+        feupdate!(weights, mesh; measure = particles.detJdV)
         sum(particles.detJdV)
     end
     cmesh = CartesianMesh(1, (0,2))
     @test compute_volume(UnstructuredMesh(Tesserae.Line2(), cmesh)) ≈
           compute_volume(UnstructuredMesh(Tesserae.Line3(), cmesh)) ≈ 2
+
     cmesh = CartesianMesh(1, (0,2), (-1,3))
     @test compute_volume(UnstructuredMesh(Tesserae.Quad4(), cmesh)) ≈
           compute_volume(UnstructuredMesh(Tesserae.Quad8(), cmesh)) ≈
@@ -122,7 +123,7 @@ end
         mesh_face = Tesserae.extract_face(mesh_body, 1:length(mesh_body))
         particles = generate_particles(ParticleProp, mesh_face)
         weights = generate_basis_weights(mesh_face, size(particles))
-        feupdate!(weights, mesh_face; normal = particles.n, area = particles.detJdA)
+        feupdate!(weights, mesh_face; normal = particles.n, measure = particles.detJdA)
         sum(particles.detJdA)
     end
     cmesh = CartesianMesh(1, (0,1), (0,1))
@@ -137,6 +138,22 @@ end
           compute_area(UnstructuredMesh(Tesserae.Hex27(), cmesh)) ≈ 6
     @test compute_area(UnstructuredMesh(Tesserae.Tet4(), cmesh))  ≈
           compute_area(UnstructuredMesh(Tesserae.Tet10(), cmesh)) ≈ 6 * (1+√2)
+
+    line_mesh = UnstructuredMesh(
+        Tesserae.Line2(),
+        [Vec(0.0,0.0,0.0), Vec(1.0,2.0,2.0)],
+        [Tesserae.SVector(1, 2)],
+    )
+    LinePointProp = @NamedTuple begin
+        x      :: Vec{3, Float64}
+        n      :: Vec{3, Float64}
+        detJdL :: Float64
+    end
+    line_points = generate_particles(LinePointProp, line_mesh)
+    line_weights = generate_basis_weights(line_mesh, size(line_points))
+    feupdate!(line_weights, line_mesh; measure=line_points.detJdL)
+    @test sum(line_points.detJdL) ≈ 3
+    @test_throws ArgumentError feupdate!(line_weights, line_mesh; normal=line_points.n)
 
     cmesh1 = CartesianMesh(1, (0,2), (0,2))
     cmesh2 = CartesianMesh(1, (1,3), (1,3))

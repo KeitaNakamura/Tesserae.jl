@@ -9,12 +9,12 @@ end
 function feupdate!(
         weights::AbstractArray{<: BasisWeight{S}}, mesh::UnstructuredMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
-        volume::Union{Nothing, AbstractArray} = nothing,
+        measure::Union{Nothing, AbstractArray} = nothing,
         quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
     ) where {dim, S <: Shape{dim}}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
-    _feupdate!(Val(:volume), weights, mesh, nodes, volume, nothing, qdata, qwts)
+    _feupdate!(Val(:domain), weights, mesh, nodes, measure, nothing, qdata, qwts)
 end
 
 @inline _basis_values_and_gradients(mesh::UnstructuredMesh, qdata, cell, p) = qdata[p]
@@ -40,45 +40,50 @@ function _feupdate!(mode, weights, mesh::AbstractMesh, nodes, measure, normal, q
     end
 end
 
-function _check_feupdate_outputs(::Val{:volume}, weights, volume, normal)
-    @assert isnothing(volume) || size(weights) == size(volume)
+function _check_feupdate_outputs(::Val{:domain}, weights, measure, normal)
+    @assert isnothing(measure) || size(weights) == size(measure)
+    @assert isnothing(normal)
 end
-function _check_feupdate_outputs(::Val{:area}, weights, area, normal)
-    @assert isnothing(area) || size(weights) == size(area)
+function _check_feupdate_outputs(::Val{:boundary}, weights, measure, normal)
+    @assert isnothing(measure) || size(weights) == size(measure)
     @assert isnothing(normal) || size(weights) == size(normal)
 end
 
-@inline _set_feupdate_values!(::Val{:volume}, bw, N, dNdξ, J) = set_values!(bw, (N, dNdξ .⊡ Ref(inv(J))))
-@inline _set_feupdate_values!(::Val{:area}, bw, N, dNdξ, J) = set_values!(bw, (N,))
+# This is dL, dA, or dV depending on the parametric dimension of the element.
+@inline _jacobian_measure(qwt, J) = qwt * sqrt(det(J'J))
+
+# Domain cells have a square Jacobian, so gradients can be mapped to physical coordinates.
+@inline _set_feupdate_values!(::Val{:domain}, bw, N, dNdξ, J) = set_values!(bw, (N, dNdξ .⊡ Ref(inv(J))))
+# Boundary cells only need basis values for line/surface integration.
+@inline _set_feupdate_values!(::Val{:boundary}, bw, N, dNdξ, J) = set_values!(bw, (N,))
 
 _get_normal(J::Mat{3,2}) = J[:,1] × J[:,2]
 _get_normal(J::Mat{2,1}) = Vec(J[2,1], -J[1,1])
+_get_normal(J::Mat{3,1}) = throw(ArgumentError("normal is not defined for a 3D line element"))
 
-@inline function _set_feupdate_outputs!(::Val{:volume}, volume, normal, p, cell, qwt, J)
-    if volume !== nothing
-        volume[p,cell] = qwt * det(J)
+@inline function _set_feupdate_outputs!(::Val{:domain}, measure, normal, p, cell, qwt, J)
+    if measure !== nothing
+        measure[p,cell] = _jacobian_measure(qwt, J)
     end
 end
-@inline function _set_feupdate_outputs!(::Val{:area}, area, normal, p, cell, qwt, J)
-    if area !== nothing || normal !== nothing
+@inline function _set_feupdate_outputs!(::Val{:boundary}, measure, normal, p, cell, qwt, J)
+    if measure !== nothing
+        measure[p,cell] = _jacobian_measure(qwt, J)
+    end
+    if normal !== nothing
         n = _get_normal(J)
         n_norm = norm(n)
-        if area !== nothing
-            area[p,cell] = qwt * n_norm
-        end
-        if normal !== nothing
-            normal[p,cell] = n / n_norm
-        end
+        normal[p,cell] = n / n_norm
     end
 end
 
 function feupdate!(
         weights::AbstractArray{<: BasisWeight{S}}, mesh::UnstructuredMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
-        area::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
+        measure::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
         quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
     ) where {S <: Shape, dim}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
-    _feupdate!(Val(:area), weights, mesh, nodes, area, normal, qdata, qwts)
+    _feupdate!(Val(:boundary), weights, mesh, nodes, measure, normal, qdata, qwts)
 end
