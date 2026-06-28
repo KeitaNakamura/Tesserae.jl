@@ -159,7 +159,7 @@ function main(transfer = FLIP(1.0))
         @. grid.vⁿ = grid.mv / grid.m * m_mask
         @. grid.aⁿ = grid.ma / grid.m * m_mask
 
-        ## Update a dof map
+        ## Update free DOF maps
         dofmask_u = falses(3, size(grid)...)
         dofmask_p = falses(3, size(grid)...)
         for i in 1:2
@@ -176,12 +176,12 @@ function main(transfer = FLIP(1.0))
             grid.aⁿ[i] = grid.aⁿ[i] .* (true,false)
             dofmask_u[2,i] = false
         end
-        dofmap_u = DofMap(dofmask_u)
-        dofmap_p = DofMap(dofmask_p)
-        dofmap = DofMap(dofmask_u .| dofmask_p)
+        free_u = DofMap(dofmask_u)
+        free_p = DofMap(dofmask_p)
+        free = DofMap(dofmask_u .| dofmask_p)
 
         ## Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, dofmap_u, dofmap_p, Δt)
+        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, free, free_u, free_p, Δt)
         variational_multiscale_method(state)
 
         if transfer isa FLIP
@@ -237,7 +237,7 @@ end
 
 function variational_multiscale_method(state)
 
-    (; grid, dofmap, dofmap_u, dofmap_p, β, γ, Δt) = state
+    (; grid, free, free_u, free_p, β, γ, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
     ## Compute VMS stabilization coefficients using current grid velocity,
@@ -247,15 +247,15 @@ function variational_multiscale_method(state)
     K = jacobian(state)
 
     ## Extract the activated degrees of freedom
-    A = extract(K, dofmap, dofmap)
-    Aᵤᵤ = extract(K, dofmap_u, dofmap_u) # dispacement-dispacement
-    Aᵤₚ = extract(K, dofmap_u, dofmap_p) # dispacement-pressure
-    Aₚᵤ = extract(K, dofmap_p, dofmap_u) # pressure-dispacement
-    Aₚₚ = extract(K, dofmap_p, dofmap_p) # pressure-pressure
+    A = extract(K, free, free)
+    Aᵤᵤ = extract(K, free_u, free_u) # dispacement-dispacement
+    Aᵤₚ = extract(K, free_u, free_p) # dispacement-pressure
+    Aₚᵤ = extract(K, free_p, free_u) # pressure-dispacement
+    Aₚₚ = extract(K, free_p, free_p) # pressure-pressure
 
     ## Reindex DOFs relative to the extracted `A` (not the full `K`).
-    dofs_u = indexin(dofs(dofmap_u), dofs(dofmap))
-    dofs_p = indexin(dofs(dofmap_p), dofs(dofmap))
+    dofs_u = indexin(dofs(free_u), dofs(free))
+    dofs_p = indexin(dofs(free_p), dofs(free))
 
     ## Build block preconditioner (approximate Schur complement form)
     ## - Pᵤ: dispacement block preconditioner from Aᵤᵤ
@@ -274,7 +274,7 @@ function variational_multiscale_method(state)
     end)
 
     ## Solve nonlinear system using GMRES
-    U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
+    U = zeros(ndofs(free)) # Initialize nodal dispacement and pressure with zero
     linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹)[1])
     Tesserae.newton!(U, U->residual(U,state), U->A; linsolve, backtracking=true)
 
@@ -337,10 +337,10 @@ end
 # ## Residual vector
 
 function residual(U, state)
-    (; grid, particles, weights, μ, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, μ, β, γ, free, Δt) = state
 
     ## Map `U` to grid dispacement and pressure
-    dofmap(grid.u_p) .= U
+    free(grid.u_p) .= U
     grid.u .= map(x->@Tensor(x[1:2]), grid.u_p)
     grid.p .= map(x->x[3], grid.u_p)
 
@@ -364,13 +364,13 @@ function residual(U, state)
     end
 
     ## Map grid values to vector `R`
-    Array(dofmap(map(vcat, grid.R_mom, grid.R_mas)))
+    Array(free(map(vcat, grid.R_mom, grid.R_mas)))
 end
 
 # ## Jacobian matrix
 
 function jacobian(state)
-    (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt) = state
+    (; grid, particles, weights, ρ, μ, β, γ, A, free, Δt) = state
 
     ## Construct the Jacobian matrix
     cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
