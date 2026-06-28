@@ -32,7 +32,7 @@ function main()
 
     ## Basis weights
     weights = generate_basis_weights(mesh, size(points); name=Val(:N))
-    feupdate!(weights, mesh; volume=points.V) # Use `feupdate!` instead of `update!`
+    feupdate!(weights, mesh; measure=points.V) # Use `feupdate!` instead of `update!`
 
     ## Global matrix
     ndofs = 1 # Degrees of freedom per node
