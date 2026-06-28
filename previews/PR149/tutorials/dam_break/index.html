@@ -140,7 +140,7 @@ function main(transfer = FLIP(1.0))
         @. grid.vⁿ = grid.mv / grid.m * m_mask
         @. grid.aⁿ = grid.ma / grid.m * m_mask
 
-        # Update a dof map
+        # Update free DOF maps
         dofmask_u = falses(3, size(grid)...)
         dofmask_p = falses(3, size(grid)...)
         for i in 1:2
@@ -157,12 +157,12 @@ function main(transfer = FLIP(1.0))
             grid.aⁿ[i] = grid.aⁿ[i] .* (true,false)
             dofmask_u[2,i] = false
         end
-        dofmap_u = DofMap(dofmask_u)
-        dofmap_p = DofMap(dofmask_p)
-        dofmap = DofMap(dofmask_u .| dofmask_p)
+        free_u = DofMap(dofmask_u)
+        free_p = DofMap(dofmask_p)
+        free = DofMap(dofmask_u .| dofmask_p)
 
         # Solve grid position, dispacement, velocity, acceleration and pressure by VMS method
-        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, dofmap, dofmap_u, dofmap_p, Δt)
+        state = (; grid, particles, weights, weights_cell, ρ, μ, β, γ, A, free, free_u, free_p, Δt)
         variational_multiscale_method(state)
 
         if transfer isa FLIP
@@ -212,7 +212,7 @@ function main(transfer = FLIP(1.0))
     end
 end</code></pre><h2 id="Variational-multiscale-method"><a class="docs-heading-anchor" href="#Variational-multiscale-method">Variational multiscale method</a><a id="Variational-multiscale-method-1"></a><a class="docs-heading-anchor-permalink" href="#Variational-multiscale-method" title="Permalink"></a></h2><pre><code class="language-julia hljs">function variational_multiscale_method(state)
 
-    (; grid, dofmap, dofmap_u, dofmap_p, β, γ, Δt) = state
+    (; grid, free, free_u, free_p, β, γ, Δt) = state
     @. grid.u_p = zero(grid.u_p)
 
     # Compute VMS stabilization coefficients using current grid velocity,
@@ -222,15 +222,15 @@ end</code></pre><h2 id="Variational-multiscale-method"><a class="docs-heading-an
     K = jacobian(state)
 
     # Extract the activated degrees of freedom
-    A = extract(K, dofmap, dofmap)
-    Aᵤᵤ = extract(K, dofmap_u, dofmap_u) # dispacement-dispacement
-    Aᵤₚ = extract(K, dofmap_u, dofmap_p) # dispacement-pressure
-    Aₚᵤ = extract(K, dofmap_p, dofmap_u) # pressure-dispacement
-    Aₚₚ = extract(K, dofmap_p, dofmap_p) # pressure-pressure
+    A = extract(K, free, free)
+    Aᵤᵤ = extract(K, free_u, free_u) # dispacement-dispacement
+    Aᵤₚ = extract(K, free_u, free_p) # dispacement-pressure
+    Aₚᵤ = extract(K, free_p, free_u) # pressure-dispacement
+    Aₚₚ = extract(K, free_p, free_p) # pressure-pressure
 
     # Reindex DOFs relative to the extracted `A` (not the full `K`).
-    dofs_u = indexin(dofs(dofmap_u), dofs(dofmap))
-    dofs_p = indexin(dofs(dofmap_p), dofs(dofmap))
+    dofs_u = indexin(dofs(free_u), dofs(free))
+    dofs_p = indexin(dofs(free_p), dofs(free))
 
     # Build block preconditioner (approximate Schur complement form)
     # - Pᵤ: dispacement block preconditioner from Aᵤᵤ
@@ -249,7 +249,7 @@ end</code></pre><h2 id="Variational-multiscale-method"><a class="docs-heading-an
     end)
 
     # Solve nonlinear system using GMRES
-    U = zeros(ndofs(dofmap)) # Initialize nodal dispacement and pressure with zero
+    U = zeros(ndofs(free)) # Initialize nodal dispacement and pressure with zero
     linsolve(x, A, b) = copy!(x, gmres(A, b; N=P⁻¹)[1])
     Tesserae.newton!(U, U-&gt;residual(U,state), U-&gt;A; linsolve, backtracking=true)
 
@@ -300,10 +300,10 @@ end</code></pre><h2 id="δ-correction"><a class="docs-heading-anchor" href="#δ-
         end
     end
 end</code></pre><h2 id="Residual-vector"><a class="docs-heading-anchor" href="#Residual-vector">Residual vector</a><a id="Residual-vector-1"></a><a class="docs-heading-anchor-permalink" href="#Residual-vector" title="Permalink"></a></h2><pre><code class="language-julia hljs">function residual(U, state)
-    (; grid, particles, weights, μ, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, μ, β, γ, free, Δt) = state
 
     # Map `U` to grid dispacement and pressure
-    dofmap(grid.u_p) .= U
+    free(grid.u_p) .= U
     grid.u .= map(x-&gt;@Tensor(x[1:2]), grid.u_p)
     grid.p .= map(x-&gt;x[3], grid.u_p)
 
@@ -327,9 +327,9 @@ end</code></pre><h2 id="Residual-vector"><a class="docs-heading-anchor" href="#R
     end
 
     # Map grid values to vector `R`
-    Array(dofmap(map(vcat, grid.R_mom, grid.R_mas)))
+    Array(free(map(vcat, grid.R_mom, grid.R_mas)))
 end</code></pre><h2 id="Jacobian-matrix"><a class="docs-heading-anchor" href="#Jacobian-matrix">Jacobian matrix</a><a id="Jacobian-matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Jacobian-matrix" title="Permalink"></a></h2><pre><code class="language-julia hljs">function jacobian(state)
-    (; grid, particles, weights, ρ, μ, β, γ, A, dofmap, Δt) = state
+    (; grid, particles, weights, ρ, μ, β, γ, A, free, Δt) = state
 
     # Construct the Jacobian matrix
     cₚ = 2μ * one(SymmetricFourthOrderTensor{2})
@@ -348,4 +348,4 @@ end</code></pre><h2 id="Jacobian-matrix"><a class="docs-heading-anchor" href="#J
     end
 
     A
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../collapse/">« Elasto-plastic large deformation</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 28 June 2026 14:42">Sunday 28 June 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.cma.2023.116644">Chandra, B., Hashimoto, R., Matsumi, S., Kamrin, K. and Soga, K., 2024. Stabilized mixed material point method for incompressible fluid flow analysis. Computer Methods in Applied Mechanics and Engineering, 419, p.116644.</a></li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../collapse/">« Elasto-plastic large deformation</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 28 June 2026 15:58">Sunday 28 June 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
