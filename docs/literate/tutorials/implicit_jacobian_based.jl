@@ -127,18 +127,18 @@ function main()
             iszero(grid.m[i]) && (dofmask[:,i] .= false)
         end
 
-        ## Update boundary conditions and dofmap
+        ## Update boundary conditions and free DOF map
         @. grid.u = zero(grid.u)
         for i in eachindex(grid)
             if grid.X[i][1] ≤ 0 && grid.X[i][2] > -(1+2h)
                 dofmask[:,i] .= false
             end
         end
-        dofmap = DofMap(dofmask)
+        free = DofMap(dofmask)
 
         ## Solve the nonlinear equation
-        state = (; grid, particles, weights, kirchhoff_stress, β, γ, A, dofmap, Δt)
-        U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
+        state = (; grid, particles, weights, kirchhoff_stress, β, γ, A, free, Δt)
+        U = copy(free(grid.u)) # Convert grid data to plain vector data
         compute_residual(U) = residual(U, state)
         compute_jacobian(U) = jacobian(U, state)
         Tesserae.newton!(U, compute_residual, compute_jacobian)
@@ -179,9 +179,9 @@ function main()
 end
 
 function residual(U::AbstractVector, state)
-    (; grid, particles, weights, kirchhoff_stress, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt) = state
 
-    dofmap(grid.u) .= U
+    free(grid.u) .= U
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
@@ -198,18 +198,18 @@ function residual(U::AbstractVector, state)
         f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p]) - w[ip] * m[p] * b[p]
     end
 
-    @. $dofmap(grid.m) * $dofmap(grid.a) + $dofmap(grid.f)
+    @. $free(grid.m) * $free(grid.a) + $free(grid.f)
 end
 
 function jacobian(U::AbstractVector, state)
-    (; grid, particles, weights, β, A, dofmap, Δt) = state
+    (; grid, particles, weights, β, A, free, Δt) = state
 
     dotdot(a,ℂ,b) = @einsum (i,j) -> a[k] * ℂ[i,k,j,l] * b[l]
     @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
         A[i,j] = @∑ dotdot(∇w[ip] ⊡ ΔF⁻¹[p], ℂ[p], ∇w[jp] ⊡ ΔF⁻¹[p]) * V⁰[p]
     end
 
-    extract(A, dofmap) + Diagonal(inv(β*Δt^2) * dofmap(grid.m))
+    extract(A, free) + Diagonal(inv(β*Δt^2) * free(grid.m))
 end
 
 using Test                            #src
