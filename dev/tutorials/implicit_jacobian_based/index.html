@@ -112,18 +112,18 @@ function main()
             iszero(grid.m[i]) &amp;&amp; (dofmask[:,i] .= false)
         end
 
-        # Update boundary conditions and dofmap
+        # Update boundary conditions and free DOF map
         @. grid.u = zero(grid.u)
         for i in eachindex(grid)
             if grid.X[i][1] ≤ 0 &amp;&amp; grid.X[i][2] &gt; -(1+2h)
                 dofmask[:,i] .= false
             end
         end
-        dofmap = DofMap(dofmask)
+        free = DofMap(dofmask)
 
         # Solve the nonlinear equation
-        state = (; grid, particles, weights, kirchhoff_stress, β, γ, A, dofmap, Δt)
-        U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
+        state = (; grid, particles, weights, kirchhoff_stress, β, γ, A, free, Δt)
+        U = copy(free(grid.u)) # Convert grid data to plain vector data
         compute_residual(U) = residual(U, state)
         compute_jacobian(U) = jacobian(U, state)
         Tesserae.newton!(U, compute_residual, compute_jacobian)
@@ -160,9 +160,9 @@ function main()
 end
 
 function residual(U::AbstractVector, state)
-    (; grid, particles, weights, kirchhoff_stress, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt) = state
 
-    dofmap(grid.u) .= U
+    free(grid.u) .= U
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
@@ -179,16 +179,16 @@ function residual(U::AbstractVector, state)
         f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p]) - w[ip] * m[p] * b[p]
     end
 
-    @. $dofmap(grid.m) * $dofmap(grid.a) + $dofmap(grid.f)
+    @. $free(grid.m) * $free(grid.a) + $free(grid.f)
 end
 
 function jacobian(U::AbstractVector, state)
-    (; grid, particles, weights, β, A, dofmap, Δt) = state
+    (; grid, particles, weights, β, A, free, Δt) = state
 
     dotdot(a,ℂ,b) = @einsum (i,j) -&gt; a[k] * ℂ[i,k,j,l] * b[l]
     @P2G_Matrix grid=&gt;(i,j) particles=&gt;p weights=&gt;(ip,jp) begin
         A[i,j] = @∑ dotdot(∇w[ip] ⊡ ΔF⁻¹[p], ℂ[p], ∇w[jp] ⊡ ΔF⁻¹[p]) * V⁰[p]
     end
 
-    extract(A, dofmap) + Diagonal(inv(β*Δt^2) * dofmap(grid.m))
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_free/">« Jacobian-free</a><a class="docs-footer-nextpage" href="../collapse/">Elasto-plastic large deformation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 28 June 2026 13:40">Sunday 28 June 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+    extract(A, free) + Diagonal(inv(β*Δt^2) * free(grid.m))
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../implicit_jacobian_free/">« Jacobian-free</a><a class="docs-footer-nextpage" href="../collapse/">Elasto-plastic large deformation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 29 June 2026 00:40">Monday 29 June 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
