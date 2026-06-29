@@ -132,11 +132,11 @@ function main()
             dofmask[:,i] .= false
             grid.u[i] = (rotmat(2π*Δt, Vec(1,0,0)) - I) * grid.X[i]
         end
-        dofmap = DofMap(dofmask)
+        free = DofMap(dofmask)
 
         ## Solve the nonlinear equation
-        state = (; grid, particles, weights, kirchhoff_stress, β, γ, dofmap, Δt)
-        U = copy(dofmap(grid.u)) # Convert grid data to plain vector data
+        state = (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt)
+        U = copy(free(grid.u)) # Convert grid data to plain vector data
         compute_residual(U) = residual(U, state)
         compute_jacobian(U) = jacobian(U, state)
         Tesserae.newton!(U, compute_residual, compute_jacobian; linsolve = (x,A,b)->copy!(x,gmres(A,b)[1]))
@@ -168,9 +168,9 @@ function main()
 end
 
 function residual(U::AbstractVector, state)
-    (; grid, particles, weights, kirchhoff_stress, β, γ, dofmap, Δt) = state
+    (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt) = state
 
-    dofmap(grid.u) .= U
+    free(grid.u) .= U
     @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
     @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
 
@@ -187,18 +187,18 @@ function residual(U::AbstractVector, state)
         f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
     end
 
-    @. β*Δt^2 * ($dofmap(grid.a) + $dofmap(grid.f) * $dofmap(grid.m⁻¹))
+    @. β*Δt^2 * ($free(grid.a) + $free(grid.f) * $free(grid.m⁻¹))
 end
 
 function jacobian(U::AbstractVector, state)
-    (; grid, particles, weights, β, dofmap, Δt) = state
+    (; grid, particles, weights, β, free, Δt) = state
 
     ## Create a linear map to represent Jacobian-vector product J*δU.
     ## `U` is acutally not used because the stiffness tensor is already calculated
     ## when computing the residual vector.
     fillzero!(grid.δu)
     function mul!(JδU, δU)
-        dofmap(grid.δu) .= δU
+        free(grid.δu) .= δU
 
         @G2P2G grid=>i particles=>p weights=>ip begin
             ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⊡ ΔF⁻¹[p])
@@ -206,9 +206,9 @@ function jacobian(U::AbstractVector, state)
             f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
         end
 
-        @. JδU = δU + β*Δt^2 * $dofmap(grid.f) * $dofmap(grid.m⁻¹)
+        @. JδU = δU + β*Δt^2 * $free(grid.f) * $free(grid.m⁻¹)
     end
-    LinearOperator(Float64, ndofs(dofmap), ndofs(dofmap), false, false, mul!)
+    LinearOperator(Float64, ndofs(free), ndofs(free), false, false, mul!)
 end
 
 using Test                                #src

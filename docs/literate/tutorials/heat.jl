@@ -42,7 +42,7 @@ function main()
     dofmask = trues(ndofs, size(grid)...)
     dofmask[1, findall(x -> x[1]==-1 || x[1]==1, mesh)] .= false
     dofmask[1, findall(x -> x[2]==-1 || x[2]==1, mesh)] .= false
-    dofmap = DofMap(dofmask)
+    free = DofMap(dofmask)
 
     ## Construct global vector (on grid) and matrix
     @P2G grid=>i points=>p weights=>ip begin
@@ -53,7 +53,7 @@ function main()
     end
 
     ## Solve the equation
-    dofmap(grid.u) .= Symmetric(extract(K, dofmap)) \ Array(dofmap(grid.f))
+    free(grid.u) .= Symmetric(extract(K, free)) \ Array(free(grid.f))
 
     ## Output the results
     openvtk("heat", mesh) do vtk
