@@ -17,6 +17,8 @@ include("shapes.jl")
 include("transfer.jl")
 include("foreach.jl")
 include("implicit.jl")
+include("nurbs.jl")
+include("iga.jl")
 include("explain.jl")
 
 include("export.jl")

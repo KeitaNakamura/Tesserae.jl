@@ -52,6 +52,11 @@ export
     extract,
     UnstructuredMesh,
     cells,
+    boundaries,
+    IGAPatch,
+    IGACell,
+    IGAMesh,
+    IGABasis,
 # Grid
     Grid,
     SpGrid,
@@ -120,8 +125,10 @@ include("progress.jl")
 import .Progress: @showprogress
 
 include("shapes.jl")
+include("NURBS/NURBS.jl")
 
 include("mesh.jl")
+include("igamesh.jl")
 include("thread_partition.jl")
 include("sparray.jl")
 include("hybridarray.jl")
@@ -130,6 +137,7 @@ include("grid.jl")
 include("particles.jl")
 
 include("Basis/basis_weight.jl")
+include("Basis/iga.jl")
 include("Basis/bspline.jl")
 include("Basis/gimp.jl")
 include("Basis/cpdi.jl")
