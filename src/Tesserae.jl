@@ -120,6 +120,7 @@ include("progress.jl")
 import .Progress: @showprogress
 
 include("shapes.jl")
+include("NURBS/NURBS.jl")
 
 include("mesh.jl")
 include("thread_partition.jl")
