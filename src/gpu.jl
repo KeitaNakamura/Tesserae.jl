@@ -73,6 +73,8 @@ function KernelAbstractions.get_backend(mesh::UnstructuredMesh)
     backend
 end
 
+KernelAbstractions.get_backend(mesh::IGAMesh) = get_backend(mesh.controlpoints)
+
 # BasisWeightArray
 function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
