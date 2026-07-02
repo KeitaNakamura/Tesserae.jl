@@ -210,6 +210,14 @@ function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[], reorient
     end
 end
 
+function NURBS.writestep(filename::AbstractString, net::NURBS.ControlNet{2, 1})
+    writestep_file(filename, embed3d(net))
+end
+
+function NURBS.writestep(filename::AbstractString, net::NURBS.ControlNet{2, 2})
+    writestep_file(filename, embed3d(net))
+end
+
 function NURBS.writestep(filename::AbstractString, net::NURBS.ControlNet{3, 1})
     writestep_file(filename, net)
 end
@@ -242,6 +250,13 @@ function writestep_file(filename::AbstractString, net::NURBS.ControlNet)
         Gmsh.gmsh.write(filename)
     end
     filename
+end
+
+function embed3d(net::NURBS.ControlNet{2})
+    points = map(net.points) do point
+        Vec(point[1], point[2], zero(point[1]))
+    end
+    NURBS.ControlNet(net.axes, points, net.weights)
 end
 
 mesh_dimension(::NURBS.ControlNet{3, 1}) = 1

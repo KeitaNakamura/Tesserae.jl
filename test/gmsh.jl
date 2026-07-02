@@ -96,4 +96,22 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
         Gmsh.finalize()
     end
     @test !Bool(Gmsh.gmsh.isInitialized())
+
+    mktempdir() do dir
+        curve = Tesserae.NURBS.line(Vec(0.0, 0.0), Vec(1.0, 0.0))
+        curve_step = joinpath(dir, "curve.step")
+        @test Tesserae.NURBS.writestep(curve_step, curve) == curve_step
+        @test isfile(curve_step)
+        @test !Bool(Gmsh.gmsh.isInitialized())
+
+        bottom = Tesserae.NURBS.line(Vec(0.0, 0.0), Vec(1.0, 0.0))
+        top = Tesserae.NURBS.line(Vec(0.0, 1.0), Vec(1.0, 1.0))
+        left = Tesserae.NURBS.line(Vec(0.0, 0.0), Vec(0.0, 1.0))
+        right = Tesserae.NURBS.line(Vec(1.0, 0.0), Vec(1.0, 1.0))
+        surface = Tesserae.NURBS.coons_patch(bottom, top, left, right)
+        surface_step = joinpath(dir, "surface.step")
+        @test Tesserae.NURBS.writestep(surface_step, surface) == surface_step
+        @test isfile(surface_step)
+        @test !Bool(Gmsh.gmsh.isInitialized())
+    end
 end

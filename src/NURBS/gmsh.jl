@@ -1,8 +1,9 @@
 """
     writestep(filename, net::ControlNet)
 
-Write a 3D curve, surface, or volume control net to a STEP file. The method is
-provided by the Gmsh extension.
+Write a curve, surface, or volume control net to a STEP file. Two-dimensional
+curves and surfaces are embedded in the `z=0` plane. The method is provided by
+the Gmsh extension.
 """
 function writestep end
 
