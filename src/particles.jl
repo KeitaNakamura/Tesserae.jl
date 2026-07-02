@@ -21,20 +21,40 @@ struct CellSampling{V <: Union{AbstractVector{<: Vec}, Tuple{Vararg{Vec}}}} <: S
     qpts::V
 end
 
-function generate_points(alg::CellSampling, mesh::UnstructuredMesh{<: Any, dim, T}) where {dim, T}
-    qpts = alg.qpts
-    shape = cellshape(mesh)
+cell_sampling(mesh::UnstructuredMesh) = CellSampling(quadpoints(cellshape(mesh)))
+cell_sampling(mesh::IGAMesh) = CellSampling(quadrature_rule(igabasis(mesh)).points)
 
-    points = Matrix{Vec{dim, T}}(undef, length(qpts), ncells(mesh))
+function generate_points(alg::CellSampling, mesh::Union{UnstructuredMesh, IGAMesh})
+    qpts = alg.qpts
+    points = Matrix{eltype(mesh)}(undef, length(qpts), ncells(mesh))
     for cell in cells(mesh)
-        indices = supportnodes(mesh, cell)
-        x = mesh[indices]
         for (i, qpt) in enumerate(qpts)
-            N = value(shape, qpt)
-            points[i,cell] = sum(N .* x)
+            points[i,cell] = cell_point(mesh, cell, qpt)
         end
     end
     points
+end
+
+function cell_point(mesh::UnstructuredMesh, cell, qpt)
+    indices = supportnodes(mesh, cell)
+    N = value(cellshape(mesh), qpt)
+    sum(N .* mesh[indices])
+end
+
+function cell_point(mesh::IGAMesh, cell, qpt)
+    patch = patches(mesh, cell.patch)
+    ξ = span_point(patch, cell.span, qpt)
+    N, _ = iga_basis_values_and_gradients(patch, cell.span, ξ)
+    indices = supportnodes(mesh, cell)
+    R = geometry_basis_values(N, mesh.weights, indices)
+    sum(R .* mesh[indices])
+end
+
+geometry_basis_values(N, ::Nothing, indices) = N
+function geometry_basis_values(N, weights::AbstractVector, indices)
+    w = weights[indices]
+    W = sum(N .* w)
+    map((Nᵢ, wᵢ) -> Nᵢ*wᵢ/W, N, w)
 end
 
 """
@@ -138,8 +158,8 @@ function generate_particles(
 end
 
 function generate_particles(
-        ::Type{ParticleProp}, mesh::UnstructuredMesh;
-        alg::SamplingAlgorithm=CellSampling(quadpoints(cellshape(mesh)))) where {ParticleProp}
+        ::Type{ParticleProp}, mesh::Union{UnstructuredMesh, IGAMesh};
+        alg::SamplingAlgorithm=cell_sampling(mesh)) where {ParticleProp}
     points = generate_points(alg, mesh)
     particles = _generate_particles(ParticleProp, points)
     particles

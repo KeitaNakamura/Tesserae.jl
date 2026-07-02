@@ -214,6 +214,11 @@ end
     @boundscheck checkbounds(mesh, inds)
     inds
 end
+@inline function supportnodes(bw::BasisWeight, mesh::IGAMesh)
+    inds = supportnodes(bw)
+    @boundscheck checkbounds(mesh, inds)
+    inds
+end
 
 @inline supportnodes_storage(bw::BasisWeight) = getfield(bw, :indices)
 
