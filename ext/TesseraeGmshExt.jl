@@ -1,6 +1,7 @@
 module TesseraeGmshExt
 
 using Tesserae
+using Tesserae: NURBS
 using Gmsh
 using StaticArrays
 
@@ -193,14 +194,104 @@ function read_gmsh_physical_groups(; reorient_boundary=false)
     meshes
 end
 
-function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=false)
+function with_gmsh(f, gmsh_argv=String[])
     initialized = Gmsh.initialize(gmsh_argv; finalize_atexit=false)
     try
-        Gmsh.gmsh.open(filename)
-        read_gmsh_physical_groups(; reorient_boundary)
+        f()
     finally
         initialized && Gmsh.finalize()
     end
+end
+
+function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=false)
+    with_gmsh(gmsh_argv) do
+        Gmsh.gmsh.open(filename)
+        read_gmsh_physical_groups(; reorient_boundary)
+    end
+end
+
+function NURBS.writestep(filename::AbstractString, net::NURBS.ControlNet{3, 1})
+    writestep_file(filename, net)
+end
+
+function NURBS.writestep(filename::AbstractString, net::NURBS.ControlNet{3, 2})
+    writestep_file(filename, net)
+end
+
+function NURBS.writestep(filename::AbstractString, net::NURBS.ControlNet{3, 3})
+    writestep_file(filename, net)
+end
+
+function NURBS.viewmesh(net::NURBS.ControlNet{3}; mesh_size_factor=0.5)
+    with_gmsh() do
+        Gmsh.gmsh.model.add("Tesserae")
+        Gmsh.gmsh.option.setNumber("Mesh.MeshSizeFactor", mesh_size_factor)
+        add_occ(net)
+        Gmsh.gmsh.model.occ.synchronize()
+        Gmsh.gmsh.model.mesh.generate(mesh_dimension(net))
+        Gmsh.gmsh.fltk.run()
+    end
+    nothing
+end
+
+function writestep_file(filename::AbstractString, net::NURBS.ControlNet)
+    with_gmsh() do
+        Gmsh.gmsh.model.add(basename(filename))
+        add_occ(net)
+        Gmsh.gmsh.model.occ.synchronize()
+        Gmsh.gmsh.write(filename)
+    end
+    filename
+end
+
+mesh_dimension(::NURBS.ControlNet{3, 1}) = 1
+mesh_dimension(::NURBS.ControlNet{3, 2}) = 2
+mesh_dimension(::NURBS.ControlNet{3, 3}) = 2
+
+function add_occ(net::NURBS.ControlNet{3, 1})
+    axis = only(net.axes)
+    knots, multiplicities = gmsh_knot_vector(axis)
+    point_tags = map(add_point, net.points)
+    Gmsh.gmsh.model.occ.addBSpline(point_tags, -1, axis.degree, net.weights, knots, multiplicities)
+end
+
+function add_occ(net::NURBS.ControlNet{3, 2})
+    axis_u, axis_v = net.axes
+    knots_u, multiplicities_u = gmsh_knot_vector(axis_u)
+    knots_v, multiplicities_v = gmsh_knot_vector(axis_v)
+    point_tags = map(add_point, net.points)
+    Gmsh.gmsh.model.occ.addBSplineSurface(
+        vec(point_tags),
+        size(point_tags, 1),
+        -1,
+        axis_u.degree,
+        axis_v.degree,
+        vec(net.weights),
+        knots_u,
+        knots_v,
+        multiplicities_u,
+        multiplicities_v,
+    )
+end
+
+function add_occ(net::NURBS.ControlNet{3, 3})
+    surface_tags = map(add_occ, NURBS.boundaries(net))
+    shell = Gmsh.gmsh.model.occ.addSurfaceLoop(collect(surface_tags), -1, true)
+    Gmsh.gmsh.model.occ.addVolume([shell])
+end
+
+function add_point(point)
+    Gmsh.gmsh.model.occ.addPoint(point[1], point[2], point[3])
+end
+
+function gmsh_knot_vector(axis::NURBS.BSplineAxis)
+    knots = eltype(axis.knot_vector)[]
+    multiplicities = Int[]
+    for (knot, multiplicity) in NURBS.knot_multiplicities(axis.knot_vector)
+        push!(knots, knot)
+        push!(multiplicities, multiplicity)
+    end
+    knots, multiplicities
 end
 
 end
