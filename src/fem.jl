@@ -20,11 +20,11 @@ end
 function feupdate!(
         weights::AbstractArray{<: BasisWeight{<: IGABasis}}, mesh::IGAMesh{dim, dim, T},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
-        volume::Union{Nothing, AbstractArray} = nothing,
+        measure::Union{Nothing, AbstractArray} = nothing,
         quadrature_rule::QuadratureRule = quadrature_rule(igabasis(mesh)),
     ) where {dim, T}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
-    _feupdate!(Val(:volume), weights, mesh, nodes, volume, nothing, qpts, qwts)
+    _feupdate!(Val(:domain), weights, mesh, nodes, measure, nothing, qpts, qwts)
 end
 
 @inline _basis_values_and_gradients(mesh::UnstructuredMesh, qdata, cell, indices, p) = qdata[p]
@@ -113,9 +113,9 @@ end
 function feupdate!(
         weights::AbstractArray{<: BasisWeight{<: IGABasis}}, mesh::IGAMesh{dim, pdim, T},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
-        area::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
+        measure::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
         quadrature_rule::QuadratureRule = quadrature_rule(igabasis(mesh)),
     ) where {dim, T, pdim}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
-    _feupdate!(Val(:area), weights, mesh, nodes, area, normal, qpts, qwts)
+    _feupdate!(Val(:boundary), weights, mesh, nodes, measure, normal, qpts, qwts)
 end

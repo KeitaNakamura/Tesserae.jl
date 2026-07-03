@@ -231,19 +231,19 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
     @testset "feupdate!" begin
         feweights = generate_basis_weights(Float64, mesh, length(qrule.points), Tesserae.ncells(mesh))
-        volume = zeros(Float64, size(feweights))
-        @test (@inferred feupdate!(feweights, mesh; volume)) === nothing
+        measure = zeros(Float64, size(feweights))
+        @test (@inferred feupdate!(feweights, mesh; measure)) === nothing
         @test supportnodes(feweights[1, meshcells[1]]) == supportnodes(mesh, meshcells[1])
         @test sum(feweights[1, meshcells[1]].w) ≈ 1
         @test isapprox(sum(feweights[1, meshcells[1]].∇w), Vec(0.0, 0.0); atol=1e-14)
-        @test sum(volume[:, meshcells[1]]) ≈ 1/16
-        @test sum(volume) ≈ 1
+        @test sum(measure[:, meshcells[1]]) ≈ 1/16
+        @test sum(measure) ≈ 1
 
         # Rational feupdate! should use rational basis values in both N and ∇N.
         rational_mesh = IGAMesh(cmesh; degree=Quadratic(), weights=range(1.0, 2.0; length=length(mesh)))
         rational_weights = generate_basis_weights(Float64, rational_mesh, length(qrule.points), Tesserae.ncells(rational_mesh))
-        rational_volume = zeros(Float64, size(rational_weights))
-        @test feupdate!(rational_weights, rational_mesh; volume=rational_volume) === nothing
+        rational_measure = zeros(Float64, size(rational_weights))
+        @test feupdate!(rational_weights, rational_mesh; measure=rational_measure) === nothing
 
         rational_cell = first(cells(rational_mesh))
         rational_patch = Tesserae.patches(rational_mesh, rational_cell.patch)
@@ -262,10 +262,10 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         boundary_mesh = IGAMesh([boundary_patch], mesh.controlpoints)
         boundary_rule = Tesserae.quadrature_rule(Tesserae.igabasis(boundary_mesh))
         boundary_weights = generate_basis_weights(boundary_mesh, length(boundary_rule.points), Tesserae.ncells(boundary_mesh); name=Val(:N))
-        area = zeros(Float64, size(boundary_weights))
+        measure = zeros(Float64, size(boundary_weights))
         normal = zeros(Vec{2, Float64}, size(boundary_weights))
-        @test (@inferred feupdate!(boundary_weights, boundary_mesh; area, normal)) === nothing
-        @test sum(area) ≈ 1
+        @test (@inferred feupdate!(boundary_weights, boundary_mesh; measure, normal)) === nothing
+        @test sum(measure) ≈ 1
         @test all(n -> n ≈ Vec(0.0, -1.0), normal)
     end
 
@@ -319,7 +319,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
             grid = generate_grid(GridProp, mesh)
             points = generate_particles(PointProp, mesh)
             weights = generate_basis_weights(mesh, size(points); name=Val(:N))
-            feupdate!(weights, mesh; volume=points.V)
+            feupdate!(weights, mesh; measure=points.V)
             K = create_sparse_matrix(mesh; ndofs=1)
             dofmask = trues(1, size(grid)...)
             for i in eachindex(mesh)
