@@ -65,6 +65,15 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         weighted_duplicate_mesh = IGAMesh(weighted_duplicate; merge=true)
         @test Tesserae.patches(weighted_duplicate_mesh, 1).controlpoint_ids == [1, 2]
 
+        # Merge tolerances are forwarded to both control-point and weight
+        # comparisons.
+        near_points = [Vec(1.0, 0.0), Vec(1.01, 0.0)]
+        near_control = Tesserae.NURBS.ControlNet((duplicate_axis,), near_points, [1.0, 1.0])
+        @test length(IGAMesh(near_control; merge=true)) == 2
+        @test length(IGAMesh(near_control; merge=true, atol=0.02)) == 1
+        @test length(IGAMesh(near_control; merge=true, rtol=0.02)) == 1
+        @test length(IGAMesh(near_control; merge=true, atol=0.0, rtol=0.02)) == 1
+
         # Multi-patch conversion keeps separate patch connectivity, and
         # optionally shares interface control points.
         first_piece = Tesserae.NURBS.line(Vec(0.0, 0.0), Vec(1.0, 0.0))
@@ -144,6 +153,11 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         # Active 1D B-splines form a partition of unity on the span.
         @test sum(Tesserae.cox_de_boor_values(Quadratic(), knot_vector, span[1], x)) ≈ 1
         @test sum(Tesserae.cox_de_boor_derivatives(Quadratic(), knot_vector, span[1], x)) ≈ 0
+
+        # Degree-zero B-splines have one active value and zero derivative.
+        N0, dN0 = @inferred Tesserae.cox_de_boor_values_and_derivatives(Constant(), [0.0, 1.0], 1, 0.5)
+        @test N0 == Tesserae.SVector(1.0)
+        @test dN0 == Tesserae.SVector(0.0)
 
         N, dN = @inferred Tesserae.cox_de_boor_values_and_derivatives(Quadratic(), knot_vector, span[1], x)
         @test N ≈ Tesserae.cox_de_boor_values(Quadratic(), knot_vector, span[1], x)

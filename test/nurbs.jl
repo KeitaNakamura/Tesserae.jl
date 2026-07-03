@@ -87,6 +87,7 @@ const nurbs_test_cubic = Tesserae.NURBS.cubic
         @test generated_arc3d.points[2] ≈ Vec(2.0, 2.0, 1.0)
         @test generated_arc3d.points[3] ≈ Vec(0.0, 2.0, 1.0)
         @test Tesserae.NURBS.evaluate(generated_arc3d, Vec(0.5)) ≈ Vec(√2, √2, 1.0)
+        @test Tesserae.NURBS.default_arc_xaxis(Vec(0.0, 1.0, 0.0)) ≈ Vec(-1.0, 0.0, 0.0)
 
         # Reversing a curve should only reverse the parameterization, not move
         # the represented geometry.
@@ -122,6 +123,17 @@ const nurbs_test_cubic = Tesserae.NURBS.cubic
         @test Tesserae.NURBS.evaluate(annular_sector, Vec(0.5, 0.5)) ≈ Vec(1.5 / √2, 1.5 / √2)
         @test_throws ArgumentError Tesserae.NURBS.coons_patch(bottom, top, right, left)
 
+        # Coons blending first moves all four boundary curves to common bases.
+        # Here the bottom curve already has an interior knot, so the top curve
+        # must be refined to the same first-direction axis.
+        kinked_bottom = Tesserae.NURBS.polyline([Vec(0.0, 0.0), Vec(0.5, 0.0), Vec(1.0, 0.0)])
+        straight_top = Tesserae.NURBS.line(Vec(0.0, 1.0), Vec(1.0, 1.0))
+        straight_left = Tesserae.NURBS.line(Vec(0.0, 0.0), Vec(0.0, 1.0))
+        straight_right = Tesserae.NURBS.line(Vec(1.0, 0.0), Vec(1.0, 1.0))
+        refined_coons = Tesserae.NURBS.coons_patch(kinked_bottom, straight_top, straight_left, straight_right)
+        @test nurbs_test_knot_vectors(refined_coons)[1] == [0.0,0.0,0.5,1.0,1.0]
+        @test Tesserae.NURBS.evaluate(refined_coons, Vec(0.5, 0.5)) ≈ Vec(0.5, 0.5)
+
         @test surface_control isa Tesserae.NURBS.ControlNet
         @test size(surface_control.points) == (4, 5)
         @test all(isone, surface_control.weights)
@@ -142,6 +154,21 @@ const nurbs_test_cubic = Tesserae.NURBS.cubic
         @test nurbs_test_knot_vectors(surface_boundaries[1]) == (surface_knots[2],)
         @test_throws ArgumentError Tesserae.NURBS.boundaries(surface_control, 3, -1)
         @test_throws ArgumentError Tesserae.NURBS.boundaries(surface_control, 1, 0)
+    end
+
+    @testset "Basis utilities" begin
+        # Dense basis matrices are filled only on the active basis-function
+        # columns, but each row still forms a partition of unity.
+        axis = Tesserae.NURBS.BSplineAxis(nurbs_test_linear, [0.0,0.0,0.5,1.0,1.0])
+        basis_values = Tesserae.NURBS.basis_matrix(axis, [0.0, 0.25, 0.5, 0.75, 1.0])
+        @test size(basis_values) == (5, 3)
+        @test vec(sum(basis_values; dims=2)) ≈ ones(5)
+        @test basis_values[1,:] ≈ [1.0, 0.0, 0.0]
+        @test basis_values[end,:] ≈ [0.0, 0.0, 1.0]
+
+        # Tuple-index helpers should reject impossible parametric directions.
+        @test Tesserae.NURBS.dropat((:u, :v, :w), 2) == (:u, :w)
+        @test_throws ArgumentError Tesserae.NURBS.dropat((:u, :v), 3)
     end
 
     @testset "Refinement" begin
@@ -189,6 +216,15 @@ const nurbs_test_cubic = Tesserae.NURBS.cubic
         twice_refined_surface = Tesserae.NURBS.insert_knot(surface_control, 0.5; direction=2, ntimes=2)
         @test size(twice_refined_surface.points) == (4, 7)
         @test nurbs_test_knot_vectors(twice_refined_surface)[2] == [0.0,0.0,0.0,1/3,0.5,0.5,2/3,1.0,1.0,1.0]
+
+        # Refining directly to a target axis handles repeated inserted knots in
+        # one pass and should preserve the geometry.
+        target_axis = Tesserae.NURBS.BSplineAxis(nurbs_test_quadratic, [0.0,0.0,0.0,0.25,0.25,0.5,1.0,1.0,1.0])
+        target_refined_curve = Tesserae.NURBS.refineto(curve_control, target_axis; direction=1)
+        @test nurbs_test_knot_vectors(target_refined_curve) == (target_axis.knot_vector,)
+        for ξ in (0.1, 0.25, 0.4, 0.8)
+            @test Tesserae.NURBS.evaluate(target_refined_curve, Vec(ξ)) ≈ Tesserae.NURBS.evaluate(curve_control, Vec(ξ))
+        end
 
         direction_uniform_surface = Tesserae.NURBS.refine(surface_control, 1; direction=2)
         @test nurbs_test_knot_vectors(direction_uniform_surface)[1] == surface_knots[1]
