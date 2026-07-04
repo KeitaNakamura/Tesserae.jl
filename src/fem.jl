@@ -17,8 +17,30 @@ function feupdate!(
     _feupdate!(Val(:domain), weights, mesh, nodes, measure, nothing, qdata, qwts)
 end
 
-@inline _basis_values_and_gradients(mesh::UnstructuredMesh, qdata, cell, p) = qdata[p]
+function feupdate!(
+        weights::AbstractArray{<: BasisWeight{<: IGABasis}}, mesh::IGAMesh{dim, dim, T},
+        nodes::AbstractArray{<: Vec{dim}} = mesh;
+        measure::Union{Nothing, AbstractArray} = nothing,
+        quadrature_rule::QuadratureRule = quadrature_rule(igabasis(mesh)),
+    ) where {dim, T}
+    qpts, qwts = quadrature_rule.points, quadrature_rule.weights
+    _feupdate!(Val(:domain), weights, mesh, nodes, measure, nothing, qpts, qwts)
+end
+
+@inline _basis_values_and_gradients(mesh::UnstructuredMesh, qdata, cell, indices, p) = qdata[p]
 @inline _quadrature_weight(mesh::UnstructuredMesh, qdata, qwts, cell, p) = qwts[p]
+@inline function _basis_values_and_gradients(mesh::IGAMesh, qdata, cell, indices, p)
+    patch = patches(mesh, cell.patch)
+    ξ = span_point(patch, cell.span, qdata[p])
+    N, dN = iga_basis_values_and_gradients(patch, cell.span, ξ)
+    _rationalize_basis(N, dN, mesh.weights, indices)
+end
+@inline _rationalize_basis(N, dN, ::Nothing, indices) = N, dN
+@inline _rationalize_basis(N, dN, weights::AbstractVector, indices) = rational_basis_values_and_gradients(N, dN, weights[indices])
+@inline function _quadrature_weight(mesh::IGAMesh, qdata, qwts, cell, p)
+    patch = patches(mesh, cell.patch)
+    span_weight(patch, cell.span, qwts[p])
+end
 
 function _feupdate!(mode, weights, mesh::AbstractMesh, nodes, measure, normal, qdata, qwts)
     @assert length(qdata) == length(qwts)
@@ -29,7 +51,7 @@ function _feupdate!(mode, weights, mesh::AbstractMesh, nodes, measure, normal, q
         indices = supportnodes(mesh, cell)
         x = nodes[indices]
         for p in eachindex(qdata, qwts)
-            N, dNdξ = _basis_values_and_gradients(mesh, qdata, cell, p)
+            N, dNdξ = _basis_values_and_gradients(mesh, qdata, cell, indices, p)
             J = sum(x .⊗ dNdξ)
             qwt = _quadrature_weight(mesh, qdata, qwts, cell, p)
             bw = weights[p,cell]
@@ -86,4 +108,14 @@ function feupdate!(
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
     _feupdate!(Val(:boundary), weights, mesh, nodes, measure, normal, qdata, qwts)
+end
+
+function feupdate!(
+        weights::AbstractArray{<: BasisWeight{<: IGABasis}}, mesh::IGAMesh{dim, pdim, T},
+        nodes::AbstractArray{<: Vec{dim}} = mesh;
+        measure::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
+        quadrature_rule::QuadratureRule = quadrature_rule(igabasis(mesh)),
+    ) where {dim, T, pdim}
+    qpts, qwts = quadrature_rule.points, quadrature_rule.weights
+    _feupdate!(Val(:boundary), weights, mesh, nodes, measure, normal, qpts, qwts)
 end

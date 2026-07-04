@@ -173,8 +173,39 @@ function append_dofs!(I, J, idofs, jdofs)
     end
 end
 
+function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Int) where {T}
+    _create_cell_support_sparse_matrix(T, mesh, (ndofs, ndofs))
+end
+
+function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Tuple{Int,Int}) where {T}
+    gdofs1 = LinearIndices((ndofs[1], length(mesh)))
+    gdofs2 = LinearIndices((ndofs[2], length(mesh)))
+
+    I, J = Int[], Int[]
+    for cell in cells(mesh)
+        cellnodes = supportnodes(mesh, cell)
+        append_dofs!(I, J, gdofs1[:, cellnodes], gdofs2[:, cellnodes])
+    end
+
+    sparse(I, J, zeros(T, length(I)), length(gdofs1), length(gdofs2))
+end
+
+function create_sparse_matrix(::IGABasis, mesh::IGAMesh{dim}; ndofs = dim) where {dim}
+    _create_sparse_matrix(Float64, mesh, ndofs)
+end
+function create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh{dim}; ndofs = dim) where {T, dim}
+    _create_sparse_matrix(T, mesh, ndofs)
+end
+_create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Int) where {T} = _create_sparse_matrix(T, mesh, ndofs)
+_create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T} = _create_sparse_matrix(T, mesh, ndofs)
+_create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Int) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
+_create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
+create_sparse_matrix(::Type{T}, mesh::IGAMesh{dim}; ndofs = dim) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
+create_sparse_matrix(mesh::IGAMesh{dim}; ndofs = dim) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
 
 function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{UnstructuredMesh, UnstructuredMesh}; ndofs::Tuple{Int, Int}) where {T}
+    mesh1 === mesh2 && return _create_cell_support_sparse_matrix(T, mesh1, ndofs)
+
     gdofs1 = LinearIndices((ndofs[1], length(mesh1)))
     gdofs2 = LinearIndices((ndofs[2], length(mesh2)))
 
@@ -187,16 +218,12 @@ function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{UnstructuredMesh, 
         primary_cellnodes1 = cellnodes1[primarynodes_indices(cellshape(mesh1))]
         celldofs1 = gdofs1[:, cellnodes1]
 
-        if mesh1 === mesh2
-            append_dofs!(I, J, celldofs1, celldofs1)
-        else
-            for cell2 in cells(mesh2)
-                cellnodes2 = supportnodes(mesh2, cell2)
-                primary_cellnodes2 = cellnodes2[primarynodes_indices(cellshape(mesh2))]
-                if mesh1[primary_cellnodes1] ≈ mesh2[primary_cellnodes2]
-                    celldofs2 = gdofs2[:, cellnodes2]
-                    append_dofs!(I, J, celldofs1, celldofs2)
-                end
+        for cell2 in cells(mesh2)
+            cellnodes2 = supportnodes(mesh2, cell2)
+            primary_cellnodes2 = cellnodes2[primarynodes_indices(cellshape(mesh2))]
+            if mesh1[primary_cellnodes1] ≈ mesh2[primary_cellnodes2]
+                celldofs2 = gdofs2[:, cellnodes2]
+                append_dofs!(I, J, celldofs1, celldofs2)
             end
         end
     end
