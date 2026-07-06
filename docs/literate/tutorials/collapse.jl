@@ -189,7 +189,7 @@ function cauchy_stress(model::DruckerPrager, σⁿ::SymmetricSecondOrderTensor{3
 
     ## Elastic predictor
     cᵉ = λ*δ⊗δ + 2G*I
-    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(σⁿ * skew(∇u)) # Consider Jaumann stress-rate
+    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(skew(∇u) * σⁿ) # Consider Jaumann stress-rate
     dfdσ, fᵗʳ = gradient(f, σᵗʳ, :all)
     fᵗʳ ≤ 0 && tr(σᵗʳ)/3 ≤ pₜ && return σᵗʳ
 

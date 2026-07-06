@@ -195,7 +195,7 @@ function vonmises_model(σⁿ, ∇u; λ, G, σy)
     δ = one(SymmetricSecondOrderTensor{3})
     I = one(SymmetricFourthOrderTensor{3})
     cᵉ = λ*δ⊗δ + 2G*I
-    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(σⁿ * skew(∇u)) # Consider Jaumann stress-rate
+    σᵗʳ = σⁿ + cᵉ ⊡₂ symmetric(∇u) + 2*symmetric(skew(∇u) * σⁿ) # Consider Jaumann stress-rate
     dfdσ, fᵗʳ = gradient(σ -> vonmises(σ) - σy, σᵗʳ, :all)
     if fᵗʳ > 0
         dλ = fᵗʳ / (dfdσ ⊡₂ cᵉ ⊡₂ dfdσ)
