@@ -90,5 +90,4 @@ function foreach_loop(f, device::GPUDevice, ::Val{scheduler}, collection) where 
         kernel = gpukernel_foreach(backend)
         kernel(f, collection; ndrange=size(collection))
     end
-    synchronize(backend)
 end

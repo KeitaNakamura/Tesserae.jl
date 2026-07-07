@@ -39,7 +39,6 @@ function _stencil!(::GPUDevice, combine, dest, src, offsets, weights, baseshift,
     backend = get_backend(dest)
     kernel = kernel_stencil(backend)
     kernel(combine, dest, src, offsets, weights, baseshift, first(indices); ndrange=size(indices))
-    synchronize(backend)
 end
 
 function stencil!(combine, dest::StencilArray, src::StencilArray, offsets::AbstractArray{CartesianIndex{dim}}, weights::AbstractArray{<: Number}; pad::Int) where {dim}

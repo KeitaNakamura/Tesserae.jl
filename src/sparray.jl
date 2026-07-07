@@ -270,13 +270,12 @@ function _number_blocks!(sp::SpIndices, activity, backend::GPU)
     # activity -> 0/1 markers -> prefix sum -> inactive blocks reset to 0.
     init_kernel = gpukernel_init_block_numbering!(backend)
     init_kernel(block_numbers, activity; ndrange=length(block_numbers))
-    synchronize(backend)
 
     cumsum!(vec(block_numbers), vec(block_numbers))
-    synchronize(backend)
 
     finalize_kernel = gpukernel_finalize_block_numbering!(backend)
     finalize_kernel(block_numbers, activity, active_count_buffer; ndrange=length(block_numbers))
+    # Only sync before the CPU reads `active_count_buffer`.
     synchronize(backend)
     only(Array(active_count_buffer)) * blocklength(sp)
 end
@@ -426,7 +425,6 @@ function _activate_neighbor_blocks!(active, occupied, backend::GPU)
     fillzero!(active)
     expand_kernel = gpukernel_expand_occupied_blocks!(backend)
     expand_kernel(active, occupied; ndrange=length(occupied))
-    synchronize(backend)
     active
 end
 
@@ -655,7 +653,6 @@ function _copyto_sp_broadcast!(device::GPUDevice, dest::SpArray, bc::Broadcasted
     spinds = get_spinds(dest)
     kernel = gpukernel_copyto_sp_broadcast!(backend)
     kernel(dest, bc, spinds; ndrange=_spindex_ndrange(spinds))
-    synchronize(backend)
     dest
 end
 
