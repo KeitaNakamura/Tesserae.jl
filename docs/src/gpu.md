@@ -283,13 +283,11 @@ function main()
             @timeit "Grid computation" begin
                 @. grid.vⁿ = grid.mv / grid.m * !iszero(grid.m)
                 @. grid.v  = grid.vⁿ + Δt * grid.f / grid.m * !iszero(grid.m)
-                CUDA.synchronize() # wait for broadcast kernels before stopping @timeit
             end
 
             @timeit "Apply boundary conditions" begin
                 slip_floor(v) = v .* (true, true, false)
                 @. grid.v[:, :, begin] = slip_floor(grid.v[:, :, begin])
-                CUDA.synchronize() # wait for broadcast kernels before stopping @timeit
             end
 
             @timeit "G2P transfer" begin
