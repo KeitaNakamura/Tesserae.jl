@@ -423,7 +423,6 @@ function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray,
     else
         kernel = gpukernel_update_weight(backend)
         kernel(weights, particles, mesh, filter; ndrange=length(particles))
-        synchronize(backend)
     end
     weights
 end

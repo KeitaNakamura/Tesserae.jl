@@ -361,7 +361,6 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
     backend = get_backend(device)
     kernel = gpukernel_P2G(backend)
     kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
-    synchronize(backend)
 end
 
 function P2G_nosum_expr((grid,i), nosum_equations::Vector)
@@ -413,7 +412,6 @@ function P2G_nosum(f, device::GPUDevice, grid)
         kernel = gpukernel_P2G_nosum(backend)
         kernel(f, grid; ndrange=size(grid))
     end
-    synchronize(backend)
 end
 
 function check_arguments_for_P2G(grid, particles, weights, partition)
@@ -570,7 +568,6 @@ function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) w
     backend = get_backend(device)
     kernel = gpukernel_G2P(backend)
     kernel(f, grid, particles, weights; ndrange=length(particles))
-    synchronize(backend)
 end
 
 function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector)
