@@ -72,7 +72,7 @@ Move the grid, particles, and basis weights to the GPU, then update the sparse g
 grid = generate_grid(SpArray, GridProp, mesh)
 weights = generate_basis_weights(Float32, BSpline(Quadratic()), grid.x, length(particles))
 
-grid, particles, weights = (grid, particles, weights) .|> gpu
+grid, particles, weights = (grid, particles, weights) .|> gpu;
 
 update_sparsity!(grid, particles.x)
 update!(weights, particles, grid.x)

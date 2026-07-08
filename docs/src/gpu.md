@@ -42,29 +42,32 @@ particles = generate_particles(ParticleProp, grid.x)
 @. particles.v = zero(particles.v)
 weights = generate_basis_weights(T, BSpline(Quadratic()), grid.x, length(particles))
 
-grid_gpu = gpu(grid)
-particles_gpu = gpu(particles)
-weights_gpu = gpu(weights)
+grid_gpu = gpu(grid);
+particles_gpu = gpu(particles);
+weights_gpu = gpu(weights);
 ```
 
-After that, the transfer code is the same as the CPU version:
+After that, the transfer code is the same as the CPU version.
+A single update step can be written as:
 
 ```julia
-dt = T(1.0e-4)
+function step!(grid_gpu, particles_gpu, weights_gpu, dt)
+    update!(weights_gpu, particles_gpu, grid_gpu.x)
 
-update!(weights_gpu, particles_gpu, grid_gpu.x)
+    @P2G grid_gpu=>i particles_gpu=>p weights_gpu=>ip begin
+        m[i]  = @∑ w[ip] * m[p]
+        mv[i] = @∑ w[ip] * m[p] * v[p]
+        m⁻¹[i] = ifelse(iszero(m[i]), zero(m[i]), inv(m[i]))
+        v[i] = mv[i] * m⁻¹[i]
+    end
 
-@P2G grid_gpu=>i particles_gpu=>p weights_gpu=>ip begin
-    m[i]  = @∑ w[ip] * m[p]
-    mv[i] = @∑ w[ip] * m[p] * v[p]
-    m⁻¹[i] = ifelse(iszero(m[i]), zero(m[i]), inv(m[i]))
-    v[i] = mv[i] * m⁻¹[i]
+    @G2P grid_gpu=>i particles_gpu=>p weights_gpu=>ip begin
+        v[p] = @∑ v[i] * w[ip]
+        x[p] += v[p] * dt
+    end
 end
 
-@G2P grid_gpu=>i particles_gpu=>p weights_gpu=>ip begin
-    v[p] = @∑ v[i] * w[ip]
-    x[p] += v[p] * dt
-end
+step!(grid_gpu, particles_gpu, weights_gpu, T(1.0e-4))
 ```
 
 Use `cpu` to copy GPU data back to CPU memory, for example for output:
@@ -90,6 +93,17 @@ ERROR: Scalar indexing is disallowed.
 ```
 
 The same rule applies to fields such as `grid_gpu.v`, `particles_gpu.x`, and `weights_gpu`.
+
+!!! note
+    In the REPL, displaying an object that contains GPU arrays, such as `particles_gpu` or `grid_gpu`, can hit the same scalar indexing error.
+    Suppress display with `;` when assigning GPU objects:
+
+    ```julia
+    particles_gpu = gpu(particles);
+    ```
+
+    Copy data back with `cpu` before inspecting values on the CPU.
+
 Use array operations such as broadcasting or `map!`, or write the operation inside a transfer macro or a GPU kernel.
 Indexing inside `@P2G` and `@G2P` is fine because the generated code runs in GPU kernels.
 This is also how boundary conditions should be applied on GPU.
@@ -114,17 +128,16 @@ slip_floor(v) = v .* (true, true, false)
 `gpu` returns GPU arrays and, by default, converts floating-point arrays to `Float32`.
 Use `gpu_preserve` instead when the original floating-point type should be preserved on the GPU.
 The conversion applies to arrays and adapted Tesserae objects.
-It does not rewrite scalar constants captured by a kernel, so constants used in GPU code should be written with the intended type:
+It does not rewrite scalar constants captured by a kernel, so write scalar constants with the intended type:
 
-```diff
-- dt = 1.0e-4
-- gravity = Vec(0, -9.81)
-+ T = Float32
-+ dt = T(1.0e-4)
-+ gravity = Vec(T(0), T(-9.81))
+```julia
+T = Float32
+
+dt = T(1.0e-4)
+gravity = Vec(T(0), T(-9.81))
 ```
 
-This is required on Metal, where `Float64` cannot be used in GPU kernels.
+This matters on Metal, where `Float64` cannot be used in GPU kernels.
 
 ## Transfers
 
@@ -162,9 +175,9 @@ The same scalar-indexing rule applies: use `SpArray` through `update_sparsity!`,
 grid = generate_grid(SpArray, GridProp, mesh)
 weights = generate_basis_weights(T, BSpline(Quadratic()), grid.x, length(particles))
 
-grid_gpu = gpu(grid)
-particles_gpu = gpu(particles)
-weights_gpu = gpu(weights)
+grid_gpu = gpu(grid);
+particles_gpu = gpu(particles);
+weights_gpu = gpu(weights);
 
 update_sparsity!(grid_gpu, particles_gpu.x)
 update!(weights_gpu, particles_gpu, grid_gpu.x)
@@ -182,8 +195,14 @@ It should not be expected to remove the main cost of `@P2G`, which is still prop
 
 ## Taylor impact on GPU
 
-The Taylor impact tutorial can be moved to GPU without changing the transfer equations.
-The material model `vonmises_model` is the same as in the [Taylor impact tutorial](@ref taylor_impact_tutorial); the main changes are removing CPU threading utilities, moving the simulation objects with `gpu_preserve`, rewriting the slip floor boundary condition as a broadcast, and copying data back with `cpu` before writing output.
+The Taylor impact tutorial can be moved to GPU without changing the transfer equations or the material model.
+Compared with the [Taylor impact tutorial](@ref taylor_impact_tutorial), the implementation changes are:
+
+- Remove CPU threading utilities such as `@threaded`, `ThreadPartition`, and `reorder_particles!`.
+- Move the simulation objects to GPU with `gpu_preserve` after CPU-side setup.
+- Keep grid and particle calculations inside GPU operations, using `@P2G`, `@G2P`, and broadcasts.
+- Rewrite the slip floor boundary condition as a broadcast to avoid scalar indexing on GPU arrays.
+- Copy data back with `cpu` only when writing VTK output.
 
 ```julia
 using Tesserae
@@ -256,84 +275,61 @@ function main()
     fps = T(300e3)
     savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
-    reset_timer!()
-
     # Move the simulation state to the GPU after CPU-side setup; the time loop below stays on GPU.
     let (grid, particles, weights) = (grid, particles, weights) .|> gpu_preserve
 
         Tesserae.@showprogress while t < t_stop
 
-            @timeit "Update timestep" begin
-                @. particles.c = sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v)
-                Δt = CFL * spacing(grid.x) / maximum(particles.c)
+            @. particles.c = sqrt((λ+2μ) / (particles.m/particles.V)) + norm(particles.v)
+            Δt = CFL * spacing(grid.x) / maximum(particles.c)
+
+            update!(weights, particles, grid.x)
+
+            @P2G grid=>i particles=>p weights=>ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
+                vⁿ[i] = mv[i] / m[i] * !iszero(m[i])
+                v[i]  = vⁿ[i] + Δt * f[i] / m[i] * !iszero(m[i])
             end
 
-            @timeit "Update basis weights" begin
-                update!(weights, particles, grid.x)
-            end
+            slip_floor(v) = v .* (true, true, false)
+            @. grid.vⁿ[:, :, begin] = slip_floor(grid.vⁿ[:, :, begin])
+            @. grid.v[:, :, begin] = slip_floor(grid.v[:, :, begin])
 
-            @timeit "P2G transfer" begin
-                @P2G grid=>i particles=>p weights=>ip begin
-                    m[i]  = @∑ w[ip] * m[p]
-                    mv[i] = @∑ w[ip] * m[p] * v[p]
-                    f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
-                end
-            end
-
-            @timeit "Grid computation" begin
-                @. grid.vⁿ = grid.mv / grid.m * !iszero(grid.m)
-                @. grid.v  = grid.vⁿ + Δt * grid.f / grid.m * !iszero(grid.m)
-            end
-
-            @timeit "Apply boundary conditions" begin
-                slip_floor(v) = v .* (true, true, false)
-                @. grid.v[:, :, begin] = slip_floor(grid.v[:, :, begin])
-            end
-
-            @timeit "G2P transfer" begin
-                @G2P grid=>i particles=>p weights=>ip begin
-                    v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
-                    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
-                    x[p] += @∑ w[ip] * v[i] * Δt
-                end
-            end
-
-            @timeit "Particle computation" begin
-                # Reuse @G2P only as a particle-parallel GPU loop; this block does not interpolate from grid to particles.
-                @G2P grid=>i particles=>p weights=>ip begin
-                    ΔFₚ = I + Δt * ∇v[p]
-                    Fₚ = ΔFₚ * F[p]
-                    σₚ, Cᵖ⁻¹ₚ, ε̄ᵖₚ = vonmises_model(Cᵖ⁻¹[p], ε̄ᵖ[p], Fₚ; λ, μ, H, τ̄y⁰)
-                    σ[p] = σₚ
-                    F[p] = Fₚ
-                    V[p] = det(ΔFₚ) * V[p]
-                    Cᵖ⁻¹[p] = Cᵖ⁻¹ₚ
-                    ε̄ᵖ[p] = ε̄ᵖₚ
-                end
+            @G2P grid=>i particles=>p weights=>ip begin
+                v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                x[p] += @∑ w[ip] * v[i] * Δt
+                ΔFₚ = I + Δt * ∇v[p]
+                Fₚ = ΔFₚ * F[p]
+                σₚ, Cᵖ⁻¹ₚ, ε̄ᵖₚ = vonmises_model(Cᵖ⁻¹[p], ε̄ᵖ[p], Fₚ; λ, μ, H, τ̄y⁰)
+                σ[p] = σₚ
+                F[p] = Fₚ
+                V[p] = det(ΔFₚ) * V[p]
+                Cᵖ⁻¹[p] = Cᵖ⁻¹ₚ
+                ε̄ᵖ[p] = ε̄ᵖₚ
             end
 
             t += Δt
             step += 1
 
             if t > first(savepoints)
-                @timeit "Write results" begin
-                    popfirst!(savepoints)
-                    openpvd(pvdfile; append=true) do pvd
-                        openvtm(string(pvdfile, step)) do vtm
-                            openvtk(vtm, cpu(particles.x)) do vtk
-                                vtk["velocity"] = cpu(particles.v)
-                                vtk["plastic strain"] = cpu(particles.ε̄ᵖ)
-                            end
-                            openvtk(vtm, cpu(grid.x)) do vtk
-                                vtk["velocity"] = cpu(grid.v)
-                            end
-                            pvd[t] = vtm
+                popfirst!(savepoints)
+                openpvd(pvdfile; append=true) do pvd
+                    openvtm(string(pvdfile, step)) do vtm
+                        openvtk(vtm, cpu(particles.x)) do vtk
+                            vtk["velocity"] = cpu(particles.v)
+                            vtk["plastic strain"] = cpu(particles.ε̄ᵖ)
                         end
+                        openvtk(vtm, cpu(grid.x)) do vtk
+                            vtk["velocity"] = cpu(grid.v)
+                        end
+                        pvd[t] = vtm
                     end
                 end
             end
         end
     end
-    print_timer()
 end
 ```
