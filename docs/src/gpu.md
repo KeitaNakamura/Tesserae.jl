@@ -195,14 +195,22 @@ It should not be expected to remove the main cost of `@P2G`, which is still prop
 
 ## Taylor impact on GPU
 
-The Taylor impact tutorial can be moved to GPU without changing the transfer equations or the material model.
-Compared with the [Taylor impact tutorial](@ref taylor_impact_tutorial), the implementation changes are:
+This section rewrites the [Taylor impact tutorial](@ref taylor_impact_tutorial) as a GPU simulation.
+The transfer equations and the von Mises material model are unchanged; only the execution pattern is adjusted.
+The main changes are:
 
 - Remove CPU threading utilities such as `@threaded`, `ThreadPartition`, and `reorder_particles!`.
 - Move the simulation objects to GPU with `gpu_preserve` after CPU-side setup.
 - Keep grid and particle calculations inside GPU operations, using `@P2G`, `@G2P`, and broadcasts.
 - Rewrite the slip floor boundary condition as a broadcast to avoid scalar indexing on GPU arrays.
 - Copy data back with `cpu` only when writing VTK output.
+
+The following compute-only results were obtained on an NVIDIA GeForce RTX 5090 by disabling VTK output.
+
+| Precision | # Particles | # Iterations | Execution time (w/o output) |
+| --------- | ----------- | ------------ | ---------------------------- |
+| Float64   | 1.48M       | 1.8k         | 1 min 01 sec                 |
+| Float32   | 1.48M       | 1.8k         | 37 sec                       |
 
 ```julia
 using Tesserae
@@ -250,7 +258,7 @@ function main()
     end
 
     ## Background grid
-    grid = generate_grid(GridProp, CartesianMesh(R/12, (-3R,3R), (-3R,3R), (0,L+0.1L)))
+    grid = generate_grid(GridProp, CartesianMesh(T, R/12, (-3R,3R), (-3R,3R), (0,L+0.1L)))
 
     ## Particles
     block = extract(grid.x, (-R,R), (-R,R), (0,L))
@@ -260,7 +268,7 @@ function main()
     @. particles.m = ρ⁰ * particles.V
     @. particles.F = one(particles.F)
     @. particles.Cᵖ⁻¹ = one(particles.Cᵖ⁻¹)
-    particles.v .= Ref(Vec(0.0, 0.0, -227.0)) # Set initial velocity
+    particles.v .= Ref(Vec(T(0), T(0), T(-227))) # Set initial velocity
 
     ## Basis weights
     weights = generate_basis_weights(T, KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
@@ -331,5 +339,45 @@ function main()
             end
         end
     end
+end
+
+function vonmises_model(Cᵖⁿ⁻¹, ε̄ᵖⁿ, F; λ, μ, H, τ̄y⁰)
+    κ = λ + 2μ/3                             # Bulk modulus
+    J = det(F)                               # Jacobian
+    p = κ * log(J) / J                       # Pressure
+    bᵉᵗʳ = symmetric(F * Cᵖⁿ⁻¹ * F')         # Trial left Cauchy-Green tensor
+    vals, vecs = eigen(bᵉᵗʳ)                 # Eigenvalue decomposition
+    λᵉᵗʳ = sqrt.(vals)                       # Trial stretches
+    nᵗʳₐ = (vecs[:,1], vecs[:,2], vecs[:,3]) # Principal directions
+    τ′ᵗʳ = @. 2μ*log(λᵉᵗʳ) - 2μ/3*log(J)     # Trial Kirchhoff stress
+
+    f(τ) = sqrt(3τ⋅τ/2) - (τ̄y⁰ + H*ε̄ᵖⁿ) # Yield function
+    dfdσ, fᵗʳ = gradient(f, τ′ᵗʳ, :all)
+    if fᵗʳ > 0
+        Δγ = fᵗʳ / (3μ + H)          # Incremental plastic multiplier
+        Δεᵖ = Δγ * dfdσ              # Incremental logarithmic plastic stretch
+        λᵉ = @. exp(log(λᵉᵗʳ) - Δεᵖ) # Elastic stretch
+        τ′ = τ′ᵗʳ - 2μ*Δεᵖ           # Return map
+    else # Elastic response
+        Δγ = zero(H)
+        λᵉ = λᵉᵗʳ
+        τ′ = τ′ᵗʳ
+    end
+
+    ## Update inverse of elastic left Cauchy-Green tensor
+    nₐ = nᵗʳₐ
+    bᵉ = mapreduce((λᵉ,nₐ) -> λᵉ^2 * nₐ^⊗(2), +, λᵉ, nₐ)
+
+    ## Update stress
+    σ′ = τ′ / J    # Principal deviatoric Cauchy stress
+    σ  = @. σ′ + p # Principal Cauchy stress
+    σ  = mapreduce((σ,nₐ) -> σ * nₐ^⊗(2), +, σ, nₐ)
+
+    ## Update state variables
+    F⁻¹ = inv(F)
+    Cᵖ⁻¹ = symmetric(F⁻¹ * bᵉ * F⁻¹') # Update plastic right Cauchy-Green tensor
+    ε̄ᵖ = ε̄ᵖⁿ + Δγ                     # Update equivalent plastic strain
+
+    σ, Cᵖ⁻¹, ε̄ᵖ
 end
 ```
