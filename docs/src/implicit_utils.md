@@ -1,6 +1,7 @@
 # Utilities for implicit methods
 
-This page collects helper types and macros used by implicit tutorials, such as degree-of-freedom maps, sparse matrices, matrix assembly, and nonlinear solvers.
+Implicit MPM formulations often need degree-of-freedom maps, sparse matrices, matrix assembly, and nonlinear iteration.
+Tesserae provides small utilities for those parts of an implicit formulation.
 
 ## Degrees of freedom (DoF) mapping
 

@@ -37,15 +37,22 @@ makedocs(;
             ],
         ],
         "Manual" => [
-            "mesh.md"
-            "generation.md"
-            "basis.md"
-            "transfer.md"
-            "implicit_utils.md"
-            "multithreading.md"
-            "gpu.md"
-            "sparray.md"
-            "export.md"
+            "Overview" => "manual.md"
+            "Core workflow" => [
+                "mesh.md"
+                "generation.md"
+                "basis.md"
+                "transfer.md"
+                "export.md"
+            ]
+            "Scaling simulations" => [
+                "multithreading.md"
+                "gpu.md"
+                "sparray.md"
+            ]
+            "Advanced methods" => [
+                "implicit_utils.md"
+            ]
         ]
     ],
     doctest = true, # :fix

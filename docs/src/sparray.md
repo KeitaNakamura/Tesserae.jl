@@ -4,6 +4,8 @@
 It has the same logical size as a dense array, but allocates storage only for active blocks.
 
 The main use case is a large Cartesian mesh where the simulated material occupies only a small part of the domain.
+The MPM loop still sees the same grid fields and transfer macros, but grid storage and grid-wide operations are restricted to active blocks.
+
 At this stage, `SpArray` is mainly a way to avoid allocating grid fields over empty regions.
 It should not be expected to make every computation much faster, but it can substantially reduce memory use when a dense grid would contain many nodes that are never touched by particles.
 

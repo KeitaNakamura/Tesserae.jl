@@ -1,7 +1,11 @@
 # Mesh
 
-Meshes define the background coordinates used by grids, particles, and basis weights.
-In a typical MPM simulation, the mesh is created first, then `generate_grid`, `generate_particles`, and `generate_basis_weights` are built from it.
+A background mesh and a background grid are often used interchangeably in MPM literature, but Tesserae keeps them separate.
+A mesh stores the geometry of the background domain, while a grid is a state container generated from that mesh.
+Grid fields such as mass, momentum, velocity, and force live on the grid; coordinates and spacing come from the mesh.
+
+A simulation typically shares one mesh between the grid, particles, and basis weights.
+This keeps coordinates and particle-grid connectivity consistent across the calculation.
 
 !!! info
     Currently, only the Cartesian mesh is available.

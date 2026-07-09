@@ -1,7 +1,11 @@
 # GPU computing
 
-Tesserae can move grids, particles, basis weights, and meshes to a GPU with `gpu`.
-The transfer macros then dispatch to GPU kernels when all inputs live on the same GPU backend.
+GPU support in Tesserae is built around the same transfer notation used on CPU.
+Once the mesh, grid, particles, and basis weights are moved to a GPU backend, macros such as [`@P2G`](@ref) and [`@G2P`](@ref) launch GPU kernels instead of CPU loops.
+This keeps the MPM update close to the CPU version while moving the particle-grid work to the GPU.
+
+The code still needs to follow GPU array rules.
+Grid and particle updates should be written as transfer macros, broadcasts, or GPU kernels, and data should be copied back to CPU memory only for inspection or output.
 
 Load the GPU backend package together with Tesserae:
 

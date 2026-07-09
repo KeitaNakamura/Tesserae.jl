@@ -1,8 +1,16 @@
 # Multi-threading
 
-Tesserae.jl provides a [`@threaded`](@ref) macro to enable multi-threading. It behaves similarly to Julia’s built-in Threads.@threads, but is specifically designed to work with particle-grid transfer macros such as [`@G2P`](@ref), [`@P2G`](@ref), [`@G2P2G`](@ref), and [`@P2G_Matrix`](@ref).
+Multi-threading in Tesserae parallelizes CPU work over particles, grid nodes, and particle-grid transfers.
+The [`@threaded`](@ref) macro adds this parallelism while keeping transfer expressions close to their sequential form.
+It behaves similarly to Julia's built-in `Threads.@threads`, but is designed to work with particle-grid transfer macros such as [`@G2P`](@ref), [`@P2G`](@ref), [`@G2P2G`](@ref), and [`@P2G_Matrix`](@ref).
 
 ## Usage guidelines
+
+Particle-grid transfers have two directions: gathering and scattering.
+In a gathering transfer, each particle reads values from nearby grid nodes, so the operation can be threaded directly.
+In a scattering transfer, particles write contributions to grid nodes.
+If multiple threads update the same grid node at the same time, this is a data race; see Julia's discussion of [data races between threads](https://docs.julialang.org/en/v1/manual/multi-threading/#Communication-and-data-races-between-threads).
+Threaded scattering therefore uses a [`ThreadPartition`](@ref).
 
 ### Gathering (`@G2P`)
 

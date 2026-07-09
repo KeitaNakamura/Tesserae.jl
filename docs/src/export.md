@@ -1,7 +1,9 @@
 # Export
 
-Tesserae supports VTK output for visualization.
-The export functions are built on the [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl) package.
+Tesserae uses VTK files to write simulation states that can be opened in [ParaView](https://www.paraview.org/).
+Grid fields and particle fields can be exported separately, combined into a multiblock dataset, or collected as a time series.
+
+The export functions are built on [WriteVTK.jl](https://github.com/JuliaVTK/WriteVTK.jl).
 
 ## VTK file
 
