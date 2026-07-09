@@ -87,7 +87,6 @@ export
 # BasisWeight
     generate_basis_weights,
     generate_interpolation_weights,
-    neighboringnodes,
     supportnodes,
     basis,
     BasisWeight,

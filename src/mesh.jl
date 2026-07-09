@@ -158,9 +158,9 @@ end
 end
 
 """
-    neighboringnodes(x::Vec, r::Real, mesh::CartesianMesh)
+    supportnodes(x::Vec, r::Real, mesh::CartesianMesh)
 
-Return `CartesianIndices` for neighboring nodes around `x`.
+Return `CartesianIndices` for support nodes around `x`.
 `r` denotes the range for searching area. In 1D, for example, the range `a`
 becomes ` x-r*h ≤ a < x+r*h` where `h` is `spacing(mesh)`.
 
@@ -175,14 +175,14 @@ julia> mesh = CartesianMesh(1, (0,5))
  [4.0]
  [5.0]
 
-julia> neighboringnodes(Vec(1.5), 1, mesh)
+julia> supportnodes(Vec(1.5), 1, mesh)
 CartesianIndices((2:3,))
 
-julia> neighboringnodes(Vec(1.5), 3, mesh)
+julia> supportnodes(Vec(1.5), 3, mesh)
 CartesianIndices((1:5,))
 ```
 """
-@inline function neighboringnodes(x::Vec, r::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
+@inline function supportnodes(x::Vec, r::Real, mesh::CartesianMesh{dim, T}) where {dim, T}
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
