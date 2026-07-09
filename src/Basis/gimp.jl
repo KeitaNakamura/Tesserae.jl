@@ -19,7 +19,7 @@ support_width(::uGIMP) = 3
 
 @inline function supportnodes(::uGIMP, pt, mesh::CartesianMesh)
     h⁻¹ = spacing_inv(mesh)
-    neighboringnodes(getx(pt), 1+pt.l*h⁻¹, mesh)
+    supportnodes(getx(pt), 1+pt.l*h⁻¹, mesh)
 end
 
 # simple uGIMP calculation

@@ -19,3 +19,4 @@ Base.@deprecate_binding ColorPartition ThreadPartition
 @deprecate neighboringnodes(bw::BasisWeight) supportnodes(bw)
 @deprecate neighboringnodes(bw::BasisWeight, domain) supportnodes(bw, domain)
 @deprecate neighboringnodes(basis::Basis, pt, mesh::AbstractMesh) supportnodes(basis, pt, mesh)
+@deprecate neighboringnodes(x::Vec, r::Real, mesh::CartesianMesh) supportnodes(x, r, mesh)
