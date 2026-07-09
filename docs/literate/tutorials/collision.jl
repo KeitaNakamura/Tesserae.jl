@@ -8,6 +8,8 @@
 # | ----------- | ------------ | --------------------------- |
 # | 17k         | 2.9k         | 5 sec                       |
 #
+# The VTK output is written to `output/collision`.
+#
 # This tutorial compares several velocity transfer schemes on the collision of two elastic rings:
 #
 # * PIC--FLIP mixed transfer[^1]

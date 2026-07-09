@@ -4,8 +4,11 @@ CollapsedDocStrings = false
 
 # Basis Functions
 
-Basis weights store the values and gradients of a basis function between particles and nearby grid nodes.
-They are updated after particles move and then reused by transfer macros such as [`@P2G`](@ref) and [`@G2P`](@ref).
+Basis functions define the interpolation between particles and grid nodes.
+Tesserae stores this local particle-grid relation as basis weights, which contain the basis values and gradients used by transfer macros such as [`@P2G`](@ref) and [`@G2P`](@ref).
+
+Because particles move through the mesh, basis weights are updated before transfers that use the current particle positions.
+The basis type determines the support nodes of each particle, affecting both the transfer behavior and computational cost.
 
 ```@docs
 update!(::AbstractArray{<: BasisWeight}, ::Tesserae.StructArray, ::Tesserae.AbstractMesh, ::AbstractArray)

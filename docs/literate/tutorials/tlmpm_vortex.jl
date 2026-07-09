@@ -8,6 +8,8 @@
 # | ----------- | ------------ | --------------------------- |
 # | 8k          | 27k          | 30 sec                      |
 #
+# The VTK output is written to `output/tlmpm_vortex`.
+#
 # This tutorial demonstrates the total Lagrangian material point method[^1].
 # It solves the generalized vortex problem[^1] using a linear kernel.
 #

@@ -1,7 +1,11 @@
 # [Transfer between grid and particles](@id manual)
 
-Transfer macros express the two directions of MPM data movement: particle-to-grid scattering and grid-to-particle gathering.
-The same macro body can include the transfer itself and the local grid or particle calculations that follow it.
+Transfer macros describe how quantities move between particles and grid nodes.
+[`@P2G`](@ref) evaluates particle-to-grid operations, such as scattering mass, momentum, or internal force to the grid.
+[`@G2P`](@ref) evaluates grid-to-particle operations, such as updating particle velocity, position, or deformation state from grid values.
+
+Inside a transfer macro, grid fields, particle fields, and basis weights are written with indexed notation.
+This notation keeps the code close to the transfer equations while letting Tesserae choose the execution backend, including sequential CPU execution, threaded CPU execution, and GPU kernels.
 
 ## Transfer macros
 

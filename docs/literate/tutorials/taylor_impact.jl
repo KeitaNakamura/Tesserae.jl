@@ -8,6 +8,8 @@
 # | ----------- | ------------ | ----------------------------|
 # | 1.5M        | 1.8k         | 6 min (8 threads)           |
 #
+# The VTK output is written to `output/taylor_impact`.
+#
 # This tutorial uses a Taylor impact test to demonstrate multi-threaded MPM simulation.
 #
 

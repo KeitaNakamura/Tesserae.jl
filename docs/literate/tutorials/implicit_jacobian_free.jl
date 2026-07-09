@@ -8,6 +8,8 @@
 # | ----------- | ------------ | --------------------------- |
 # | 26k         | 300          | 1 min                       |
 #
+# The VTK output is written to `output/implicit_jacobian_free`.
+#
 # This tutorial solves an implicit MPM problem with a Jacobian-free Newton--Krylov method.
 # The linear solve is written as a matrix-free operator.
 

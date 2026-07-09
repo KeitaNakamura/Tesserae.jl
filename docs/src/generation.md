@@ -1,7 +1,11 @@
 # Grid and particle generation
 
-Grids and particles are generated from a mesh and a property type.
-For a grid, the first field is the coordinate field and is backed by the mesh itself.
+Grid and particle generation starts from the fields that each object should carry.
+In Tesserae, those fields are described by a property type, written either as a `struct` or an `@NamedTuple`.
+
+For grids, the property type defines fields stored at background nodes.
+For particles, it defines fields stored on material points.
+The first field is reserved for position: grid positions are backed by the mesh coordinates, while particle positions are filled by the sampling algorithm used in `generate_particles`.
 
 ```@docs
 generate_grid

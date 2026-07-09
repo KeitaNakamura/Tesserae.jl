@@ -8,6 +8,8 @@
 # | ----------- | ------------ | ----------------------------|
 # | 19k         | 8k           | 20 sec                      |
 #
+# The VTK output is written to `output/collapse`.
+#
 # This tutorial simulates the collapse of a sand column using a Drucker--Prager material model.
 # The full simulation is shown first, followed by the material update used inside `main`.
 

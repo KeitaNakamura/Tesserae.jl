@@ -31,7 +31,9 @@ If you are new to Tesserae, start with the [Getting started](@ref) tutorial. It 
 5. Transfer grid data back to particles with [`@G2P`](@ref).
 6. Update particle state and write or plot results.
 
-After that, the [Transfer schemes](@ref) tutorial is a good next step for comparing FLIP, APIC, TPIC, and XPIC. For larger simulations, see [Multi-threading](@ref) and [GPU computing](@ref).
+After that, the [Transfer schemes](@ref) tutorial is a good next step for comparing FLIP, APIC, TPIC, and XPIC.
+The [Manual overview](@ref manual_overview) connects the tutorial workflow to the individual API pages.
+For larger simulations, see [Multi-threading](@ref) and [GPU computing](@ref).
 
 ## Installation
 
