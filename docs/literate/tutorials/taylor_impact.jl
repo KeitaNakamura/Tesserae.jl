@@ -6,7 +6,7 @@
 #
 # | # Particles | # Iterations | Execution time (w/o output) |
 # | ----------- | ------------ | ----------------------------|
-# | 1.5M        | 1.8k         | 6 min (8 threads)           |
+# | 1.5M        | 1.8k         | 5 min (8 threads)           |
 #
 # The VTK output is written to `output/taylor_impact`.
 #
@@ -243,65 +243,152 @@ end
 #
 # The following results were obtained using 8 threads (started with `julia -t8`).
 #
+# ### Intel Core Ultra 9 285K
+#
 # ```julia
 # julia> versioninfo()
-# Julia Version 1.11.5
-# Commit 760b2e5b739 (2025-04-14 06:53 UTC)
+# Julia Version 1.12.6
+# Commit 15346901f00 (2026-04-09 19:20 UTC)
 # Build Info:
-#   Official https://julialang.org/ release
+#   Official https://julialang.org release
+# Platform Info:
+#   OS: Linux (x86_64-linux-gnu)
+#   CPU: 24 × Intel(R) Core(TM) Ultra 9 285K
+#   WORD_SIZE: 64
+#   LLVM: libLLVM-18.1.7 (ORCJIT, arrowlake-s)
+#   GC: Built with stock GC
+# Threads: 8 default, 1 interactive, 8 GC (on 24 virtual cores)
+#
+# julia> main()
+# length(particles) = 1472942
+# Progress: 100%|█████████████████████████████████████████| Time: 0:08:03
+#    Iterations: 1,833
+# Wall time/step:
+#   Range (min … max): 0.22  s … 8.60  s
+#   Mean ± σ:          0.26  s ± 0.32  s
+# ──────────────────────────────────────────────────────────────────────────────────────
+#                                              Time                    Allocations
+#                                     ───────────────────────   ────────────────────────
+#          Tot / % measured:                484s /  99.8%           17.5GiB /  99.6%
+#
+# Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+# ──────────────────────────────────────────────────────────────────────────────────────
+# Particle computation         1.83k     179s   37.1%  97.8ms    406MiB    2.3%   227KiB
+# Update basis weights         1.83k    87.4s   18.1%  47.7ms    681MiB    3.8%   380KiB
+# P2G transfer                 1.83k    72.5s   15.0%  39.5ms    152MiB    0.8%  84.7KiB
+# G2P transfer                 1.83k    62.0s   12.8%  33.8ms   46.5MiB    0.3%  26.0KiB
+# Write results                   25    55.1s   11.4%   2.20s   8.16GiB   46.8%   334MiB
+# Grid computation             1.83k    10.0s    2.1%  5.48ms   79.9MiB    0.4%  44.6KiB
+# Update timestep              1.83k    5.77s    1.2%  3.15ms   61.7MiB    0.3%  34.5KiB
+# Apply boundary conditions    1.83k    4.93s    1.0%  2.69ms   7.49GiB   42.9%  4.19MiB
+# Update thread partition      1.83k    4.24s    0.9%  2.31ms   79.1MiB    0.4%  44.2KiB
+# Reorder particles               25    1.64s    0.3%  65.7ms    329MiB    1.8%  13.1MiB
+# ──────────────────────────────────────────────────────────────────────────────────────
+# ```
+#
+# ### Apple M2 Ultra
+#
+# ```julia
+# julia> versioninfo()
+# Julia Version 1.12.6
+# Commit 15346901f00 (2026-04-09 19:20 UTC)
+# Build Info:
+#   Official https://julialang.org release
 # Platform Info:
 #   OS: macOS (arm64-apple-darwin24.0.0)
 #   CPU: 24 × Apple M2 Ultra
 #   WORD_SIZE: 64
-#   LLVM: libLLVM-16.0.6 (ORCJIT, apple-m2)
-# Threads: 8 default, 0 interactive, 4 GC (on 16 virtual cores)
+#   LLVM: libLLVM-18.1.7 (ORCJIT, apple-m2)
+#   GC: Built with stock GC
+# Threads: 8 default, 1 interactive, 8 GC (on 16 virtual cores)
 #
 # julia> main()
-# length(particles) = 1526888
-# Progress: 100%|███████████████████████████████████████| Time: 0:07:01
-#       Elapsed: 0:07:01
-#    Iterations: 1,831
-#         Speed: 0.18  s/it
+# length(particles) = 1472942
+# Progress: 100%|█████████████████████████████████████████| Time: 0:06:11
+#    Iterations: 1,833
+# Wall time/step:
+#   Range (min … max): 0.15  s … 8.95  s
+#   Mean ± σ:          0.20  s ± 0.42  s
 # ──────────────────────────────────────────────────────────────────────────────────────
 #                                              Time                    Allocations
 #                                     ───────────────────────   ────────────────────────
-#          Tot / % measured:                422s /  99.7%           21.1GiB /  99.9%
+#          Tot / % measured:                371s /  99.8%           17.6GiB /  99.4%
 #
 # Section                     ncalls     time    %tot     avg     alloc    %tot      avg
 # ──────────────────────────────────────────────────────────────────────────────────────
-# Particle computation         1.83k     229s   54.5%   125ms   12.4MiB    0.1%  6.91KiB
-# Write results                   25    79.2s   18.8%   3.17s   7.08GiB   33.5%   290MiB
-# G2P transfer                 1.83k    35.7s    8.5%  19.5ms   12.8MiB    0.1%  7.14KiB
-# P2G transfer                 1.83k    33.2s    7.9%  18.1ms   1.94GiB    9.2%  1.09MiB
-# Update basis weights         1.83k    26.9s    6.4%  14.7ms   16.4MiB    0.1%  9.20KiB
-# Grid computation             1.83k    9.53s    2.3%  5.21ms     0.00B    0.0%    0.00B
-# Update timestep              1.83k    3.24s    0.8%  1.77ms   10.9MiB    0.1%  6.11KiB
-# Reorder particles               25    1.81s    0.4%  72.5ms   11.8GiB   55.7%   482MiB
-# Update thread partition      1.83k    1.79s    0.4%   976μs   59.1MiB    0.3%  33.0KiB
-# Apply boundary conditions    1.83k    126ms    0.0%  69.1μs    229MiB    1.1%   128KiB
+# Particle computation         1.83k     198s   53.5%   108ms    408MiB    2.3%   228KiB
+# Write results                   25    81.3s   22.0%   3.25s   8.19GiB   46.8%   335MiB
+# P2G transfer                 1.83k    27.4s    7.4%  14.9ms    153MiB    0.9%  85.4KiB
+# G2P transfer                 1.83k    27.1s    7.3%  14.8ms   48.0MiB    0.3%  26.8KiB
+# Update basis weights         1.83k    17.7s    4.8%  9.66ms    695MiB    3.9%   388KiB
+# Grid computation             1.83k    9.58s    2.6%  5.23ms   81.2MiB    0.5%  45.4KiB
+# Apply boundary conditions    1.83k    5.16s    1.4%  2.81ms   7.50GiB   42.8%  4.19MiB
+# Update thread partition      1.83k    1.76s    0.5%   961μs   79.6MiB    0.4%  44.5KiB
+# Update timestep              1.83k    1.57s    0.4%   858μs   61.1MiB    0.3%  34.1KiB
+# Reorder particles               25    851ms    0.2%  34.0ms    341MiB    1.9%  13.6MiB
 # ──────────────────────────────────────────────────────────────────────────────────────
 # ```
 #
 # ## Scalability
+#
+# The scalability depends strongly on the memory system. Apple's
+# [M2 Ultra](https://www.apple.com/newsroom/2023/06/apple-introduces-m2-ultra/)
+# provides 800 GB/s of unified memory bandwidth, whereas Intel's
+# [Core Ultra 9 285K](https://www.intel.com/content/www/us/en/products/sku/241060/intel-core-ultra-9-processor-285k-36m-cache-up-to-5-70-ghz/specifications.html)
+# specifies two DDR5-6400 memory channels, corresponding to about 102 GB/s of
+# theoretical peak bandwidth. This difference matters here because the basis-weight
+# update and P2G/G2P transfer kernels perform many reads and writes compared with the
+# amount of arithmetic work, so they can become limited by memory bandwidth. The
+# particle constitutive update is more compute-heavy and tends to scale better with
+# thread count.
+#
+# ### Intel Core Ultra 9 285K
 #
 # ```@example
 # using Plots                                             # hide
 # plot(xlabel = "Number of threads", ylabel = "Speedup",  # hide
 #      xlims = (0,18), ylims = (0,18), palette = :RdBu_4) # hide
 # plot!([1, 2, 4, 8, 16],                                 # hide
-#       93.5 ./ [93.5, 46.8, 25.6, 14.7, 8.05],           # hide
+#       179.0 ./ [179.0, 108.0, 98.3, 87.4, 85.5],        # hide
 #       label = "Update basis weights", marker = "o")     # hide
 # plot!([1, 2, 4, 8, 16],                                 # hide
-#       108.0 ./ [108.0, 59.7, 31.9, 18.1, 12.6],         # hide
+#       224.0 ./ [224.0, 152.0, 93.4, 72.5, 63.0],        # hide
 #       label = "P2G transfer", marker = "o")             # hide
 # plot!([1, 2, 4, 8, 16],                                 # hide
-#       145.0 ./ [145.0, 73.6, 37.6, 19.5, 11.5],         # hide
+#       195.0 ./ [195.0, 126.0, 76.2, 62.0, 54.7],        # hide
 #       label = "G2P transfer", marker = "o")             # hide
 # plot!([1, 2, 4, 8, 16],                                 # hide
-#       915.0 ./ [915.0, 477.0, 248.0, 125.0, 66.3],      # hide
+#       1350.0 ./ [1350.0, 678.0, 349.0, 179.0, 131.0],   # hide
 #       label = "Particle computation", marker = "o")     # hide
 # plot!([1, 2, 4, 8, 16],                                 # hide
-#       2331.6 ./ [2331.6, 1228.1, 649.5, 342.8, 196.9],  # hide
+#       1971.5 ./ [1971.5, 1093.3, 641.2, 428.9, 362.3],  # hide
+#       label = "Total (w/o output)", color = "black",    # hide
+#       marker = "o")                                     # hide
+# plot!([1, 17], [1, 17],                                 # hide
+#       color = "black", linestyle = :dash,               # hide
+#       label = "")                                       # hide
+# ```
+#
+# ### Apple M2 Ultra
+#
+# ```@example
+# using Plots                                             # hide
+# plot(xlabel = "Number of threads", ylabel = "Speedup",  # hide
+#      xlims = (0,18), ylims = (0,18), palette = :RdBu_4) # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       101.0 ./ [101.0, 56.0, 32.7, 17.7, 13.1],         # hide
+#       label = "Update basis weights", marker = "o")     # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       146.0 ./ [146.0, 83.2, 45.8, 27.4, 19.9],         # hide
+#       label = "P2G transfer", marker = "o")             # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       197.0 ./ [197.0, 102.0, 51.8, 27.1, 15.5],        # hide
+#       label = "G2P transfer", marker = "o")             # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       1450.0 ./ [1450.0, 737.0, 391.0, 198.0, 106.0],   # hide
+#       label = "Particle computation", marker = "o")     # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       1915.8 ./ [1915.8, 1003.0, 543.2, 289.7, 174.0],  # hide
 #       label = "Total (w/o output)", color = "black",    # hide
 #       marker = "o")                                     # hide
 # plot!([1, 17], [1, 17],                                 # hide
