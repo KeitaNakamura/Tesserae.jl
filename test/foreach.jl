@@ -20,6 +20,19 @@
         @test all(i -> grid.v[i] == grid.x[i] - grid.mv[i] / grid.m[i], eachindex(grid))
     end
 
+    @testset "Grid argument forms" begin
+        mesh = CartesianMesh(1.0, (0,2), (0,2))
+        grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
+
+        @foreach begin
+            grid=>i
+        end begin
+            m[i] = 1
+        end
+
+        @test all(i -> grid.m[i] == 1, eachindex(grid))
+    end
+
     @testset "Grid slices" begin
         mesh = CartesianMesh(1.0, (0,2), (0,2), (0,2))
         grid = generate_grid(@NamedTuple{x::Vec{3,Float64}, m::Float64}, mesh)
