@@ -93,7 +93,7 @@ end
     read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
 
 Read a Gmsh physical group and return `name => mesh`, where `mesh` is an
-`UnstructuredMesh` built from the group's elements.
+`FEMesh` built from the group's elements.
 """
 function read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
     elements = Dict{Tesserae.Shape, Vector}()
@@ -111,7 +111,7 @@ function read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
         error("physical group \"$name\" must contain exactly one cell shape; found $(length(elements)): $shapes")
     end
     shape, connectivities = only(elements)
-    name => Tesserae.UnstructuredMesh(shape, nodes, connectivities)
+    name => Tesserae.FEMesh(shape, nodes, connectivities)
 end
 
 function _cellshape_dim(mesh)
@@ -179,11 +179,11 @@ end
     read_gmsh_physical_groups()
 
 Read all physical groups from the current Gmsh model and return a dictionary
-from physical group name to `UnstructuredMesh`.
+from physical group name to `FEMesh`.
 """
 function read_gmsh_physical_groups(; reorient_boundary=false)
     nodes, nodeindices = read_gmsh_nodes()
-    meshes = Dict{String, Tesserae.UnstructuredMesh}()
+    meshes = Dict{String, Tesserae.FEMesh}()
     for (dim, physical_tag) in Gmsh.gmsh.model.getPhysicalGroups()
         name, mesh = read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
         isempty(name) && (name = "physical_group[$dim,$physical_tag]")

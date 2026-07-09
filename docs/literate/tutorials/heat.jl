@@ -5,7 +5,7 @@
 # ```
 #
 # This short example solves a heat equation with the experimental FEM workflow.
-# It shows how to generate an unstructured mesh, assemble a scalar stiffness matrix, and export the result.
+# It shows how to generate a finite-element mesh, assemble a scalar stiffness matrix, and export the result.
 
 using Tesserae
 using LinearAlgebra
@@ -23,8 +23,8 @@ function main()
         V :: Float64         # Weighted det(J) for Gauss–Legendre quadrature
     end
 
-    ## FEM mesh using UnstructuredMesh
-    mesh = UnstructuredMesh(CartesianMesh(0.1, (-1,1), (-1,1)))
+    ## Finite-element mesh
+    mesh = FEMesh(CartesianMesh(0.1, (-1,1), (-1,1)))
     grid = generate_grid(GridProp, mesh)
 
     ## Integration points

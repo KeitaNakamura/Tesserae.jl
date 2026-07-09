@@ -49,7 +49,7 @@ function _vtk_grid(vtk, mesh::CartesianMesh; kwargs...)
     WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh); kwargs...)
 end
 
-function _vtk_grid(vtk, mesh::UnstructuredMesh; kwargs...)
+function _vtk_grid(vtk, mesh::FEMesh; kwargs...)
     shape = cellshape(mesh)
     vtk_cells = WriteVTK.MeshCell[]
     celltype = to_vtk_celltype(shape)

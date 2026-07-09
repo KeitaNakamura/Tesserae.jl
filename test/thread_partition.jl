@@ -105,7 +105,7 @@
         check_particle_blocks(moving_bs, mesh, moving_xₚ)
     end
     @testset "CellStrategy" begin
-        mesh = UnstructuredMesh(CartesianMesh(0.5, (0,2), (0,2)))
+        mesh = FEMesh(CartesianMesh(0.5, (0,2), (0,2)))
         partition = ThreadPartition(mesh)
         strat = Tesserae.strategy(partition)
         groups = Tesserae.threadsafe_groups(strat)

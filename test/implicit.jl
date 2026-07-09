@@ -300,16 +300,16 @@ end
     @test extract(view, A, smap, :) == view(A, Tesserae.dofs(smap), :)
 end
 
-@testset "Unstructured sparse matrix pattern" begin
+@testset "FEM sparse matrix pattern" begin
     cmesh = CartesianMesh(1, (0,1), (0,1))
-    quad4 = UnstructuredMesh(Tesserae.Quad4(), cmesh)
-    quad9 = UnstructuredMesh(Tesserae.Quad9(), cmesh)
+    quad4 = FEMesh(Tesserae.Quad4(), cmesh)
+    quad9 = FEMesh(Tesserae.Quad9(), cmesh)
 
     A = create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
     @test size(A) == (2length(quad9), length(quad4))
     @test Tesserae.SparseArrays.nnz(A) == prod(size(A))
 
-    shifted = UnstructuredMesh(Tesserae.Quad4(), CartesianMesh(1, (2,3), (2,3)))
+    shifted = FEMesh(Tesserae.Quad4(), CartesianMesh(1, (2,3), (2,3)))
     B = create_sparse_matrix((quad9, shifted); ndofs=(2, 1))
     @test size(B) == (2length(quad9), length(shifted))
     @test iszero(Tesserae.SparseArrays.nnz(B))

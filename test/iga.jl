@@ -354,7 +354,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         end
 
         cmesh = CartesianMesh(0.1, (-1,1), (-1,1))
-        fem = heat_norm(UnstructuredMesh(cmesh))
+        fem = heat_norm(FEMesh(cmesh))
         @test fem ≈ 3.3077439126413104
         @test heat_norm(IGAMesh(cmesh; degree=Linear())) ≈ fem
         @test heat_norm(IGAMesh(cmesh; degree=Quadratic())) ≈ 3.322343871533971

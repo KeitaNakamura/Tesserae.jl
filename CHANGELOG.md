@@ -43,6 +43,8 @@ macros.
   (#130)
 - `feupdate!` now uses a single `measure` output keyword for domain and boundary
   integration. The old `volume` and `area` output keywords were removed.
+- The finite-element mesh type has been renamed from `UnstructuredMesh` to
+  `FEMesh`.
 
 ### Deprecations and Migration
 
@@ -54,6 +56,9 @@ macros.
 - Use partitionless `@P2G` on GPU. `ThreadPartition` is only for CPU scheduling.
 - Configure sparse/threading block size per mesh with
   `CartesianMesh(...; block_size_log2=Val(n))`.
+- Prefer `supportnodes` over `neighboringnodes` for mesh and basis-weight
+  support queries. `neighboringnodes` remains available as a deprecated name.
+  (#155)
 
 ### Added
 

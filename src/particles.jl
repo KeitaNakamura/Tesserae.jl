@@ -21,10 +21,10 @@ struct CellSampling{V <: Union{AbstractVector{<: Vec}, Tuple{Vararg{Vec}}}} <: S
     qpts::V
 end
 
-cell_sampling(mesh::UnstructuredMesh) = CellSampling(quadpoints(cellshape(mesh)))
+cell_sampling(mesh::FEMesh) = CellSampling(quadpoints(cellshape(mesh)))
 cell_sampling(mesh::IGAMesh) = CellSampling(quadrature_rule(igabasis(mesh)).points)
 
-function generate_points(alg::CellSampling, mesh::Union{UnstructuredMesh, IGAMesh})
+function generate_points(alg::CellSampling, mesh::Union{FEMesh, IGAMesh})
     qpts = alg.qpts
     points = Matrix{eltype(mesh)}(undef, length(qpts), ncells(mesh))
     for cell in cells(mesh)
@@ -35,7 +35,7 @@ function generate_points(alg::CellSampling, mesh::Union{UnstructuredMesh, IGAMes
     points
 end
 
-function cell_point(mesh::UnstructuredMesh, cell, qpt)
+function cell_point(mesh::FEMesh, cell, qpt)
     indices = supportnodes(mesh, cell)
     N = value(cellshape(mesh), qpt)
     sum(N .* mesh[indices])
@@ -158,7 +158,7 @@ function generate_particles(
 end
 
 function generate_particles(
-        ::Type{ParticleProp}, mesh::Union{UnstructuredMesh, IGAMesh};
+        ::Type{ParticleProp}, mesh::Union{FEMesh, IGAMesh};
         alg::SamplingAlgorithm=cell_sampling(mesh)) where {ParticleProp}
     points = generate_points(alg, mesh)
     particles = _generate_particles(ParticleProp, points)

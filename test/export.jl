@@ -17,7 +17,7 @@ using FileIO, MeshIO
 
     mktempdir() do dir
         cd(dir) do
-            files = openvtk("quad4", UnstructuredMesh(Tesserae.Quad4(), CartesianMesh(1, (0,1), (0,1)))) do vtk
+            files = openvtk("quad4", FEMesh(Tesserae.Quad4(), CartesianMesh(1, (0,1), (0,1)))) do vtk
                 vtk["temperature"] = [1.0, 2.0, 3.0, 4.0]
             end
             @test length(files) == 1

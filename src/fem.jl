@@ -7,7 +7,7 @@ end
 end
 
 function feupdate!(
-        weights::AbstractArray{<: BasisWeight{S}}, mesh::UnstructuredMesh{S, dim},
+        weights::AbstractArray{<: BasisWeight{S}}, mesh::FEMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         measure::Union{Nothing, AbstractArray} = nothing,
         quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
@@ -27,8 +27,8 @@ function feupdate!(
     _feupdate!(Val(:domain), weights, mesh, nodes, measure, nothing, qpts, qwts)
 end
 
-@inline _basis_values_and_gradients(mesh::UnstructuredMesh, qdata, cell, indices, p) = qdata[p]
-@inline _quadrature_weight(mesh::UnstructuredMesh, qdata, qwts, cell, p) = qwts[p]
+@inline _basis_values_and_gradients(mesh::FEMesh, qdata, cell, indices, p) = qdata[p]
+@inline _quadrature_weight(mesh::FEMesh, qdata, qwts, cell, p) = qwts[p]
 @inline function _basis_values_and_gradients(mesh::IGAMesh, qdata, cell, indices, p)
     patch = patches(mesh, cell.patch)
     ξ = span_point(patch, cell.span, qdata[p])
@@ -100,7 +100,7 @@ end
 end
 
 function feupdate!(
-        weights::AbstractArray{<: BasisWeight{S}}, mesh::UnstructuredMesh{S, dim},
+        weights::AbstractArray{<: BasisWeight{S}}, mesh::FEMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         measure::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
         quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
