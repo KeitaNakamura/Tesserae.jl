@@ -114,17 +114,18 @@ This is also how boundary conditions should be applied on GPU.
 For example, on a 3D grid, a CPU slip floor boundary condition can be written as
 
 ```julia
-for i in eachindex(grid)[:, :, begin]
+for i in eachindex(grid)[:,:,begin]
     grid.v[i] = grid.v[i] .* (true, true, false)
 end
 ```
 
-On GPU, write the same operation as a broadcast:
+On GPU, write the same operation with [`@foreach`](@ref), which dispatches the
+boundary slice as a GPU kernel:
 
 ```julia
-slip_floor(v) = v .* (true, true, false)
-
-@. grid_gpu.v[:, :, begin] = slip_floor(grid_gpu.v[:, :, begin])
+@foreach grid_gpu[:,:,begin]=>i begin
+    v[i] = v[i] .* (true, true, false)
+end
 ```
 
 ## Floating-point type
@@ -205,8 +206,8 @@ The main changes are:
 
 - Remove CPU threading utilities such as `@threaded`, `ThreadPartition`, and `reorder_particles!`.
 - Move the simulation objects to GPU with `gpu_preserve` after CPU-side setup.
-- Keep grid and particle calculations inside GPU operations, using `@P2G`, `@G2P`, and broadcasts.
-- Rewrite the slip floor boundary condition as a broadcast to avoid scalar indexing on GPU arrays.
+- Keep grid and particle calculations inside GPU operations, using `@P2G`, `@G2P`, and `@foreach`.
+- Rewrite the slip floor boundary condition with a boundary-slice `@foreach` loop to avoid scalar indexing on GPU arrays.
 - Copy data back with `cpu` only when writing VTK output.
 
 For reference, the compute-only runtime on an NVIDIA GeForce RTX 5090, excluding VTK output, is:
@@ -307,9 +308,10 @@ function main()
                 v[i]  = vⁿ[i] + Δt * f[i] / m[i] * !iszero(m[i])
             end
 
-            slip_floor(v) = v .* (true, true, false)
-            @. grid.vⁿ[:, :, begin] = slip_floor(grid.vⁿ[:, :, begin])
-            @. grid.v[:, :, begin] = slip_floor(grid.v[:, :, begin])
+            @foreach grid[:,:,begin]=>i begin
+                vⁿ[i] = vⁿ[i] .* (true, true, false)
+                v[i] = v[i] .* (true, true, false)
+            end
 
             @G2P grid=>i particles=>p weights=>ip begin
                 v[p] += @∑ w[ip] * (v[i] - vⁿ[i])
