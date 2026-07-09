@@ -8,7 +8,7 @@ A simulation typically shares one mesh between the grid, particles, and basis we
 This keeps coordinates and particle-grid connectivity consistent across the calculation.
 
 !!! info
-    Currently, only the Cartesian mesh is available.
+    MPM workflows currently use [`CartesianMesh`](@ref). [`FEMesh`](@ref) is used for finite-element calculations; see [Finite element calculations](fem.md).
 
 ## Cartesian mesh
 

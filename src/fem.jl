@@ -6,6 +6,40 @@ end
     SVector(ntuple(i->A[i,:], Val(N)))
 end
 
+"""
+    feupdate!(weights, mesh[, nodes]; measure=nothing, quadrature_rule=quadrature_rule(cellshape(mesh)))
+    feupdate!(weights, boundary_mesh[, nodes]; measure=nothing, normal=nothing, quadrature_rule=quadrature_rule(cellshape(boundary_mesh)))
+
+Fill finite-element basis data at quadrature points.
+
+`weights` is usually created by [`generate_basis_weights`](@ref) with dimensions
+matching the number of quadrature points per cell and the number of cells in
+`mesh`. For a domain mesh, `feupdate!` stores the basis values and physical
+gradients in each [`BasisWeight`](@ref). If `measure` is provided, it is filled
+with the quadrature weight multiplied by the Jacobian measure, such as `dV` in
+3D or `dA` in 2D.
+
+For a lower-dimensional boundary mesh, `feupdate!` stores basis values for
+boundary integration. If `normal` is provided, it is filled with unit normals
+computed from the boundary Jacobian. Normals are available for 2D curves and 3D
+surfaces; a 3D line has no unique normal and throws an `ArgumentError`.
+
+Pass `nodes` to evaluate the geometry on coordinates different from `mesh`
+itself, for example when assembling on a deformed configuration.
+
+# Example
+```julia
+mesh = FEMesh(CartesianMesh(0.1, (-1, 1), (-1, 1)))
+points = generate_particles(@NamedTuple{x::Vec{2, Float64}, V::Float64}, mesh)
+weights = generate_basis_weights(mesh, size(points); name=Val(:N))
+
+feupdate!(weights, mesh; measure=points.V)
+```
+
+After the update, `N[ip]` and `∇N[ip]` can be used inside transfer macros such
+as [`@P2G`](@ref) and [`@P2G_Matrix`](@ref) to assemble FEM vectors and
+matrices.
+"""
 function feupdate!(
         weights::AbstractArray{<: BasisWeight{S}}, mesh::FEMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;

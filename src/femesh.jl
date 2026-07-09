@@ -1,7 +1,25 @@
 """
     FEMesh(shape, nodes, cellsupports)
+    FEMesh(cartesian_mesh)
+    FEMesh(shape, cartesian_mesh)
 
 Create a finite-element mesh.
+
+`shape` is the cell shape, `nodes` stores the nodal coordinates, and
+`cellsupports` stores the node indices of each cell. `cells(mesh)` iterates over
+cell indices, while `supportnodes(mesh, cell)` returns the nodes used by one
+cell.
+
+The Cartesian constructors are convenience constructors for structured test
+meshes and examples. `FEMesh(cartesian_mesh)` uses the default first-order cell
+shape for the dimension: `Line2`, `Quad4`, or `Hex8`. Passing an explicit
+`shape` allows triangular, tetrahedral, and higher-order cells to be generated
+from the Cartesian grid.
+
+`FEMesh` is used by the finite-element workflow. Use
+[`generate_particles`](@ref) to create quadrature points,
+[`generate_basis_weights`](@ref) to create element-local basis storage, and
+[`feupdate!`](@ref) to fill the quadrature weights and basis values.
 """
 struct FEMesh{S <: Shape, dim, T, L} <: AbstractMesh{dim, T, 1}
     shape::S

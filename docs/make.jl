@@ -32,7 +32,7 @@ makedocs(;
             "Incompressible fluid flow" => "tutorials/dam_break.md",
             "tutorials/rigid_body_contact.md",
             "tutorials/taylor_impact.md",
-            "FEM (experimental)" => [
+            "FEM" => [
                 "tutorials/heat.md"
             ],
         ],
@@ -52,6 +52,7 @@ makedocs(;
             ]
             "Advanced methods" => [
                 "implicit_utils.md"
+                "fem.md"
             ]
         ]
     ],
