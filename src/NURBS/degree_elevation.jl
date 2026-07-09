@@ -1,11 +1,10 @@
 """
     elevate(net::ControlNet, degree::Int; direction::Int) -> ControlNet
-    elevate(net::ControlNet, degrees::Tuple{Vararg{Int}}) -> ControlNet
-    elevate(net::ControlNet; direction::Int, ntimes::Int=1) -> ControlNet
 
-Raise the spline degree in one or more parametric directions without changing
-the represented geometry. Rational nets are elevated in homogeneous
-coordinates, so both control points and weights are transformed.
+Raise one parametric direction of `net` to the target polynomial `degree`
+without changing the represented geometry. The target degree must not be lower
+than the current degree. Rational nets are elevated in homogeneous coordinates,
+so both control points and weights are transformed.
 """
 function elevate(net::ControlNet{dim, pdim, T}, degree::Int; direction::Int) where {dim, pdim, T}
     check_parametric_direction(direction, pdim)
@@ -15,6 +14,14 @@ function elevate(net::ControlNet{dim, pdim, T}, degree::Int; direction::Int) whe
     points = elevate_values(homogeneous_points(net), axis, axis_new, direction)
     rational_control_net(Base.setindex(net.axes, axis_new, direction), points)
 end
+
+"""
+    elevate(net::ControlNet, degrees::Tuple{Vararg{Int}}) -> ControlNet
+
+Raise each parametric direction of `net` to the corresponding target polynomial
+degree. The `d`-th entry of `degrees` is the target degree for parametric
+direction `d`.
+"""
 function elevate(net::ControlNet{dim, pdim}, degrees::NTuple{pdim, Int}) where {dim, pdim}
     result = net
     for direction in 1:pdim
@@ -22,6 +29,13 @@ function elevate(net::ControlNet{dim, pdim}, degrees::NTuple{pdim, Int}) where {
     end
     result
 end
+
+"""
+    elevate(net::ControlNet; direction::Int, ntimes::Int=1) -> ControlNet
+
+Raise one parametric direction of `net` by `ntimes` degree increments. This is
+equivalent to raising the direction to `current_degree + ntimes`.
+"""
 function elevate(net::ControlNet{dim, pdim}; direction::Int, ntimes::Int=1) where {dim, pdim}
     check_parametric_direction(direction, pdim)
     ntimes ≥ 0 || throw(ArgumentError("degree increment must be non-negative"))
@@ -31,8 +45,9 @@ end
 """
     elevate(axis::BSplineAxis, degree::Int) -> BSplineAxis
 
-Raise the polynomial degree of a B-spline axis without changing its break
-points or continuity.
+Raise `axis` to the target polynomial `degree` without changing its break
+points or continuity. The target degree must not be lower than the current
+degree.
 """
 function elevate(axis::BSplineAxis{T}, degree::Int) where {T}
     p_old = axis.degree
