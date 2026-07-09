@@ -8,6 +8,8 @@
 # | ----------- | ------------ | --------------------------- |
 # | 600         | 300          | 2 sec                       |
 #
+# The VTK output is written to `output/implicit_jacobian_based`.
+#
 # This tutorial assembles the Jacobian matrix explicitly for an implicit MPM problem.
 # It is useful when the sparse matrix structure and boundary-condition handling should be visible.
 

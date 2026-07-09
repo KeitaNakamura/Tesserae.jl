@@ -79,7 +79,7 @@ x = cpu(particles_gpu.x)
 ## GPU arrays
 
 After calling `gpu`, grid fields, particle fields, basis weights, and mesh coordinates in the returned objects are GPU arrays.
-Scalar indexing from CPU code is not allowed:
+Scalar indexing from CPU code falls back to the CPU and is disallowed in non-interactive CUDA.jl execution; see CUDA.jl's [scalar indexing workflow](https://cuda.juliagpu.org/stable/usage/workflow/#UsageWorkflowScalar) for details:
 
 ```julia
 julia> x = gpu(rand(3))
@@ -205,12 +205,14 @@ The main changes are:
 - Rewrite the slip floor boundary condition as a broadcast to avoid scalar indexing on GPU arrays.
 - Copy data back with `cpu` only when writing VTK output.
 
-The following compute-only results were obtained on an NVIDIA GeForce RTX 5090 by disabling VTK output.
+For reference, the compute-only runtime on an NVIDIA GeForce RTX 5090, excluding VTK output, is:
 
 | Precision | # Particles | # Iterations | Execution time (w/o output) |
 | --------- | ----------- | ------------ | ---------------------------- |
 | Float64   | 1.48M       | 1.8k         | 1 min 01 sec                 |
 | Float32   | 1.48M       | 1.8k         | 37 sec                       |
+
+The VTK output is written to `output/taylor_impact_gpu`.
 
 ```julia
 using Tesserae

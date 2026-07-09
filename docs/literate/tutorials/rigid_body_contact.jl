@@ -8,6 +8,8 @@
 # | ----------- | ------------ | ----------------------------|
 # | 14k         | 220k         | 6 min                       |
 #
+# The VTK output is written to `output/rigid_body_contact`.
+#
 # This tutorial simulates a deformable ground layer interacting with a moving rigid disk.
 # The contact force is computed on particles and then coupled to the usual MPM update.
 

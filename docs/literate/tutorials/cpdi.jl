@@ -8,6 +8,8 @@
 # | ----------- | ------------ | --------------------------- |
 # | 27k         | 500          | 15 sec                      |
 #
+# The VTK output is written to `output/cpdi`.
+#
 # This tutorial uses convected particle domain interpolation (CPDI) for a large-deformation 3D bar problem[^1].
 #
 # [^1]: [Sadeghirad, A., Brannon, R.M. and Burghardt, J., 2011. A convected particle domain interpolation technique to extend applicability of the material point method for problems involving massive deformations. International Journal for numerical methods in Engineering, 86(12), pp.1435-1456.](https://doi.org/10.1002/nme.3110)
