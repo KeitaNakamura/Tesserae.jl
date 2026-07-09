@@ -20,6 +20,58 @@
         @test all(i -> grid.v[i] == grid.x[i] - grid.mv[i] / grid.m[i], eachindex(grid))
     end
 
+    @testset "Grid slices" begin
+        mesh = CartesianMesh(1.0, (0,2), (0,2), (0,2))
+        grid = generate_grid(@NamedTuple{x::Vec{3,Float64}, m::Float64}, mesh)
+        indices = CartesianIndices(size(grid))
+
+        fillzero!(grid.m)
+        @foreach grid[:,:,begin]=>i begin
+            m[i] = 1
+        end
+
+        @test all(i -> grid.m[i] == (i[3] == 1 ? 1 : 0), indices)
+
+        fillzero!(grid.m)
+        @threaded @foreach grid[end,:,:]=>i begin
+            m[i] = 2
+        end
+
+        @test all(i -> grid.m[i] == (i[1] == size(grid, 1) ? 2 : 0), indices)
+
+        fillzero!(grid.m)
+        @foreach grid[begin+1:end-1,:,:]=>i begin
+            m[i] = 3
+        end
+
+        @test all(i -> grid.m[i] == (1 < i[1] < size(grid, 1) ? 3 : 0), indices)
+
+        fillzero!(grid.m)
+        @foreach grid[begin:2:end,:,end]=>i begin
+            m[i] = 4
+        end
+
+        @test all(i -> grid.m[i] == (isodd(i[1]) && i[3] == size(grid, 3) ? 4 : 0), indices)
+    end
+
+    @testset "Grid slice bounds" begin
+        mesh = CartesianMesh(1.0, (0,2), (0,2))
+        grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
+
+        @test_throws BoundsError @foreach grid[begin-1,:]=>i begin
+            m[i] = 1
+        end
+    end
+
+    @testset "Grid slice dimensions" begin
+        mesh = CartesianMesh(1.0, (0,2), (0,2))
+        grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
+
+        @test_throws ArgumentError @foreach grid[:,:,begin]=>i begin
+            m[i] = 1
+        end
+    end
+
     @testset "Particles" begin
         mesh = CartesianMesh(1.0, (0,2), (0,2))
         ParticleProp = @NamedTuple{x::Vec{2,Float64}, v::Vec{2,Float64}}
@@ -33,6 +85,18 @@
         end
 
         @test particles.x == x0 .+ particles.v .* Δt
+    end
+
+    @testset "Particle slices" begin
+        mesh = CartesianMesh(1.0, (0,2), (0,2))
+        particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, v::Vec{2,Float64}}, mesh; alg=GridSampling())
+        @. particles.v = Vec(0.25, -0.5)
+
+        @foreach particles[begin:end]=>p begin
+            v[p] = -v[p]
+        end
+
+        @test particles.v == fill(Vec(-0.25, 0.5), length(particles))
     end
 
     @testset "Interpolation" begin
@@ -67,5 +131,28 @@
         @test all(i -> grid.v[i] == grid.x[i], active)
         @test all(i -> iszero(grid.m[i]), filter(i -> !Tesserae.isactive(grid.m, i), eachindex(grid.m)))
         @test all(i -> iszero(grid.v[i]), filter(i -> !Tesserae.isactive(grid.v, i), eachindex(grid.v)))
+    end
+
+    @testset "SpGrid slices" begin
+        mesh = CartesianMesh(1.0, (0,8), (0,8))
+        grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)
+        update_sparsity!(grid, trues(Tesserae.nblocks(mesh)))
+
+        @. grid.m = 0
+        @foreach grid[:,begin]=>i begin
+            m[i] = 2
+            v[i] = x[i]
+        end
+
+        active = collect(Tesserae.activeindices(grid.m))
+        @test !isempty(active)
+        @test all(active) do i
+            I = Tesserae.logicalindex(i)
+            if I[2] == 1
+                grid.m[i] == 2 && grid.v[i] == grid.x[i]
+            else
+                iszero(grid.m[i]) && iszero(grid.v[i])
+            end
+        end
     end
 end

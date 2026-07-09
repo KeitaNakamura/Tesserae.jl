@@ -32,6 +32,16 @@ end
 end
 ```
 
+Index the collection argument to visit a slice.
+This is useful for boundary conditions and uses the same CPU, GPU, sparse-grid,
+and threading dispatch as the full loop:
+
+```julia
+@foreach grid[:,:,begin]=>i begin
+    v[i] = v[i] .* (true, true, false)
+end
+```
+
 On dense grids, [`@foreach`](@ref) visits all grid nodes.
 On `SpGrid`, it visits only active sparse nodes.
 When the collection is on GPU, the loop is dispatched as a GPU kernel.
