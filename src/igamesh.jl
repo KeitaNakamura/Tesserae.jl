@@ -49,7 +49,6 @@ _span_count(knot_vector, degree) = count(i -> _has_positive_span(knot_vector, i)
 
 # Repeated knots are continuity markers; only positive knot intervals become cells.
 _span_indices(patch::IGAPatch) = Iterators.filter(span -> _has_positive_span(patch, span), CartesianIndices(_span_ranges(patch)))
-_nsupportnodes(degrees::NTuple{dim, Degree}) where {dim} = prod(degree -> _degree(degree) + 1, degrees)
 
 """
     IGAMesh(patches, controlpoints[, weights])
@@ -61,20 +60,29 @@ struct IGAMesh{dim, pdim, T, Degrees <: NTuple{pdim, Degree}} <: AbstractMesh{di
     patches::Vector{IGAPatch{pdim, T, Degrees}}
     controlpoints::Vector{Vec{dim, T}}
     weights::Union{Nothing, Vector{T}}
+    used_controlpoint_ids::Vector{Int}
     function IGAMesh{dim, pdim, T, Degrees}(patches::Vector{IGAPatch{pdim, T, Degrees}}, controlpoints::Vector{Vec{dim, T}}, weights::Union{Nothing, Vector{T}}) where {dim, pdim, T, Degrees <: NTuple{pdim, Degree}}
         _check_iga_mesh(patches, controlpoints, weights)
-        new{dim, pdim, T, Degrees}(patches, controlpoints, weights)
+        new{dim, pdim, T, Degrees}(patches, controlpoints, weights, _collect_used_controlpoint_ids(patches))
     end
 end
 
 function IGAMesh(patches::Vector{IGAPatch{pdim, T, Degrees}}, controlpoints::Vector{Vec{dim, T}}, weights=nothing) where {dim, T, pdim, Degrees <: NTuple{pdim, Degree}}
-    IGAMesh{dim, pdim, T, Degrees}(patches, controlpoints, _iga_weights(T, weights))
+    IGAMesh{dim, pdim, T, Degrees}(patches, controlpoints, _controlpoint_weights(T, weights))
 end
 
 function IGAMesh(mesh::CartesianMesh{dim, T}; degree::Degree, weights=nothing) where {dim, T}
-    degrees = _uniform_iga_degrees(degree, Val(dim))
-    patch, controlpoints = _iga_patch_from_cartesian_mesh(mesh, degrees)
-    IGAMesh([patch], controlpoints, _iga_weights(T, weights))
+    patch_degrees = _uniform_degrees(degree, Val(dim))
+    patch, controlpoints = _patch_from_cartesian_mesh(mesh, patch_degrees)
+    IGAMesh([patch], controlpoints, _controlpoint_weights(T, weights))
+end
+
+function _collect_used_controlpoint_ids(patches::AbstractVector{<: IGAPatch})
+    nodes = Int[]
+    for patch in patches
+        append!(nodes, patch.controlpoint_ids)
+    end
+    unique!(sort!(nodes))
 end
 
 """
@@ -93,22 +101,22 @@ end
 function IGAMesh(nets::AbstractVector{<: NURBS.ControlNet{dim, pdim, T}}; merge::Bool=false, atol=nothing, rtol=nothing) where {dim, pdim, T}
     isempty(nets) && throw(ArgumentError("control nets must not be empty"))
 
-    degrees = iga_degrees(first(nets))
-    patches = IGAPatch{pdim, T, typeof(degrees)}[]
+    patch_degrees = degrees(first(nets))
+    patches = IGAPatch{pdim, T, typeof(patch_degrees)}[]
     controlpoints = Vec{dim, T}[]
     weights = T[]
     for net in nets
-        iga_degrees(net) == degrees || throw(ArgumentError("control net degrees must match"))
-        controlpoint_ids = iga_controlpoint_ids!(controlpoints, weights, net; merge, atol, rtol)
-        push!(patches, IGAPatch(degrees, iga_knot_vectors(net), controlpoint_ids))
+        degrees(net) == patch_degrees || throw(ArgumentError("control net degrees must match"))
+        ids = controlpoint_ids!(controlpoints, weights, net; merge, atol, rtol)
+        push!(patches, IGAPatch(patch_degrees, knot_vectors(net), ids))
     end
     IGAMesh(patches, controlpoints, weights)
 end
 
-iga_degrees(net::NURBS.ControlNet) = map(axis -> Degree(axis.degree), net.axes)
-iga_knot_vectors(net::NURBS.ControlNet) = map(axis -> copy(axis.knot_vector), net.axes)
+degrees(net::NURBS.ControlNet) = map(axis -> Degree(axis.degree), net.axes)
+knot_vectors(net::NURBS.ControlNet) = map(axis -> copy(axis.knot_vector), net.axes)
 
-function iga_controlpoint_ids!(controlpoints, weights, net::NURBS.ControlNet; merge::Bool, atol, rtol)
+function controlpoint_ids!(controlpoints, weights, net::NURBS.ControlNet; merge::Bool, atol, rtol)
     controlpoint_ids = Array{Int}(undef, size(net.points))
     for I in CartesianIndices(net.points)
         id = merge ? matching_controlpoint(controlpoints, weights, net.points[I], net.weights[I], atol, rtol) : 0
@@ -138,16 +146,16 @@ function approx_equal(a, b, atol, rtol)
     isapprox(a, b; atol, rtol)
 end
 
-_iga_weights(::Type{T}, ::Nothing) where {T} = nothing
-_iga_weights(::Type{T}, weights::AbstractVector) where {T} = Vector{T}(weights)
+_controlpoint_weights(::Type{T}, ::Nothing) where {T} = nothing
+_controlpoint_weights(::Type{T}, weights::AbstractVector) where {T} = Vector{T}(weights)
 
-function _uniform_iga_degrees(degree::Degree, ::Val{dim}) where {dim}
+function _uniform_degrees(degree::Degree, ::Val{dim}) where {dim}
     p = _degree(degree)
     p < 1 && throw(ArgumentError("degree must be positive"))
     nfill(degree, Val(dim))
 end
 
-function _iga_patch_from_cartesian_mesh(mesh::CartesianMesh, degrees)
+function _patch_from_cartesian_mesh(mesh::CartesianMesh, degrees)
     knot_vectors = map(_open_knot_vector_from_axis, mesh.axes, degrees)
     controlpoint_axes = map(_greville_abscissae, knot_vectors, degrees)
     controlpoint_ids, controlpoints = _tensor_product_controlpoints(controlpoint_axes)
@@ -269,6 +277,14 @@ function cells(mesh::IGAMesh)
 end
 _patch_cells(p, patch) = ((p, span) for span in _span_indices(patch))
 
+"""
+    supportnodes(mesh::IGAMesh)
+    supportnodes(mesh::IGAMesh, cell::IGACell)
+
+Return the sorted control-point indices used by `mesh`, or the local support
+control-point indices of `cell`.
+"""
+@inline supportnodes(mesh::IGAMesh) = mesh.used_controlpoint_ids
 @generated function supportnodes(mesh::IGAMesh{dim, pdim, T, Degrees}, cell::IGACell{pdim}) where {dim, pdim, T, Degrees <: NTuple{pdim, Degree}}
     p = map(degree -> degree.parameters[1], fieldtypes(Degrees))
     support_dims = p .+ 1

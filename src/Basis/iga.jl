@@ -9,7 +9,7 @@ end
 
 degrees(basis::IGABasis) = basis.degrees
 igabasis(mesh::IGAMesh) = IGABasis(degrees(first(patches(mesh))))
-nsupportnodes(basis::IGABasis) = _nsupportnodes(degrees(basis))
+nsupportnodes(basis::IGABasis) = prod(degree -> _degree(degree) + 1, degrees(basis))
 
 initial_supportnodes(basis::IGABasis, mesh::IGAMesh) = zero(SVector{nsupportnodes(basis), Int})
 

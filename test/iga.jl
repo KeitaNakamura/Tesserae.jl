@@ -33,6 +33,8 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test typeof(basis) === IGABasis{2, Tuple{Quadratic, Quadratic}}
         @test iga_test_degrees(basis) == (Quadratic(), Quadratic())
         @test (@inferred Tesserae.nsupportnodes(basis)) === 9
+        @test supportnodes(mesh) === mesh.used_controlpoint_ids
+        @test supportnodes(mesh) == collect(eachindex(mesh))
         @test (@inferred supportnodes(mesh, meshcells[1])) === Tesserae.SVector(1, 2, 3, 7, 8, 9, 13, 14, 15)
         @test (@inferred supportnodes(mesh, meshcells[end])) === Tesserae.SVector(22, 23, 24, 28, 29, 30, 34, 35, 36)
     end
@@ -61,6 +63,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         duplicate_mesh = IGAMesh(duplicate_control; merge=true)
         @test Tesserae.patches(duplicate_mesh, 1).controlpoint_ids == [1, 1]
         @test duplicate_mesh.controlpoints == [Vec(0.0, 0.0)]
+        @test supportnodes(duplicate_mesh) == [1]
         weighted_duplicate = Tesserae.NURBS.ControlNet((duplicate_axis,), duplicate_points, [1.0, 2.0])
         weighted_duplicate_mesh = IGAMesh(weighted_duplicate; merge=true)
         @test Tesserae.patches(weighted_duplicate_mesh, 1).controlpoint_ids == [1, 2]
@@ -86,6 +89,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test Tesserae.patches(merged_multi_mesh, 1).controlpoint_ids == [1, 2]
         @test Tesserae.patches(merged_multi_mesh, 2).controlpoint_ids == [2, 3]
         @test length(merged_multi_mesh) == 3
+        @test supportnodes(merged_multi_mesh) == [1, 2, 3]
         quadratic_piece = Tesserae.NURBS.arc(Vec(2.0, 0.0), 1.0, 0.0, π/2)
         @test_throws ArgumentError IGAMesh([first_piece, quadratic_piece])
 
@@ -274,6 +278,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         # into the original global control-point ids.
         boundary_patch = IGAPatch((Quadratic(),), (copy(iga_test_knot_vectors(patch)[1]),), Array(patch.controlpoint_ids[:,1]))
         boundary_mesh = IGAMesh([boundary_patch], mesh.controlpoints)
+        @test supportnodes(boundary_mesh) == collect(patch.controlpoint_ids[:,1])
         boundary_rule = Tesserae.quadrature_rule(Tesserae.igabasis(boundary_mesh))
         boundary_weights = generate_basis_weights(boundary_mesh, length(boundary_rule.points), Tesserae.ncells(boundary_mesh); name=Val(:N))
         measure = zeros(Float64, size(boundary_weights))
