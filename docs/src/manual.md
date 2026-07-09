@@ -39,4 +39,4 @@ Larger simulations keep the same objects while changing execution or storage.
 [GPU computing](gpu.md) uses GPU-backed arrays and transfer kernels.
 [SpArray](sparray.md) stores grid fields sparsely on Cartesian meshes.
 Implicit formulations use a different update structure; [Utilities for implicit methods](implicit_utils.md) provides the degree-of-freedom maps, sparse matrices, matrix assembly tools, and nonlinear solvers used by those methods.
-The same transfer and assembly tools can also be used for finite-element calculations; see [Finite element calculations](fem.md).
+The same transfer and assembly tools can also be used for finite-element and isogeometric calculations; see [Finite element calculations](fem.md) and [Isogeometric analysis calculations](iga.md).
