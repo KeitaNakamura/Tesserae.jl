@@ -50,7 +50,7 @@ export
     isinside,
     findcell,
     extract,
-    UnstructuredMesh,
+    FEMesh,
     cells,
     boundaries,
     IGAPatch,
@@ -127,6 +127,7 @@ include("shapes.jl")
 include("NURBS/NURBS.jl")
 
 include("mesh.jl")
+include("femesh.jl")
 include("igamesh.jl")
 include("thread_partition.jl")
 include("sparray.jl")

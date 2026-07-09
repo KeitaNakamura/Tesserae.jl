@@ -70,9 +70,9 @@
     @test findcell(Vec(3.0,4.0), mesh) === nothing
 end
 
-@testset "UnstructuredMesh" begin
+@testset "FEMesh" begin
     cmesh = CartesianMesh(0.5, (0,2), (0,3))
-    mesh = UnstructuredMesh(cmesh)
+    mesh = FEMesh(cmesh)
     @test length(mesh) == 35
     @test Tesserae.ncells(mesh) == 24
     @test collect(cells(mesh)) == collect(1:Tesserae.ncells(mesh))
@@ -83,11 +83,11 @@ end
     cmesh′ = CartesianMesh(0.5, (1,3), (1,4))
     mesh .= vec(cmesh′) # test setindex!
     @test mesh == vec(cmesh′)
-    @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2)))) == Tesserae.Line2()
-    @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2), (0,3)))) == Tesserae.Quad4()
-    @test Tesserae.cellshape(UnstructuredMesh(CartesianMesh(1, (0,2), (0,3), (0,4)))) == Tesserae.Hex8()
+    @test Tesserae.cellshape(FEMesh(CartesianMesh(1, (0,2)))) == Tesserae.Line2()
+    @test Tesserae.cellshape(FEMesh(CartesianMesh(1, (0,2), (0,3)))) == Tesserae.Quad4()
+    @test Tesserae.cellshape(FEMesh(CartesianMesh(1, (0,2), (0,3), (0,4)))) == Tesserae.Hex8()
 
-    mesh_with_unused_node = Tesserae.UnstructuredMesh(
+    mesh_with_unused_node = Tesserae.FEMesh(
         Tesserae.Line2(),
         [Vec(0.0), Vec(1.0), Vec(2.0)],
         [Tesserae.SVector(1, 3)],
@@ -107,21 +107,21 @@ end
         sum(particles.detJdV)
     end
     cmesh = CartesianMesh(1, (0,2))
-    @test compute_volume(UnstructuredMesh(Tesserae.Line2(), cmesh)) ≈
-          compute_volume(UnstructuredMesh(Tesserae.Line3(), cmesh)) ≈ 2
+    @test compute_volume(FEMesh(Tesserae.Line2(), cmesh)) ≈
+          compute_volume(FEMesh(Tesserae.Line3(), cmesh)) ≈ 2
 
     cmesh = CartesianMesh(1, (0,2), (-1,3))
-    @test compute_volume(UnstructuredMesh(Tesserae.Quad4(), cmesh)) ≈
-          compute_volume(UnstructuredMesh(Tesserae.Quad8(), cmesh)) ≈
-          compute_volume(UnstructuredMesh(Tesserae.Quad9(), cmesh)) ≈
-          compute_volume(UnstructuredMesh(Tesserae.Tri3(), cmesh))  ≈
-          compute_volume(UnstructuredMesh(Tesserae.Tri6(), cmesh))  ≈ 8
+    @test compute_volume(FEMesh(Tesserae.Quad4(), cmesh)) ≈
+          compute_volume(FEMesh(Tesserae.Quad8(), cmesh)) ≈
+          compute_volume(FEMesh(Tesserae.Quad9(), cmesh)) ≈
+          compute_volume(FEMesh(Tesserae.Tri3(), cmesh))  ≈
+          compute_volume(FEMesh(Tesserae.Tri6(), cmesh))  ≈ 8
     cmesh = CartesianMesh(1, (0,2), (-1,3), (2,5))
-    @test compute_volume(UnstructuredMesh(Tesserae.Hex8(), cmesh))  ≈
-          compute_volume(UnstructuredMesh(Tesserae.Hex20(), cmesh)) ≈
-          compute_volume(UnstructuredMesh(Tesserae.Hex27(), cmesh)) ≈
-          compute_volume(UnstructuredMesh(Tesserae.Tet4(), cmesh))  ≈
-          compute_volume(UnstructuredMesh(Tesserae.Tet10(), cmesh)) ≈ 24
+    @test compute_volume(FEMesh(Tesserae.Hex8(), cmesh))  ≈
+          compute_volume(FEMesh(Tesserae.Hex20(), cmesh)) ≈
+          compute_volume(FEMesh(Tesserae.Hex27(), cmesh)) ≈
+          compute_volume(FEMesh(Tesserae.Tet4(), cmesh))  ≈
+          compute_volume(FEMesh(Tesserae.Tet10(), cmesh)) ≈ 24
 
     function compute_area(mesh_body)
         dim = Tesserae.get_dimension(Tesserae.cellshape(mesh_body))
@@ -137,19 +137,19 @@ end
         sum(particles.detJdA)
     end
     cmesh = CartesianMesh(1, (0,1), (0,1))
-    @test compute_area(UnstructuredMesh(Tesserae.Quad4(), cmesh)) ≈
-          compute_area(UnstructuredMesh(Tesserae.Quad8(), cmesh)) ≈
-          compute_area(UnstructuredMesh(Tesserae.Quad9(), cmesh)) ≈ 4
-    @test compute_area(UnstructuredMesh(Tesserae.Tri3(), cmesh)) ≈
-          compute_area(UnstructuredMesh(Tesserae.Tri6(), cmesh)) ≈ 4 + 2√2
+    @test compute_area(FEMesh(Tesserae.Quad4(), cmesh)) ≈
+          compute_area(FEMesh(Tesserae.Quad8(), cmesh)) ≈
+          compute_area(FEMesh(Tesserae.Quad9(), cmesh)) ≈ 4
+    @test compute_area(FEMesh(Tesserae.Tri3(), cmesh)) ≈
+          compute_area(FEMesh(Tesserae.Tri6(), cmesh)) ≈ 4 + 2√2
     cmesh = CartesianMesh(1, (0,1), (0,1), (0,1))
-    @test compute_area(UnstructuredMesh(Tesserae.Hex8(), cmesh))  ≈
-          compute_area(UnstructuredMesh(Tesserae.Hex20(), cmesh)) ≈
-          compute_area(UnstructuredMesh(Tesserae.Hex27(), cmesh)) ≈ 6
-    @test compute_area(UnstructuredMesh(Tesserae.Tet4(), cmesh))  ≈
-          compute_area(UnstructuredMesh(Tesserae.Tet10(), cmesh)) ≈ 6 * (1+√2)
+    @test compute_area(FEMesh(Tesserae.Hex8(), cmesh))  ≈
+          compute_area(FEMesh(Tesserae.Hex20(), cmesh)) ≈
+          compute_area(FEMesh(Tesserae.Hex27(), cmesh)) ≈ 6
+    @test compute_area(FEMesh(Tesserae.Tet4(), cmesh))  ≈
+          compute_area(FEMesh(Tesserae.Tet10(), cmesh)) ≈ 6 * (1+√2)
 
-    line_mesh = UnstructuredMesh(
+    line_mesh = FEMesh(
         Tesserae.Line2(),
         [Vec(0.0,0.0,0.0), Vec(1.0,2.0,2.0)],
         [Tesserae.SVector(1, 2)],
@@ -167,17 +167,17 @@ end
 
     cmesh1 = CartesianMesh(1, (0,2), (0,2))
     cmesh2 = CartesianMesh(1, (1,3), (1,3))
-    @test compute_volume(merge(UnstructuredMesh(Tesserae.Quad4(), cmesh1), UnstructuredMesh(Tesserae.Quad4(), cmesh2))) ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Quad8(), cmesh1), UnstructuredMesh(Tesserae.Quad8(), cmesh2))) ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Quad9(), cmesh1), UnstructuredMesh(Tesserae.Quad9(), cmesh2))) ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Tri3(), cmesh1), UnstructuredMesh(Tesserae.Tri3(), cmesh2)))   ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Tri6(), cmesh1), UnstructuredMesh(Tesserae.Tri6(), cmesh2)))   ≈ 7
+    @test compute_volume(merge(FEMesh(Tesserae.Quad4(), cmesh1), FEMesh(Tesserae.Quad4(), cmesh2))) ≈
+          compute_volume(merge(FEMesh(Tesserae.Quad8(), cmesh1), FEMesh(Tesserae.Quad8(), cmesh2))) ≈
+          compute_volume(merge(FEMesh(Tesserae.Quad9(), cmesh1), FEMesh(Tesserae.Quad9(), cmesh2))) ≈
+          compute_volume(merge(FEMesh(Tesserae.Tri3(), cmesh1), FEMesh(Tesserae.Tri3(), cmesh2)))   ≈
+          compute_volume(merge(FEMesh(Tesserae.Tri6(), cmesh1), FEMesh(Tesserae.Tri6(), cmesh2)))   ≈ 7
 
     cmesh1 = CartesianMesh(1, (0,2), (0,2), (0,2))
     cmesh2 = CartesianMesh(1, (1,3), (1,3), (1,3))
-    @test compute_volume(merge(UnstructuredMesh(Tesserae.Hex8(), cmesh1), UnstructuredMesh(Tesserae.Hex8(), cmesh2)))   ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Hex20(), cmesh1), UnstructuredMesh(Tesserae.Hex20(), cmesh2))) ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Hex27(), cmesh1), UnstructuredMesh(Tesserae.Hex27(), cmesh2))) ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Tet4(), cmesh1), UnstructuredMesh(Tesserae.Tet4(), cmesh2)))   ≈
-          compute_volume(merge(UnstructuredMesh(Tesserae.Tet10(), cmesh1), UnstructuredMesh(Tesserae.Tet10(), cmesh2))) ≈ 15
+    @test compute_volume(merge(FEMesh(Tesserae.Hex8(), cmesh1), FEMesh(Tesserae.Hex8(), cmesh2)))   ≈
+          compute_volume(merge(FEMesh(Tesserae.Hex20(), cmesh1), FEMesh(Tesserae.Hex20(), cmesh2))) ≈
+          compute_volume(merge(FEMesh(Tesserae.Hex27(), cmesh1), FEMesh(Tesserae.Hex27(), cmesh2))) ≈
+          compute_volume(merge(FEMesh(Tesserae.Tet4(), cmesh1), FEMesh(Tesserae.Tet4(), cmesh2)))   ≈
+          compute_volume(merge(FEMesh(Tesserae.Tet10(), cmesh1), FEMesh(Tesserae.Tet10(), cmesh2))) ≈ 15
 end

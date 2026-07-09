@@ -65,8 +65,8 @@ function KernelAbstractions.get_backend(mesh::CartesianMesh)
     get_backend(mesh.axes[1])
 end
 
-# UnstructuredMesh
-function KernelAbstractions.get_backend(mesh::UnstructuredMesh)
+# FEMesh
+function KernelAbstractions.get_backend(mesh::FEMesh)
     backend = get_backend(mesh.nodes)
     @assert get_backend(mesh.cellsupports) == backend
     @assert get_backend(mesh.usednodes) == backend

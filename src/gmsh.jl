@@ -12,8 +12,8 @@ using Gmsh
 meshes = readmsh("mesh.msh")
 ```
 
-Returns a `Dict{String,UnstructuredMesh}` keyed by physical group name.
-Each physical group is read as one `UnstructuredMesh` and must contain exactly
+Returns a `Dict{String,FEMesh}` keyed by physical group name.
+Each physical group is read as one `FEMesh` and must contain exactly
 one supported element shape. Unnamed physical groups use keys of the form
 `"physical_group[dim,tag]"`.
 

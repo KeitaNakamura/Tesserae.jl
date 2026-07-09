@@ -474,7 +474,7 @@ end
 
 threadsafe_groups(cs::CellStrategy) = cs.threadsafe_groups
 
-function CellStrategy(mesh::UnstructuredMesh)
+function CellStrategy(mesh::FEMesh)
     g = _cell_conflict_graph(mesh)
 
     coloring = Graphs.degree_greedy_color(g)
@@ -487,7 +487,7 @@ function CellStrategy(mesh::UnstructuredMesh)
     CellStrategy(groups)
 end
 
-function _cell_conflict_graph(mesh::UnstructuredMesh)
+function _cell_conflict_graph(mesh::FEMesh)
     nc = ncells(mesh)
     nn = length(mesh)
     graph = SimpleGraph(nc)
@@ -514,7 +514,7 @@ end
 
 """
     ThreadPartition(::CartesianMesh)
-    ThreadPartition(::UnstructuredMesh)
+    ThreadPartition(::FEMesh)
 
 `ThreadPartition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
 to avoid write conflicts during threaded particle-to-grid transfers.
@@ -528,7 +528,7 @@ to avoid write conflicts during threaded particle-to-grid transfers.
 partition = ThreadPartition(mesh)
 
 # Update partition using current particle positions
-update!(partition, particles.x) # Required for `CartesianMesh`; not needed for `UnstructuredMesh` (FEM).
+update!(partition, particles.x) # Required for `CartesianMesh`; not needed for `FEMesh` (FEM).
 
 # P2G transfer
 @threaded @P2G grid=>i particles=>p weights=>ip partition begin
@@ -550,7 +550,7 @@ particle_indices(partition::ThreadPartition{<: CellStrategy}, particles, cell) =
     (CartesianIndex(p, cell) for p in 1:size(particles, 1))
 
 ThreadPartition(mesh::CartesianMesh) = ThreadPartition(BlockStrategy(mesh))
-ThreadPartition(mesh::UnstructuredMesh) = ThreadPartition(CellStrategy(mesh))
+ThreadPartition(mesh::FEMesh) = ThreadPartition(CellStrategy(mesh))
 update!(partition::ThreadPartition, args...) = update!(strategy(partition), args...)
 
 reorder_particles!(particles::StructVector, partition::ThreadPartition{<: BlockStrategy}; kwargs...) =

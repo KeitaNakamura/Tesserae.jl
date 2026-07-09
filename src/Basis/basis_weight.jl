@@ -46,7 +46,7 @@ with matching local indices.
 =#
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
-initial_supportnodes(shape::Shape, mesh::UnstructuredMesh) = zero(SVector{nlocalnodes(shape), Int})
+initial_supportnodes(shape::Shape, mesh::FEMesh) = zero(SVector{nlocalnodes(shape), Int})
 
 function allocate_basis_values(::Type{Vec{dim, T}}, basis; derivative::Order{k}=Order(1), name=nothing) where {dim, T, k}
     map(Array, allocate_static_basis_values(Vec{dim, T}, basis; derivative, name))
@@ -153,9 +153,9 @@ end
 BasisWeight(::Type{T}, basis::Basis, mesh::CartesianMesh; kwargs...) where {T} = _basis_weight(T, basis, mesh; kwargs...)
 BasisWeight(basis::Basis, mesh::CartesianMesh; kwargs...) = _basis_weight(Float64, basis, mesh; kwargs...)
 
-# UnstructuredMesh
-BasisWeight(::Type{T}, mesh::UnstructuredMesh; kwargs...) where {T} = _basis_weight(T, cellshape(mesh), mesh; kwargs...)
-BasisWeight(mesh::UnstructuredMesh; kwargs...) = BasisWeight(Float64, mesh; kwargs...)
+# FEMesh
+BasisWeight(::Type{T}, mesh::FEMesh; kwargs...) where {T} = _basis_weight(T, cellshape(mesh), mesh; kwargs...)
+BasisWeight(mesh::FEMesh; kwargs...) = BasisWeight(Float64, mesh; kwargs...)
 
 Base.propertynames(bw::BasisWeight) = propertynames(getfield(bw, :vals))
 @inline function Base.getproperty(bw::BasisWeight, name::Symbol)
@@ -209,7 +209,7 @@ end
     neighbors
 end
 
-@inline function supportnodes(bw::BasisWeight, mesh::UnstructuredMesh)
+@inline function supportnodes(bw::BasisWeight, mesh::FEMesh)
     inds = supportnodes(bw)
     @boundscheck checkbounds(mesh, inds)
     inds
@@ -293,10 +293,10 @@ _todims(x::Vararg{Int}) = x
 
 """
     generate_basis_weights([T,] ::Basis, mesh, dims...)
-    generate_basis_weights([T,] ::UnstructuredMesh, dims...)
+    generate_basis_weights([T,] ::FEMesh, dims...)
 
 Generate an array of [`BasisWeight`](@ref)s for `basis` on `mesh`.
-For unstructured meshes, the mesh cell shape is used as the basis.
+For `FEMesh`, the mesh cell shape is used as the basis.
 """
 function generate_basis_weights end
 
@@ -304,9 +304,9 @@ function generate_basis_weights end
 generate_basis_weights(::Type{T}, basis::Basis, mesh::CartesianMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, basis, mesh, _todims(dims...); kwargs...)
 generate_basis_weights(basis::Basis, mesh::CartesianMesh, dims...; kwargs...) = _generate_basis_weights(Float64, basis, mesh, _todims(dims...); kwargs...)
 
-# UnstructuredMesh
-generate_basis_weights(::Type{T}, mesh::UnstructuredMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, cellshape(mesh), mesh, _todims(dims...); kwargs...)
-generate_basis_weights(mesh::UnstructuredMesh, dims...; kwargs...) = _generate_basis_weights(Float64, cellshape(mesh), mesh, _todims(dims...); kwargs...)
+# FEMesh
+generate_basis_weights(::Type{T}, mesh::FEMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, cellshape(mesh), mesh, _todims(dims...); kwargs...)
+generate_basis_weights(mesh::FEMesh, dims...; kwargs...) = _generate_basis_weights(Float64, cellshape(mesh), mesh, _todims(dims...); kwargs...)
 
 Base.size(x::BasisWeightArray) = size(getfield(x, :indices))
 

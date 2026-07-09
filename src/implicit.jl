@@ -203,7 +203,7 @@ _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T}
 create_sparse_matrix(::Type{T}, mesh::IGAMesh{dim}; ndofs = dim) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
 create_sparse_matrix(mesh::IGAMesh{dim}; ndofs = dim) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
 
-function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{UnstructuredMesh, UnstructuredMesh}; ndofs::Tuple{Int, Int}) where {T}
+function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) where {T}
     mesh1 === mesh2 && return _create_cell_support_sparse_matrix(T, mesh1, ndofs)
 
     gdofs1 = LinearIndices((ndofs[1], length(mesh1)))
@@ -230,9 +230,9 @@ function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{UnstructuredMesh, 
 
     sparse(I, J, zeros(T, length(I)), nrow, ncol)
 end
-create_sparse_matrix(meshes::Tuple{UnstructuredMesh, UnstructuredMesh}; ndofs::Tuple{Int, Int}) = create_sparse_matrix(Float64, meshes; ndofs)
-create_sparse_matrix(::Type{T}, mesh::UnstructuredMesh{<: Any, dim}; ndofs::Int = dim) where {T, dim} = create_sparse_matrix(T, (mesh,mesh); ndofs=(ndofs,ndofs))
-create_sparse_matrix(mesh::UnstructuredMesh{<: Any, dim}; ndofs::Int = dim) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
+create_sparse_matrix(meshes::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) = create_sparse_matrix(Float64, meshes; ndofs)
+create_sparse_matrix(::Type{T}, mesh::FEMesh{<: Any, dim}; ndofs::Int = dim) where {T, dim} = create_sparse_matrix(T, (mesh,mesh); ndofs=(ndofs,ndofs))
+create_sparse_matrix(mesh::FEMesh{<: Any, dim}; ndofs::Int = dim) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
 
 """
     extract(matrix::AbstractMatrix, dofmap_row::DofMap, dofmap_col::DofMap = dofmap_row)
