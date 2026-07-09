@@ -243,6 +243,51 @@ end
 #
 # The following results were obtained using 8 threads (started with `julia -t8`).
 #
+# ### Intel Core Ultra 9 285K
+#
+# ```julia
+# julia> versioninfo()
+# Julia Version 1.12.6
+# Commit 15346901f00 (2026-04-09 19:20 UTC)
+# Build Info:
+#   Official https://julialang.org release
+# Platform Info:
+#   OS: Linux (x86_64-linux-gnu)
+#   CPU: 24 × Intel(R) Core(TM) Ultra 9 285K
+#   WORD_SIZE: 64
+#   LLVM: libLLVM-18.1.7 (ORCJIT, arrowlake-s)
+#   GC: Built with stock GC
+# Threads: 8 default, 1 interactive, 8 GC (on 24 virtual cores)
+#
+# julia> main()
+# length(particles) = 1472942
+# Progress: 100%|█████████████████████████████████████████| Time: 0:08:03
+#    Iterations: 1,833
+# Wall time/step:
+#   Range (min … max): 0.22  s … 8.60  s
+#   Mean ± σ:          0.26  s ± 0.32  s
+# ──────────────────────────────────────────────────────────────────────────────────────
+#                                              Time                    Allocations
+#                                     ───────────────────────   ────────────────────────
+#          Tot / % measured:                484s /  99.8%           17.5GiB /  99.6%
+#
+# Section                     ncalls     time    %tot     avg     alloc    %tot      avg
+# ──────────────────────────────────────────────────────────────────────────────────────
+# Particle computation         1.83k     179s   37.1%  97.8ms    406MiB    2.3%   227KiB
+# Update basis weights         1.83k    87.4s   18.1%  47.7ms    681MiB    3.8%   380KiB
+# P2G transfer                 1.83k    72.5s   15.0%  39.5ms    152MiB    0.8%  84.7KiB
+# G2P transfer                 1.83k    62.0s   12.8%  33.8ms   46.5MiB    0.3%  26.0KiB
+# Write results                   25    55.1s   11.4%   2.20s   8.16GiB   46.8%   334MiB
+# Grid computation             1.83k    10.0s    2.1%  5.48ms   79.9MiB    0.4%  44.6KiB
+# Update timestep              1.83k    5.77s    1.2%  3.15ms   61.7MiB    0.3%  34.5KiB
+# Apply boundary conditions    1.83k    4.93s    1.0%  2.69ms   7.49GiB   42.9%  4.19MiB
+# Update thread partition      1.83k    4.24s    0.9%  2.31ms   79.1MiB    0.4%  44.2KiB
+# Reorder particles               25    1.64s    0.3%  65.7ms    329MiB    1.8%  13.1MiB
+# ──────────────────────────────────────────────────────────────────────────────────────
+# ```
+#
+# ### Apple M2 Ultra
+#
 # ```julia
 # julia> versioninfo()
 # Julia Version 1.11.5
@@ -283,6 +328,46 @@ end
 # ```
 #
 # ## Scalability
+#
+# The scalability depends strongly on the memory system. Apple's
+# [M2 Ultra](https://www.apple.com/newsroom/2023/06/apple-introduces-m2-ultra/)
+# provides 800 GB/s of unified memory bandwidth, whereas Intel's
+# [Core Ultra 9 285K](https://www.intel.com/content/www/us/en/products/sku/241060/intel-core-ultra-9-processor-285k-36m-cache-up-to-5-70-ghz/specifications.html)
+# specifies two DDR5-6400 memory channels, corresponding to about 102 GB/s of
+# theoretical peak bandwidth. This difference matters here because the basis-weight
+# update and P2G/G2P transfer kernels perform many reads and writes compared with the
+# amount of arithmetic work, so they can become limited by memory bandwidth. The
+# particle constitutive update is more compute-heavy and tends to scale better with
+# thread count.
+#
+# ### Intel Core Ultra 9 285K
+#
+# ```@example
+# using Plots                                             # hide
+# plot(xlabel = "Number of threads", ylabel = "Speedup",  # hide
+#      xlims = (0,18), ylims = (0,18), palette = :RdBu_4) # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       179.0 ./ [179.0, 108.0, 98.3, 87.4, 85.5],        # hide
+#       label = "Update basis weights", marker = "o")     # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       224.0 ./ [224.0, 152.0, 93.4, 72.5, 63.0],        # hide
+#       label = "P2G transfer", marker = "o")             # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       195.0 ./ [195.0, 126.0, 76.2, 62.0, 54.7],        # hide
+#       label = "G2P transfer", marker = "o")             # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       1350.0 ./ [1350.0, 678.0, 349.0, 179.0, 131.0],   # hide
+#       label = "Particle computation", marker = "o")     # hide
+# plot!([1, 2, 4, 8, 16],                                 # hide
+#       1971.5 ./ [1971.5, 1093.3, 641.2, 428.9, 362.3],  # hide
+#       label = "Total (w/o output)", color = "black",    # hide
+#       marker = "o")                                     # hide
+# plot!([1, 17], [1, 17],                                 # hide
+#       color = "black", linestyle = :dash,               # hide
+#       label = "")                                       # hide
+# ```
+#
+# ### Apple M2 Ultra
 #
 # ```@example
 # using Plots                                             # hide
