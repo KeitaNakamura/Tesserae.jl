@@ -23,6 +23,8 @@ macros.
   including threaded transfers and matrix assembly. (#126)
 - `@foreach` provides backend-aware loops over grids, particles, and active
   sparse grid nodes without abusing transfer macros as generic loop kernels.
+- FEM support is no longer experimental, with a documented workflow for mesh
+  generation, quadrature, assembly, and boundary conditions. (#157)
 - Experimental NURBS and IGA support has been added, including rational B-spline
   control nets, geometry operations, and conversion to `IGAMesh`.
 - Gmsh `.msh` files can now be read directly as physical-group meshes through
