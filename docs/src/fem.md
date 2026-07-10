@@ -6,12 +6,12 @@ after [`feupdate!`](@ref) fills the quadrature weights and basis data, the same
 [`@P2G`](@ref) and [`@P2G_Matrix`](@ref) macros used for MPM assemble
 finite-element vectors and matrices.
 
-For quadrature point `q` in element `e`, define a particle `p` by
+For quadrature point `q` in cell `c`, define a particle `p` by
 
 ```math
-\bm{x}_p = \bm{x}_e(\bm{\xi}_q),
+\bm{x}_p = \bm{x}_c(\bm{\xi}_q),
 \qquad
-V_p = \omega_q \det \bm{J}_e(\bm{\xi}_q).
+V_p = \omega_q \det \bm{J}_c(\bm{\xi}_q).
 ```
 
 Then a particle sum is the usual FEM quadrature rule:
@@ -19,9 +19,9 @@ Then a particle sum is the usual FEM quadrature rule:
 ```math
 \sum_p f(\bm{x}_p) V_p
 =
-\sum_e \sum_q
-f(\bm{x}_e(\bm{\xi}_q))
-\omega_q \det \bm{J}_e(\bm{\xi}_q).
+\sum_c \sum_q
+f(\bm{x}_c(\bm{\xi}_q))
+\omega_q \det \bm{J}_c(\bm{\xi}_q).
 ```
 
 The particle arrays in this page store fixed Gauss points, not moving MPM
