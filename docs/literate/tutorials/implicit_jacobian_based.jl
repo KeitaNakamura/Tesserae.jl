@@ -90,7 +90,7 @@ function main()
     end
 
     ## Sparse matrix
-    A = create_sparse_matrix(basis, grid.X)
+    A = create_sparse_matrix(basis, grid.X; ndofs=2)
 
     ## Outputs
     outdir = mkpath(joinpath("output", "implicit_jacobian_based"))

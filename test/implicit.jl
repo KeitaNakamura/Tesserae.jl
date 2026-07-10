@@ -8,9 +8,11 @@
     weights = generate_basis_weights(basis, mesh, length(particles))
     update!(weights, particles, mesh)
 
+    @test_throws UndefKeywordError create_sparse_matrix(basis, mesh)
+
     @testset "square matrix" begin
-        A = create_sparse_matrix(basis, mesh)
-        B = create_sparse_matrix(basis, mesh)
+        A = create_sparse_matrix(basis, mesh; ndofs=2)
+        B = create_sparse_matrix(basis, mesh; ndofs=2)
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             A[i,j] = @∑ w[ip] * sum(∇w[jp])
         end
@@ -22,10 +24,10 @@
         @test A ≈ B
     end
     @testset "multiple matrices" begin
-        A = create_sparse_matrix(basis, mesh)
-        B = create_sparse_matrix(basis, mesh)
-        Aref = create_sparse_matrix(basis, mesh)
-        Bref = create_sparse_matrix(basis, mesh)
+        A = create_sparse_matrix(basis, mesh; ndofs=2)
+        B = create_sparse_matrix(basis, mesh; ndofs=2)
+        Aref = create_sparse_matrix(basis, mesh; ndofs=2)
+        Bref = create_sparse_matrix(basis, mesh; ndofs=2)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             A[i,j] = @∑ w[ip] * w[jp]
@@ -304,6 +306,8 @@ end
     cmesh = CartesianMesh(1, (0,1), (0,1))
     quad4 = FEMesh(Tesserae.Quad4(), cmesh)
     quad9 = FEMesh(Tesserae.Quad9(), cmesh)
+
+    @test_throws UndefKeywordError create_sparse_matrix(quad4)
 
     A = create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
     @test size(A) == (2length(quad9), length(quad4))

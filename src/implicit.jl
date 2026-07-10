@@ -71,12 +71,12 @@ function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
 end
 
 """
-    create_sparse_matrix(basis, mesh; ndofs = ndims(mesh))
+    create_sparse_matrix(basis, mesh; ndofs)
 
 Create a sparse matrix.
 Since the created matrix accounts for all nodes in the mesh,
 it needs to be extracted for active nodes using the `DofMap`.
-`ndofs` represents the number of DoFs for a field.
+`ndofs` specifies the number of DoFs for a field and must be provided explicitly.
 
 ```jldoctest
 julia> mesh = CartesianMesh(1, (0,10), (0,10));
@@ -123,11 +123,11 @@ julia> extract(A, dofmap)
   ⋅    ⋅    ⋅    ⋅   0.0  0.0   ⋅   0.0  0.0
 ```
 """
-function create_sparse_matrix(basis::Basis, mesh::AbstractMesh; ndofs = ndims(mesh))
+function create_sparse_matrix(basis::Basis, mesh::AbstractMesh; ndofs)
     _create_sparse_matrix(Float64, basis, mesh, ndofs)
 end
 
-function create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh; ndofs = ndims(mesh)) where {T}
+function create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh; ndofs) where {T}
     _create_sparse_matrix(T, basis, mesh, ndofs)
 end
 
@@ -190,18 +190,18 @@ function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Tuple{Int,In
     sparse(I, J, zeros(T, length(I)), length(gdofs1), length(gdofs2))
 end
 
-function create_sparse_matrix(::IGABasis, mesh::IGAMesh{dim}; ndofs = dim) where {dim}
+function create_sparse_matrix(::IGABasis, mesh::IGAMesh{dim}; ndofs) where {dim}
     _create_sparse_matrix(Float64, mesh, ndofs)
 end
-function create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh{dim}; ndofs = dim) where {T, dim}
+function create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh{dim}; ndofs) where {T, dim}
     _create_sparse_matrix(T, mesh, ndofs)
 end
 _create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Int) where {T} = _create_sparse_matrix(T, mesh, ndofs)
 _create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T} = _create_sparse_matrix(T, mesh, ndofs)
 _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Int) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
 _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
-create_sparse_matrix(::Type{T}, mesh::IGAMesh{dim}; ndofs = dim) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
-create_sparse_matrix(mesh::IGAMesh{dim}; ndofs = dim) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
+create_sparse_matrix(::Type{T}, mesh::IGAMesh{dim}; ndofs) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
+create_sparse_matrix(mesh::IGAMesh{dim}; ndofs) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
 
 function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) where {T}
     mesh1 === mesh2 && return _create_cell_support_sparse_matrix(T, mesh1, ndofs)
@@ -231,8 +231,8 @@ function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{FEMesh, FEMesh}; n
     sparse(I, J, zeros(T, length(I)), nrow, ncol)
 end
 create_sparse_matrix(meshes::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) = create_sparse_matrix(Float64, meshes; ndofs)
-create_sparse_matrix(::Type{T}, mesh::FEMesh{<: Any, dim}; ndofs::Int = dim) where {T, dim} = create_sparse_matrix(T, (mesh,mesh); ndofs=(ndofs,ndofs))
-create_sparse_matrix(mesh::FEMesh{<: Any, dim}; ndofs::Int = dim) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
+create_sparse_matrix(::Type{T}, mesh::FEMesh{<: Any, dim}; ndofs::Int) where {T, dim} = create_sparse_matrix(T, (mesh,mesh); ndofs=(ndofs,ndofs))
+create_sparse_matrix(mesh::FEMesh{<: Any, dim}; ndofs::Int) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
 
 """
     extract(matrix::AbstractMatrix, dofmap_row::DofMap, dofmap_col::DofMap = dofmap_row)
