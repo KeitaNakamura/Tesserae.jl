@@ -294,6 +294,9 @@ const nurbs_cubic = Tesserae.NURBS.cubic
             Set(zip(I, J))
         end
 
+        @test_throws UndefKeywordError create_sparse_matrix(mesh)
+        @test_throws UndefKeywordError create_sparse_matrix(basis, mesh)
+
         # The scalar matrix pattern must be exactly the union of each cell's
         # support-node pairings. Values are assembled later by @P2G_Matrix.
         scalar_pattern = Set{Tuple{Int,Int}}()

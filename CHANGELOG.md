@@ -34,6 +34,8 @@ macros.
 
 ### Breaking Changes
 
+- `create_sparse_matrix` now requires the `ndofs` keyword to be specified
+  explicitly. The previous default based on the mesh dimension was removed.
 - The `PoissonDiskSampling` keyword `multithreading` has been renamed to
   `threaded`. The old keyword is no longer accepted. (#113)
 - `reorder_particles!` now returns a `Bool` indicating whether particles were
