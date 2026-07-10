@@ -7,6 +7,7 @@ include("utils.jl")
 include("mesh.jl")
 include("thread_partition.jl")
 include("sparray.jl")
+include("stencil.jl")
 
 include("grid.jl")
 include("particles.jl")
