@@ -25,4 +25,20 @@ every other axis.
 """
 Face(d::Int) = Placement(axisbit(d))
 
+"""
+    Edge(d)
+
+Create a placement that is cell-centered along axis `d` and node-aligned along
+every other axis. In three dimensions this is the center of an edge parallel to
+axis `d`.
+"""
+Edge(d::Int) = Placement(~axisbit(d))
+
+"""
+    Vertex()
+
+Create a placement that is node-aligned along every axis.
+"""
+Vertex() = Placement(typemax(UInt))
+
 @inline isnodealigned(placement::Placement, d::Int) = !iszero(placement.mask & axisbit(d))

@@ -4,10 +4,12 @@ export
     AxisRegion,
     Boundary,
     Cell,
+    Edge,
     Face,
     Halo,
     Physical,
     Region,
+    Vertex,
     reflect,
     unitoffsets
 

@@ -6,13 +6,22 @@ using Tesserae.Stencil
         face₁ = @inferred Face(1)
         face₂ = @inferred Face(2)
         face₃ = @inferred Face(3)
+        edge₁ = @inferred Edge(1)
+        edge₂ = @inferred Edge(2)
+        edge₃ = @inferred Edge(3)
+        vertex = @inferred Vertex()
 
         @test typeof(cell) === typeof(face₁) === typeof(face₂) === typeof(face₃)
+        @test typeof(cell) === typeof(edge₁) === typeof(edge₂) === typeof(edge₃) === typeof(vertex)
         @test isbitstype(typeof(cell))
         @test cell.mask === zero(UInt)
         @test face₁.mask === UInt(0b001)
         @test face₂.mask === UInt(0b010)
         @test face₃.mask === UInt(0b100)
+        @test edge₁.mask === ~UInt(0b001)
+        @test edge₂.mask === ~UInt(0b010)
+        @test edge₃.mask === ~UInt(0b100)
+        @test vertex.mask === typemax(UInt)
     end
 
     @testset "Region" begin
@@ -138,6 +147,11 @@ using Tesserae.Stencil
 
         mixed = Region(Face(1), Halo(-1), Boundary(+1); halowidth=2)
         @test (@inferred Stencil.indexranges(mixed, (face_axes[1], cell_axes[1]))) == (1:2, 8:8)
+
+        edge = Region(Edge(1), Physical(), Physical(), Physical(); halowidth=1)
+        vertex = Region(Vertex(), Physical(), Physical(), Physical(); halowidth=1)
+        @test (@inferred Stencil.indexranges(edge, (1:6, 1:7, 1:7))) == (2:5, 2:6, 2:6)
+        @test (@inferred Stencil.indexranges(vertex, (1:7, 1:7, 1:7))) == (2:6, 2:6, 2:6)
 
         anisotropic = Region(Cell(), Halo(-1), Halo(+1); halowidth=(1, 2))
         @test (@inferred Stencil.indexranges(anisotropic, (1:8, 1:10))) == (1:1, 9:10)
