@@ -16,22 +16,38 @@ the placement of the axis:
     Face: …  c  b (a) b  c  …
 
 Here `|` lies between cell-centered samples, while `(a)` lies on the boundary.
-Reflecting the same axis twice restores its original index order.
+A shifted region cannot be reflected. Reflecting the same axis twice restores
+its original index order.
 """
-@inline function reflect(region::Region, d::Int)
+@inline function reflect(region::Region{N}, d::Int) where {N}
+    1 ≤ d ≤ N || throw(ArgumentError("axis must be between 1 and $N, got $d"))
     axisregion(region, d) isa Halo || throw(ArgumentError("only a Halo axis can be reflected"))
+    all(d -> iszero(nhalfsteps(region, d)), 1:N) || throw(ArgumentError("a shifted Region cannot be reflected"))
     ReflectionMap(region, axisbit(d))
 end
 
 @inline function reflect(reflection::ReflectionMap, d::Int)
-    axisregion(reflection.region, d) isa Halo || throw(ArgumentError("only a Halo axis can be reflected"))
+    region = reflection.region
+    N = length(axisregions(region))
+    1 ≤ d ≤ N || throw(ArgumentError("axis must be between 1 and $N, got $d"))
+    axisregion(region, d) isa Halo || throw(ArgumentError("only a Halo axis can be reflected"))
+    all(d -> iszero(nhalfsteps(region, d)), 1:N) || throw(ArgumentError("a shifted Region cannot be reflected"))
     mask = xor(reflection.mask, axisbit(d))
-    ReflectionMap(reflection.region, mask)
+    ReflectionMap(region, mask)
 end
 
 function mappedranges(reflection::ReflectionMap{R}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N, R <: Region{N}}
     region = reflection.region
     ranges = indexranges(region, array_axes)
+
+    for d in 1:N
+        if isreflected(reflection, d)
+            width = halowidth(region, d)
+            ncells = length(array_axes[d]) - 2 * width - isnodealigned(placement(region), d)
+            width ≤ ncells || throw(DimensionMismatch("halowidth $width exceeds $ncells physical cells on axis $d"))
+        end
+    end
+
     _mappedranges(reflection, placement(region), axisregions(region), ranges, 1)
 end
 
@@ -52,8 +68,9 @@ end
 end
 
 @inline function _reflectionrange(region::Halo, halo::UnitRange{Int}, node_aligned::Bool)
-    s = side(region)
-    s == -1 && return (last(halo) + length(halo) + node_aligned):-1:(last(halo) + 1 + node_aligned)
-    s == +1 && return (first(halo) - 1 - node_aligned):-1:(first(halo) - length(halo) - node_aligned)
-    throw(ArgumentError("side must be -1 or +1, got $s"))
+    if side(region) == -1
+        (last(halo) + length(halo) + node_aligned):-1:(last(halo) + 1 + node_aligned)
+    else
+        (first(halo) - 1 - node_aligned):-1:(first(halo) - length(halo) - node_aligned)
+    end
 end

@@ -1,113 +1,23 @@
 using Tesserae.Stencil
 
 @testset "Stencil" begin
-    @testset "Placement" begin
-        cell = @inferred Cell()
-        face₁ = @inferred Face(1)
-        face₂ = @inferred Face(2)
-        face₃ = @inferred Face(3)
-        edge₁ = @inferred Edge(1)
-        edge₂ = @inferred Edge(2)
-        edge₃ = @inferred Edge(3)
-        vertex = @inferred Vertex()
-
-        @test typeof(cell) === typeof(face₁) === typeof(face₂) === typeof(face₃)
-        @test typeof(cell) === typeof(edge₁) === typeof(edge₂) === typeof(edge₃) === typeof(vertex)
-        @test isbitstype(typeof(cell))
-        @test cell.mask === zero(UInt)
-        @test face₁.mask === UInt(0b001)
-        @test face₂.mask === UInt(0b010)
-        @test face₃.mask === UInt(0b100)
-        @test edge₁.mask === ~UInt(0b001)
-        @test edge₂.mask === ~UInt(0b010)
-        @test edge₃.mask === ~UInt(0b100)
-        @test vertex.mask === typemax(UInt)
-    end
-
-    @testset "Region" begin
-        physical = Physical()
-        halo⁻ = Halo(-1)
-        halo⁺ = Halo(+1)
-        boundary⁻ = Boundary(-1)
-        boundary⁺ = Boundary(+1)
-
-        @test physical isa AxisRegion
-        @test halo⁻ isa AxisRegion
-        @test boundary⁻ isa AxisRegion
-        @test halo⁻.side === -1
-        @test halo⁺.side === +1
-        @test boundary⁻.side === -1
-        @test boundary⁺.side === +1
-
-        cells = @inferred Region(Cell(), physical; halowidth=2)
-        @test cells isa Region{1}
-        @test cells.placement == Cell()
-        @test cells.axes == (physical,)
-        @test cells.halowidth === (2,)
-
-        cellregion = @inferred Region(Cell(), (physical, physical); halowidth=2)
-        @test cellregion.axes == (physical, physical)
-        @test cellregion.halowidth === (2, 2)
-
-        anisotropic = @inferred Region(Cell(), physical, physical; halowidth=(1, 2))
-        @test anisotropic.halowidth === (1, 2)
-
-        e, = unitoffsets(Val(1))
-        @test iszero(cells.offset)
-
-        shifted = @inferred cells + e / 2
-        @test shifted.placement == cells.placement
-        @test shifted.axes == cells.axes
-        @test shifted.halowidth == cells.halowidth
-        @test shifted.offset == e / 2
-        @test (@inferred(e / 2 + cells)) == shifted
-        @test (@inferred(shifted - e)).offset == -e / 2
-        @test (@inferred(shifted + e / 2)).offset == e
-        @test_throws ArgumentError e - cells
-
-        lowhalo = @inferred Region(Face(1), halo⁻, physical; halowidth=1)
-        @test lowhalo isa Region{2}
-        @test lowhalo.placement == Face(1)
-        @test lowhalo.axes == (halo⁻, physical)
-        @test typeof(lowhalo.axes) === Tuple{Halo,Physical}
-        @test lowhalo.halowidth === (1, 1)
-        @test isbitstype(typeof(lowhalo))
-
-        e₁, e₂ = unitoffsets(Val(2))
-        translated = @inferred lowhalo + e₁ - e₂ / 2
-        @test translated.offset.doubled == (2, -1)
-
-        highboundary = @inferred Region(Face(1), boundary⁺, physical; halowidth=1)
-        @test highboundary.axes == (boundary⁺, physical)
-    end
-
     @testset "GridOffset" begin
-        offsets = @inferred unitoffsets(Val(3))
-        e₁, e₂, e₃ = offsets
+        e₁, e₂, e₃ = @inferred unitoffsets(Val(3))
 
-        @test length(offsets) == 3
-        @test e₁.doubled == (2, 0, 0)
-        @test e₂.doubled == (0, 2, 0)
-        @test e₃.doubled == (0, 0, 2)
-        @test typeof(e₁) === typeof(e₂) === typeof(e₃)
-        @test isbitstype(typeof(e₁))
+        @test e₁ != e₂ && e₂ != e₃ && e₁ != e₃
 
         @test +e₁ === e₁
-        @test (@inferred(-e₁)).doubled == (-2, 0, 0)
-        @test (@inferred(e₁ + e₂)).doubled == (2, 2, 0)
-        @test (@inferred(e₁ - e₂)).doubled == (2, -2, 0)
-
-        @test (@inferred(3e₁)).doubled == (6, 0, 0)
-        @test (@inferred(e₁ * 3)).doubled == (6, 0, 0)
-        @test (@inferred(e₁ / 2)).doubled == (1, 0, 0)
-        @test (@inferred(3e₁ / 2)).doubled == (3, 0, 0)
-        @test e₁ / 2 + e₁ / 2 == e₁
-
-        z = @inferred zero(e₁)
-        @test z == zero(typeof(e₁))
-        @test z.doubled == (0, 0, 0)
-        @test iszero(z)
+        @test -(-e₁) == e₁
+        @test (@inferred(e₁ + e₂)) == e₂ + e₁
+        @test (@inferred(e₁ - e₁)) == zero(e₁)
+        @test (@inferred zero(e₁)) == e₁ - e₁
         @test !iszero(e₁)
+
+        @test (@inferred 3e₁) == e₁ + e₁ + e₁
+        @test (@inferred e₁ * 3) == e₁ + e₁ + e₁
+        half = @inferred e₁ / 2
+        @test half + half == e₁
+        @test 3e₁ / 2 - e₁ == e₁ / 2
 
         @test sprint(show, e₁) == "GridOffset(1, 0, 0)"
         @test sprint(show, e₁ / 2) == "GridOffset(1//2, 0, 0)"
@@ -116,113 +26,225 @@ using Tesserae.Stencil
         @test_throws DivideError e₁ / 0
     end
 
-    @testset "Index ranges" begin
-        e, = unitoffsets(Val(1))
-        cells = Region(Cell(), Physical(); halowidth=2)
-        faces = Region(Face(1), Physical(); halowidth=2)
-        cell_axes = axes(zeros(10))
-        face_axes = axes(zeros(11))
+    @testset "Placement transitions" begin
+        e₁, e₂, e₃ = unitoffsets(Val(3))
+        physical = (Physical(), Physical(), Physical())
+        ncells = (3, 4, 5)
+        halowidth = 1
+        A = zeros(ntuple(d -> ncells[d] + 2 * halowidth, Val(3)))
 
-        @test (@inferred Stencil.indexranges(cells, cell_axes)) == (3:8,)
-        @test (@inferred Stencil.indexranges(faces, face_axes)) == (3:9,)
+        cases = (
+            (Cell(), zero(e₁), (2:4, 2:5, 2:6)),
+            (Face(1), e₁ / 2, (2:5, 2:5, 2:6)),
+            (Face(2), e₂ / 2, (2:4, 2:6, 2:6)),
+            (Face(3), e₃ / 2, (2:4, 2:5, 2:7)),
+            (Edge(1), (e₂ + e₃) / 2, (2:4, 2:6, 2:7)),
+            (Edge(2), (e₁ + e₃) / 2, (2:5, 2:5, 2:7)),
+            (Edge(3), (e₁ + e₂) / 2, (2:5, 2:6, 2:6)),
+            (Vertex(), (e₁ + e₂ + e₃) / 2, (2:5, 2:6, 2:7)),
+        )
 
-        @test Stencil.indexranges(cells + e / 2, face_axes) == (4:9,)
-        @test Stencil.indexranges(cells - e / 2, face_axes) == (3:8,)
-        @test Stencil.indexranges(faces + e / 2, cell_axes) == (3:9,)
-        @test Stencil.indexranges(faces - e / 2, cell_axes) == (2:8,)
+        for (placement, offset, expected_indices) in cases
+            region = Region(placement, physical; halowidth) + offset
+            @test parentindices(view(A, region)) == expected_indices
+        end
 
-        @test Stencil.indexranges(cells + e, cell_axes) == (4:9,)
-        @test Stencil.indexranges(cells - e, cell_axes) == (2:7,)
-
-        e₁, e₂ = unitoffsets(Val(2))
-        region = Region(Face(1), Physical(), Physical(); halowidth=1) + (e₁ - e₂) / 2
-        @test Stencil.indexranges(region, (-2:3, 10:15)) == (-1:3, 11:13)
-
-        @test Stencil.indexranges(Region(Cell(), Halo(-1); halowidth=2), cell_axes) == (1:2,)
-        @test Stencil.indexranges(Region(Cell(), Halo(+1); halowidth=2), cell_axes) == (9:10,)
-        @test Stencil.indexranges(Region(Cell(), Boundary(-1); halowidth=2), cell_axes) == (3:3,)
-        @test Stencil.indexranges(Region(Cell(), Boundary(+1); halowidth=2), cell_axes) == (8:8,)
-        @test Stencil.indexranges(Region(Face(1), Halo(+1); halowidth=2), face_axes) == (10:11,)
-        @test Stencil.indexranges(Region(Face(1), Boundary(+1); halowidth=2), face_axes) == (9:9,)
-
-        mixed = Region(Face(1), Halo(-1), Boundary(+1); halowidth=2)
-        @test (@inferred Stencil.indexranges(mixed, (face_axes[1], cell_axes[1]))) == (1:2, 8:8)
-
-        edge = Region(Edge(1), Physical(), Physical(), Physical(); halowidth=1)
-        vertex = Region(Vertex(), Physical(), Physical(), Physical(); halowidth=1)
-        @test (@inferred Stencil.indexranges(edge, (1:6, 1:7, 1:7))) == (2:5, 2:6, 2:6)
-        @test (@inferred Stencil.indexranges(vertex, (1:7, 1:7, 1:7))) == (2:6, 2:6, 2:6)
-
-        anisotropic = Region(Cell(), Halo(-1), Halo(+1); halowidth=(1, 2))
-        @test (@inferred Stencil.indexranges(anisotropic, (1:8, 1:10))) == (1:1, 9:10)
-
-        boundary = Region(Face(1), Boundary(-1); halowidth=2)
-        @test Stencil.indexranges(boundary + e / 2, cell_axes) == (3:3,)
-        @test Stencil.indexranges(boundary - e / 2, cell_axes) == (2:2,)
-
-        @test_throws ArgumentError Stencil.indexranges(Region(Cell(), Halo(0); halowidth=2), cell_axes)
-        @test_throws ArgumentError Stencil.indexranges(Region(Cell(), Boundary(0); halowidth=2), cell_axes)
+        region = Region(Face(1), physical; halowidth) + e₁ / 2
+        @test size(@inferred(view(A, region))) == (4, 4, 5)
     end
 
-    @testset "Array indexing" begin
-        e₁, _ = unitoffsets(Val(2))
+    @testset "Region" begin
+        e₁, e₂ = unitoffsets(Val(2))
+        scalar = @inferred Region(Cell(), Physical(), Physical(); halowidth=2)
+        tuple = @inferred Region(Cell(), (Physical(), Physical()); halowidth=(2, 2))
+        A = zeros(10, 10)
+
+        @test parentindices(view(A, scalar)) == parentindices(view(A, tuple))
+        shifted = @inferred scalar + e₁
+        left_shifted = @inferred e₁ + scalar
+        @test parentindices(view(A, shifted)) == (4:9, 3:8)
+        @test parentindices(view(A, left_shifted)) == (4:9, 3:8)
+        @test parentindices(view(A, @inferred(shifted - e₁))) == parentindices(view(A, scalar))
+        @test_throws ArgumentError e₁ - scalar
+
+        e, = unitoffsets(Val(1))
+        cell_data = collect(1:10)
+        face_data = collect(1:11)
+        cells = Region(Cell(), Physical(); halowidth=2)
+        faces = Region(Face(1), Physical(); halowidth=2)
+
+        for (placement, array, physical_length) in ((Cell(), cell_data, 6), (Face(1), face_data, 7))
+            low = array[Region(placement, Halo(-1); halowidth=2)]
+            physical = array[Region(placement, Physical(); halowidth=2)]
+            high = array[Region(placement, Halo(+1); halowidth=2)]
+
+            @test [low; physical; high] == array
+            @test length(low) == length(high) == 2
+            @test length(physical) == physical_length
+            @test array[Region(placement, Boundary(-1); halowidth=2)] == physical[begin:begin]
+            @test array[Region(placement, Boundary(+1); halowidth=2)] == physical[end:end]
+        end
+
+        boundary = Region(Face(1), Boundary(-1); halowidth=2)
+        cases = (
+            (face_data, cells + e / 2, 4:9),
+            (face_data, cells - e / 2, 3:8),
+            (cell_data, faces + e / 2, 3:9),
+            (cell_data, faces - e / 2, 2:8),
+            (cell_data, cells + e, 4:9),
+            (cell_data, cells - e, 2:7),
+            (cell_data, boundary + e / 2, 3:3),
+            (cell_data, boundary - e / 2, 2:2),
+        )
+
+        for (array, region, expected) in cases
+            @test array[region] == array[expected]
+        end
+
+        mixed = Region(Face(1), Halo(-1), Boundary(+1); halowidth=2)
+        mixed_view = @inferred view(zeros(11, 10), mixed)
+        @test parentindices(mixed_view) == (1:2, 8:8)
+
+        anisotropic = Region(Cell(), Halo(-1), Halo(+1); halowidth=(1, 2))
+        anisotropic_view = @inferred view(zeros(8, 10), anisotropic)
+        @test parentindices(anisotropic_view) == (1:1, 9:10)
+
+        shifted = Region(Face(1), Physical(), Physical(); halowidth=1) + (e₁ - e₂) / 2
+        @test (@inferred Stencil.indexranges(shifted, (-2:3, 10:15))) == (-1:3, 11:13)
+    end
+
+    @testset "Finite differences" begin
+        e₁, e₂ = unitoffsets(Val(2))
         cells = Region(Cell(), Physical(), Physical(); halowidth=1)
-        faces = Region(Face(1), Physical(), Physical(); halowidth=1)
+        xfaces = Region(Face(1), Physical(), Physical(); halowidth=1)
+        yfaces = Region(Face(2), Physical(), Physical(); halowidth=1)
 
-        A = reshape(collect(1:30), 5, 6)
-        @test (@inferred Base.to_indices(A, (cells,))) == (2:4, 2:5)
-        @test A[cells] == A[2:4, 2:5]
-        @test A[Region(Cell(), Halo(-1), Physical(); halowidth=1)] == A[1:1, 2:5]
-        @test A[Region(Cell(), Boundary(+1), Physical(); halowidth=1)] == A[4:4, 2:5]
+        p = [i^2 + 3j^2 for i in 1:5, j in 1:4]
+        ∂p∂x = zeros(Int, 6, 4)
+        ∂p∂y = zeros(Int, 5, 5)
 
-        fill!(view(A, cells), 0)
-        @test all(iszero, A[cells])
+        @views @. ∂p∂x[xfaces] = p[xfaces + e₁ / 2] - p[xfaces - e₁ / 2]
+        @views @. ∂p∂y[yfaces] = p[yfaces + e₂ / 2] - p[yfaces - e₂ / 2]
 
-        pressure = reshape(collect(1.0:30.0), 5, 6)
-        gradient = zeros(6, 6)
-        @views @. gradient[faces] = pressure[faces + e₁ / 2] - pressure[faces - e₁ / 2]
-        @test gradient[faces] == ones(4, 4)
+        @test ∂p∂x[xfaces] == [3 3; 5 5; 7 7; 9 9]
+        @test ∂p∂y[yfaces] == [9 15 21; 9 15 21; 9 15 21]
+
+        u = [2i for i in 1:6, _ in 1:4]
+        v = [5j for _ in 1:5, j in 1:5]
+        divergence = zeros(Int, 5, 4)
+
+        @views @. divergence[cells] =
+            u[cells + e₁ / 2] - u[cells - e₁ / 2] +
+            v[cells + e₂ / 2] - v[cells - e₂ / 2]
+
+        @test divergence[cells] == fill(7, 3, 2)
+
+        laplacian = zeros(Int, 5, 4)
+
+        @views @. laplacian[cells] =
+            ∂p∂x[cells + e₁ / 2] - ∂p∂x[cells - e₁ / 2] +
+            ∂p∂y[cells + e₂ / 2] - ∂p∂y[cells - e₂ / 2]
+
+        @test laplacian[cells] == fill(8, 3, 2)
     end
 
     @testset "Reflection" begin
-        cell_axes = axes(zeros(10))
-        face_axes = axes(zeros(11))
+        cells = Region(Cell(), Physical(), Physical(); halowidth=2)
+        cell_low = Region(Cell(), Halo(-1), Physical(); halowidth=2)
+        cell_high = Region(Cell(), Halo(+1), Physical(); halowidth=2)
 
-        cell_low = Region(Cell(), Halo(-1); halowidth=2)
-        cell_high = Region(Cell(), Halo(+1); halowidth=2)
-        face_low = Region(Face(1), Halo(-1); halowidth=2)
-        face_high = Region(Face(1), Halo(+1); halowidth=2)
+        A = zeros(Int, 8, 6)
+        A[cells] .= [11 12; 21 22; 31 32; 41 42]
 
-        @test Stencil.mappedranges(reflect(cell_low, 1), cell_axes) == (4:-1:3,)
-        @test Stencil.mappedranges(reflect(cell_high, 1), cell_axes) == (8:-1:7,)
-        @test Stencil.mappedranges(reflect(face_low, 1), face_axes) == (5:-1:4,)
-        @test Stencil.mappedranges(reflect(face_high, 1), face_axes) == (8:-1:7,)
+        @views @. A[cell_low] = A[reflect(cell_low, 1)]
+        @views @. A[cell_high] = A[reflect(cell_high, 1)]
 
-        reflected = @inferred reflect(cell_low, 1)
-        unreflected = @inferred reflect(reflected, 1)
-        @test reflected isa Stencil.RegionMap
-        @test reflected isa Stencil.ReflectionMap
-        @test typeof(unreflected) === typeof(reflected)
-        @test (@inferred Stencil.mappedranges(reflected, cell_axes)) == (4:-1:3,)
-        @test (@inferred Stencil.mappedranges(unreflected, cell_axes)) == Stencil.indexranges(cell_low, cell_axes)
+        @test A[cell_low] == [21 22; 11 12]
+        @test A[cell_high] == [41 42; 31 32]
+
+        reflected_wall = @inferred view(A, reflect(cell_low, 1))
+        @test parentindices(reflected_wall) == (4:-1:3, 3:4)
+
+        faces = Region(Face(1), Physical(), Physical(); halowidth=2)
+        face_low = Region(Face(1), Halo(-1), Physical(); halowidth=2)
+        face_high = Region(Face(1), Halo(+1), Physical(); halowidth=2)
+
+        F = zeros(Int, 9, 6)
+        F[faces] .= [11 12; 21 22; 31 32; 41 42; 51 52]
+
+        @views @. F[face_low] = F[reflect(face_low, 1)]
+        @views @. F[face_high] = F[reflect(face_high, 1)]
+
+        @test F[face_low] == [31 32; 21 22]
+        @test F[face_high] == [41 42; 31 32]
 
         corner = Region(Cell(), Halo(-1), Halo(+1); halowidth=2)
-        reflected_corner = @inferred reflect(reflect(corner, 1), 2)
-        @test reflected_corner == reflect(reflect(corner, 2), 1)
-        @test (@inferred Stencil.mappedranges(reflected_corner, (cell_axes[1], cell_axes[1]))) == (4:-1:3, 8:-1:7)
+        C = [10i + j for i in 1:8, j in 1:7]
+        x_then_y = reflect(reflect(corner, 1), 2)
+        y_then_x = reflect(reflect(corner, 2), 1)
 
-        wall = Region(Cell(), Halo(-1), Physical(); halowidth=2)
-        wallreflection = reflect(wall, 1)
-        A₂ = zeros(10, 10)
-        @test (@inferred Stencil.mappedranges(wallreflection, axes(A₂))) == (4:-1:3, 3:8)
-        @test (@inferred view(A₂, wallreflection)) == @view A₂[4:-1:3, 3:8]
+        @test C[x_then_y] == C[y_then_x]
+        @views @. C[corner] = C[x_then_y]
+        @test C[corner] == [45 44; 35 34]
 
-        A = collect(1:10)
-        @test (@inferred view(A, reflected)) == @view A[4:-1:3]
-        @views @. A[cell_low] = A[reflect(cell_low, 1)]
-        @test A[1:2] == [4, 3]
+        C = [10i + j for i in 1:8, j in 1:7]
+        reflectionview = (array, region, d) -> view(array, reflect(region, d))
+        one_axis = @inferred reflectionview(C, corner, 1)
 
-        @test_throws ArgumentError reflect(Region(Cell(), Physical(); halowidth=2), 1)
-        @test_throws ArgumentError reflect(Region(Face(1), Boundary(-1); halowidth=2), 1)
+        @test parentindices(one_axis) == (4:-1:3, 6:1:7)
+        @test one_axis == [46 47; 36 37]
+
+        unreflected = @inferred view(C, reflect(reflect(corner, 1), 1))
+        @test parentindices(unreflected) == (1:1:2, 6:1:7)
+
+        boundary = Region(Cell(), Halo(-1), Boundary(+1); halowidth=2)
+        reflected_boundary = @inferred view(C, reflect(boundary, 1))
+        @test parentindices(reflected_boundary) == (4:-1:3, 5:5)
+
+        e, = unitoffsets(Val(1))
+        shifted_data = collect(1:9)
+        shifted_halo = Region(Cell(), Halo(-1); halowidth=2) + e / 2
+        @test shifted_data[shifted_halo] == shifted_data[2:3]
+        @test_throws ArgumentError reflect(shifted_halo, 1)
+
+        _, e₂ = unitoffsets(Val(2))
+        transverse_shift = Region(Cell(), Halo(-1), Physical(); halowidth=2) + e₂ / 2
+        @test_throws ArgumentError reflect(transverse_shift, 1)
+    end
+
+    @testset "Invalid geometry" begin
+        nbits = 8 * sizeof(UInt)
+
+        for constructor in (Face, Edge), d in (-1, 0, nbits + 1)
+            @test_throws ArgumentError constructor(d)
+        end
+
+        for constructor in (Halo, Boundary), side in (-2, 0, +2)
+            @test_throws ArgumentError constructor(side)
+        end
+
+        @test_throws ArgumentError Region(Cell(), Physical(); halowidth=-1)
+        @test_throws ArgumentError Region(Cell(), Physical(), Physical(); halowidth=(1, -1))
+        @test_throws DimensionMismatch view(zeros(4), Region(Cell(), Physical(); halowidth=2))
+        @test_throws DimensionMismatch view(zeros(5), Region(Face(1), Physical(); halowidth=2))
+        @test_throws DimensionMismatch view(zeros(4), Region(Cell(), Physical(); halowidth=typemax(Int)))
+
+        @test parentindices(view(zeros(5), Region(Cell(), Physical(); halowidth=2))) == (3:3,)
+        @test parentindices(view(zeros(6), Region(Face(1), Physical(); halowidth=2))) == (3:4,)
+        @test_throws DimensionMismatch view(zeros(5), reflect(Region(Cell(), Halo(-1); halowidth=2), 1))
+        @test_throws DimensionMismatch view(zeros(6), reflect(Region(Face(1), Halo(-1); halowidth=2), 1))
+
+        @test parentindices(view(zeros(6), reflect(Region(Cell(), Halo(-1); halowidth=2), 1))) == (4:-1:3,)
+        @test parentindices(view(zeros(7), reflect(Region(Face(1), Halo(-1); halowidth=2), 1))) == (5:-1:4,)
+
+        zero_halo = Region(Cell(), Physical(); halowidth=0)
+        @test parentindices(view(zeros(4), zero_halo)) == (1:4,)
+        @test isempty(view(zeros(4), Region(Cell(), Halo(-1); halowidth=0)))
+
+        @test_throws ArgumentError reflect(Region(Cell(), Physical(); halowidth=1), 1)
+        @test_throws ArgumentError reflect(Region(Face(1), Boundary(-1); halowidth=1), 1)
+        @test_throws ArgumentError reflect(Region(Cell(), Halo(-1); halowidth=1), 0)
+        @test_throws ArgumentError reflect(Region(Cell(), Halo(-1); halowidth=1), 2)
+        @test_throws ArgumentError reflect(reflect(Region(Cell(), Halo(-1); halowidth=1), 1), 2)
     end
 end

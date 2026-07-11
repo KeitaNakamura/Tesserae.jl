@@ -8,7 +8,10 @@ struct Placement
     mask::UInt
 end
 
-@inline axisbit(d::Int) = one(UInt) << (d - 1)
+@inline function axisbit(d::Int)
+    1 ≤ d ≤ 8 * sizeof(UInt) || throw(ArgumentError("axis must be between 1 and $(8 * sizeof(UInt)), got $d"))
+    one(UInt) << (d - 1)
+end
 
 """
     Cell()

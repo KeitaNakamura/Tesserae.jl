@@ -20,6 +20,10 @@ The halo region on the low (`side = -1`) or high (`side = +1`) side of an axis.
 """
 struct Halo <: AxisRegion
     side::Int
+    function Halo(side::Int)
+        side == -1 || side == +1 || throw(ArgumentError("side must be -1 or +1, got $side"))
+        new(side)
+    end
 end
 
 """
@@ -30,6 +34,10 @@ an axis.
 """
 struct Boundary <: AxisRegion
     side::Int
+    function Boundary(side::Int)
+        side == -1 || side == +1 || throw(ArgumentError("side must be -1 or +1, got $side"))
+        new(side)
+    end
 end
 
 """
@@ -38,7 +46,7 @@ end
 An `N`-dimensional Cartesian product of axis regions. A region stores geometry
 relative to the physical domain, but not concrete array indices or extents.
 `halowidth` may be an `N`-tuple of axis widths or a scalar width shared by all
-axes.
+axes. Each width must be nonnegative.
 """
 struct Region{N, Axes <: NTuple{N, AxisRegion}}
     placement::Placement
@@ -51,6 +59,7 @@ abstract type RegionMap end
 
 function Region(placement::Placement, axes::NTuple{N, AxisRegion}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
     widths = halowidth isa Int ? ntuple(_ -> halowidth, Val(N)) : halowidth
+    all(width -> width ≥ 0, widths) || throw(ArgumentError("halowidth must be nonnegative, got $widths"))
     Region(placement, axes, widths, zero(GridOffset{N}))
 end
 
