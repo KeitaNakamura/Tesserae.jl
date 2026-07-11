@@ -1,6 +1,20 @@
 using Tesserae.Stencil
 
 @testset "Stencil" begin
+    @testset "Placement" begin
+        cell = @inferred Cell()
+        face₁ = @inferred Face(1)
+        face₂ = @inferred Face(2)
+        face₃ = @inferred Face(3)
+
+        @test typeof(cell) === typeof(face₁) === typeof(face₂) === typeof(face₃)
+        @test isbitstype(typeof(cell))
+        @test cell.mask === zero(UInt)
+        @test face₁.mask === UInt(0b001)
+        @test face₂.mask === UInt(0b010)
+        @test face₃.mask === UInt(0b100)
+    end
+
     @testset "GridOffset" begin
         offsets = @inferred unitoffsets(Val(3))
         e₁, e₂, e₃ = offsets
