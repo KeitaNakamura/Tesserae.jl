@@ -17,24 +17,24 @@ using Tesserae.Stencil
 
     @testset "Region" begin
         physical = Physical()
-        ghost⁻ = Ghost(-1)
-        ghost⁺ = Ghost(+1)
+        halo⁻ = Halo(-1)
+        halo⁺ = Halo(+1)
         boundary⁻ = Boundary(-1)
         boundary⁺ = Boundary(+1)
 
         @test physical isa AxisRegion
-        @test ghost⁻ isa AxisRegion
+        @test halo⁻ isa AxisRegion
         @test boundary⁻ isa AxisRegion
-        @test ghost⁻.side === -1
-        @test ghost⁺.side === +1
+        @test halo⁻.side === -1
+        @test halo⁺.side === +1
         @test boundary⁻.side === -1
         @test boundary⁺.side === +1
 
-        cells = @inferred Region(Cell(), physical; halo=2)
+        cells = @inferred Region(Cell(), physical; halowidth=2)
         @test cells isa Region{1}
         @test cells.placement == Cell()
         @test cells.axes == (physical,)
-        @test cells.halo === 2
+        @test cells.halowidth === 2
 
         e, = unitoffsets(Val(1))
         @test iszero(cells.offset)
@@ -42,26 +42,26 @@ using Tesserae.Stencil
         shifted = @inferred cells + e / 2
         @test shifted.placement == cells.placement
         @test shifted.axes == cells.axes
-        @test shifted.halo == cells.halo
+        @test shifted.halowidth == cells.halowidth
         @test shifted.offset == e / 2
         @test (@inferred(e / 2 + cells)) == shifted
         @test (@inferred(shifted - e)).offset == -e / 2
         @test (@inferred(shifted + e / 2)).offset == e
         @test_throws ArgumentError e - cells
 
-        lowghost = @inferred Region(Face(1), ghost⁻, physical; halo=1)
-        @test lowghost isa Region{2}
-        @test lowghost.placement == Face(1)
-        @test lowghost.axes == (ghost⁻, physical)
-        @test typeof(lowghost.axes) === Tuple{Ghost,Physical}
-        @test lowghost.halo === 1
-        @test isbitstype(typeof(lowghost))
+        lowhalo = @inferred Region(Face(1), halo⁻, physical; halowidth=1)
+        @test lowhalo isa Region{2}
+        @test lowhalo.placement == Face(1)
+        @test lowhalo.axes == (halo⁻, physical)
+        @test typeof(lowhalo.axes) === Tuple{Halo,Physical}
+        @test lowhalo.halowidth === 1
+        @test isbitstype(typeof(lowhalo))
 
         e₁, e₂ = unitoffsets(Val(2))
-        translated = @inferred lowghost + e₁ - e₂ / 2
+        translated = @inferred lowhalo + e₁ - e₂ / 2
         @test translated.offset.doubled == (2, -1)
 
-        highboundary = @inferred Region(Face(1), boundary⁺, physical; halo=1)
+        highboundary = @inferred Region(Face(1), boundary⁺, physical; halowidth=1)
         @test highboundary.axes == (boundary⁺, physical)
     end
 
@@ -102,8 +102,8 @@ using Tesserae.Stencil
 
     @testset "Index ranges" begin
         e, = unitoffsets(Val(1))
-        cells = Region(Cell(), Physical(); halo=2)
-        faces = Region(Face(1), Physical(); halo=2)
+        cells = Region(Cell(), Physical(); halowidth=2)
+        faces = Region(Face(1), Physical(); halowidth=2)
         cell_axes = axes(zeros(10))
         face_axes = axes(zeros(11))
 
@@ -119,37 +119,37 @@ using Tesserae.Stencil
         @test Stencil.indexranges(cells - e, cell_axes) == (2:7,)
 
         e₁, e₂ = unitoffsets(Val(2))
-        region = Region(Face(1), Physical(), Physical(); halo=1) + (e₁ - e₂) / 2
+        region = Region(Face(1), Physical(), Physical(); halowidth=1) + (e₁ - e₂) / 2
         @test Stencil.indexranges(region, (-2:3, 10:15)) == (-1:3, 11:13)
 
-        @test Stencil.indexranges(Region(Cell(), Ghost(-1); halo=2), cell_axes) == (1:2,)
-        @test Stencil.indexranges(Region(Cell(), Ghost(+1); halo=2), cell_axes) == (9:10,)
-        @test Stencil.indexranges(Region(Cell(), Boundary(-1); halo=2), cell_axes) == (3:3,)
-        @test Stencil.indexranges(Region(Cell(), Boundary(+1); halo=2), cell_axes) == (8:8,)
-        @test Stencil.indexranges(Region(Face(1), Ghost(+1); halo=2), face_axes) == (10:11,)
-        @test Stencil.indexranges(Region(Face(1), Boundary(+1); halo=2), face_axes) == (9:9,)
+        @test Stencil.indexranges(Region(Cell(), Halo(-1); halowidth=2), cell_axes) == (1:2,)
+        @test Stencil.indexranges(Region(Cell(), Halo(+1); halowidth=2), cell_axes) == (9:10,)
+        @test Stencil.indexranges(Region(Cell(), Boundary(-1); halowidth=2), cell_axes) == (3:3,)
+        @test Stencil.indexranges(Region(Cell(), Boundary(+1); halowidth=2), cell_axes) == (8:8,)
+        @test Stencil.indexranges(Region(Face(1), Halo(+1); halowidth=2), face_axes) == (10:11,)
+        @test Stencil.indexranges(Region(Face(1), Boundary(+1); halowidth=2), face_axes) == (9:9,)
 
-        mixed = Region(Face(1), Ghost(-1), Boundary(+1); halo=2)
+        mixed = Region(Face(1), Halo(-1), Boundary(+1); halowidth=2)
         @test (@inferred Stencil.indexranges(mixed, (face_axes[1], cell_axes[1]))) == (1:2, 8:8)
 
-        boundary = Region(Face(1), Boundary(-1); halo=2)
+        boundary = Region(Face(1), Boundary(-1); halowidth=2)
         @test Stencil.indexranges(boundary + e / 2, cell_axes) == (3:3,)
         @test Stencil.indexranges(boundary - e / 2, cell_axes) == (2:2,)
 
-        @test_throws ArgumentError Stencil.indexranges(Region(Cell(), Ghost(0); halo=2), cell_axes)
-        @test_throws ArgumentError Stencil.indexranges(Region(Cell(), Boundary(0); halo=2), cell_axes)
+        @test_throws ArgumentError Stencil.indexranges(Region(Cell(), Halo(0); halowidth=2), cell_axes)
+        @test_throws ArgumentError Stencil.indexranges(Region(Cell(), Boundary(0); halowidth=2), cell_axes)
     end
 
     @testset "Array indexing" begin
         e₁, _ = unitoffsets(Val(2))
-        cells = Region(Cell(), Physical(), Physical(); halo=1)
-        faces = Region(Face(1), Physical(), Physical(); halo=1)
+        cells = Region(Cell(), Physical(), Physical(); halowidth=1)
+        faces = Region(Face(1), Physical(), Physical(); halowidth=1)
 
         A = reshape(collect(1:30), 5, 6)
         @test (@inferred Base.to_indices(A, (cells,))) == (2:4, 2:5)
         @test A[cells] == A[2:4, 2:5]
-        @test A[Region(Cell(), Ghost(-1), Physical(); halo=1)] == A[1:1, 2:5]
-        @test A[Region(Cell(), Boundary(+1), Physical(); halo=1)] == A[4:4, 2:5]
+        @test A[Region(Cell(), Halo(-1), Physical(); halowidth=1)] == A[1:1, 2:5]
+        @test A[Region(Cell(), Boundary(+1), Physical(); halowidth=1)] == A[4:4, 2:5]
 
         fill!(view(A, cells), 0)
         @test all(iszero, A[cells])
@@ -164,10 +164,10 @@ using Tesserae.Stencil
         cell_axes = axes(zeros(10))
         face_axes = axes(zeros(11))
 
-        cell_low = Region(Cell(), Ghost(-1); halo=2)
-        cell_high = Region(Cell(), Ghost(+1); halo=2)
-        face_low = Region(Face(1), Ghost(-1); halo=2)
-        face_high = Region(Face(1), Ghost(+1); halo=2)
+        cell_low = Region(Cell(), Halo(-1); halowidth=2)
+        cell_high = Region(Cell(), Halo(+1); halowidth=2)
+        face_low = Region(Face(1), Halo(-1); halowidth=2)
+        face_high = Region(Face(1), Halo(+1); halowidth=2)
 
         @test Stencil.indexranges(mirror(cell_low, 1), cell_axes) == (4:-1:3,)
         @test Stencil.indexranges(mirror(cell_high, 1), cell_axes) == (8:-1:7,)
@@ -175,7 +175,7 @@ using Tesserae.Stencil
         @test Stencil.indexranges(mirror(face_high, 1), face_axes) == (8:-1:7,)
         @test mirror(mirror(cell_low, 1), 1) == cell_low
 
-        corner = Region(Cell(), Ghost(-1), Ghost(+1); halo=2)
+        corner = Region(Cell(), Halo(-1), Halo(+1); halowidth=2)
         mirrored = mirror(mirror(corner, 1), 2)
         @test mirrored == mirror(mirror(corner, 2), 1)
         @test (@inferred Stencil.indexranges(mirrored, (cell_axes[1], cell_axes[1]))) == (4:-1:3, 8:-1:7)
@@ -184,7 +184,7 @@ using Tesserae.Stencil
         @views @. A[cell_low] = A[mirror(cell_low, 1)]
         @test A[1:2] == [4, 3]
 
-        @test_throws ArgumentError mirror(Region(Cell(), Physical(); halo=2), 1)
-        @test_throws ArgumentError mirror(Region(Face(1), Boundary(-1); halo=2), 1)
+        @test_throws ArgumentError mirror(Region(Cell(), Physical(); halowidth=2), 1)
+        @test_throws ArgumentError mirror(Region(Face(1), Boundary(-1); halowidth=2), 1)
     end
 end

@@ -14,11 +14,11 @@ The physical part of an axis.
 struct Physical <: AxisRegion end
 
 """
-    Ghost(side)
+    Halo(side)
 
-The ghost part of the low (`side = -1`) or high (`side = +1`) side of an axis.
+The halo region on the low (`side = -1`) or high (`side = +1`) side of an axis.
 """
-struct Ghost <: AxisRegion
+struct Halo <: AxisRegion
     side::Int
 end
 
@@ -33,7 +33,7 @@ struct Boundary <: AxisRegion
 end
 
 """
-    Region(placement, axes...; halo)
+    Region(placement, axes...; halowidth)
 
 An `N`-dimensional Cartesian product of axis regions. A region stores geometry
 relative to the physical domain, but not concrete array indices or extents.
@@ -41,26 +41,26 @@ relative to the physical domain, but not concrete array indices or extents.
 struct Region{N, Axes <: NTuple{N, AxisRegion}}
     placement::Placement
     axes::Axes
-    halo::Int
+    halowidth::Int
     offset::GridOffset{N}
 end
 
-function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halo::Int) where {N}
-    Region(placement, axes, halo, zero(GridOffset{N}))
+function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halowidth::Int) where {N}
+    Region(placement, axes, halowidth, zero(GridOffset{N}))
 end
 
 @inline placement(region::Region) = region.placement
 @inline axisregion(region::Region, d::Int) = region.axes[d]
-@inline halo(region::Region) = region.halo
+@inline halowidth(region::Region) = region.halowidth
 @inline nhalfsteps(region::Region, d::Int) = nhalfsteps(region.offset, d)
-@inline side(region::Union{Ghost, Boundary}) = region.side
+@inline side(region::Union{Halo, Boundary}) = region.side
 
 @inline function replaceaxis(region::Region, d::Int, axis::AxisRegion)
-    Region(region.placement, Base.setindex(region.axes, axis, d), region.halo, region.offset)
+    Region(region.placement, Base.setindex(region.axes, axis, d), region.halowidth, region.offset)
 end
 
 @inline function shift(region::Region{N}, offset::GridOffset{N}) where {N}
-    Region(region.placement, region.axes, region.halo, region.offset + offset)
+    Region(region.placement, region.axes, region.halowidth, region.offset + offset)
 end
 
 @inline Base.:+(region::Region{N}, offset::GridOffset{N}) where {N} = shift(region, offset)

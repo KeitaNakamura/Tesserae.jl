@@ -5,7 +5,7 @@ export
     Boundary,
     Cell,
     Face,
-    Ghost,
+    Halo,
     Physical,
     Region,
     mirror,
