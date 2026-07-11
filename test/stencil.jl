@@ -170,7 +170,7 @@ using Tesserae.Stencil
         @test gradient[faces] == ones(4, 4)
     end
 
-    @testset "Mirror" begin
+    @testset "Reflection" begin
         cell_axes = axes(zeros(10))
         face_axes = axes(zeros(11))
 
@@ -179,22 +179,36 @@ using Tesserae.Stencil
         face_low = Region(Face(1), Halo(-1); halowidth=2)
         face_high = Region(Face(1), Halo(+1); halowidth=2)
 
-        @test Stencil.indexranges(mirror(cell_low, 1), cell_axes) == (4:-1:3,)
-        @test Stencil.indexranges(mirror(cell_high, 1), cell_axes) == (8:-1:7,)
-        @test Stencil.indexranges(mirror(face_low, 1), face_axes) == (5:-1:4,)
-        @test Stencil.indexranges(mirror(face_high, 1), face_axes) == (8:-1:7,)
-        @test mirror(mirror(cell_low, 1), 1) == cell_low
+        @test Stencil.mappedranges(reflect(cell_low, 1), cell_axes) == (4:-1:3,)
+        @test Stencil.mappedranges(reflect(cell_high, 1), cell_axes) == (8:-1:7,)
+        @test Stencil.mappedranges(reflect(face_low, 1), face_axes) == (5:-1:4,)
+        @test Stencil.mappedranges(reflect(face_high, 1), face_axes) == (8:-1:7,)
+
+        reflected = @inferred reflect(cell_low, 1)
+        unreflected = @inferred reflect(reflected, 1)
+        @test reflected isa Stencil.RegionMap
+        @test reflected isa Stencil.ReflectionMap
+        @test typeof(unreflected) === typeof(reflected)
+        @test (@inferred Stencil.mappedranges(reflected, cell_axes)) == (4:-1:3,)
+        @test (@inferred Stencil.mappedranges(unreflected, cell_axes)) == Stencil.indexranges(cell_low, cell_axes)
 
         corner = Region(Cell(), Halo(-1), Halo(+1); halowidth=2)
-        mirrored = mirror(mirror(corner, 1), 2)
-        @test mirrored == mirror(mirror(corner, 2), 1)
-        @test (@inferred Stencil.indexranges(mirrored, (cell_axes[1], cell_axes[1]))) == (4:-1:3, 8:-1:7)
+        reflected_corner = @inferred reflect(reflect(corner, 1), 2)
+        @test reflected_corner == reflect(reflect(corner, 2), 1)
+        @test (@inferred Stencil.mappedranges(reflected_corner, (cell_axes[1], cell_axes[1]))) == (4:-1:3, 8:-1:7)
+
+        wall = Region(Cell(), Halo(-1), Physical(); halowidth=2)
+        wallreflection = reflect(wall, 1)
+        A₂ = zeros(10, 10)
+        @test (@inferred Stencil.mappedranges(wallreflection, axes(A₂))) == (4:-1:3, 3:8)
+        @test (@inferred view(A₂, wallreflection)) == @view A₂[4:-1:3, 3:8]
 
         A = collect(1:10)
-        @views @. A[cell_low] = A[mirror(cell_low, 1)]
+        @test (@inferred view(A, reflected)) == @view A[4:-1:3]
+        @views @. A[cell_low] = A[reflect(cell_low, 1)]
         @test A[1:2] == [4, 3]
 
-        @test_throws ArgumentError mirror(Region(Cell(), Physical(); halowidth=2), 1)
-        @test_throws ArgumentError mirror(Region(Face(1), Boundary(-1); halowidth=2), 1)
+        @test_throws ArgumentError reflect(Region(Cell(), Physical(); halowidth=2), 1)
+        @test_throws ArgumentError reflect(Region(Face(1), Boundary(-1); halowidth=2), 1)
     end
 end

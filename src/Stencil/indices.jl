@@ -43,3 +43,7 @@ end
 @inline function Base.to_indices(A::AbstractArray{T, N}, indices::Tuple{Region{N}}) where {T, N}
     indexranges(only(indices), axes(A))
 end
+
+@inline function Base.to_indices(A::AbstractArray, indices::Tuple{<: RegionMap})
+    mappedranges(only(indices), axes(A))
+end

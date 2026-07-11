@@ -47,6 +47,8 @@ struct Region{N, Axes <: NTuple{N, AxisRegion}}
     offset::GridOffset{N}
 end
 
+abstract type RegionMap end
+
 function Region(placement::Placement, axes::NTuple{N, AxisRegion}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
     widths = halowidth isa Int ? ntuple(_ -> halowidth, Val(N)) : halowidth
     Region(placement, axes, widths, zero(GridOffset{N}))
@@ -57,15 +59,12 @@ function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halowidth::Un
 end
 
 @inline placement(region::Region) = region.placement
+@inline axisregions(region::Region) = region.axes
 @inline axisregion(region::Region, d::Int) = region.axes[d]
 @inline halowidth(region::Region) = region.halowidth
 @inline halowidth(region::Region, d::Int) = region.halowidth[d]
 @inline nhalfsteps(region::Region, d::Int) = nhalfsteps(region.offset, d)
 @inline side(region::Union{Halo, Boundary}) = region.side
-
-@inline function withaxisregion(region::Region, d::Int, axis::AxisRegion)
-    Region(region.placement, Base.setindex(region.axes, axis, d), region.halowidth, region.offset)
-end
 
 @inline function shift(region::Region{N}, offset::GridOffset{N}) where {N}
     Region(region.placement, region.axes, region.halowidth, region.offset + offset)
@@ -77,3 +76,4 @@ end
 Base.:-(::GridOffset, ::Region) = throw(ArgumentError("`GridOffset - Region` is not a translation; write `Region - GridOffset`"))
 
 Base.broadcastable(region::Region) = Ref(region)
+Base.broadcastable(map::RegionMap) = Ref(map)

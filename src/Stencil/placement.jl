@@ -8,6 +8,8 @@ struct Placement
     mask::UInt
 end
 
+@inline axisbit(d::Int) = one(UInt) << (d - 1)
+
 """
     Cell()
 
@@ -21,6 +23,6 @@ Cell() = Placement(zero(UInt))
 Create a placement that is node-aligned along axis `d` and cell-centered along
 every other axis.
 """
-Face(d::Int) = Placement(one(UInt) << (d - 1))
+Face(d::Int) = Placement(axisbit(d))
 
-@inline isnodealigned(placement::Placement, d::Int) = !iszero(placement.mask & (one(UInt) << (d - 1)))
+@inline isnodealigned(placement::Placement, d::Int) = !iszero(placement.mask & axisbit(d))
