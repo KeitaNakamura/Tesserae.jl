@@ -99,4 +99,30 @@ using Tesserae.Stencil
         @test_throws ArgumentError e₁ / 4
         @test_throws DivideError e₁ / 0
     end
+
+    @testset "Index ranges" begin
+        e, = unitoffsets(Val(1))
+        cells = Region(Cell(), Physical(); halo=2)
+        faces = Region(Face(1), Physical(); halo=2)
+        cell_axes = axes(zeros(10))
+        face_axes = axes(zeros(11))
+
+        @test (@inferred Stencil.indexranges(cells, cell_axes)) == (3:8,)
+        @test (@inferred Stencil.indexranges(faces, face_axes)) == (3:9,)
+
+        @test Stencil.indexranges(cells + e / 2, face_axes) == (4:9,)
+        @test Stencil.indexranges(cells - e / 2, face_axes) == (3:8,)
+        @test Stencil.indexranges(faces + e / 2, cell_axes) == (3:9,)
+        @test Stencil.indexranges(faces - e / 2, cell_axes) == (2:8,)
+
+        @test Stencil.indexranges(cells + e, cell_axes) == (4:9,)
+        @test Stencil.indexranges(cells - e, cell_axes) == (2:7,)
+
+        e₁, e₂ = unitoffsets(Val(2))
+        region = Region(Face(1), Physical(), Physical(); halo=1) + (e₁ - e₂) / 2
+        @test Stencil.indexranges(region, (-2:3, 10:15)) == (-1:3, 11:13)
+
+        ghost = Region(Cell(), Ghost(-1); halo=2)
+        @test_throws MethodError Stencil.indexranges(ghost, cell_axes)
+    end
 end

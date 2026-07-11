@@ -22,3 +22,5 @@ Create a placement that is node-aligned along axis `d` and cell-centered along
 every other axis.
 """
 Face(d::Int) = Placement(one(UInt) << (d - 1))
+
+@inline isnodealigned(placement::Placement, d::Int) = !iszero(placement.mask & (one(UInt) << (d - 1)))

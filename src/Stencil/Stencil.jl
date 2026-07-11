@@ -13,5 +13,6 @@ export
 include("offset.jl")
 include("placement.jl")
 include("region.jl")
+include("indices.jl")
 
 end # module Stencil

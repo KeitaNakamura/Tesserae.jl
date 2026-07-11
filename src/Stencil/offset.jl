@@ -9,6 +9,8 @@ struct GridOffset{N}
     doubled::NTuple{N, Int}
 end
 
+@inline nhalfsteps(offset::GridOffset, d::Int) = offset.doubled[d]
+
 """
     unitoffsets(Val(N))
 

@@ -49,6 +49,10 @@ function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halo::Int) wh
     Region(placement, axes, halo, zero(GridOffset{N}))
 end
 
+@inline placement(region::Region) = region.placement
+@inline halo(region::Region) = region.halo
+@inline nhalfsteps(region::Region, d::Int) = nhalfsteps(region.offset, d)
+
 @inline function shift(region::Region{N}, offset::GridOffset{N}) where {N}
     Region(region.placement, region.axes, region.halo, region.offset + offset)
 end
