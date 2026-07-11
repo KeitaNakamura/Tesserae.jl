@@ -159,4 +159,32 @@ using Tesserae.Stencil
         @views @. gradient[faces] = pressure[faces + e₁ / 2] - pressure[faces - e₁ / 2]
         @test gradient[faces] == ones(4, 4)
     end
+
+    @testset "Mirror" begin
+        cell_axes = axes(zeros(10))
+        face_axes = axes(zeros(11))
+
+        cell_low = Region(Cell(), Ghost(-1); halo=2)
+        cell_high = Region(Cell(), Ghost(+1); halo=2)
+        face_low = Region(Face(1), Ghost(-1); halo=2)
+        face_high = Region(Face(1), Ghost(+1); halo=2)
+
+        @test Stencil.indexranges(mirror(cell_low, 1), cell_axes) == (4:-1:3,)
+        @test Stencil.indexranges(mirror(cell_high, 1), cell_axes) == (8:-1:7,)
+        @test Stencil.indexranges(mirror(face_low, 1), face_axes) == (5:-1:4,)
+        @test Stencil.indexranges(mirror(face_high, 1), face_axes) == (8:-1:7,)
+        @test mirror(mirror(cell_low, 1), 1) == cell_low
+
+        corner = Region(Cell(), Ghost(-1), Ghost(+1); halo=2)
+        mirrored = mirror(mirror(corner, 1), 2)
+        @test mirrored == mirror(mirror(corner, 2), 1)
+        @test (@inferred Stencil.indexranges(mirrored, (cell_axes[1], cell_axes[1]))) == (4:-1:3, 8:-1:7)
+
+        A = collect(1:10)
+        @views @. A[cell_low] = A[mirror(cell_low, 1)]
+        @test A[1:2] == [4, 3]
+
+        @test_throws ArgumentError mirror(Region(Cell(), Physical(); halo=2), 1)
+        @test_throws ArgumentError mirror(Region(Face(1), Boundary(-1); halo=2), 1)
+    end
 end

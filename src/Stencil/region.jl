@@ -55,6 +55,10 @@ end
 @inline nhalfsteps(region::Region, d::Int) = nhalfsteps(region.offset, d)
 @inline side(region::Union{Ghost, Boundary}) = region.side
 
+@inline function replaceaxis(region::Region, d::Int, axis::AxisRegion)
+    Region(region.placement, Base.setindex(region.axes, axis, d), region.halo, region.offset)
+end
+
 @inline function shift(region::Region{N}, offset::GridOffset{N}) where {N}
     Region(region.placement, region.axes, region.halo, region.offset + offset)
 end

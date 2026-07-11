@@ -20,20 +20,20 @@ function indexranges(region::Region{N}, array_axes::NTuple{N, AbstractUnitRange{
         first_index = first(axis) + halo_width + index_shift
         physical = first_index:(first_index + count - 1)
 
-        _indexrange(axisregion(region, d), physical, halo_width)
+        _indexrange(axisregion(region, d), physical, halo_width, node_aligned)
     end
 end
 
-@inline _indexrange(::Physical, physical::UnitRange{Int}, ::Int) = physical
+@inline _indexrange(::Physical, physical::UnitRange{Int}, ::Int, ::Bool) = physical
 
-@inline function _indexrange(region::Ghost, physical::UnitRange{Int}, halo::Int)
+@inline function _indexrange(region::Ghost, physical::UnitRange{Int}, halo::Int, ::Bool)
     s = side(region)
     s == -1 && return (first(physical) - halo):(first(physical) - 1)
     s == +1 && return (last(physical) + 1):(last(physical) + halo)
     throw(ArgumentError("side must be -1 or +1, got $s"))
 end
 
-@inline function _indexrange(region::Boundary, physical::UnitRange{Int}, ::Int)
+@inline function _indexrange(region::Boundary, physical::UnitRange{Int}, ::Int, ::Bool)
     s = side(region)
     s == -1 && return first(physical):first(physical)
     s == +1 && return last(physical):last(physical)
