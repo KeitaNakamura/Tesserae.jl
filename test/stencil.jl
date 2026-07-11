@@ -62,10 +62,16 @@ using Tesserae.Stencil
         @test parentindices(view(A, scalar)) == parentindices(view(A, tuple))
         shifted = @inferred scalar + e₁
         left_shifted = @inferred e₁ + scalar
+        @test shifted isa Stencil.ShiftedRegion
+        @test parent(shifted) === scalar
         @test parentindices(view(A, shifted)) == (4:9, 3:8)
         @test parentindices(view(A, left_shifted)) == (4:9, 3:8)
-        @test parentindices(view(A, @inferred(shifted - e₁))) == parentindices(view(A, scalar))
+        unshifted = @inferred shifted - e₁
+        @test unshifted isa Stencil.ShiftedRegion
+        @test parent(unshifted) === scalar
+        @test parentindices(view(A, unshifted)) == parentindices(view(A, scalar))
         @test_throws ArgumentError e₁ - scalar
+        @test_throws ArgumentError e₁ - shifted
 
         e, = unitoffsets(Val(1))
         cell_data = collect(1:10)
@@ -206,6 +212,7 @@ using Tesserae.Stencil
         shifted_halo = Region(Cell(), Halo(-1); halowidth=2) + e / 2
         @test shifted_data[shifted_halo] == shifted_data[2:3]
         @test_throws ArgumentError reflect(shifted_halo, 1)
+        @test_throws ArgumentError reflect(Region(Cell(), Halo(-1); halowidth=2) + zero(e), 1)
 
         _, e₂ = unitoffsets(Val(2))
         transverse_shift = Region(Cell(), Halo(-1), Physical(); halowidth=2) + e₂ / 2

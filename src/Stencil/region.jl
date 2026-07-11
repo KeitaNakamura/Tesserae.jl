@@ -40,27 +40,34 @@ struct Boundary <: AxisRegion
     end
 end
 
+@inline side(region::Union{Halo, Boundary}) = region.side
+
 """
     Region(placement, axes...; halowidth)
 
 An `N`-dimensional Cartesian product of axis regions. A region stores geometry
 relative to the physical domain, but not concrete array indices or extents.
 `halowidth` may be an `N`-tuple of axis widths or a scalar width shared by all
-axes. Each width must be nonnegative.
+axes. Each width must be nonnegative. Shifting a region produces a
+[`ShiftedRegion`](@ref).
 """
 struct Region{N, Axes <: NTuple{N, AxisRegion}}
     placement::Placement
     axes::Axes
     halowidth::NTuple{N, Int}
-    offset::GridOffset{N}
+    function Region{N, Axes}(placement::Placement, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
+        all(width -> width ≥ 0, halowidth) || throw(ArgumentError("halowidth must be nonnegative, got $halowidth"))
+        new{N, Axes}(placement, axes, halowidth)
+    end
 end
 
-abstract type RegionMap end
+function Region(placement::Placement, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
+    Region{N, Axes}(placement, axes, halowidth)
+end
 
 function Region(placement::Placement, axes::NTuple{N, AxisRegion}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
     widths = halowidth isa Int ? ntuple(_ -> halowidth, Val(N)) : halowidth
-    all(width -> width ≥ 0, widths) || throw(ArgumentError("halowidth must be nonnegative, got $widths"))
-    Region(placement, axes, widths, zero(GridOffset{N}))
+    Region(placement, axes, widths)
 end
 
 function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
@@ -69,20 +76,45 @@ end
 
 @inline placement(region::Region) = region.placement
 @inline axisregions(region::Region) = region.axes
-@inline axisregion(region::Region, d::Int) = region.axes[d]
 @inline halowidth(region::Region) = region.halowidth
 @inline halowidth(region::Region, d::Int) = region.halowidth[d]
-@inline nhalfsteps(region::Region, d::Int) = nhalfsteps(region.offset, d)
-@inline side(region::Union{Halo, Boundary}) = region.side
 
-@inline function shift(region::Region{N}, offset::GridOffset{N}) where {N}
-    Region(region.placement, region.axes, region.halowidth, region.offset + offset)
+@inline function shift(region::Region{N}, displacement::GridOffset{N}) where {N}
+    ShiftedRegion(region, displacement)
 end
 
 @inline Base.:+(region::Region{N}, offset::GridOffset{N}) where {N} = shift(region, offset)
 @inline Base.:+(offset::GridOffset{N}, region::Region{N}) where {N} = shift(region, offset)
 @inline Base.:-(region::Region{N}, offset::GridOffset{N}) where {N} = shift(region, -offset)
-Base.:-(::GridOffset, ::Region) = throw(ArgumentError("`GridOffset - Region` is not a translation; write `Region - GridOffset`"))
+Base.:-(::GridOffset, ::Region) = throw(ArgumentError("`GridOffset - region` is not a shift; write `region - GridOffset`"))
 
 Base.broadcastable(region::Region) = Ref(region)
+
+"""
+    ShiftedRegion
+
+A [`Region`](@ref) shifted by a [`GridOffset`](@ref). Shifted regions are
+created by adding or subtracting a grid offset from a region.
+"""
+struct ShiftedRegion{N, R <: Region{N}}
+    region::R
+    offset::GridOffset{N}
+end
+
+@inline Base.parent(shifted::ShiftedRegion) = shifted.region
+@inline offset(shifted::ShiftedRegion) = shifted.offset
+
+@inline function shift(shifted::ShiftedRegion{N}, displacement::GridOffset{N}) where {N}
+    ShiftedRegion(parent(shifted), offset(shifted) + displacement)
+end
+
+@inline Base.:+(shifted::ShiftedRegion{N}, offset::GridOffset{N}) where {N} = shift(shifted, offset)
+@inline Base.:+(offset::GridOffset{N}, shifted::ShiftedRegion{N}) where {N} = shift(shifted, offset)
+@inline Base.:-(shifted::ShiftedRegion{N}, offset::GridOffset{N}) where {N} = shift(shifted, -offset)
+Base.:-(::GridOffset, ::ShiftedRegion) = throw(ArgumentError("`GridOffset - region` is not a shift; write `region - GridOffset`"))
+
+Base.broadcastable(shifted::ShiftedRegion) = Ref(shifted)
+
+abstract type RegionMap end
+
 Base.broadcastable(map::RegionMap) = Ref(map)
