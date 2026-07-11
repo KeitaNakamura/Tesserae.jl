@@ -1,10 +1,10 @@
 """
     indexranges(region, array_axes)
 
-Resolve a physical region against concrete array axes and return one storage
+Resolve a region against concrete array axes and return one storage
 index range per dimension.
 """
-function indexranges(region::Region{N, <: NTuple{N, Physical}}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
+function indexranges(region::Region{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
     ntuple(Val(N)) do d
         axis = array_axes[d]
         halo_width = halo(region)
@@ -18,9 +18,26 @@ function indexranges(region::Region{N, <: NTuple{N, Physical}}, array_axes::NTup
         ncells = length(axis) - 2 * halo_width - iszero(translated_phase)
         count = ncells + node_aligned
         first_index = first(axis) + halo_width + index_shift
+        physical = first_index:(first_index + count - 1)
 
-        first_index:(first_index + count - 1)
+        _indexrange(axisregion(region, d), physical, halo_width)
     end
+end
+
+@inline _indexrange(::Physical, physical::UnitRange{Int}, ::Int) = physical
+
+@inline function _indexrange(region::Ghost, physical::UnitRange{Int}, halo::Int)
+    s = side(region)
+    s == -1 && return (first(physical) - halo):(first(physical) - 1)
+    s == +1 && return (last(physical) + 1):(last(physical) + halo)
+    throw(ArgumentError("side must be -1 or +1, got $s"))
+end
+
+@inline function _indexrange(region::Boundary, physical::UnitRange{Int}, ::Int)
+    s = side(region)
+    s == -1 && return first(physical):first(physical)
+    s == +1 && return last(physical):last(physical)
+    throw(ArgumentError("side must be -1 or +1, got $s"))
 end
 
 @inline function Base.to_indices(A::AbstractArray{T, N}, indices::Tuple{Region{N}}) where {T, N}

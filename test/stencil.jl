@@ -122,8 +122,22 @@ using Tesserae.Stencil
         region = Region(Face(1), Physical(), Physical(); halo=1) + (e₁ - e₂) / 2
         @test Stencil.indexranges(region, (-2:3, 10:15)) == (-1:3, 11:13)
 
-        ghost = Region(Cell(), Ghost(-1); halo=2)
-        @test_throws MethodError Stencil.indexranges(ghost, cell_axes)
+        @test Stencil.indexranges(Region(Cell(), Ghost(-1); halo=2), cell_axes) == (1:2,)
+        @test Stencil.indexranges(Region(Cell(), Ghost(+1); halo=2), cell_axes) == (9:10,)
+        @test Stencil.indexranges(Region(Cell(), Boundary(-1); halo=2), cell_axes) == (3:3,)
+        @test Stencil.indexranges(Region(Cell(), Boundary(+1); halo=2), cell_axes) == (8:8,)
+        @test Stencil.indexranges(Region(Face(1), Ghost(+1); halo=2), face_axes) == (10:11,)
+        @test Stencil.indexranges(Region(Face(1), Boundary(+1); halo=2), face_axes) == (9:9,)
+
+        mixed = Region(Face(1), Ghost(-1), Boundary(+1); halo=2)
+        @test (@inferred Stencil.indexranges(mixed, (face_axes[1], cell_axes[1]))) == (1:2, 8:8)
+
+        boundary = Region(Face(1), Boundary(-1); halo=2)
+        @test Stencil.indexranges(boundary + e / 2, cell_axes) == (3:3,)
+        @test Stencil.indexranges(boundary - e / 2, cell_axes) == (2:2,)
+
+        @test_throws ArgumentError Stencil.indexranges(Region(Cell(), Ghost(0); halo=2), cell_axes)
+        @test_throws ArgumentError Stencil.indexranges(Region(Cell(), Boundary(0); halo=2), cell_axes)
     end
 
     @testset "Array indexing" begin
@@ -134,6 +148,8 @@ using Tesserae.Stencil
         A = reshape(collect(1:30), 5, 6)
         @test (@inferred Base.to_indices(A, (cells,))) == (2:4, 2:5)
         @test A[cells] == A[2:4, 2:5]
+        @test A[Region(Cell(), Ghost(-1), Physical(); halo=1)] == A[1:1, 2:5]
+        @test A[Region(Cell(), Boundary(+1), Physical(); halo=1)] == A[4:4, 2:5]
 
         fill!(view(A, cells), 0)
         @test all(iszero, A[cells])
