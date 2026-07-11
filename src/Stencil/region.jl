@@ -9,7 +9,7 @@ abstract type AxisRegion end
 """
     Physical()
 
-The physical part of an axis.
+The full non-halo extent of an axis, including its boundaries.
 """
 struct Physical <: AxisRegion end
 
