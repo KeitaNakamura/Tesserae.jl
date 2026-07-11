@@ -15,6 +15,39 @@ using Tesserae.Stencil
         @test face₃.mask === UInt(0b100)
     end
 
+    @testset "Region" begin
+        physical = Physical()
+        ghost⁻ = Ghost(-1)
+        ghost⁺ = Ghost(+1)
+        boundary⁻ = Boundary(-1)
+        boundary⁺ = Boundary(+1)
+
+        @test physical isa AxisRegion
+        @test ghost⁻ isa AxisRegion
+        @test boundary⁻ isa AxisRegion
+        @test ghost⁻.side === -1
+        @test ghost⁺.side === +1
+        @test boundary⁻.side === -1
+        @test boundary⁺.side === +1
+
+        cells = @inferred Region(Cell(), physical; halo=2)
+        @test cells isa Region{1}
+        @test cells.placement == Cell()
+        @test cells.axes == (physical,)
+        @test cells.halo === 2
+
+        lowghost = @inferred Region(Face(1), ghost⁻, physical; halo=1)
+        @test lowghost isa Region{2}
+        @test lowghost.placement == Face(1)
+        @test lowghost.axes == (ghost⁻, physical)
+        @test typeof(lowghost.axes) === Tuple{Ghost,Physical}
+        @test lowghost.halo === 1
+        @test isbitstype(typeof(lowghost))
+
+        highboundary = @inferred Region(Face(1), boundary⁺, physical; halo=1)
+        @test highboundary.axes == (boundary⁺, physical)
+    end
+
     @testset "GridOffset" begin
         offsets = @inferred unitoffsets(Val(3))
         e₁, e₂, e₃ = offsets
