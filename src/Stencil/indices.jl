@@ -4,10 +4,7 @@
 Resolve a physical region against concrete array axes and return one storage
 index range per dimension.
 """
-function indexranges(
-    region::Region{N, Axes},
-    array_axes::NTuple{N, AbstractUnitRange{Int}},
-) where {N, Axes <: NTuple{N, Physical}}
+function indexranges(region::Region{N, <: NTuple{N, Physical}}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
     ntuple(Val(N)) do d
         axis = array_axes[d]
         halo_width = halo(region)
@@ -24,4 +21,8 @@ function indexranges(
 
         first_index:(first_index + count - 1)
     end
+end
+
+@inline function Base.to_indices(A::AbstractArray{T, N}, indices::Tuple{Region{N}}) where {T, N}
+    indexranges(only(indices), axes(A))
 end

@@ -51,3 +51,5 @@ function Base.show(io::IO, offset::GridOffset{N}) where {N}
 end
 
 @inline _logical_coordinate(x::Int) = iseven(x) ? x ÷ 2 : x // 2
+
+Base.broadcastable(offset::GridOffset) = Ref(offset)

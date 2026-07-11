@@ -61,3 +61,5 @@ end
 @inline Base.:+(offset::GridOffset{N}, region::Region{N}) where {N} = shift(region, offset)
 @inline Base.:-(region::Region{N}, offset::GridOffset{N}) where {N} = shift(region, -offset)
 Base.:-(::GridOffset, ::Region) = throw(ArgumentError("`GridOffset - Region` is not a translation; write `Region - GridOffset`"))
+
+Base.broadcastable(region::Region) = Ref(region)

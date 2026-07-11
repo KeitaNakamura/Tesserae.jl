@@ -125,4 +125,22 @@ using Tesserae.Stencil
         ghost = Region(Cell(), Ghost(-1); halo=2)
         @test_throws MethodError Stencil.indexranges(ghost, cell_axes)
     end
+
+    @testset "Array indexing" begin
+        e₁, _ = unitoffsets(Val(2))
+        cells = Region(Cell(), Physical(), Physical(); halo=1)
+        faces = Region(Face(1), Physical(), Physical(); halo=1)
+
+        A = reshape(collect(1:30), 5, 6)
+        @test (@inferred Base.to_indices(A, (cells,))) == (2:4, 2:5)
+        @test A[cells] == A[2:4, 2:5]
+
+        fill!(view(A, cells), 0)
+        @test all(iszero, A[cells])
+
+        pressure = reshape(collect(1.0:30.0), 5, 6)
+        gradient = zeros(6, 6)
+        @views @. gradient[faces] = pressure[faces + e₁ / 2] - pressure[faces - e₁ / 2]
+        @test gradient[faces] == ones(4, 4)
+    end
 end
