@@ -36,6 +36,9 @@ using Tesserae.Stencil
         @test cells.axes == (physical,)
         @test cells.halowidth === 2
 
+        cellregion = @inferred Region(Cell(), (physical, physical); halowidth=2)
+        @test cellregion.axes == (physical, physical)
+
         e, = unitoffsets(Val(1))
         @test iszero(cells.offset)
 

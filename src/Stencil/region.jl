@@ -45,8 +45,12 @@ struct Region{N, Axes <: NTuple{N, AxisRegion}}
     offset::GridOffset{N}
 end
 
-function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halowidth::Int) where {N}
+function Region(placement::Placement, axes::NTuple{N, AxisRegion}; halowidth::Int) where {N}
     Region(placement, axes, halowidth, zero(GridOffset{N}))
+end
+
+function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halowidth::Int) where {N}
+    Region(placement, axes; halowidth)
 end
 
 @inline placement(region::Region) = region.placement
