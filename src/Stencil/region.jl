@@ -63,7 +63,7 @@ end
 @inline nhalfsteps(region::Region, d::Int) = nhalfsteps(region.offset, d)
 @inline side(region::Union{Halo, Boundary}) = region.side
 
-@inline function replaceaxis(region::Region, d::Int, axis::AxisRegion)
+@inline function withaxisregion(region::Region, d::Int, axis::AxisRegion)
     Region(region.placement, Base.setindex(region.axes, axis, d), region.halowidth, region.offset)
 end
 

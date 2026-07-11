@@ -5,7 +5,7 @@ end
 @inline side(region::MirroredHalo) = side(region.halo)
 
 @inline function mirror(region::Region, d::Int)
-    replaceaxis(region, d, _mirror(axisregion(region, d)))
+    withaxisregion(region, d, _mirror(axisregion(region, d)))
 end
 
 @inline _mirror(region::Halo) = MirroredHalo(region)
