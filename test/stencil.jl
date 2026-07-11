@@ -36,6 +36,19 @@ using Tesserae.Stencil
         @test cells.axes == (physical,)
         @test cells.halo === 2
 
+        e, = unitoffsets(Val(1))
+        @test iszero(cells.offset)
+
+        shifted = @inferred cells + e / 2
+        @test shifted.placement == cells.placement
+        @test shifted.axes == cells.axes
+        @test shifted.halo == cells.halo
+        @test shifted.offset == e / 2
+        @test (@inferred(e / 2 + cells)) == shifted
+        @test (@inferred(shifted - e)).offset == -e / 2
+        @test (@inferred(shifted + e / 2)).offset == e
+        @test_throws ArgumentError e - cells
+
         lowghost = @inferred Region(Face(1), ghost⁻, physical; halo=1)
         @test lowghost isa Region{2}
         @test lowghost.placement == Face(1)
@@ -43,6 +56,10 @@ using Tesserae.Stencil
         @test typeof(lowghost.axes) === Tuple{Ghost,Physical}
         @test lowghost.halo === 1
         @test isbitstype(typeof(lowghost))
+
+        e₁, e₂ = unitoffsets(Val(2))
+        translated = @inferred lowghost + e₁ - e₂ / 2
+        @test translated.offset.doubled == (2, -1)
 
         highboundary = @inferred Region(Face(1), boundary⁺, physical; halo=1)
         @test highboundary.axes == (boundary⁺, physical)

@@ -42,8 +42,18 @@ struct Region{N, Axes <: NTuple{N, AxisRegion}}
     placement::Placement
     axes::Axes
     halo::Int
+    offset::GridOffset{N}
 end
 
 function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halo::Int) where {N}
-    Region{N, typeof(axes)}(placement, axes, halo)
+    Region(placement, axes, halo, zero(GridOffset{N}))
 end
+
+@inline function shift(region::Region{N}, offset::GridOffset{N}) where {N}
+    Region(region.placement, region.axes, region.halo, region.offset + offset)
+end
+
+@inline Base.:+(region::Region{N}, offset::GridOffset{N}) where {N} = shift(region, offset)
+@inline Base.:+(offset::GridOffset{N}, region::Region{N}) where {N} = shift(region, offset)
+@inline Base.:-(region::Region{N}, offset::GridOffset{N}) where {N} = shift(region, -offset)
+Base.:-(::GridOffset, ::Region) = throw(ArgumentError("`GridOffset - Region` is not a translation; write `Region - GridOffset`"))
