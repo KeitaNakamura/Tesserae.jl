@@ -34,10 +34,14 @@ using Tesserae.Stencil
         @test cells isa Region{1}
         @test cells.placement == Cell()
         @test cells.axes == (physical,)
-        @test cells.halowidth === 2
+        @test cells.halowidth === (2,)
 
         cellregion = @inferred Region(Cell(), (physical, physical); halowidth=2)
         @test cellregion.axes == (physical, physical)
+        @test cellregion.halowidth === (2, 2)
+
+        anisotropic = @inferred Region(Cell(), physical, physical; halowidth=(1, 2))
+        @test anisotropic.halowidth === (1, 2)
 
         e, = unitoffsets(Val(1))
         @test iszero(cells.offset)
@@ -57,7 +61,7 @@ using Tesserae.Stencil
         @test lowhalo.placement == Face(1)
         @test lowhalo.axes == (halo⁻, physical)
         @test typeof(lowhalo.axes) === Tuple{Halo,Physical}
-        @test lowhalo.halowidth === 1
+        @test lowhalo.halowidth === (1, 1)
         @test isbitstype(typeof(lowhalo))
 
         e₁, e₂ = unitoffsets(Val(2))
@@ -134,6 +138,9 @@ using Tesserae.Stencil
 
         mixed = Region(Face(1), Halo(-1), Boundary(+1); halowidth=2)
         @test (@inferred Stencil.indexranges(mixed, (face_axes[1], cell_axes[1]))) == (1:2, 8:8)
+
+        anisotropic = Region(Cell(), Halo(-1), Halo(+1); halowidth=(1, 2))
+        @test (@inferred Stencil.indexranges(anisotropic, (1:8, 1:10))) == (1:1, 9:10)
 
         boundary = Region(Face(1), Boundary(-1); halowidth=2)
         @test Stencil.indexranges(boundary + e / 2, cell_axes) == (3:3,)

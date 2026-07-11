@@ -37,25 +37,29 @@ end
 
 An `N`-dimensional Cartesian product of axis regions. A region stores geometry
 relative to the physical domain, but not concrete array indices or extents.
+`halowidth` may be an `N`-tuple of axis widths or a scalar width shared by all
+axes.
 """
 struct Region{N, Axes <: NTuple{N, AxisRegion}}
     placement::Placement
     axes::Axes
-    halowidth::Int
+    halowidth::NTuple{N, Int}
     offset::GridOffset{N}
 end
 
-function Region(placement::Placement, axes::NTuple{N, AxisRegion}; halowidth::Int) where {N}
-    Region(placement, axes, halowidth, zero(GridOffset{N}))
+function Region(placement::Placement, axes::NTuple{N, AxisRegion}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
+    widths = halowidth isa Int ? ntuple(_ -> halowidth, Val(N)) : halowidth
+    Region(placement, axes, widths, zero(GridOffset{N}))
 end
 
-function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halowidth::Int) where {N}
+function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
     Region(placement, axes; halowidth)
 end
 
 @inline placement(region::Region) = region.placement
 @inline axisregion(region::Region, d::Int) = region.axes[d]
 @inline halowidth(region::Region) = region.halowidth
+@inline halowidth(region::Region, d::Int) = region.halowidth[d]
 @inline nhalfsteps(region::Region, d::Int) = nhalfsteps(region.offset, d)
 @inline side(region::Union{Halo, Boundary}) = region.side
 

@@ -7,7 +7,7 @@ index range per dimension.
 function indexranges(region::Region{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
     ntuple(Val(N)) do d
         axis = array_axes[d]
-        width = halowidth(region)
+        width = halowidth(region, d)
         node_aligned = isnodealigned(placement(region), d)
         phase = ifelse(node_aligned, 0, 1)
 
