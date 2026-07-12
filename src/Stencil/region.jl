@@ -7,6 +7,13 @@ the Cartesian product of `N` axis regions.
 abstract type AxisRegion end
 
 """
+    Full()
+
+The full extent of an array axis, including its halo.
+"""
+struct Full <: AxisRegion end
+
+"""
     Physical()
 
 The full non-halo extent of an axis, including its boundaries.
@@ -73,7 +80,12 @@ function Region(placement::Placement, axes::NTuple{N, AxisRegion}; halowidth::Un
     Region(placement, axes, widths)
 end
 
-function Region(placement::Placement, axes::Vararg{AxisRegion, N}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
+function Region(placement::Placement, axes::NTuple{N, Union{AxisRegion, Colon}}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
+    normalized = map(axis -> axis isa Colon ? Full() : axis, axes)
+    Region(placement, normalized; halowidth)
+end
+
+function Region(placement::Placement, axes::Vararg{Union{AxisRegion, Colon}, N}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
     Region(placement, axes; halowidth)
 end
 

@@ -57,9 +57,16 @@ using Tesserae.Stencil
         e₁, e₂ = unitoffsets(Val(2))
         scalar = @inferred Region(Cell(), Physical(), Physical(); halowidth=2)
         tuple = @inferred Region(Cell(), (Physical(), Physical()); halowidth=(2, 2))
+        full = @inferred Region(Cell(), Full(), Full(); halowidth=2)
+        colon = @inferred Region(Cell(), :, :; halowidth=2)
+        tuple_colon = @inferred Region(Cell(), (Halo(-1), :); halowidth=2)
         A = zeros(10, 10)
 
         @test parentindices(view(A, scalar)) == parentindices(view(A, tuple))
+        @test parentindices(view(A, full)) == (1:10, 1:10)
+        @test parentindices(view(A, colon)) == (1:10, 1:10)
+        @test parentindices(view(A, tuple_colon)) == (1:2, 1:10)
+        @test Stencil.indexranges(full, (-2:7, 10:19)) == (-2:7, 10:19)
         shifted = @inferred scalar + e₁
         left_shifted = @inferred e₁ + scalar
         @test shifted isa Stencil.ShiftedRegion
@@ -176,8 +183,10 @@ using Tesserae.Stencil
         cells = Region(Cell(), Physical(), Physical(); halowidth=2)
         cell_low = Region(Cell(), Halo(-1), Physical(); halowidth=2)
         cell_high = Region(Cell(), Halo(+1), Physical(); halowidth=2)
+        full_cell_low = Region(Cell(), Halo(-1), :; halowidth=2)
 
         A = zeros(Int, 8, 6)
+        @test parentindices(@inferred(view(A, reflect(full_cell_low, 1)))) == (4:-1:3, 1:6)
         A[cells] .= [11 12; 21 22; 31 32; 41 42]
 
         @views @. A[cell_low] = A[reflect(cell_low, 1)]

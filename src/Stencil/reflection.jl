@@ -49,7 +49,7 @@ function mappedranges(reflection::ReflectionMap{N}, array_axes::NTuple{N, Abstra
     end
 end
 
-@inline _mappedrange(::ReflectionMap, ::Int, ::Union{Physical, Boundary}, range::UnitRange{Int}, ::Bool) = range
+@inline _mappedrange(::ReflectionMap, ::Int, ::Union{Full, Physical, Boundary}, range::UnitRange{Int}, ::Bool) = range
 
 @inline function _mappedrange(reflection::ReflectionMap, d::Int, axis::Halo, range::UnitRange{Int}, node_aligned::Bool)
     isreflected(reflection, d) && return _reflectionrange(axis, range, node_aligned)

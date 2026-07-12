@@ -30,13 +30,15 @@ function _indexranges(region::Region{N}, offset::GridOffset{N}, array_axes::NTup
         first_index = first(array_axis) + width + index_shift
         physical = first_index:(first_index + count - 1)
 
-        _indexrange(region_axis, physical, width)
+        _indexrange(region_axis, physical, width, array_axis)
     end
 end
 
-@inline _indexrange(::Physical, physical::UnitRange{Int}, ::Int) = physical
+@inline _indexrange(::Full, ::UnitRange{Int}, ::Int, array_axis::AbstractUnitRange{Int}) = first(array_axis):last(array_axis)
 
-@inline function _indexrange(region::Halo, physical::UnitRange{Int}, width::Int)
+@inline _indexrange(::Physical, physical::UnitRange{Int}, ::Int, ::AbstractUnitRange{Int}) = physical
+
+@inline function _indexrange(region::Halo, physical::UnitRange{Int}, width::Int, ::AbstractUnitRange{Int})
     if side(region) == -1
         (first(physical) - width):(first(physical) - 1)
     else
@@ -44,7 +46,7 @@ end
     end
 end
 
-@inline function _indexrange(region::Boundary, physical::UnitRange{Int}, ::Int)
+@inline function _indexrange(region::Boundary, physical::UnitRange{Int}, ::Int, ::AbstractUnitRange{Int})
     if side(region) == -1
         first(physical):first(physical)
     else

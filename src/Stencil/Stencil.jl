@@ -6,6 +6,7 @@ export
     Cell,
     Edge,
     Face,
+    Full,
     Halo,
     Physical,
     Region,
