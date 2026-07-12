@@ -38,17 +38,13 @@ end
 function mappedranges(reflection::ReflectionMap{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
     region = reflection.region
     ranges = indexranges(region, array_axes)
+    dimensions = ntuple(identity, Val(N))
 
-    for d in 1:N
+    map(axisregions(region), ranges, array_axes, halowidth(region), dimensions) do axis, range, array_axis, width, d
         if isreflected(reflection, d)
-            width = halowidth(region, d)
-            ncells = length(array_axes[d]) - 2 * width - isnodealigned(placement(region), d)
+            ncells = length(array_axis) - 2 * width - isnodealigned(placement(region), d)
             width ≤ ncells || throw(DimensionMismatch("halowidth $width exceeds $ncells physical cells on axis $d"))
         end
-    end
-
-    dimensions = ntuple(identity, Val(N))
-    map(axisregions(region), ranges, dimensions) do axis, range, d
         _mappedrange(reflection, d, axis, range, isnodealigned(placement(region), d))
     end
 end

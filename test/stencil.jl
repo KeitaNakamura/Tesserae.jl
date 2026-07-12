@@ -226,6 +226,10 @@ using Tesserae.Stencil
             @test_throws ArgumentError constructor(d)
         end
 
+        for placement in (Face(3), Edge(3))
+            @test_throws ArgumentError Region(placement, Physical(), Physical(); halowidth=1)
+        end
+
         for constructor in (Halo, Boundary), side in (-2, 0, +2)
             @test_throws ArgumentError constructor(side)
         end

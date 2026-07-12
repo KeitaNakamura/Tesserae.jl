@@ -56,6 +56,9 @@ struct Region{N, Axes <: NTuple{N, AxisRegion}}
     axes::Axes
     halowidth::NTuple{N, Int}
     function Region{N, Axes}(placement::Placement, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
+        N ≤ 8 * sizeof(UInt) || throw(ArgumentError("Region supports at most $(8 * sizeof(UInt)) dimensions"))
+        valid_placement = placement == Cell() || placement == Vertex() || any(d -> placement == Face(d) || placement == Edge(d), 1:N)
+        valid_placement || throw(ArgumentError("placement is incompatible with a $N-dimensional Region"))
         all(width -> width ≥ 0, halowidth) || throw(ArgumentError("halowidth must be nonnegative, got $halowidth"))
         new{N, Axes}(placement, axes, halowidth)
     end
