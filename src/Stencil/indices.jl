@@ -1,21 +1,21 @@
 """
-    indexranges(region, array_axes)
+    regionranges(region, array_axes)
 
 Resolve a region against concrete array axes and return one storage
 index range per dimension.
 """
-function indexranges(region::Region{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
-    _indexranges(region, zero(GridOffset{N}), array_axes)
+function regionranges(region::Region{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
+    regionranges(region, zero(GridOffset{N}), array_axes)
 end
 
-function indexranges(shifted::ShiftedRegion{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
-    _indexranges(parent(shifted), offset(shifted), array_axes)
+function regionranges(shifted::ShiftedRegion{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
+    regionranges(parent(shifted), offset(shifted), array_axes)
 end
 
-function _indexranges(region::Region{N}, offset::GridOffset{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
+function regionranges(region::Region{N}, offset::GridOffset{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
     dimensions = ntuple(identity, Val(N))
 
-    map(axisregions(region), array_axes, halowidth(region), dimensions) do region_axis, array_axis, width, d
+    map(axisregions(region), array_axes, halowidth(region), dimensions) do region_axis, array_axis, halowidth, d
         node_aligned = isnodealigned(placement(region), d)
         phase = ifelse(node_aligned, 0, 1)
 
@@ -24,42 +24,42 @@ function _indexranges(region::Region{N}, offset::GridOffset{N}, array_axes::NTup
         index_shift = fld(translated, 2)
 
         available = length(array_axis) - iszero(translated_phase)
-        available ≥ 1 && width ≤ (available - 1) ÷ 2 || throw(DimensionMismatch("axis $d with length $(length(array_axis)) does not contain a physical cell with halowidth $width"))
-        ncells = available - 2 * width
+        available ≥ 1 && halowidth ≤ (available - 1) ÷ 2 || throw(DimensionMismatch("axis $d with length $(length(array_axis)) does not contain a physical cell with halowidth $halowidth"))
+        ncells = available - 2 * halowidth
         count = ncells + node_aligned
-        first_index = first(array_axis) + width + index_shift
-        physical = first_index:(first_index + count - 1)
+        first_index = first(array_axis) + halowidth + index_shift
+        physical_range = first_index:(first_index + count - 1)
 
-        _indexrange(region_axis, physical, width, array_axis)
+        axisrange(region_axis, array_axis, physical_range, halowidth)
     end
 end
 
-@inline _indexrange(::Full, ::UnitRange{Int}, ::Int, array_axis::AbstractUnitRange{Int}) = first(array_axis):last(array_axis)
+@inline axisrange(::Full, array_axis::AbstractUnitRange{Int}, ::UnitRange{Int}, ::Int) = first(array_axis):last(array_axis)
 
-@inline _indexrange(::Physical, physical::UnitRange{Int}, ::Int, ::AbstractUnitRange{Int}) = physical
+@inline axisrange(::Physical, ::AbstractUnitRange{Int}, physical_range::UnitRange{Int}, ::Int) = physical_range
 
-@inline function _indexrange(region::Halo, physical::UnitRange{Int}, width::Int, ::AbstractUnitRange{Int})
+@inline function axisrange(region::Halo, ::AbstractUnitRange{Int}, physical_range::UnitRange{Int}, halowidth::Int)
     if side(region) == -1
-        (first(physical) - width):(first(physical) - 1)
+        (first(physical_range) - halowidth):(first(physical_range) - 1)
     else
-        (last(physical) + 1):(last(physical) + width)
+        (last(physical_range) + 1):(last(physical_range) + halowidth)
     end
 end
 
-@inline function _indexrange(region::Boundary, physical::UnitRange{Int}, ::Int, ::AbstractUnitRange{Int})
+@inline function axisrange(region::Boundary, ::AbstractUnitRange{Int}, physical_range::UnitRange{Int}, ::Int)
     if side(region) == -1
-        first(physical):first(physical)
+        first(physical_range):first(physical_range)
     else
-        last(physical):last(physical)
+        last(physical_range):last(physical_range)
     end
 end
 
 @inline function Base.to_indices(A::AbstractArray{T, N}, indices::Tuple{Region{N}}) where {T, N}
-    indexranges(only(indices), axes(A))
+    regionranges(only(indices), axes(A))
 end
 
 @inline function Base.to_indices(A::AbstractArray{T, N}, indices::Tuple{ShiftedRegion{N}}) where {T, N}
-    indexranges(only(indices), axes(A))
+    regionranges(only(indices), axes(A))
 end
 
 @inline function Base.to_indices(A::AbstractArray, indices::Tuple{<: RegionMap})

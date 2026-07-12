@@ -66,7 +66,7 @@ using Tesserae.Stencil
         @test parentindices(view(A, full)) == (1:10, 1:10)
         @test parentindices(view(A, colon)) == (1:10, 1:10)
         @test parentindices(view(A, tuple_colon)) == (1:2, 1:10)
-        @test Stencil.indexranges(full, (-2:7, 10:19)) == (-2:7, 10:19)
+        @test Stencil.regionranges(full, (-2:7, 10:19)) == (-2:7, 10:19)
         shifted = @inferred scalar + e₁
         left_shifted = @inferred e₁ + scalar
         @test shifted isa Stencil.ShiftedRegion
@@ -132,7 +132,7 @@ using Tesserae.Stencil
         @test parentindices(anisotropic_view) == (1:1, 9:10)
 
         shifted = Region(Face(1), Physical(), Physical(); halowidth=1) + (e₁ - e₂) / 2
-        @test (@inferred Stencil.indexranges(shifted, (-2:3, 10:15))) == (-1:3, 11:13)
+        @test (@inferred Stencil.regionranges(shifted, (-2:3, 10:15))) == (-1:3, 11:13)
     end
 
     @testset "Finite differences" begin

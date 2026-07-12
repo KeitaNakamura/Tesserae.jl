@@ -37,7 +37,7 @@ end
 
 function mappedranges(reflection::ReflectionMap{N}, array_axes::NTuple{N, AbstractUnitRange{Int}}) where {N}
     region = reflection.region
-    ranges = indexranges(region, array_axes)
+    ranges = regionranges(region, array_axes)
     dimensions = ntuple(identity, Val(N))
 
     map(axisregions(region), ranges, array_axes, halowidth(region), dimensions) do axis, range, array_axis, width, d
