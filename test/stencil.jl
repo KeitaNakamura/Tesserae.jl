@@ -26,7 +26,7 @@ using Tesserae.Stencil
         @test_throws DivideError e₁ / 0
     end
 
-    @testset "Placement transitions" begin
+    @testset "Placements" begin
         e₁, e₂, e₃ = unitoffsets(Val(3))
         physical = (Physical(), Physical(), Physical())
         ncells = (3, 4, 5)
@@ -79,16 +79,25 @@ using Tesserae.Stencil
         cells = Region(Cell(), Physical(); halowidth=2)
         faces = Region(Face(1), Physical(); halowidth=2)
 
-        for (placement, array, physical_length) in ((Cell(), cell_data, 6), (Face(1), face_data, 7))
-            low = array[Region(placement, Halo(-1); halowidth=2)]
-            physical = array[Region(placement, Physical(); halowidth=2)]
-            high = array[Region(placement, Halo(+1); halowidth=2)]
+        cases = (
+            (Cell(), cell_data, (1:2, 3:8, 9:10)),
+            (Face(1), face_data, (1:2, 3:9, 10:11)),
+        )
 
-            @test [low; physical; high] == array
-            @test length(low) == length(high) == 2
-            @test length(physical) == physical_length
-            @test array[Region(placement, Boundary(-1); halowidth=2)] == physical[begin:begin]
-            @test array[Region(placement, Boundary(+1); halowidth=2)] == physical[end:end]
+        for (placement, array, expected_indices) in cases
+            low_indices, physical_indices, high_indices = expected_indices
+            low = Region(placement, Halo(-1); halowidth=2)
+            physical = Region(placement, Physical(); halowidth=2)
+            high = Region(placement, Halo(+1); halowidth=2)
+            low_boundary = Region(placement, Boundary(-1); halowidth=2)
+            high_boundary = Region(placement, Boundary(+1); halowidth=2)
+
+            @test parentindices(view(array, low)) == (low_indices,)
+            @test parentindices(view(array, physical)) == (physical_indices,)
+            @test parentindices(view(array, high)) == (high_indices,)
+            @test parentindices(view(array, low_boundary)) == (first(physical_indices):first(physical_indices),)
+            @test parentindices(view(array, high_boundary)) == (last(physical_indices):last(physical_indices),)
+            @test [array[low]; array[physical]; array[high]] == array
         end
 
         boundary = Region(Face(1), Boundary(-1); halowidth=2)
@@ -132,8 +141,13 @@ using Tesserae.Stencil
         @views @. ∂p∂x[xfaces] = p[xfaces + e₁ / 2] - p[xfaces - e₁ / 2]
         @views @. ∂p∂y[yfaces] = p[yfaces + e₂ / 2] - p[yfaces - e₂ / 2]
 
-        @test ∂p∂x[xfaces] == [3 3; 5 5; 7 7; 9 9]
-        @test ∂p∂y[yfaces] == [9 15 21; 9 15 21; 9 15 21]
+        expected_∂p∂x = zeros(Int, 6, 4)
+        expected_∂p∂x[2:5, 2:3] .= [3 3; 5 5; 7 7; 9 9]
+        expected_∂p∂y = zeros(Int, 5, 5)
+        expected_∂p∂y[2:4, 2:4] .= [9 15 21; 9 15 21; 9 15 21]
+
+        @test ∂p∂x == expected_∂p∂x
+        @test ∂p∂y == expected_∂p∂y
 
         u = [2i for i in 1:6, _ in 1:4]
         v = [5j for _ in 1:5, j in 1:5]
@@ -143,7 +157,9 @@ using Tesserae.Stencil
             u[cells + e₁ / 2] - u[cells - e₁ / 2] +
             v[cells + e₂ / 2] - v[cells - e₂ / 2]
 
-        @test divergence[cells] == fill(7, 3, 2)
+        expected_divergence = zeros(Int, 5, 4)
+        expected_divergence[2:4, 2:3] .= 7
+        @test divergence == expected_divergence
 
         laplacian = zeros(Int, 5, 4)
 
@@ -151,7 +167,9 @@ using Tesserae.Stencil
             ∂p∂x[cells + e₁ / 2] - ∂p∂x[cells - e₁ / 2] +
             ∂p∂y[cells + e₂ / 2] - ∂p∂y[cells - e₂ / 2]
 
-        @test laplacian[cells] == fill(8, 3, 2)
+        expected_laplacian = zeros(Int, 5, 4)
+        expected_laplacian[2:4, 2:3] .= 8
+        @test laplacian == expected_laplacian
     end
 
     @testset "Reflection" begin
@@ -165,8 +183,9 @@ using Tesserae.Stencil
         @views @. A[cell_low] = A[reflect(cell_low, 1)]
         @views @. A[cell_high] = A[reflect(cell_high, 1)]
 
-        @test A[cell_low] == [21 22; 11 12]
-        @test A[cell_high] == [41 42; 31 32]
+        expected_A = zeros(Int, 8, 6)
+        expected_A[:, 3:4] .= [21 22; 11 12; 11 12; 21 22; 31 32; 41 42; 41 42; 31 32]
+        @test A == expected_A
 
         reflected_wall = @inferred view(A, reflect(cell_low, 1))
         @test parentindices(reflected_wall) == (4:-1:3, 3:4)
@@ -181,17 +200,22 @@ using Tesserae.Stencil
         @views @. F[face_low] = F[reflect(face_low, 1)]
         @views @. F[face_high] = F[reflect(face_high, 1)]
 
-        @test F[face_low] == [31 32; 21 22]
-        @test F[face_high] == [41 42; 31 32]
+        expected_F = zeros(Int, 9, 6)
+        expected_F[:, 3:4] .= [31 32; 21 22; 11 12; 21 22; 31 32; 41 42; 51 52; 41 42; 31 32]
+        @test F == expected_F
 
         corner = Region(Cell(), Halo(-1), Halo(+1); halowidth=2)
         C = [10i + j for i in 1:8, j in 1:7]
         x_then_y = reflect(reflect(corner, 1), 2)
         y_then_x = reflect(reflect(corner, 2), 1)
 
+        @test parentindices(view(C, x_then_y)) == (4:-1:3, 5:-1:4)
+        @test parentindices(view(C, y_then_x)) == (4:-1:3, 5:-1:4)
         @test C[x_then_y] == C[y_then_x]
+        expected_C = copy(C)
+        expected_C[1:2, 6:7] .= [45 44; 35 34]
         @views @. C[corner] = C[x_then_y]
-        @test C[corner] == [45 44; 35 34]
+        @test C == expected_C
 
         C = [10i + j for i in 1:8, j in 1:7]
         reflectionview = (array, region, d) -> view(array, reflect(region, d))
@@ -206,6 +230,21 @@ using Tesserae.Stencil
         boundary = Region(Cell(), Halo(-1), Boundary(+1); halowidth=2)
         reflected_boundary = @inferred view(C, reflect(boundary, 1))
         @test parentindices(reflected_boundary) == (4:-1:3, 5:5)
+
+        reflected_accumulation = [2, 3, 10, 20, 30, 40, 0, 0]
+        low_halo = Region(Cell(), Halo(-1); halowidth=2)
+        @views @. reflected_accumulation[reflect(low_halo, 1)] += reflected_accumulation[low_halo]
+        @test reflected_accumulation == [2, 3, 13, 22, 30, 40, 0, 0]
+
+        for (placement, n) in ((Cell(), 4), (Face(1), 5)), side in (-1, +1)
+            data = collect(1:n)
+            halo = Region(placement, Halo(side); halowidth=0)
+            reflected = @inferred view(data, reflect(halo, 1))
+
+            @test isempty(reflected)
+            @views @. data[halo] = data[reflect(halo, 1)]
+            @test data == collect(1:n)
+        end
 
         e, = unitoffsets(Val(1))
         shifted_data = collect(1:9)
