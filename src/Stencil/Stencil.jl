@@ -15,7 +15,7 @@ export
     unitoffsets
 
 include("offset.jl")
-include("placement.jl")
+include("location.jl")
 include("region.jl")
 include("indices.jl")
 include("reflection.jl")

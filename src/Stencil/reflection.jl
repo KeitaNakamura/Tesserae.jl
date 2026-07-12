@@ -10,7 +10,7 @@ end
     reflect(reflection, d)
 
 Reflect halo axis `d` across its physical boundary. Reflection is defined by
-the placement of the axis:
+the location of the axis:
 
     Cell: …  b  a  |  a  b  …
     Face: …  c  b (a) b  c  …
@@ -42,10 +42,10 @@ function mappedranges(reflection::ReflectionMap{N}, array_axes::NTuple{N, Abstra
 
     map(axisregions(region), ranges, array_axes, halowidth(region), dimensions) do axis, range, array_axis, width, d
         if isreflected(reflection, d)
-            ncells = length(array_axis) - 2 * width - isnodealigned(placement(region), d)
+            ncells = length(array_axis) - 2 * width - isnodealigned(location(region), d)
             width ≤ ncells || throw(DimensionMismatch("halowidth $width exceeds $ncells physical cells on axis $d"))
         end
-        _mappedrange(reflection, d, axis, range, isnodealigned(placement(region), d))
+        _mappedrange(reflection, d, axis, range, isnodealigned(location(region), d))
     end
 end
 

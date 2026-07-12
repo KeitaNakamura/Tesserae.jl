@@ -26,7 +26,7 @@ using Tesserae.Stencil
         @test_throws DivideError e₁ / 0
     end
 
-    @testset "Placements" begin
+    @testset "Locations" begin
         e₁, e₂, e₃ = unitoffsets(Val(3))
         physical = (Physical(), Physical(), Physical())
         ncells = (3, 4, 5)
@@ -44,8 +44,8 @@ using Tesserae.Stencil
             (Vertex(), (e₁ + e₂ + e₃) / 2, (2:5, 2:6, 2:7)),
         )
 
-        for (placement, offset, expected_indices) in cases
-            region = Region(placement, physical; halowidth) + offset
+        for (location, offset, expected_indices) in cases
+            region = Region(location, physical; halowidth) + offset
             @test parentindices(view(A, region)) == expected_indices
         end
 
@@ -91,13 +91,13 @@ using Tesserae.Stencil
             (Face(1), face_data, (1:2, 3:9, 10:11)),
         )
 
-        for (placement, array, expected_indices) in cases
+        for (location, array, expected_indices) in cases
             low_indices, physical_indices, high_indices = expected_indices
-            low = Region(placement, Halo(-1); halowidth=2)
-            physical = Region(placement, Physical(); halowidth=2)
-            high = Region(placement, Halo(+1); halowidth=2)
-            low_boundary = Region(placement, Boundary(-1); halowidth=2)
-            high_boundary = Region(placement, Boundary(+1); halowidth=2)
+            low = Region(location, Halo(-1); halowidth=2)
+            physical = Region(location, Physical(); halowidth=2)
+            high = Region(location, Halo(+1); halowidth=2)
+            low_boundary = Region(location, Boundary(-1); halowidth=2)
+            high_boundary = Region(location, Boundary(+1); halowidth=2)
 
             @test parentindices(view(array, low)) == (low_indices,)
             @test parentindices(view(array, physical)) == (physical_indices,)
@@ -245,9 +245,9 @@ using Tesserae.Stencil
         @views @. reflected_accumulation[reflect(low_halo, 1)] += reflected_accumulation[low_halo]
         @test reflected_accumulation == [2, 3, 13, 22, 30, 40, 0, 0]
 
-        for (placement, n) in ((Cell(), 4), (Face(1), 5)), side in (-1, +1)
+        for (location, n) in ((Cell(), 4), (Face(1), 5)), side in (-1, +1)
             data = collect(1:n)
-            halo = Region(placement, Halo(side); halowidth=0)
+            halo = Region(location, Halo(side); halowidth=0)
             reflected = @inferred view(data, reflect(halo, 1))
 
             @test isempty(reflected)
@@ -274,8 +274,8 @@ using Tesserae.Stencil
             @test_throws ArgumentError constructor(d)
         end
 
-        for placement in (Face(3), Edge(3))
-            @test_throws ArgumentError Region(placement, Physical(), Physical(); halowidth=1)
+        for location in (Face(3), Edge(3))
+            @test_throws ArgumentError Region(location, Physical(), Physical(); halowidth=1)
         end
 
         for constructor in (Halo, Boundary), side in (-2, 0, +2)

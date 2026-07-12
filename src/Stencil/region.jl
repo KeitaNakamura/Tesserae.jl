@@ -50,7 +50,7 @@ end
 @inline side(region::Union{Halo, Boundary}) = region.side
 
 """
-    Region(placement, axes...; halowidth)
+    Region(location, axes...; halowidth)
 
 An `N`-dimensional Cartesian product of axis regions. A region stores geometry
 relative to the physical domain, but not concrete array indices or extents.
@@ -59,37 +59,37 @@ axes. Each width must be nonnegative. Shifting a region produces a
 [`ShiftedRegion`](@ref).
 """
 struct Region{N, Axes <: NTuple{N, AxisRegion}}
-    placement::Placement
+    location::Location
     axes::Axes
     halowidth::NTuple{N, Int}
-    function Region{N, Axes}(placement::Placement, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
+    function Region{N, Axes}(location::Location, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
         N ≤ 8 * sizeof(UInt) || throw(ArgumentError("Region supports at most $(8 * sizeof(UInt)) dimensions"))
-        valid_placement = placement == Cell() || placement == Vertex() || any(d -> placement == Face(d) || placement == Edge(d), 1:N)
-        valid_placement || throw(ArgumentError("placement is incompatible with a $N-dimensional Region"))
+        valid_location = location == Cell() || location == Vertex() || any(d -> location == Face(d) || location == Edge(d), 1:N)
+        valid_location || throw(ArgumentError("location is incompatible with a $N-dimensional Region"))
         all(width -> width ≥ 0, halowidth) || throw(ArgumentError("halowidth must be nonnegative, got $halowidth"))
-        new{N, Axes}(placement, axes, halowidth)
+        new{N, Axes}(location, axes, halowidth)
     end
 end
 
-function Region(placement::Placement, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
-    Region{N, Axes}(placement, axes, halowidth)
+function Region(location::Location, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
+    Region{N, Axes}(location, axes, halowidth)
 end
 
-function Region(placement::Placement, axes::NTuple{N, AxisRegion}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
+function Region(location::Location, axes::NTuple{N, AxisRegion}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
     widths = halowidth isa Int ? ntuple(_ -> halowidth, Val(N)) : halowidth
-    Region(placement, axes, widths)
+    Region(location, axes, widths)
 end
 
-function Region(placement::Placement, axes::NTuple{N, Union{AxisRegion, Colon}}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
+function Region(location::Location, axes::NTuple{N, Union{AxisRegion, Colon}}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
     normalized = map(axis -> axis isa Colon ? Full() : axis, axes)
-    Region(placement, normalized; halowidth)
+    Region(location, normalized; halowidth)
 end
 
-function Region(placement::Placement, axes::Vararg{Union{AxisRegion, Colon}, N}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
-    Region(placement, axes; halowidth)
+function Region(location::Location, axes::Vararg{Union{AxisRegion, Colon}, N}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
+    Region(location, axes; halowidth)
 end
 
-@inline placement(region::Region) = region.placement
+@inline location(region::Region) = region.location
 @inline axisregions(region::Region) = region.axes
 @inline halowidth(region::Region) = region.halowidth
 @inline halowidth(region::Region, d::Int) = region.halowidth[d]

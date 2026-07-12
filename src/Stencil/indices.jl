@@ -16,7 +16,7 @@ function regionranges(region::Region{N}, offset::GridOffset{N}, array_axes::NTup
     dimensions = ntuple(identity, Val(N))
 
     map(axisregions(region), array_axes, halowidth(region), dimensions) do region_axis, array_axis, halowidth, d
-        node_aligned = isnodealigned(placement(region), d)
+        node_aligned = isnodealigned(location(region), d)
         phase = ifelse(node_aligned, 0, 1)
 
         translated = phase + nhalfsteps(offset, d)
