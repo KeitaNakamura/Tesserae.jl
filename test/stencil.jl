@@ -58,8 +58,7 @@ using Tesserae.Stencil
         scalar = @inferred Region(Cell(), physical, physical; halowidth=2)
         tuple = @inferred Region(Cell(), (physical, physical); halowidth=(2, 2))
         full_region = @inferred Region(Cell(), full, full; halowidth=2)
-        colon = @inferred Region(Cell(), :, :; halowidth=2)
-        tuple_colon = @inferred Region(Cell(), (lowhalo, :); halowidth=2)
+        tuple_full = @inferred Region(Cell(), (lowhalo, full); halowidth=2)
         A = zeros(10, 10)
 
         @test instances(AxisRegion) == (full, physical, lowhalo, highhalo, lowboundary, highboundary)
@@ -67,11 +66,11 @@ using Tesserae.Stencil
         @test sprint(show, physical) == "physical"
         @test sprint(show, lowhalo) == "lowhalo"
         @test sprint(show, highboundary) == "highboundary"
+        @test_throws MethodError Region(Cell(), :; halowidth=2)
 
         @test parentindices(view(A, scalar)) == parentindices(view(A, tuple))
         @test parentindices(view(A, full_region)) == (1:10, 1:10)
-        @test parentindices(view(A, colon)) == (1:10, 1:10)
-        @test parentindices(view(A, tuple_colon)) == (1:2, 1:10)
+        @test parentindices(view(A, tuple_full)) == (1:2, 1:10)
         @test Stencil.regionranges(full_region, (-2:7, 10:19)) == (-2:7, 10:19)
         shifted = @inferred scalar + e₁
         left_shifted = @inferred e₁ + scalar
@@ -141,7 +140,7 @@ using Tesserae.Stencil
         @test (@inferred Stencil.regionranges(shifted, (-2:3, 10:15))) == (-1:3, 11:13)
 
         function runtimewallregion(axis::Int)
-            axes = ntuple(d -> d == axis ? lowhalo : physical, Val(3))
+            axes = ntuple(d -> d == axis ? lowhalo : full, Val(3))
             Region(Cell(), axes; halowidth=1)
         end
 
@@ -200,7 +199,7 @@ using Tesserae.Stencil
         cells = Region(Cell(), physical, physical; halowidth=2)
         cell_low = Region(Cell(), lowhalo, physical; halowidth=2)
         cell_high = Region(Cell(), highhalo, physical; halowidth=2)
-        full_cell_low = Region(Cell(), lowhalo, :; halowidth=2)
+        full_cell_low = Region(Cell(), lowhalo, full; halowidth=2)
 
         A = zeros(Int, 8, 6)
         @test parentindices(@inferred(view(A, reflect(full_cell_low, 1)))) == (4:-1:3, 1:6)
@@ -255,7 +254,7 @@ using Tesserae.Stencil
         mapped_ranges = @inferred Stencil.mappedranges(runtime_reflection, axes(C))
         @test mapped_ranges isa NTuple{2, StepRange{Int, Int}}
 
-        mixed = Region(Cell(), lowhalo, physical, highboundary, :; halowidth=1)
+        mixed = Region(Cell(), lowhalo, physical, highboundary, full; halowidth=1)
         mixed_axes = axes(zeros(5, 5, 5, 5))
         @test (@inferred Stencil.regionranges(mixed, mixed_axes)) isa NTuple{4, UnitRange{Int}}
         @test (@inferred Stencil.mappedranges(reflect(mixed, 1), mixed_axes)) isa NTuple{4, StepRange{Int, Int}}

@@ -56,12 +56,7 @@ function Region(location::Location, axes::NTuple{N, AxisRegion}; halowidth::Unio
     Region(location, axes, widths)
 end
 
-function Region(location::Location, axes::NTuple{N, Union{AxisRegion, Colon}}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
-    normalized = map(axis -> axis isa Colon ? full : axis, axes)
-    Region(location, normalized; halowidth)
-end
-
-function Region(location::Location, axes::Vararg{Union{AxisRegion, Colon}, N}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
+function Region(location::Location, axes::Vararg{AxisRegion, N}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
     Region(location, axes; halowidth)
 end
 
