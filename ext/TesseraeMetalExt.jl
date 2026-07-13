@@ -4,7 +4,6 @@ using Tesserae
 using Tesserae: MetalDevice, EltypePolicy, CastFloat32, PreserveEltype
 
 using Metal
-using Metal: DefaultStorageMode
 
 using KernelAbstractions
 using Adapt
@@ -14,7 +13,7 @@ Tesserae.get_device(x::MetalBackend) = MetalDevice{EltypePolicy}()
 Tesserae.has_device(x::MetalDevice) = true
 
 function Adapt.adapt_storage(::MetalDevice{CastFloat32}, A::AbstractArray)
-    adapt(Metal.MtlArrayAdaptor{DefaultStorageMode}(), A)
+    mtl(A)
 end
 
 function Adapt.adapt_storage(::MetalDevice{PreserveEltype}, A::AbstractArray)
