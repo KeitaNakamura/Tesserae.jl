@@ -1,36 +1,45 @@
+@enum AxisRegionKind::UInt8 begin
+    FullAxis
+    PhysicalAxis
+    LowHalo
+    HighHalo
+    LowBoundary
+    HighBoundary
+end
+
 """
     AxisRegion
 
 A one-dimensional region along an axis. An `N`-dimensional [`Region`](@ref) is
 the Cartesian product of `N` axis regions.
 """
-abstract type AxisRegion end
+struct AxisRegion
+    kind::AxisRegionKind
+end
 
 """
     Full()
 
 The full extent of an array axis, including its halo.
 """
-struct Full <: AxisRegion end
+Full() = AxisRegion(FullAxis)
 
 """
     Physical()
 
 The full non-halo extent of an axis, including its boundaries.
 """
-struct Physical <: AxisRegion end
+Physical() = AxisRegion(PhysicalAxis)
 
 """
     Halo(side)
 
 The halo region on the low (`side = -1`) or high (`side = +1`) side of an axis.
 """
-struct Halo <: AxisRegion
-    side::Int
-    function Halo(side::Int)
-        side == -1 || side == +1 || throw(ArgumentError("side must be -1 or +1, got $side"))
-        new(side)
-    end
+function Halo(side::Int)
+    side == -1 && return AxisRegion(LowHalo)
+    side == +1 && return AxisRegion(HighHalo)
+    throw(ArgumentError("side must be -1 or +1, got $side"))
 end
 
 """
@@ -39,15 +48,29 @@ end
 The physical boundary on the low (`side = -1`) or high (`side = +1`) side of
 an axis.
 """
-struct Boundary <: AxisRegion
-    side::Int
-    function Boundary(side::Int)
-        side == -1 || side == +1 || throw(ArgumentError("side must be -1 or +1, got $side"))
-        new(side)
-    end
+function Boundary(side::Int)
+    side == -1 && return AxisRegion(LowBoundary)
+    side == +1 && return AxisRegion(HighBoundary)
+    throw(ArgumentError("side must be -1 or +1, got $side"))
 end
 
-@inline side(region::Union{Halo, Boundary}) = region.side
+@inline isfull(region::AxisRegion) = region.kind == FullAxis
+@inline isphysical(region::AxisRegion) = region.kind == PhysicalAxis
+@inline ishalo(region::AxisRegion) = region.kind == LowHalo || region.kind == HighHalo
+@inline isboundary(region::AxisRegion) = region.kind == LowBoundary || region.kind == HighBoundary
+
+@inline function side(region::AxisRegion)
+    (region.kind == LowHalo || region.kind == LowBoundary) && return -1
+    (region.kind == HighHalo || region.kind == HighBoundary) && return +1
+    throw(ArgumentError("$(region.kind) does not have a side"))
+end
+
+function Base.show(io::IO, region::AxisRegion)
+    isfull(region) && return print(io, "Full()")
+    isphysical(region) && return print(io, "Physical()")
+    ishalo(region) && return print(io, "Halo(", side(region), ')')
+    print(io, "Boundary(", side(region), ')')
+end
 
 """
     Region(location, axes...; halowidth)
@@ -58,21 +81,21 @@ relative to the physical domain, but not concrete array indices or extents.
 axes. Each width must be nonnegative. Shifting a region produces a
 [`ShiftedRegion`](@ref).
 """
-struct Region{N, Axes <: NTuple{N, AxisRegion}}
+struct Region{N}
     location::Location
-    axes::Axes
+    axes::NTuple{N, AxisRegion}
     halowidth::NTuple{N, Int}
-    function Region{N, Axes}(location::Location, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
+    function Region{N}(location::Location, axes::NTuple{N, AxisRegion}, halowidth::NTuple{N, Int}) where {N}
         N ≤ 8 * sizeof(UInt) || throw(ArgumentError("Region supports at most $(8 * sizeof(UInt)) dimensions"))
         valid_location = location == Cell() || location == Vertex() || any(d -> location == Face(d) || location == Edge(d), 1:N)
         valid_location || throw(ArgumentError("location is incompatible with a $N-dimensional Region"))
         all(width -> width ≥ 0, halowidth) || throw(ArgumentError("halowidth must be nonnegative, got $halowidth"))
-        new{N, Axes}(location, axes, halowidth)
+        new{N}(location, axes, halowidth)
     end
 end
 
-function Region(location::Location, axes::Axes, halowidth::NTuple{N, Int}) where {N, Axes <: NTuple{N, AxisRegion}}
-    Region{N, Axes}(location, axes, halowidth)
+function Region(location::Location, axes::NTuple{N, AxisRegion}, halowidth::NTuple{N, Int}) where {N}
+    Region{N}(location, axes, halowidth)
 end
 
 function Region(location::Location, axes::NTuple{N, AxisRegion}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
@@ -111,8 +134,8 @@ Base.broadcastable(region::Region) = Ref(region)
 A [`Region`](@ref) shifted by a [`GridOffset`](@ref). Shifted regions are
 created by adding or subtracting a grid offset from a region.
 """
-struct ShiftedRegion{N, R <: Region{N}}
-    region::R
+struct ShiftedRegion{N}
+    region::Region{N}
     offset::GridOffset{N}
 end
 

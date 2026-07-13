@@ -34,20 +34,16 @@ function regionranges(region::Region{N}, offset::GridOffset{N}, array_axes::NTup
     end
 end
 
-@inline axisrange(::Full, array_axis::AbstractUnitRange{Int}, ::UnitRange{Int}, ::Int) = first(array_axis):last(array_axis)
-
-@inline axisrange(::Physical, ::AbstractUnitRange{Int}, physical_range::UnitRange{Int}, ::Int) = physical_range
-
-@inline function axisrange(region::Halo, ::AbstractUnitRange{Int}, physical_range::UnitRange{Int}, halowidth::Int)
-    if side(region) == -1
+@inline function axisrange(region::AxisRegion, array_axis::AbstractUnitRange{Int}, physical_range::UnitRange{Int}, halowidth::Int)
+    if isfull(region)
+        first(array_axis):last(array_axis)
+    elseif isphysical(region)
+        physical_range
+    elseif ishalo(region) && side(region) == -1
         (first(physical_range) - halowidth):(first(physical_range) - 1)
-    else
+    elseif ishalo(region)
         (last(physical_range) + 1):(last(physical_range) + halowidth)
-    end
-end
-
-@inline function axisrange(region::Boundary, ::AbstractUnitRange{Int}, physical_range::UnitRange{Int}, ::Int)
-    if side(region) == -1
+    elseif side(region) == -1
         first(physical_range):first(physical_range)
     else
         last(physical_range):last(physical_range)

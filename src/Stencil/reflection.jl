@@ -1,5 +1,5 @@
-struct ReflectionMap{N, R <: Region{N}} <: RegionMap
-    region::R
+struct ReflectionMap{N} <: RegionMap
+    region::Region{N}
     mask::UInt
 end
 
@@ -21,7 +21,7 @@ same axis twice restores its original index order.
 """
 @inline function reflect(region::Region{N}, d::Int) where {N}
     1 ≤ d ≤ N || throw(ArgumentError("axis must be between 1 and $N, got $d"))
-    map(axis -> axis isa Halo, axisregions(region))[d] || throw(ArgumentError("only a Halo axis can be reflected"))
+    ishalo(axisregions(region)[d]) || throw(ArgumentError("only a Halo axis can be reflected"))
     ReflectionMap(region, axisbit(d))
 end
 
@@ -30,7 +30,7 @@ reflect(::ShiftedRegion, ::Int) = throw(ArgumentError("a ShiftedRegion cannot be
 @inline function reflect(reflection::ReflectionMap{N}, d::Int) where {N}
     region = reflection.region
     1 ≤ d ≤ N || throw(ArgumentError("axis must be between 1 and $N, got $d"))
-    map(axis -> axis isa Halo, axisregions(region))[d] || throw(ArgumentError("only a Halo axis can be reflected"))
+    ishalo(axisregions(region)[d]) || throw(ArgumentError("only a Halo axis can be reflected"))
     mask = xor(reflection.mask, axisbit(d))
     ReflectionMap(region, mask)
 end
@@ -45,18 +45,16 @@ function mappedranges(reflection::ReflectionMap{N}, array_axes::NTuple{N, Abstra
             ncells = length(array_axis) - 2 * width - isnodealigned(location(region), d)
             width ≤ ncells || throw(DimensionMismatch("halowidth $width exceeds $ncells physical cells on axis $d"))
         end
-        _mappedrange(reflection, d, axis, range, isnodealigned(location(region), d))
+        mappedrange(reflection, d, axis, range, isnodealigned(location(region), d))
     end
 end
 
-@inline _mappedrange(::ReflectionMap, ::Int, ::Union{Full, Physical, Boundary}, range::UnitRange{Int}, ::Bool) = range
-
-@inline function _mappedrange(reflection::ReflectionMap, d::Int, axis::Halo, range::UnitRange{Int}, node_aligned::Bool)
+@inline function mappedrange(reflection::ReflectionMap, d::Int, axis::AxisRegion, range::UnitRange{Int}, node_aligned::Bool)
     isreflected(reflection, d) && return _reflectionrange(axis, range, node_aligned)
     first(range):1:last(range)
 end
 
-@inline function _reflectionrange(region::Halo, halo::UnitRange{Int}, node_aligned::Bool)
+@inline function _reflectionrange(region::AxisRegion, halo::UnitRange{Int}, node_aligned::Bool)
     if side(region) == -1
         (last(halo) + length(halo) + node_aligned):-1:(last(halo) + 1 + node_aligned)
     else
