@@ -4,7 +4,6 @@ using Tesserae
 using Tesserae: CUDADevice, EltypePolicy, CastFloat32, PreserveEltype
 
 using CUDA
-using CUDA: default_memory
 
 using KernelAbstractions
 using Adapt
@@ -14,7 +13,7 @@ Tesserae.get_device(x::CUDABackend) = CUDADevice{EltypePolicy}()
 Tesserae.has_device(x::CUDADevice) = true
 
 function Adapt.adapt_storage(::CUDADevice{CastFloat32}, A::AbstractArray)
-    adapt(CUDA.CuArrayKernelAdaptor{default_memory}(), A)
+    cu(A)
 end
 
 function Adapt.adapt_storage(::CUDADevice{PreserveEltype}, A::AbstractArray)
