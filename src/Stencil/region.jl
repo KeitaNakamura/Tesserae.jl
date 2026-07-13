@@ -1,75 +1,28 @@
-@enum AxisRegionKind::UInt8 begin
-    FullAxis
-    PhysicalAxis
-    LowHalo
-    HighHalo
-    LowBoundary
-    HighBoundary
-end
-
 """
     AxisRegion
 
 A one-dimensional region along an axis. An `N`-dimensional [`Region`](@ref) is
-the Cartesian product of `N` axis regions.
+the Cartesian product of `N` axis regions. `full` includes the halo, while
+`physical` excludes it.
 """
-struct AxisRegion
-    kind::AxisRegionKind
+@enum AxisRegion::UInt8 begin
+    full
+    physical
+    lowhalo
+    highhalo
+    lowboundary
+    highboundary
 end
 
-"""
-    Full()
-
-The full extent of an array axis, including its halo.
-"""
-Full() = AxisRegion(FullAxis)
-
-"""
-    Physical()
-
-The full non-halo extent of an axis, including its boundaries.
-"""
-Physical() = AxisRegion(PhysicalAxis)
-
-"""
-    Halo(side)
-
-The halo region on the low (`side = -1`) or high (`side = +1`) side of an axis.
-"""
-function Halo(side::Int)
-    side == -1 && return AxisRegion(LowHalo)
-    side == +1 && return AxisRegion(HighHalo)
-    throw(ArgumentError("side must be -1 or +1, got $side"))
-end
-
-"""
-    Boundary(side)
-
-The physical boundary on the low (`side = -1`) or high (`side = +1`) side of
-an axis.
-"""
-function Boundary(side::Int)
-    side == -1 && return AxisRegion(LowBoundary)
-    side == +1 && return AxisRegion(HighBoundary)
-    throw(ArgumentError("side must be -1 or +1, got $side"))
-end
-
-@inline isfull(region::AxisRegion) = region.kind == FullAxis
-@inline isphysical(region::AxisRegion) = region.kind == PhysicalAxis
-@inline ishalo(region::AxisRegion) = region.kind == LowHalo || region.kind == HighHalo
-@inline isboundary(region::AxisRegion) = region.kind == LowBoundary || region.kind == HighBoundary
+@inline isfull(region::AxisRegion) = region == full
+@inline isphysical(region::AxisRegion) = region == physical
+@inline ishalo(region::AxisRegion) = region == lowhalo || region == highhalo
+@inline isboundary(region::AxisRegion) = region == lowboundary || region == highboundary
 
 @inline function side(region::AxisRegion)
-    (region.kind == LowHalo || region.kind == LowBoundary) && return -1
-    (region.kind == HighHalo || region.kind == HighBoundary) && return +1
-    throw(ArgumentError("$(region.kind) does not have a side"))
-end
-
-function Base.show(io::IO, region::AxisRegion)
-    isfull(region) && return print(io, "Full()")
-    isphysical(region) && return print(io, "Physical()")
-    ishalo(region) && return print(io, "Halo(", side(region), ')')
-    print(io, "Boundary(", side(region), ')')
+    (region == lowhalo || region == lowboundary) && return -1
+    (region == highhalo || region == highboundary) && return +1
+    throw(ArgumentError("$region does not have a side"))
 end
 
 """
@@ -104,7 +57,7 @@ function Region(location::Location, axes::NTuple{N, AxisRegion}; halowidth::Unio
 end
 
 function Region(location::Location, axes::NTuple{N, Union{AxisRegion, Colon}}; halowidth::Union{Int, NTuple{N, Int}}) where {N}
-    normalized = map(axis -> axis isa Colon ? Full() : axis, axes)
+    normalized = map(axis -> axis isa Colon ? full : axis, axes)
     Region(location, normalized; halowidth)
 end
 

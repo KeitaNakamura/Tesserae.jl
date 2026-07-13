@@ -21,7 +21,7 @@ same axis twice restores its original index order.
 """
 @inline function reflect(region::Region{N}, d::Int) where {N}
     1 ≤ d ≤ N || throw(ArgumentError("axis must be between 1 and $N, got $d"))
-    ishalo(axisregions(region)[d]) || throw(ArgumentError("only a Halo axis can be reflected"))
+    ishalo(axisregions(region)[d]) || throw(ArgumentError("only a halo axis can be reflected"))
     ReflectionMap(region, axisbit(d))
 end
 
@@ -30,7 +30,7 @@ reflect(::ShiftedRegion, ::Int) = throw(ArgumentError("a ShiftedRegion cannot be
 @inline function reflect(reflection::ReflectionMap{N}, d::Int) where {N}
     region = reflection.region
     1 ≤ d ≤ N || throw(ArgumentError("axis must be between 1 and $N, got $d"))
-    ishalo(axisregions(region)[d]) || throw(ArgumentError("only a Halo axis can be reflected"))
+    ishalo(axisregions(region)[d]) || throw(ArgumentError("only a halo axis can be reflected"))
     mask = xor(reflection.mask, axisbit(d))
     ReflectionMap(region, mask)
 end

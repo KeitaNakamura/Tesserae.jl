@@ -2,15 +2,17 @@ module Stencil
 
 export
     AxisRegion,
-    Boundary,
     Cell,
     Edge,
     Face,
-    Full,
-    Halo,
-    Physical,
     Region,
     Vertex,
+    full,
+    physical,
+    lowhalo,
+    highhalo,
+    lowboundary,
+    highboundary,
     reflect,
     unitoffsets
 
