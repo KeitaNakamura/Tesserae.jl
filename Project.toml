@@ -37,7 +37,7 @@ TesseraeMetalExt = "Metal"
 [compat]
 Adapt = "4"
 Atomix = "1"
-CUDA = "5"
+CUDA = "5, 6"
 GPUArraysCore = "0.2"
 Gmsh = "0.3.1"
 Graphs = "1.4"
