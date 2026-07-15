@@ -21,8 +21,8 @@ struct CellSampling{V <: Union{AbstractVector{<: Vec}, Tuple{Vararg{Vec}}}} <: S
     qpts::V
 end
 
-cell_sampling(mesh::FEMesh) = CellSampling(quadpoints(cellshape(mesh)))
-cell_sampling(mesh::IGAMesh) = CellSampling(quadrature_rule(igabasis(mesh)).points)
+cell_sampling(mesh::FEMesh) = CellSampling(generate_quadrature_rule(cellshape(mesh)).points)
+cell_sampling(mesh::IGAMesh) = CellSampling(generate_quadrature_rule(igabasis(mesh)).points)
 
 function generate_points(alg::CellSampling, mesh::Union{FEMesh, IGAMesh})
     qpts = alg.qpts
