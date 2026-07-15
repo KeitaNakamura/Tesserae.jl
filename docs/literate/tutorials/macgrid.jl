@@ -47,7 +47,7 @@ function main()
         m   :: Float64                                  # mass
         V   :: Float64                                  # volume
         v   :: Vec{dim, Float64}                        # velocity
-        ∇v  :: SecondOrderTensor{dim, Float64, dim*dim} # velocity gradient (APIC-style)
+        ∇v  :: SecondOrderTensor{dim, Float64, dim*dim} # velocity gradient (TPIC)
         vᵈ  :: Float64                                  # scratch: interpolated face component
         ∇vᵈ :: Vec{dim, Float64}                        # scratch: grad of interpolated component
         p   :: Float64                                  # pressure
