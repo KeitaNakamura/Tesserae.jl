@@ -5,8 +5,8 @@
 
 This page solves a scalar heat-conduction problem on a NURBS patch. The
 assembly flow is the same as in [Finite element calculations](fem.md):
-quadrature points are stored in the particle array, [`feupdate!`](@ref) fills
-the basis values and quadrature weights, and [`@P2G_Matrix`](@ref) assembles
+quadrature points are stored in the particle array, `update!` fills the basis
+values and physical quadrature measures, and [`@P2G_Matrix`](@ref) assembles
 the global matrix.
 
 The difference is the geometric and discrete basis. An [`IGAMesh`](@ref) uses
@@ -270,10 +270,10 @@ grid = generate_grid(GridProp, mesh)
 gauss_points = generate_particles(GaussProp, mesh)
 weights = generate_basis_weights(mesh, size(gauss_points); name=Val(:N))
 
-feupdate!(weights, mesh; measure=gauss_points.V)
+update!(weights, gauss_points, mesh; measure=gauss_points.V)
 ```
 
-After [`feupdate!`](@ref), `N[ip]` and `∇N[ip]` are the rational basis value
+After `update!`, `N[ip]` and `∇N[ip]` are the rational basis value
 and physical gradient associated with local support index `ip`. The value
 `V[p]` is the quadrature weight multiplied by the physical Jacobian measure.
 
@@ -403,6 +403,7 @@ IGAPatch
 IGAMesh
 IGABasis
 boundaries
+update!(::BasisWeightArray{B}, ::QuadraturePoints, ::IGAMesh{dim,pdim}) where {dim,pdim,B<:IGABasis{pdim}}
 ```
 
 ### NURBS

@@ -65,8 +65,10 @@ export
     spacing,
 # Quadrature
     generate_quadrature_rule,
+    quadrature_rule,
 # Particles
     generate_particles,
+    QuadraturePoints,
     reorder_particles!,
     GridSampling,
     PoissonDiskSampling,
@@ -95,7 +97,6 @@ export
     BasisWeight,
     BasisWeightArray,
     InterpolationWeight,
-    feupdate!,
 # transfer
     @P2G,
     @G2P,

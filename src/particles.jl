@@ -17,46 +17,6 @@ function generate_points(alg::GridSampling, mesh::CartesianMesh{dim, T}) where {
     vec(CartesianMesh(axis.(domain)...))
 end
 
-struct CellSampling{V <: Union{AbstractVector{<: Vec}, Tuple{Vararg{Vec}}}} <: SamplingAlgorithm
-    qpts::V
-end
-
-cell_sampling(mesh::FEMesh) = CellSampling(generate_quadrature_rule(cellshape(mesh)).points)
-cell_sampling(mesh::IGAMesh) = CellSampling(generate_quadrature_rule(igabasis(mesh)).points)
-
-function generate_points(alg::CellSampling, mesh::Union{FEMesh, IGAMesh})
-    qpts = alg.qpts
-    points = Matrix{eltype(mesh)}(undef, length(qpts), ncells(mesh))
-    for cell in cells(mesh)
-        for (i, qpt) in enumerate(qpts)
-            points[i,cell] = cell_point(mesh, cell, qpt)
-        end
-    end
-    points
-end
-
-function cell_point(mesh::FEMesh, cell, qpt)
-    indices = supportnodes(mesh, cell)
-    N = value(cellshape(mesh), qpt)
-    sum(N .* mesh[indices])
-end
-
-function cell_point(mesh::IGAMesh, cell, qpt)
-    patch = patches(mesh, cell.patch)
-    ξ = span_point(patch, cell.span, qpt)
-    N, _ = iga_basis_values_and_gradients(patch, cell.span, ξ)
-    indices = supportnodes(mesh, cell)
-    R = geometry_basis_values(N, mesh.weights, indices)
-    sum(R .* mesh[indices])
-end
-
-geometry_basis_values(N, ::Nothing, indices) = N
-function geometry_basis_values(N, weights::AbstractVector, indices)
-    w = weights[indices]
-    W = sum(N .* w)
-    map((Nᵢ, wᵢ) -> Nᵢ*wᵢ/W, N, w)
-end
-
 """
     PoissonDiskSampling(spacing = 1/2, rng = Random.default_rng())
 
@@ -96,7 +56,7 @@ function _generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}
 end
 
 """
-    generate_particles([ParticleProp], mesh; alg=PoissonDiskSampling())
+    generate_particles(ParticleProp, mesh::CartesianMesh; alg=PoissonDiskSampling())
 
 Generate particles across the entire `mesh` domain based on the selected `alg` algorithm.
 See also [`GridSampling`](@ref) and [`PoissonDiskSampling`](@ref).
@@ -157,14 +117,108 @@ function generate_particles(
     particles
 end
 
-function generate_particles(
-        ::Type{ParticleProp}, mesh::Union{FEMesh, IGAMesh};
-        alg::SamplingAlgorithm=cell_sampling(mesh)) where {ParticleProp}
-    points = generate_points(alg, mesh)
-    particles = _generate_particles(ParticleProp, points)
-    particles
-end
-
 function generate_particles(mesh::CartesianMesh{dim, T}; alg::SamplingAlgorithm=PoissonDiskSampling()) where {dim, T}
     generate_particles(@NamedTuple{x::Vec{dim, T}}, mesh; alg).x
+end
+
+"""
+    generate_particles(ParticleProp, mesh::FEMesh, rule=generate_quadrature_rule(cellshape(mesh)))
+
+Generate one point-property record for each point of `rule` in every finite
+element cell. The result is a [`QuadraturePoints`](@ref) matrix whose rows are
+rule points and whose columns are cells.
+"""
+function generate_particles(::Type{ParticleProp}, mesh::FEMesh, rule::QuadratureRule=generate_quadrature_rule(cellshape(mesh))) where {ParticleProp}
+    QuadraturePoints(_generate_particles(ParticleProp, generate_points(rule, mesh)), rule)
+end
+
+"""
+    generate_particles(ParticleProp, mesh::IGAMesh, rule=generate_quadrature_rule(igabasis(mesh)))
+
+Generate one point-property record for each point of `rule` in every nonzero
+knot span. The result is a [`QuadraturePoints`](@ref) matrix whose rows are rule
+points and whose columns are cells.
+"""
+function generate_particles(::Type{ParticleProp}, mesh::IGAMesh, rule::QuadratureRule=generate_quadrature_rule(igabasis(mesh))) where {ParticleProp}
+    QuadraturePoints(_generate_particles(ParticleProp, generate_points(rule, mesh)), rule)
+end
+
+"""
+    QuadraturePoints(particles, rule)
+
+A matrix of point-property records associated with a reference-cell
+[`QuadratureRule`](@ref). `parent(points)` returns the underlying `StructArray`,
+and [`quadrature_rule(points)`](@ref) returns the stored rule.
+"""
+struct QuadraturePoints{T, P <: StructArray{T, 2}, R <: QuadratureRule} <: AbstractMatrix{T}
+    particles::P
+    rule::R
+    function QuadraturePoints{T, P, R}(particles::P, rule::R) where {T, P <: StructArray{T, 2}, R <: QuadratureRule}
+        length(rule.points) == length(rule.weights) || throw(DimensionMismatch("quadrature points and weights must have the same length"))
+        size(particles, 1) == length(rule.points) || throw(DimensionMismatch("the first particle dimension must equal the number of quadrature points"))
+        new{T, P, R}(particles, rule)
+    end
+end
+
+QuadraturePoints(particles::P, rule::R) where {T, P <: StructArray{T, 2}, R <: QuadratureRule} = QuadraturePoints{T, P, R}(particles, rule)
+
+Base.parent(points::QuadraturePoints) = getfield(points, :particles)
+
+"""
+    quadrature_rule(points::QuadraturePoints)
+
+Return the reference-cell quadrature rule stored by `points`.
+"""
+quadrature_rule(points::QuadraturePoints) = getfield(points, :rule)
+Base.size(points::QuadraturePoints) = size(parent(points))
+Base.IndexStyle(::Type{<: QuadraturePoints{T, P}}) where {T, P} = IndexStyle(P)
+Base.propertynames(points::QuadraturePoints, private::Bool=false) = propertynames(parent(points), private)
+@inline Base.getproperty(points::QuadraturePoints, name::Symbol) = getproperty(parent(points), name)
+@inline Base.getindex(points::QuadraturePoints, i::Int) = getindex(parent(points), i)
+@inline Base.setindex!(points::QuadraturePoints, value, i::Int) = setindex!(parent(points), value, i)
+Base.copy(points::QuadraturePoints) = QuadraturePoints(copy(parent(points)), quadrature_rule(points))
+StructArrays.components(points::QuadraturePoints) = StructArrays.components(parent(points))
+
+function _check_quadrature_rule(::QuadratureRule{F, qdim}, mesh::FEMesh) where {F, qdim}
+    F === _reference_cell_family(cellshape(mesh)) || throw(ArgumentError("quadrature rule and FEM mesh must use the same reference-cell family"))
+    qdim == get_dimension(cellshape(mesh)) || throw(DimensionMismatch("quadrature-rule and FEM reference dimensions must match"))
+end
+
+function _check_quadrature_rule(::QuadratureRule{F, qdim}, ::IGAMesh{dim, pdim}) where {F, qdim, dim, pdim}
+    F === _tensor_product_family(Val(pdim)) || throw(ArgumentError("quadrature rule and IGA mesh must use the same reference-cell family"))
+    qdim == pdim || throw(DimensionMismatch("quadrature-rule and IGA parametric dimensions must match"))
+end
+
+function generate_points(rule::QuadratureRule, mesh::Union{FEMesh, IGAMesh})
+    _check_quadrature_rule(rule, mesh)
+    qpts = rule.points
+    points = Matrix{eltype(mesh)}(undef, length(qpts), ncells(mesh))
+    for cell in cells(mesh)
+        for (i, qpt) in enumerate(qpts)
+            points[i,cell] = cell_point(mesh, cell, qpt)
+        end
+    end
+    points
+end
+
+function cell_point(mesh::FEMesh, cell, qpt)
+    indices = supportnodes(mesh, cell)
+    N = value(cellshape(mesh), qpt)
+    sum(N .* mesh[indices])
+end
+
+function cell_point(mesh::IGAMesh, cell, qpt)
+    patch = patches(mesh, cell.patch)
+    ξ = span_point(patch, cell.span, qpt)
+    N, _ = iga_basis_values_and_gradients(patch, cell.span, ξ)
+    indices = supportnodes(mesh, cell)
+    R = geometry_basis_values(N, mesh.weights, indices)
+    sum(R .* mesh[indices])
+end
+
+geometry_basis_values(N, ::Nothing, indices) = N
+function geometry_basis_values(N, weights::AbstractVector, indices)
+    w = weights[indices]
+    W = sum(N .* w)
+    map((Nᵢ, wᵢ) -> Nᵢ*wᵢ/W, N, w)
 end

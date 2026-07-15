@@ -13,6 +13,9 @@ nsupportnodes(basis::IGABasis) = prod(degree -> _degree(degree) + 1, degrees(bas
 
 initial_supportnodes(basis::IGABasis, mesh::IGAMesh) = zero(SVector{nsupportnodes(basis), Int})
 
+_generate_supportnodes(::IGABasis, mesh::IGAMesh, dims::Dims{2}) = _generate_cell_supportnodes(mesh, dims)
+_generate_supportnodes(::IGABasis, ::IGAMesh, ::Dims) = throw(DimensionMismatch("IGA basis weights must have dimensions (quadrature points, cells)"))
+
 function allocate_static_basis_values(::Type{Vec{dim, T}}, basis::IGABasis; kwargs...) where {dim, T}
     A = MArray{Tuple{nsupportnodes(basis)}}
     _allocate_basis_values(A, Vec{dim, T}; kwargs...)
@@ -33,7 +36,7 @@ generate_quadrature_rule(basis::IGABasis) = generate_quadrature_rule(Float64, ba
 function generate_quadrature_rule(::Type{T}, basis::IGABasis{dim}) where {T, dim}
     _check_quadrature_float(T)
     rules = map(degree -> _gauss_legendre_rule(T, degree), degrees(basis))
-    _tensor_product_quadrature_rule(rules)
+    _tensor_product_quadrature_rule(_tensor_product_family(Val(dim)), rules)
 end
 
 # Map parent Gauss points from [-1, 1]^dim to the selected knot span.

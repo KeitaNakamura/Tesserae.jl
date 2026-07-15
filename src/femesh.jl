@@ -17,9 +17,9 @@ shape for the dimension: `Line2`, `Quad4`, or `Hex8`. Passing an explicit
 from the Cartesian grid.
 
 `FEMesh` is used by the finite-element workflow. Use
-[`generate_particles`](@ref) to create quadrature points,
+`generate_particles` to create quadrature points,
 [`generate_basis_weights`](@ref) to create element-local basis storage, and
-[`feupdate!`](@ref) to fill the quadrature weights and basis values.
+`update!` to fill the element-local basis data.
 """
 struct FEMesh{S <: Shape, dim, T, L} <: AbstractMesh{dim, T, 1}
     shape::S

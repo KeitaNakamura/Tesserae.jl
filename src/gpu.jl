@@ -73,7 +73,12 @@ function KernelAbstractions.get_backend(mesh::FEMesh)
     backend
 end
 
+# IGAMesh
 KernelAbstractions.get_backend(mesh::IGAMesh) = get_backend(mesh.controlpoints)
+
+# QuadraturePoints
+Adapt.adapt_structure(to, points::QuadraturePoints) = QuadraturePoints(adapt(to, parent(points)), quadrature_rule(points))
+KernelAbstractions.get_backend(points::QuadraturePoints) = get_backend(parent(points))
 
 # BasisWeightArray
 function Adapt.adapt_structure(to, weights::BasisWeightArray)

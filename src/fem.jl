@@ -7,149 +7,116 @@ end
 end
 
 """
-    feupdate!(weights, mesh[, nodes]; measure=nothing, quadrature_rule=generate_quadrature_rule(cellshape(mesh)))
-    feupdate!(weights, boundary_mesh[, nodes]; measure=nothing, normal=nothing, quadrature_rule=generate_quadrature_rule(cellshape(boundary_mesh)))
+    update!(weights::BasisWeightArray{<:Shape}, points::QuadraturePoints, geometry::FEMesh; measure=nothing, normal=nothing)
 
-Fill finite-element basis data at quadrature points.
+Evaluate the FEM field basis stored by `weights` at the reference points in
+`quadrature_rule(points)`. `geometry` supplies the mapping to physical space.
+The field and geometry may use different shapes from the same reference-cell
+family, provided that they describe the same cells in the same order and
+orientation.
 
-`weights` is usually created by [`generate_basis_weights`](@ref) with dimensions
-matching the number of quadrature points per cell and the number of cells in
-`mesh`. For a domain mesh, `feupdate!` stores the basis values and physical
-gradients in each [`BasisWeight`](@ref). If `measure` is provided, it is filled
-with the quadrature weight multiplied by the Jacobian measure, such as `dV` in
-3D or `dA` in 2D.
-
-For a lower-dimensional boundary mesh, `feupdate!` stores basis values for
-boundary integration. If `normal` is provided, it is filled with unit normals
-computed from the boundary Jacobian. Normals are available for 2D curves and 3D
-surfaces; a 3D line has no unique normal and throws an `ArgumentError`.
-
-Pass `nodes` to evaluate the geometry on coordinates different from `mesh`
-itself, for example when assembling on a deformed configuration.
-
-# Example
-```julia
-mesh = FEMesh(CartesianMesh(0.1, (-1, 1), (-1, 1)))
-points = generate_particles(@NamedTuple{x::Vec{2, Float64}, V::Float64}, mesh)
-weights = generate_basis_weights(mesh, size(points); name=Val(:N))
-
-feupdate!(weights, mesh; measure=points.V)
-```
-
-After the update, `N[ip]` and `∇N[ip]` can be used inside transfer macros such
-as [`@P2G`](@ref) and [`@P2G_Matrix`](@ref) to assemble FEM vectors and
-matrices.
+For full-dimensional cells, `weights` stores basis values and physical
+gradients. For boundary cells, it stores basis values. `measure` receives the
+physical quadrature measure, and `normal` receives boundary unit normals.
 """
-function feupdate!(
-        weights::AbstractArray{<: BasisWeight{S}}, mesh::FEMesh{S, dim},
-        nodes::AbstractArray{<: Vec{dim}} = mesh;
-        measure::Union{Nothing, AbstractArray} = nothing,
-        quadrature_rule::QuadratureRule = generate_quadrature_rule(cellshape(mesh)),
-    ) where {dim, S <: Shape{dim}}
-    qpts, qwts = quadrature_rule.points, quadrature_rule.weights
-    qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
-    _feupdate!(Val(:domain), weights, mesh, nodes, measure, nothing, qdata, qwts)
-end
+function update!(
+        weights::BasisWeightArray{S}, points::QuadraturePoints,
+        geometry::FEMesh{<: Shape{pdim}, dim};
+        measure::Union{Nothing, AbstractArray}=nothing,
+        normal::Union{Nothing, AbstractArray}=nothing,
+    ) where {pdim, dim, S <: Shape{pdim}}
+    _reference_cell_family(basis(weights)) === _reference_cell_family(cellshape(geometry)) || throw(ArgumentError("field and geometry must use the same reference-cell family"))
+    is_domain = pdim == dim
+    mode = pdim == dim ? Val(:domain) : Val(:boundary)
+    rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
 
-function feupdate!(
-        weights::AbstractArray{<: BasisWeight{<: IGABasis}}, mesh::IGAMesh{dim, dim, T},
-        nodes::AbstractArray{<: Vec{dim}} = mesh;
-        measure::Union{Nothing, AbstractArray} = nothing,
-        quadrature_rule::QuadratureRule = generate_quadrature_rule(igabasis(mesh)),
-    ) where {dim, T}
-    qpts, qwts = quadrature_rule.points, quadrature_rule.weights
-    _feupdate!(Val(:domain), weights, mesh, nodes, measure, nothing, qpts, qwts)
-end
-
-@inline _basis_values_and_gradients(mesh::FEMesh, qdata, cell, indices, p) = qdata[p]
-@inline _quadrature_weight(mesh::FEMesh, qdata, qwts, cell, p) = qwts[p]
-@inline function _basis_values_and_gradients(mesh::IGAMesh, qdata, cell, indices, p)
-    patch = patches(mesh, cell.patch)
-    ξ = span_point(patch, cell.span, qdata[p])
-    N, dN = iga_basis_values_and_gradients(patch, cell.span, ξ)
-    _rationalize_basis(N, dN, mesh.weights, indices)
-end
-@inline _rationalize_basis(N, dN, ::Nothing, indices) = N, dN
-@inline _rationalize_basis(N, dN, weights::AbstractVector, indices) = rational_basis_values_and_gradients(N, dN, weights[indices])
-@inline function _quadrature_weight(mesh::IGAMesh, qdata, qwts, cell, p)
-    patch = patches(mesh, cell.patch)
-    span_weight(patch, cell.span, qwts[p])
-end
-
-function _feupdate!(mode, weights, mesh::AbstractMesh, nodes, measure, normal, qdata, qwts)
-    @assert length(qdata) == length(qwts)
-    @assert size(mesh) == size(nodes)
-    @assert size(weights) == (length(qdata), ncells(mesh))
-    _check_feupdate_outputs(mode, weights, measure, normal)
-    for cell in cells(mesh)
-        indices = supportnodes(mesh, cell)
-        x = nodes[indices]
-        for p in eachindex(qdata, qwts)
-            N, dNdξ = _basis_values_and_gradients(mesh, qdata, cell, indices, p)
-            J = sum(x .⊗ dNdξ)
-            qwt = _quadrature_weight(mesh, qdata, qwts, cell, p)
-            bw = weights[p,cell]
-            _set_feupdate_values!(mode, bw, N, dNdξ, J)
-            supportnodes_storage(bw)[] = indices
-            _set_feupdate_outputs!(mode, measure, normal, p, cell, qwt, J)
+    field_shape = basis(weights)
+    geometry_shape = cellshape(geometry)
+    field_qdata = jet.(Ref(Order(1)), Ref(field_shape), rule.points)
+    geometry_qdata = field_shape === geometry_shape ? field_qdata : jet.(Ref(Order(1)), Ref(geometry_shape), rule.points)
+    for cell in cells(geometry)
+        geometry_indices = supportnodes(geometry, cell)
+        x = geometry[geometry_indices]
+        for q in eachindex(field_qdata, rule.weights)
+            N, dNdξ = field_qdata[q]
+            J = sum(x .⊗ last(geometry_qdata[q]))
+            _set_quadrature_data!(mode, weights[q,cell], measure, normal, q, cell, N, dNdξ, J, rule.weights[q])
         end
+    end
+    weights
+end
+
+"""
+    update!(weights::BasisWeightArray{<:IGABasis}, points::QuadraturePoints, geometry::IGAMesh; measure=nothing, normal=nothing)
+
+Evaluate the IGA basis of `geometry` at the reference points in
+`quadrature_rule(points)` and store the result in `weights`. `measure` and
+`normal` have the same roles as in the FEM method.
+"""
+function update!(
+        weights::BasisWeightArray{B}, points::QuadraturePoints,
+        geometry::IGAMesh{dim, pdim};
+        measure::Union{Nothing, AbstractArray}=nothing,
+        normal::Union{Nothing, AbstractArray}=nothing,
+    ) where {dim, pdim, B <: IGABasis{pdim}}
+    degrees(basis(weights)) == degrees(igabasis(geometry)) || throw(ArgumentError("IGA field and geometry degrees must match"))
+    is_domain = pdim == dim
+    mode = pdim == dim ? Val(:domain) : Val(:boundary)
+    rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
+
+    for cell in cells(geometry)
+        indices = supportnodes(geometry, cell)
+        supportnodes(weights[1,cell]) == indices || throw(ArgumentError("IGA basis weights and geometry must use the same cell connectivity"))
+        x = geometry[indices]
+        patch = patches(geometry, cell.patch)
+        for q in eachindex(rule.points, rule.weights)
+            ξ = span_point(patch, cell.span, rule.points[q])
+            N, dNdξ = iga_basis_values_and_gradients(patch, cell.span, ξ)
+            if geometry.weights !== nothing
+                N, dNdξ = rational_basis_values_and_gradients(N, dNdξ, geometry.weights[indices])
+            end
+            J = sum(x .⊗ dNdξ)
+            weight = span_weight(patch, cell.span, rule.weights[q])
+            _set_quadrature_data!(mode, weights[q,cell], measure, normal, q, cell, N, dNdξ, J, weight)
+        end
+    end
+    weights
+end
+
+function _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
+    rule = quadrature_rule(points)
+    _check_quadrature_rule(rule, geometry)
+    size(weights) == size(points) || throw(DimensionMismatch("basis weights and quadrature points must have the same dimensions"))
+    size(points) == (length(rule.points), ncells(geometry)) || throw(DimensionMismatch("quadrature points must have dimensions (rule points, geometry cells)"))
+    isnothing(measure) || size(weights) == size(measure) || throw(DimensionMismatch("measure and basis weights must have the same dimensions"))
+    is_domain && !isnothing(normal) && throw(ArgumentError("normal is only valid for boundary integration"))
+    isnothing(normal) || size(weights) == size(normal) || throw(DimensionMismatch("normal and basis weights must have the same dimensions"))
+    if is_domain && !isempty(weights)
+        bw = first(weights)
+        derivative_order(bw) isa Order{0} && throw(ArgumentError("domain basis weights must store first derivatives"))
+        length(eltype(nodal_basis_values(bw, Order(1)))) == length(eltype(geometry)) || throw(DimensionMismatch("basis-gradient and geometry dimensions must match"))
+    end
+    rule
+end
+
+@inline function _set_quadrature_data!(::Val{:domain}, bw, measure, normal, q, cell, N, dNdξ, J, weight)
+    set_values!(bw, (N, dNdξ .⊡ Ref(inv(J))))
+    if measure !== nothing
+        measure[q,cell] = weight * sqrt(det(J'J))
     end
 end
 
-function _check_feupdate_outputs(::Val{:domain}, weights, measure, normal)
-    @assert isnothing(measure) || size(weights) == size(measure)
-    @assert isnothing(normal)
+@inline function _set_quadrature_data!(::Val{:boundary}, bw, measure, normal, q, cell, N, dNdξ, J, weight)
+    set_values!(bw, (N,))
+    if measure !== nothing
+        measure[q,cell] = weight * sqrt(det(J'J))
+    end
+    if normal !== nothing
+        n = _get_normal(J)
+        normal[q,cell] = n / norm(n)
+    end
 end
-function _check_feupdate_outputs(::Val{:boundary}, weights, measure, normal)
-    @assert isnothing(measure) || size(weights) == size(measure)
-    @assert isnothing(normal) || size(weights) == size(normal)
-end
-
-# This is dL, dA, or dV depending on the parametric dimension of the element.
-@inline _jacobian_measure(qwt, J) = qwt * sqrt(det(J'J))
-
-# Domain cells have a square Jacobian, so gradients can be mapped to physical coordinates.
-@inline _set_feupdate_values!(::Val{:domain}, bw, N, dNdξ, J) = set_values!(bw, (N, dNdξ .⊡ Ref(inv(J))))
-# Boundary cells only need basis values for line/surface integration.
-@inline _set_feupdate_values!(::Val{:boundary}, bw, N, dNdξ, J) = set_values!(bw, (N,))
 
 _get_normal(J::Mat{3,2}) = J[:,1] × J[:,2]
 _get_normal(J::Mat{2,1}) = Vec(J[2,1], -J[1,1])
 _get_normal(J::Mat{3,1}) = throw(ArgumentError("normal is not defined for a 3D line element"))
-
-@inline function _set_feupdate_outputs!(::Val{:domain}, measure, normal, p, cell, qwt, J)
-    if measure !== nothing
-        measure[p,cell] = _jacobian_measure(qwt, J)
-    end
-end
-@inline function _set_feupdate_outputs!(::Val{:boundary}, measure, normal, p, cell, qwt, J)
-    if measure !== nothing
-        measure[p,cell] = _jacobian_measure(qwt, J)
-    end
-    if normal !== nothing
-        n = _get_normal(J)
-        n_norm = norm(n)
-        normal[p,cell] = n / n_norm
-    end
-end
-
-function feupdate!(
-        weights::AbstractArray{<: BasisWeight{S}}, mesh::FEMesh{S, dim},
-        nodes::AbstractArray{<: Vec{dim}} = mesh;
-        measure::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
-        quadrature_rule::QuadratureRule = generate_quadrature_rule(cellshape(mesh)),
-    ) where {S <: Shape, dim}
-    qpts, qwts = quadrature_rule.points, quadrature_rule.weights
-    qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
-    _feupdate!(Val(:boundary), weights, mesh, nodes, measure, normal, qdata, qwts)
-end
-
-function feupdate!(
-        weights::AbstractArray{<: BasisWeight{<: IGABasis}}, mesh::IGAMesh{dim, pdim, T},
-        nodes::AbstractArray{<: Vec{dim}} = mesh;
-        measure::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
-        quadrature_rule::QuadratureRule = generate_quadrature_rule(igabasis(mesh)),
-    ) where {dim, T, pdim}
-    qpts, qwts = quadrature_rule.points, quadrature_rule.weights
-    _feupdate!(Val(:boundary), weights, mesh, nodes, measure, normal, qpts, qwts)
-end

@@ -197,6 +197,7 @@ end
 
 function foreach_loop(f, device::GPUDevice, ::Val{scheduler}, collection) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    collection = collection isa QuadraturePoints ? parent(collection) : collection
     backend = get_backend(device)
     if collection isa SpGrid
         spinds = get_spinds(collection)
@@ -213,6 +214,7 @@ end
 
 function foreach_loop(f, device::GPUDevice, ::Val{scheduler}, collection, slice::ForeachSlice) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    collection = collection isa QuadraturePoints ? parent(collection) : collection
     foreach_check_slice(collection, slice)
     ndrange = foreach_slice_ndrange(slice)
     backend = get_backend(device)

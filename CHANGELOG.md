@@ -43,8 +43,9 @@ macros.
   was removed. Pass a `ThreadPartition` instead. (#137)
 - `CPDI` on `SpGrid` is now rejected explicitly; use a dense grid for CPDI.
   (#130)
-- `feupdate!` now uses a single `measure` output keyword for domain and boundary
-  integration. The old `volume` and `area` output keywords were removed. (#147)
+- `feupdate!` has been removed. Use
+  `update!(weights, points, geometry; measure=nothing, normal=nothing)` instead;
+  `points` carries the quadrature rule.
 - The finite-element mesh type has been renamed from `UnstructuredMesh` to
   `FEMesh`; the old name is no longer available. (#156)
 
