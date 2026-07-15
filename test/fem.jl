@@ -21,6 +21,14 @@
         @test_throws ArgumentError generate_particles(@NamedTuple{x::Vec{2,Float64}}, geometry, generate_quadrature_rule(Tesserae.Tri6()))
         @test quadrature_rule(points) === rule
         @test points[1,1] == parent(points)[1,1]
+        points_view = @inferred view(points, :, [1])
+        @test quadrature_rule(points_view) === rule
+        original_point = parent(points)[1,1]
+        parent(points)[1,1] = merge(original_point, (; V=1))
+        @test points_view[1,1].V == 1
+        points_view[1,1] = original_point
+        @test parent(points)[1,1] == original_point
+        @test collect(points_view) == collect(parent(points_view))
         adapted_points = Tesserae.Adapt.adapt(Array, points)
         @test adapted_points isa QuadraturePoints
         @test parent(adapted_points) isa Tesserae.StructArray

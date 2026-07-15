@@ -149,6 +149,7 @@ end
 A matrix of point-property records associated with a reference-cell
 [`QuadratureRule`](@ref). `parent(points)` returns the underlying `StructArray`,
 and [`quadrature_rule(points)`](@ref) returns the stored rule.
+`view(points, :, cells)` shares the storage and rule when `cells` is `:` or an `AbstractVector`.
 """
 struct QuadraturePoints{T, P <: StructArray{T, 2}, R <: QuadratureRule} <: AbstractMatrix{T}
     particles::P
@@ -175,7 +176,10 @@ Base.IndexStyle(::Type{<: QuadraturePoints{T, P}}) where {T, P} = IndexStyle(P)
 Base.propertynames(points::QuadraturePoints, private::Bool=false) = propertynames(parent(points), private)
 @inline Base.getproperty(points::QuadraturePoints, name::Symbol) = getproperty(parent(points), name)
 @inline Base.getindex(points::QuadraturePoints, i::Int) = getindex(parent(points), i)
+@inline Base.getindex(points::QuadraturePoints, i::Int, j::Int) = getindex(parent(points), i, j)
 @inline Base.setindex!(points::QuadraturePoints, value, i::Int) = setindex!(parent(points), value, i)
+@inline Base.setindex!(points::QuadraturePoints, value, i::Int, j::Int) = setindex!(parent(points), value, i, j)
+@inline Base.view(points::QuadraturePoints, ::Colon, cells::Union{Colon, AbstractVector}) = QuadraturePoints(view(parent(points), :, cells), quadrature_rule(points))
 Base.copy(points::QuadraturePoints) = QuadraturePoints(copy(parent(points)), quadrature_rule(points))
 StructArrays.components(points::QuadraturePoints) = StructArrays.components(parent(points))
 
