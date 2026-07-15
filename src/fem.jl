@@ -7,8 +7,8 @@ end
 end
 
 """
-    feupdate!(weights, mesh[, nodes]; measure=nothing, quadrature_rule=quadrature_rule(cellshape(mesh)))
-    feupdate!(weights, boundary_mesh[, nodes]; measure=nothing, normal=nothing, quadrature_rule=quadrature_rule(cellshape(boundary_mesh)))
+    feupdate!(weights, mesh[, nodes]; measure=nothing, quadrature_rule=generate_quadrature_rule(cellshape(mesh)))
+    feupdate!(weights, boundary_mesh[, nodes]; measure=nothing, normal=nothing, quadrature_rule=generate_quadrature_rule(cellshape(boundary_mesh)))
 
 Fill finite-element basis data at quadrature points.
 
@@ -44,7 +44,7 @@ function feupdate!(
         weights::AbstractArray{<: BasisWeight{S}}, mesh::FEMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         measure::Union{Nothing, AbstractArray} = nothing,
-        quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
+        quadrature_rule::QuadratureRule = generate_quadrature_rule(cellshape(mesh)),
     ) where {dim, S <: Shape{dim}}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
@@ -55,7 +55,7 @@ function feupdate!(
         weights::AbstractArray{<: BasisWeight{<: IGABasis}}, mesh::IGAMesh{dim, dim, T},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         measure::Union{Nothing, AbstractArray} = nothing,
-        quadrature_rule::QuadratureRule = quadrature_rule(igabasis(mesh)),
+        quadrature_rule::QuadratureRule = generate_quadrature_rule(igabasis(mesh)),
     ) where {dim, T}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     _feupdate!(Val(:domain), weights, mesh, nodes, measure, nothing, qpts, qwts)
@@ -137,7 +137,7 @@ function feupdate!(
         weights::AbstractArray{<: BasisWeight{S}}, mesh::FEMesh{S, dim},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         measure::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
-        quadrature_rule::QuadratureRule = quadrature_rule(cellshape(mesh)),
+        quadrature_rule::QuadratureRule = generate_quadrature_rule(cellshape(mesh)),
     ) where {S <: Shape, dim}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     qdata = jet.(Ref(Order(1)), Ref(cellshape(mesh)), qpts)
@@ -148,7 +148,7 @@ function feupdate!(
         weights::AbstractArray{<: BasisWeight{<: IGABasis}}, mesh::IGAMesh{dim, pdim, T},
         nodes::AbstractArray{<: Vec{dim}} = mesh;
         measure::Union{Nothing, AbstractArray} = nothing, normal::Union{Nothing, AbstractArray} = nothing,
-        quadrature_rule::QuadratureRule = quadrature_rule(igabasis(mesh)),
+        quadrature_rule::QuadratureRule = generate_quadrature_rule(igabasis(mesh)),
     ) where {dim, T, pdim}
     qpts, qwts = quadrature_rule.points, quadrature_rule.weights
     _feupdate!(Val(:boundary), weights, mesh, nodes, measure, normal, qpts, qwts)

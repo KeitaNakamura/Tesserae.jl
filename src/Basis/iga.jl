@@ -21,53 +21,20 @@ end
 generate_basis_weights(::Type{T}, mesh::IGAMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, igabasis(mesh), mesh, _todims(dims...); kwargs...)
 generate_basis_weights(mesh::IGAMesh, dims...; kwargs...) = generate_basis_weights(Float64, mesh, dims...; kwargs...)
 
-quadrature_rule(basis::IGABasis) = quadrature_rule(Float64, basis)
+"""
+    generate_quadrature_rule(basis::IGABasis)
+    generate_quadrature_rule(T, basis::IGABasis)
 
-function quadrature_rule(::Type{T}, basis::IGABasis{dim}) where {T, dim}
-    rules = map(degree -> gauss_legendre_rule(T, degree), degrees(basis))
-    qpts1d = map(first, rules)
-    qwts1d = map(last, rules)
-    indices = CartesianIndices(map(length, qpts1d))
-    qpts = vec(map(I -> Vec(map(getindex, qpts1d, Tuple(I))), indices))
-    qwts = vec(map(I -> prod(map(getindex, qwts1d, Tuple(I))), indices))
-    QuadratureRule(qpts, qwts)
+Generate the standard [`QuadratureRule`](@ref) for `basis`, using `p + 1`
+Gauss–Legendre points in each parametric direction of degree `p`. `T` may be
+`Float16`, `Float32`, or `Float64` and defaults to `Float64`.
+"""
+generate_quadrature_rule(basis::IGABasis) = generate_quadrature_rule(Float64, basis)
+function generate_quadrature_rule(::Type{T}, basis::IGABasis{dim}) where {T, dim}
+    _check_quadrature_float(T)
+    rules = map(degree -> _gauss_legendre_rule(T, degree), degrees(basis))
+    _tensor_product_quadrature_rule(rules)
 end
-
-function gauss_legendre_rule(::Type{T}, ::Degree{0}) where {T}
-    SVector{1, T}((0,)), SVector{1, T}((2,))
-end
-function gauss_legendre_rule(::Type{T}, ::Degree{1}) where {T}
-    x = sqrt(T(1) / 3)
-    SVector{2, T}((-x, x)), SVector{2, T}((1, 1))
-end
-function gauss_legendre_rule(::Type{T}, ::Degree{2}) where {T}
-    x = sqrt(T(3) / 5)
-    SVector{3, T}((-x, 0, x)), SVector{3, T}((T(5)/9, T(8)/9, T(5)/9))
-end
-function gauss_legendre_rule(::Type{T}, ::Degree{3}) where {T}
-    x1 = sqrt(T(3)/7 - T(2)/7 * sqrt(T(6)/5))
-    x2 = sqrt(T(3)/7 + T(2)/7 * sqrt(T(6)/5))
-    w1 = (18 + sqrt(T(30))) / 36
-    w2 = (18 - sqrt(T(30))) / 36
-    SVector{4, T}((-x2, -x1, x1, x2)), SVector{4, T}((w2, w1, w1, w2))
-end
-function gauss_legendre_rule(::Type{T}, ::Degree{4}) where {T}
-    x1 = sqrt(T(5) - 2sqrt(T(10)/7)) / 3
-    x2 = sqrt(T(5) + 2sqrt(T(10)/7)) / 3
-    w1 = (322 + 13sqrt(T(70))) / 900
-    w2 = (322 - 13sqrt(T(70))) / 900
-    SVector{5, T}((-x2, -x1, 0, x1, x2)), SVector{5, T}((w2, w1, T(128)/225, w1, w2))
-end
-function gauss_legendre_rule(::Type{T}, ::Degree{5}) where {T}
-    x1 = T(0.2386191860831969)
-    x2 = T(0.6612093864662645)
-    x3 = T(0.9324695142031521)
-    w1 = T(0.4679139345726910)
-    w2 = T(0.3607615730481386)
-    w3 = T(0.1713244923791704)
-    SVector{6, T}((-x3, -x2, -x1, x1, x2, x3)), SVector{6, T}((w3, w2, w1, w1, w2, w3))
-end
-gauss_legendre_rule(::Type{T}, degree::Degree) where {T} = throw(ArgumentError("IGA quadrature is implemented up to quintic degree"))
 
 # Map parent Gauss points from [-1, 1]^dim to the selected knot span.
 span_point(patch::IGAPatch, span::CartesianIndex, X::Vec) = Vec(map(span_point, patch.knot_vectors, Tuple(span), Tuple(X)))

@@ -16,7 +16,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
     mesh = IGAMesh(cmesh; degree=Quadratic())
     meshcells = collect(cells(mesh))
     basis = @inferred Tesserae.igabasis(mesh)
-    qrule = Tesserae.quadrature_rule(basis)
+    qrule = generate_quadrature_rule(basis)
     patch = Tesserae.patches(mesh, 1)
     span = first(meshcells).span
     ξ = Tesserae.span_point(patch, span, first(qrule.points))
@@ -127,22 +127,18 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
     @testset "Quadrature" begin
         # For degree p, IGA uses p+1 Gauss points per parametric direction.
-        @test length(Tesserae.quadrature_rule(IGABasis((Linear(), Linear()))).points) == 4
+        @test length(generate_quadrature_rule(IGABasis((Constant(),))).points) == 1
         @test length(qrule.points) == 9
-        @test length(Tesserae.quadrature_rule(IGABasis((Cubic(), Cubic()))).points) == 16
-        @test length(Tesserae.quadrature_rule(IGABasis((Tesserae.Quartic(), Tesserae.Quartic()))).points) == 25
-        @test length(Tesserae.quadrature_rule(IGABasis((Tesserae.Quintic(), Tesserae.Quintic()))).points) == 36
         @test sum(qrule.weights) ≈ 4
-
-        for (degree, n) in ((Linear(), 2), (Quadratic(), 3), (Cubic(), 4), (Tesserae.Quartic(), 5), (Tesserae.Quintic(), 6))
-            qpts, qwts = @inferred Tesserae.gauss_legendre_rule(Float64, degree)
-            @test length(qpts) == n
-            @test sum(qwts) ≈ 2
-            for k in 0:(2n-1)
-                exact = iseven(k) ? 2 / (k + 1) : 0
-                @test isapprox(sum(qwts .* qpts .^ k), exact; atol=1e-14, rtol=1e-14)
-            end
-        end
+        high_order_rule = @inferred generate_quadrature_rule(Float32, IGABasis((Tesserae.Degree(6), Quadratic())))
+        @test length(high_order_rule.points) == 21
+        @test eltype(high_order_rule.weights) === Float32
+        @test sum(high_order_rule.weights) ≈ 4
+        @test_throws ArgumentError generate_quadrature_rule(BigFloat, basis)
+        anisotropic_rule = @inferred generate_quadrature_rule(IGABasis((Linear(), Quadratic())))
+        @test length(anisotropic_rule.points) == 6
+        @test sum(anisotropic_rule.weights) ≈ 4
+        @test length(generate_quadrature_rule(IGABasis((Tesserae.Quintic(),))).points) == 6
 
         # Parent Gauss points are mapped from [-1,1]^dim to each knot span.
         α = √(3/5)
@@ -279,7 +275,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         boundary_patch = IGAPatch((Quadratic(),), (copy(iga_test_knot_vectors(patch)[1]),), Array(patch.controlpoint_ids[:,1]))
         boundary_mesh = IGAMesh([boundary_patch], mesh.controlpoints)
         @test supportnodes(boundary_mesh) == collect(patch.controlpoint_ids[:,1])
-        boundary_rule = Tesserae.quadrature_rule(Tesserae.igabasis(boundary_mesh))
+        boundary_rule = generate_quadrature_rule(Tesserae.igabasis(boundary_mesh))
         boundary_weights = generate_basis_weights(boundary_mesh, length(boundary_rule.points), Tesserae.ncells(boundary_mesh); name=Val(:N))
         measure = zeros(Float64, size(boundary_weights))
         normal = zeros(Vec{2, Float64}, size(boundary_weights))

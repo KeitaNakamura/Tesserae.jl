@@ -5,6 +5,7 @@ using Base.Broadcast: Broadcasted, ArrayStyle
 using Base.Cartesian: @ntuple, @nall, @nexprs
 
 using SparseArrays
+using LinearAlgebra: SymTridiagonal, eigen
 using Printf
 
 using Reexport
@@ -62,6 +63,8 @@ export
     SpGrid,
     generate_grid,
     spacing,
+# Quadrature
+    generate_quadrature_rule,
 # Particles
     generate_particles,
     reorder_particles!,
@@ -124,6 +127,7 @@ include("progress.jl")
 import .Progress: @showprogress
 
 include("shapes.jl")
+include("quadrature.jl")
 include("NURBS/NURBS.jl")
 
 include("mesh.jl")
