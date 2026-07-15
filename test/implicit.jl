@@ -304,13 +304,14 @@ end
 
 @testset "FEM sparse matrix pattern" begin
     cmesh = CartesianMesh(1, (0,1), (0,1))
-    quad4 = FEMesh(Tesserae.Quad4(), cmesh)
-    quad9 = FEMesh(Tesserae.Quad9(), cmesh)
+    geometry = FEMesh(Tesserae.Quad9(), cmesh)
+    quad4 = FEMesh(Tesserae.Quad4(), geometry)
+    quad9 = FEMesh(Tesserae.Quad9(), geometry)
 
     @test_throws UndefKeywordError create_sparse_matrix(quad4)
 
     A = create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
-    @test size(A) == (2length(quad9), length(quad4))
+    @test size(A) == (18, 4)
     @test Tesserae.SparseArrays.nnz(A) == prod(size(A))
 
     shifted = FEMesh(Tesserae.Quad4(), CartesianMesh(1, (2,3), (2,3)))

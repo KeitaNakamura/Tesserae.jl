@@ -76,6 +76,8 @@ macros.
 
 ### Added
 
+- Added `FEMesh(shape, geometry)` for compact field meshes that share geometry
+  coordinates.
 - Added GPU support for `SpArray` sparsity updates and sparse-grid transfers.
   (#112)
 - Added `@explain` and `ExplainedCode` for inspecting transfer macro structure.

@@ -68,7 +68,7 @@
             [Vec(0.0, 0.0), Vec(1.0, 0.0), Vec(0.0, 1.0), Vec(0.5, 0.0), Vec(0.0, 0.5), Vec(0.5, 0.5 + α / 4)],
             [Tesserae.SVector(1, 2, 3, 4, 5, 6)],
         )
-        field = FEMesh(Tesserae.Tri3(), [Vec(-1.0, -1.0), geometry.nodes[1:3]...], [Tesserae.SVector(2, 3, 4)])
+        field = FEMesh(Tesserae.Tri3(), geometry)
         rule = generate_quadrature_rule(Tesserae.Tri6())
         points = generate_particles(@NamedTuple{x::Vec{2,Float64}, V::Float64}, geometry, rule)
         weights = generate_basis_weights(field, size(points); name=Val(:N))
@@ -76,7 +76,7 @@
         update!(weights, points, geometry; measure=points.V)
         for (q, (point, weight)) in enumerate(zip(rule.points, rule.weights))
             @test weights[q,1].N ≈ Tesserae.value(Tesserae.Tri3(), point)
-            @test supportnodes(weights[q,1]) == Tesserae.SVector(2, 3, 4)
+            @test supportnodes(weights[q,1]) == Tesserae.SVector(1, 2, 3)
             @test points.V[q,1] ≈ weight * (1 + α * point[1])
         end
         @test sum(points.V) ≈ 1/2 + α/6
