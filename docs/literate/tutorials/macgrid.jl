@@ -22,22 +22,25 @@ function main()
 
     ## Properties
     CellProp = @NamedTuple begin
-        x  :: Vec{dim, Float64} # cell-center position
-        V  :: Float64           # volume
-        ϕ  :: Float64           # volume fraction (V / h^dim)
-        p  :: Float64           # pressure
-        δp :: Float64           # temporary vector for matvec (A*x)
-        Δp :: Float64           # Laplacian
-        q  :: Float64           # divergence field
+        x    :: Vec{dim, Float64} # cell-center position
+        V    :: Float64           # volume
+        ϕ    :: Float64           # volume fraction (V / h^dim)
+        φ    :: Float64           # implicit free-surface field
+        φtmp :: Float64           # temporary field for surface smoothing
+        p    :: Float64           # pressure
+        δp   :: Float64           # temporary vector for matvec (A*x)
+        Δp   :: Float64           # Laplacian
+        q    :: Float64           # divergence field
     end
     FaceProp = @NamedTuple begin
-        x  :: Vec{dim, Float64} # face-center position
-        m  :: Float64           # mass
-        mv :: Float64           # momentum component (along face axis)
-        v  :: Float64           # face velocity component
-        ∇p :: Float64           # pressure gradient component on faces
-        Δv :: Float64           # Laplacian for viscosity
-        b  :: Float64           # body force component (e.g., gravity)
+        x    :: Vec{dim, Float64} # face-center position
+        m    :: Float64           # mass
+        mv   :: Float64           # momentum component (along face axis)
+        v    :: Float64           # face velocity component
+        ∇p   :: Float64           # pressure gradient component on faces
+        invθ :: Float64           # inverse fluid-to-surface cut fraction
+        Δv   :: Float64           # Laplacian for viscosity
+        b    :: Float64           # body force component (e.g., gravity)
     end
     ParticleProp = @NamedTuple begin
         x   :: Vec{dim, Float64}                        # position
@@ -58,6 +61,8 @@ function main()
 
     cells = generate_grid(CellProp, macmesh(paddedmesh, Cell()))
     facegrids = ntuple(d -> generate_grid(FaceProp, macmesh(paddedmesh, Face(d))), dim)
+
+    fluid = falses(size(cells))
 
     Ωc = Region(Cell(), physical, physical, physical; halowidth=pad)
     Ωf = ntuple(d -> Region(Face(d), physical, physical, physical; halowidth=pad), dim)
@@ -100,6 +105,10 @@ function main()
         fillzero!(cells.ϕ)
         @views @. cells.ϕ[Ωc] = cells.V[Ωc] / h^dim
 
+        ## Reconstruct an implicit free surface from marker occupancy
+        reconstructsurface!(cells.φ, cells.φtmp, cells.V, Ωc; halowidth=pad)
+        inversecutfractions!(getproperty.(facegrids, :invθ), cells.φ, Ωf)
+
         ## P2G: transfer mass/momentum to faces, update face velocities, add viscosity+body force
         for d in 1:dim
             grid = facegrids[d]
@@ -137,13 +146,14 @@ function main()
         ## Compute divergence of face velocities at cell centers
         divergence!(cells.q, getproperty.(facegrids, :v), Ωc; spacing=h)
 
-        ## Setup fluid region using volume fraction
-        mask = cells.ϕ .> 0  # active fluid region
-        dofmap = DofMap(reshape(mask, 1, size(cells)...))
+        ## Setup fluid region using the reconstructed free surface
+        fill!(fluid, false)
+        @views @. fluid[Ωc] = cells.φ[Ωc] < 0
+        dofmap = DofMap(reshape(fluid, 1, size(cells)...))
 
         ## Solve Poisson for pressure on active (fluid) cells, then mirror pressure to padded region
         b = -dofmap(cells.q)
-        A = laplacian(; cells, dofmap, Ωc, pad, spacing=h, ρ, Δt)
+        A = pressurelaplacian(; cells, facegrids, dofmap, Ωc, Ωf, pad, spacing=h, ρ, Δt)
 
         fillzero!(cells.p)
         dofmap(cells.p) .= cg(A, b; verbose=0)[1]
@@ -153,7 +163,7 @@ function main()
         end
 
         ## Compute pressure gradient on faces
-        gradient!(getproperty.(facegrids, :∇p), cells.p, Ωf; spacing=h)
+        gradient!(getproperty.(facegrids, :∇p), cells.p, getproperty.(facegrids, :invθ), Ωf; spacing=h)
 
         fillzero!(particles.v)
         fillzero!(particles.∇v)
@@ -209,7 +219,9 @@ function main()
 end
 
 ## Matrix-free Laplacian operator for pressure Poisson (restricted to dofmap)
-function laplacian(; cells, dofmap, Ωc, pad, spacing, ρ, Δt)
+function pressurelaplacian(; cells, facegrids, dofmap, Ωc, Ωf, pad, spacing, ρ, Δt)
+    pressuregradient = getproperty.(facegrids, :∇p)
+    invθ = getproperty.(facegrids, :invθ)
     function mul!(y, x)
         fillzero!(cells.δp)
         dofmap(cells.δp) .= x
@@ -217,10 +229,54 @@ function laplacian(; cells, dofmap, Ωc, pad, spacing, ρ, Δt)
             halo = wallregion(Cell(), halo_axis, axis; halowidth=pad)
             reflect!(cells.δp, halo, axis, +1)
         end
-        laplacian!(cells.Δp, cells.δp, Ωc; spacing)
+        gradient!(pressuregradient, cells.δp, invθ, Ωf; spacing)
+        divergence!(cells.Δp, pressuregradient, Ωc; spacing)
         y .= (-Δt/ρ) .* dofmap(cells.Δp)
     end
     LinearOperator(Float64, ndofs(dofmap), ndofs(dofmap), true, true, mul!)
+end
+
+function reconstructsurface!(φ, φtmp, volume, Ω; halowidth)
+    @views @. φ[Ω] = ifelse(volume[Ω] > 0, -1.0, +1.0)
+    smoothimplicit!(φ, φtmp, Ω; halowidth)
+    for axis in 1:3, halo_axis in (lowhalo, highhalo)
+        halo = wallregion(Cell(), halo_axis, axis; halowidth)
+        reflect!(φ, halo, axis, +1)
+    end
+    φ
+end
+
+function smoothimplicit!(φ, φtmp, Ω; halowidth)
+    # Apply one separable [1, 2, 1] weighted average.
+    for (axis, offset) in enumerate(unitoffsets(Val(3)))
+        for halo_axis in (lowhalo, highhalo)
+            halo = wallregion(Cell(), halo_axis, axis; halowidth)
+            reflect!(φ, halo, axis, +1)
+        end
+        @views @. φtmp[Ω] = (φ[Ω - offset] + 2 * φ[Ω] + φ[Ω + offset]) / 4
+        copyto!(view(φ, Ω), view(φtmp, Ω))
+    end
+    φ
+end
+
+function inversecutfractions!(invθ, φ, Ωf)
+    e₁, e₂, e₃ = unitoffsets(Val(3))
+    invθ₁, invθ₂, invθ₃ = invθ
+    F₁, F₂, F₃ = Ωf
+    @views @. invθ₁[F₁] = inversecutfraction(φ[F₁ - e₁/2], φ[F₁ + e₁/2])
+    @views @. invθ₂[F₂] = inversecutfraction(φ[F₂ - e₂/2], φ[F₂ + e₂/2])
+    @views @. invθ₃[F₃] = inversecutfraction(φ[F₃ - e₃/2], φ[F₃ + e₃/2])
+    invθ
+end
+
+function inversecutfraction(φ₋, φ₊)
+    fluid₋ = φ₋ < 0
+    fluid₊ = φ₊ < 0
+    fluid₋ == fluid₊ && return 1.0
+    φfluid = fluid₋ ? φ₋ : φ₊
+    φair = fluid₋ ? φ₊ : φ₋
+    θ = φfluid / (φfluid - φair)
+    inv(max(θ, 1.0e-6))
 end
 
 function macmesh(mesh::CartesianMesh{3}, location)
@@ -253,13 +309,14 @@ function divergence!(q, velocity, Ω; spacing)
     q
 end
 
-function gradient!(∇p, p, Ωf; spacing)
+function gradient!(∇p, p, invθ, Ωf; spacing)
     e₁, e₂, e₃ = unitoffsets(Val(3))
     ∇p₁, ∇p₂, ∇p₃ = ∇p
+    invθ₁, invθ₂, invθ₃ = invθ
     F₁, F₂, F₃ = Ωf
-    @views @. ∇p₁[F₁] = (p[F₁ + e₁/2] - p[F₁ - e₁/2]) / spacing
-    @views @. ∇p₂[F₂] = (p[F₂ + e₂/2] - p[F₂ - e₂/2]) / spacing
-    @views @. ∇p₃[F₃] = (p[F₃ + e₃/2] - p[F₃ - e₃/2]) / spacing
+    @views @. ∇p₁[F₁] = invθ₁[F₁] * (p[F₁ + e₁/2] - p[F₁ - e₁/2]) / spacing
+    @views @. ∇p₂[F₂] = invθ₂[F₂] * (p[F₂ + e₂/2] - p[F₂ - e₂/2]) / spacing
+    @views @. ∇p₃[F₃] = invθ₃[F₃] * (p[F₃ + e₃/2] - p[F₃ - e₃/2]) / spacing
     ∇p
 end
 
