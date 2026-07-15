@@ -101,10 +101,10 @@ end
             x      :: Vec{dim, Float64}
             detJdV :: Float64
         end
-        particles = generate_particles(ParticleProp, mesh)
-        weights = generate_basis_weights(mesh, size(particles))
-        feupdate!(weights, mesh; measure = particles.detJdV)
-        sum(particles.detJdV)
+        points = generate_particles(ParticleProp, mesh)
+        weights = generate_basis_weights(mesh, size(points))
+        update!(weights, points, mesh; measure=points.detJdV)
+        sum(points.detJdV)
     end
     cmesh = CartesianMesh(1, (0,2))
     @test compute_volume(FEMesh(Tesserae.Line2(), cmesh)) ≈
@@ -131,10 +131,10 @@ end
             detJdA :: Float64
         end
         mesh_face = Tesserae.extract_face(mesh_body, 1:length(mesh_body))
-        particles = generate_particles(ParticleProp, mesh_face)
-        weights = generate_basis_weights(mesh_face, size(particles))
-        feupdate!(weights, mesh_face; normal = particles.n, measure = particles.detJdA)
-        sum(particles.detJdA)
+        points = generate_particles(ParticleProp, mesh_face)
+        weights = generate_basis_weights(mesh_face, size(points))
+        update!(weights, points, mesh_face; normal=points.n, measure=points.detJdA)
+        sum(points.detJdA)
     end
     cmesh = CartesianMesh(1, (0,1), (0,1))
     @test compute_area(FEMesh(Tesserae.Quad4(), cmesh)) ≈
@@ -161,9 +161,9 @@ end
     end
     line_points = generate_particles(LinePointProp, line_mesh)
     line_weights = generate_basis_weights(line_mesh, size(line_points))
-    feupdate!(line_weights, line_mesh; measure=line_points.detJdL)
+    update!(line_weights, line_points, line_mesh; measure=line_points.detJdL)
     @test sum(line_points.detJdL) ≈ 3
-    @test_throws ArgumentError feupdate!(line_weights, line_mesh; normal=line_points.n)
+    @test_throws ArgumentError update!(line_weights, line_points, line_mesh; normal=line_points.n)
 
     cmesh1 = CartesianMesh(1, (0,2), (0,2))
     cmesh2 = CartesianMesh(1, (1,3), (1,3))

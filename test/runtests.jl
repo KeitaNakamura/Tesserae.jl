@@ -13,6 +13,7 @@ include("particles.jl")
 
 include("basis.jl")
 include("shapes.jl")
+include("fem.jl")
 
 include("transfer.jl")
 include("foreach.jl")

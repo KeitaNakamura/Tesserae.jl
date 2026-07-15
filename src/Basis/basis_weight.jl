@@ -280,12 +280,25 @@ function BasisWeightArray(basis::B, vals::Vals, indices::Indices) where {B, Vals
 end
 
 # AbstractMesh
-function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh{dim}, dims::Dims{N}; kwargs...) where {T, dim, N}
+function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh{dim}, dims::Dims; kwargs...) where {T, dim}
     vals = map(allocate_basis_values(Vec{dim, T}, basis; kwargs...)) do vals
         fill(zero(eltype(vals)), size(vals)..., dims...)
     end
-    indices = map(p->initial_supportnodes(basis, mesh), CartesianIndices(dims))
+    indices = _generate_supportnodes(basis, mesh, dims)
     BasisWeightArray(basis, vals, indices)
+end
+
+# CartesianMesh
+_generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
+
+# FEMesh
+_generate_supportnodes(::Shape, mesh::FEMesh, dims::Dims{2}) = _generate_cell_supportnodes(mesh, dims)
+_generate_supportnodes(::Shape, ::FEMesh, ::Dims) = throw(DimensionMismatch("FEM basis weights must have dimensions (quadrature points, cells)"))
+
+function _generate_cell_supportnodes(mesh, dims::Dims{2})
+    dims[2] == ncells(mesh) || throw(DimensionMismatch("the second basis-weight dimension must equal the number of cells"))
+    cell_supports = map(cell -> supportnodes(mesh, cell), cells(mesh))
+    map(I -> cell_supports[I[2]], CartesianIndices(dims))
 end
 
 _todims(x::Tuple{Vararg{Int}}) = x

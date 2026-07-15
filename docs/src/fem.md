@@ -2,7 +2,7 @@
 
 This page solves a scalar Poisson problem. The key convention is that
 finite-element quadrature points are stored in the particle array:
-after [`feupdate!`](@ref) fills the quadrature weights and basis data, the same
+after `update!` fills the physical quadrature measures and basis data, the same
 [`@P2G`](@ref) and [`@P2G_Matrix`](@ref) macros used for MPM assemble
 finite-element vectors and matrices.
 
@@ -11,7 +11,7 @@ For quadrature point `q` in cell `c`, define a particle `p` by
 ```math
 \bm{x}_p = \bm{x}_c(\bm{\xi}_q),
 \qquad
-V_p = \omega_q \det \bm{J}_c(\bm{\xi}_q).
+V_p = \omega_q \left|\det \bm{J}_c(\bm{\xi}_q)\right|.
 ```
 
 Then a particle sum is the usual FEM quadrature rule:
@@ -21,7 +21,7 @@ Then a particle sum is the usual FEM quadrature rule:
 =
 \sum_c \sum_q
 f(\bm{x}_c(\bm{\xi}_q))
-\omega_q \det \bm{J}_c(\bm{\xi}_q).
+\omega_q \left|\det \bm{J}_c(\bm{\xi}_q)\right|.
 ```
 
 The particle arrays in this page store fixed Gauss points, not moving MPM
@@ -187,11 +187,11 @@ grid = generate_grid(GridProp, domain)
 gauss_points = generate_particles(GaussProp, domain)
 weights = generate_basis_weights(domain, size(gauss_points); name=Val(:N))
 
-feupdate!(weights, domain; measure=gauss_points.V)
+update!(weights, gauss_points, domain; measure=gauss_points.V)
 ```
 
 The basis-weight array has the same `nq × ncells` shape as `gauss_points`.
-After [`feupdate!`](@ref), each entry stores the element-local basis data for
+After `update!`, each entry stores the element-local basis data for
 one Gauss point: `N[ip]` and `∇N[ip]` are the value and physical gradient of
 the basis function associated with local support index `ip`, and `V[p]` is the
 quadrature weight multiplied by the Jacobian measure. This is the same
@@ -243,8 +243,9 @@ end
 hole_gauss_points = generate_particles(BoundaryGaussProp, hole_boundary)
 hole_weights = generate_basis_weights(hole_boundary, size(hole_gauss_points); name=Val(:N))
 
-feupdate!(
+update!(
     hole_weights,
+    hole_gauss_points,
     hole_boundary;
     measure=hole_gauss_points.dS,
     normal=hole_gauss_points.n,
@@ -350,6 +351,6 @@ plot_solution(domain, grid.u, outer_boundary, hole_boundary)
 ```@docs
 FEMesh
 supportnodes(::FEMesh)
-feupdate!
+update!(::BasisWeightArray{S}, ::QuadraturePoints, ::FEMesh{<:Tesserae.Shape{pdim},dim}) where {pdim,dim,S<:Tesserae.Shape{pdim}}
 readmsh
 ```

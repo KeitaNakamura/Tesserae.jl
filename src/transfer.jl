@@ -358,6 +358,7 @@ end
 end
 function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
     kernel = gpukernel_P2G(backend)
     kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
@@ -565,6 +566,7 @@ end
 end
 function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
     kernel = gpukernel_G2P(backend)
     kernel(f, grid, particles, weights; ndrange=length(particles))

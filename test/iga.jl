@@ -243,21 +243,28 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test rational_points.x[1, rational_cell] ≈ sum(R .* rational_mesh[rational_ids])
     end
 
-    @testset "feupdate!" begin
-        feweights = generate_basis_weights(Float64, mesh, length(qrule.points), Tesserae.ncells(mesh))
+    @testset "Quadrature update" begin
+        points = generate_particles(@NamedTuple{x::Vec{2,Float64}}, mesh, qrule)
+        feweights = generate_basis_weights(Float64, mesh, size(points))
         measure = zeros(Float64, size(feweights))
-        @test (@inferred feupdate!(feweights, mesh; measure)) === nothing
+        @test (@inferred update!(feweights, points, mesh; measure)) === feweights
         @test supportnodes(feweights[1, meshcells[1]]) == supportnodes(mesh, meshcells[1])
         @test sum(feweights[1, meshcells[1]].w) ≈ 1
         @test isapprox(sum(feweights[1, meshcells[1]].∇w), Vec(0.0, 0.0); atol=1e-14)
         @test sum(measure[:, meshcells[1]]) ≈ 1/16
         @test sum(measure) ≈ 1
 
-        # Rational feupdate! should use rational basis values in both N and ∇N.
+        reversed_patch = IGAPatch(iga_test_degrees(patch), map(copy, iga_test_knot_vectors(patch)), reverse(patch.controlpoint_ids))
+        reversed_mesh = IGAMesh([reversed_patch], mesh.controlpoints)
+        reversed_weights = generate_basis_weights(reversed_mesh, size(points))
+        @test_throws ArgumentError update!(reversed_weights, points, mesh)
+
+        # Rational updates should use rational basis values in both N and ∇N.
         rational_mesh = IGAMesh(cmesh; degree=Quadratic(), weights=range(1.0, 2.0; length=length(mesh)))
-        rational_weights = generate_basis_weights(Float64, rational_mesh, length(qrule.points), Tesserae.ncells(rational_mesh))
+        rational_points = generate_particles(@NamedTuple{x::Vec{2,Float64}}, rational_mesh)
+        rational_weights = generate_basis_weights(Float64, rational_mesh, size(rational_points))
         rational_measure = zeros(Float64, size(rational_weights))
-        @test feupdate!(rational_weights, rational_mesh; measure=rational_measure) === nothing
+        @test update!(rational_weights, rational_points, rational_mesh; measure=rational_measure) === rational_weights
 
         rational_cell = first(cells(rational_mesh))
         rational_patch = Tesserae.patches(rational_mesh, rational_cell.patch)
@@ -275,11 +282,11 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         boundary_patch = IGAPatch((Quadratic(),), (copy(iga_test_knot_vectors(patch)[1]),), Array(patch.controlpoint_ids[:,1]))
         boundary_mesh = IGAMesh([boundary_patch], mesh.controlpoints)
         @test supportnodes(boundary_mesh) == collect(patch.controlpoint_ids[:,1])
-        boundary_rule = generate_quadrature_rule(Tesserae.igabasis(boundary_mesh))
-        boundary_weights = generate_basis_weights(boundary_mesh, length(boundary_rule.points), Tesserae.ncells(boundary_mesh); name=Val(:N))
+        boundary_points = generate_particles(@NamedTuple{x::Vec{2,Float64}}, boundary_mesh)
+        boundary_weights = generate_basis_weights(boundary_mesh, size(boundary_points); name=Val(:N))
         measure = zeros(Float64, size(boundary_weights))
         normal = zeros(Vec{2, Float64}, size(boundary_weights))
-        @test (@inferred feupdate!(boundary_weights, boundary_mesh; measure, normal)) === nothing
+        @test (@inferred update!(boundary_weights, boundary_points, boundary_mesh; measure, normal)) === boundary_weights
         @test sum(measure) ≈ 1
         @test all(n -> n ≈ Vec(0.0, -1.0), normal)
     end
@@ -337,7 +344,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
             grid = generate_grid(GridProp, mesh)
             points = generate_particles(PointProp, mesh)
             weights = generate_basis_weights(mesh, size(points); name=Val(:N))
-            feupdate!(weights, mesh; measure=points.V)
+            update!(weights, points, mesh; measure=points.V)
             K = create_sparse_matrix(mesh; ndofs=1)
             dofmask = trues(1, size(grid)...)
             for i in eachindex(mesh)

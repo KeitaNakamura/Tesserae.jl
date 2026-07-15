@@ -9,7 +9,7 @@ The first field is reserved for position: grid positions are backed by the mesh 
 
 ```@docs
 generate_grid
-generate_particles
+generate_particles(::Type, ::CartesianMesh)
 GridSampling
 PoissonDiskSampling
 ```

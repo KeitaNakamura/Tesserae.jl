@@ -1,11 +1,16 @@
 """
-    QuadratureRule(points, weights)
+    QuadratureRule(family, points, weights)
 
-Points and weights for integration on a reference cell.
+Points and weights for integration on a reference cell of `family`.
 """
-struct QuadratureRule{dim, T, P <: AbstractVector{Vec{dim, T}}, W <: AbstractVector{<: T}}
+struct QuadratureRule{F <: Shape, dim, T, P <: AbstractVector{Vec{dim, T}}, W <: AbstractVector{<: T}}
     points::P
     weights::W
+end
+
+function QuadratureRule(::Type{F}, points::P, weights::W) where {F <: Shape, dim, T, P <: AbstractVector{Vec{dim, T}}, W <: AbstractVector{<: T}}
+    length(points) == length(weights) || throw(DimensionMismatch("quadrature points and weights must have the same length"))
+    QuadratureRule{F, dim, T, P, W}(points, weights)
 end
 
 _reference_cell_family(::S) where {S <: Shape} = S
@@ -14,6 +19,7 @@ _reference_cell_family(::Quad) = Quad
 _reference_cell_family(::Hex) = Hex
 _reference_cell_family(::Tri) = Tri
 _reference_cell_family(::Tet) = Tet
+_reference_cell_family(::QuadratureRule{F}) where {F} = F
 
 _order_value(::Order{p}) where {p} = p
 
@@ -24,8 +30,8 @@ _order_value(::Order{p}) where {p} = p
 Generate the standard [`QuadratureRule`](@ref) for `shape`. For interpolation
 order `p`, the rule integrates degree `2p` in each reference coordinate for
 tensor-product shapes and total degree `2p` for simplex shapes. `T` may be
-`Float16`, `Float32`, or `Float64` and defaults to `Float64`. The selection
-depends only on the interpolation order of `shape`.
+`Float16`, `Float32`, or `Float64` and defaults to `Float64`. The reference-cell
+family and interpolation order of `shape` determine the selected rule.
 """
 generate_quadrature_rule(shape::Shape) = generate_quadrature_rule(Float64, shape)
 function generate_quadrature_rule(::Type{T}, shape::Shape) where {T}
@@ -65,26 +71,30 @@ end
 function _generate_tensor_quadrature_rule(::Type{T}, family, exactness::Int, ::Val{dim}) where {T, dim}
     exactness ≥ 0 || throw(ArgumentError("$family quadrature exactness must be nonnegative; got $exactness"))
     rule1d = _gauss_legendre_rule(T, Val(fld(exactness, 2) + 1))
-    _tensor_product_quadrature_rule(ntuple(_ -> rule1d, Val(dim)))
+    _tensor_product_quadrature_rule(family, ntuple(_ -> rule1d, Val(dim)))
 end
 
-function _tensor_product_quadrature_rule(rules::Tuple{Vararg{Tuple{<: StaticVector, <: StaticVector}, dim}}) where {dim}
+_tensor_product_family(::Val{1}) = Line
+_tensor_product_family(::Val{2}) = Quad
+_tensor_product_family(::Val{3}) = Hex
+
+function _tensor_product_quadrature_rule(family, rules::Tuple{Vararg{Tuple{<: StaticVector, <: StaticVector}, dim}}) where {dim}
     qpts1d = map(first, rules)
     qwts1d = map(last, rules)
     indices = CartesianIndices(map(length, qpts1d))
     npoints = length(indices)
     qpts = SVector{npoints}(map(I -> Vec(map(getindex, qpts1d, Tuple(I))), indices))
     qwts = SVector{npoints}(map(I -> prod(map(getindex, qwts1d, Tuple(I))), indices))
-    QuadratureRule(qpts, qwts)
+    QuadratureRule(family, qpts, qwts)
 end
 
-function _tensor_product_quadrature_rule(rules::Tuple{Vararg{Any, dim}}) where {dim}
+function _tensor_product_quadrature_rule(family, rules::Tuple{Vararg{Any, dim}}) where {dim}
     qpts1d = map(first, rules)
     qwts1d = map(last, rules)
     indices = CartesianIndices(map(length, qpts1d))
     qpts = vec(map(I -> Vec(map(getindex, qpts1d, Tuple(I))), indices))
     qwts = vec(map(I -> prod(map(getindex, qwts1d, Tuple(I))), indices))
-    QuadratureRule(qpts, qwts)
+    QuadratureRule(family, qpts, qwts)
 end
 
 _gauss_legendre_rule(::Type{T}, ::Degree{p}) where {T, p} = _gauss_legendre_rule(T, Val(p + 1))
@@ -150,14 +160,14 @@ end
 function _simplex_quadrature_rule(::Type{T}, ::Type{Tri}, ::Val{1}) where {T}
     a = T(0.33333333333333333333)
     w = T(0.50000000000000000000)
-    QuadratureRule(SVector{1, Vec{2, T}}(((a, a),)), SVector{1, T}((w,)))
+    QuadratureRule(Tri, SVector{1, Vec{2, T}}(((a, a),)), SVector{1, T}((w,)))
 end
 
 function _simplex_quadrature_rule(::Type{T}, ::Type{Tri}, ::Val{2}) where {T}
     a = T(0.16666666666666666667)
     b = T(0.66666666666666666667)
     w = T(0.16666666666666666667)
-    QuadratureRule(_triangle_orbit3(a, b), SVector{3, T}((w, w, w)))
+    QuadratureRule(Tri, _triangle_orbit3(a, b), SVector{3, T}((w, w, w)))
 end
 
 function _simplex_quadrature_rule(::Type{T}, ::Type{Tri}, ::Val{4}) where {T}
@@ -168,7 +178,7 @@ function _simplex_quadrature_rule(::Type{T}, ::Type{Tri}, ::Val{4}) where {T}
     b2 = T(0.81684757298045851308)
     w2 = T(0.05497587182766093382)
     points = SVector{6, Vec{2, T}}((_triangle_orbit3(a1, b1)..., _triangle_orbit3(a2, b2)...))
-    QuadratureRule(points, SVector{6, T}((w1, w1, w1, w2, w2, w2)))
+    QuadratureRule(Tri, points, SVector{6, T}((w1, w1, w1, w2, w2, w2)))
 end
 
 function _simplex_quadrature_rule(::Type{T}, ::Type{Tri}, ::Val{6}) where {T}
@@ -184,7 +194,7 @@ function _simplex_quadrature_rule(::Type{T}, ::Type{Tri}, ::Val{6}) where {T}
     w3 = T(0.04142553780918678541)
     points = SVector{12, Vec{2, T}}((_triangle_orbit3(a1, b1)..., _triangle_orbit3(a2, b2)..., _triangle_orbit6(a3, b3, c3)...))
     weights = SVector{12, T}((w1, w1, w1, w2, w2, w2, w3, w3, w3, w3, w3, w3))
-    QuadratureRule(points, weights)
+    QuadratureRule(Tri, points, weights)
 end
 
 @inline _tetrahedron_orbit4(a::T, b::T) where {T} = SVector{4, Vec{3, T}}(((a, b, b), (b, a, b), (b, b, a), (b, b, b)))
@@ -194,14 +204,14 @@ end
 function _simplex_quadrature_rule(::Type{T}, ::Type{Tet}, ::Val{1}) where {T}
     a = T(0.25000000000000000000)
     w = T(0.16666666666666666667)
-    QuadratureRule(SVector{1, Vec{3, T}}(((a, a, a),)), SVector{1, T}((w,)))
+    QuadratureRule(Tet, SVector{1, Vec{3, T}}(((a, a, a),)), SVector{1, T}((w,)))
 end
 
 function _simplex_quadrature_rule(::Type{T}, ::Type{Tet}, ::Val{2}) where {T}
     a = T(0.58541019662496845446)
     b = T(0.13819660112501051518)
     w = T(0.04166666666666666667)
-    QuadratureRule(_tetrahedron_orbit4(a, b), SVector{4, T}((w, w, w, w)))
+    QuadratureRule(Tet, _tetrahedron_orbit4(a, b), SVector{4, T}((w, w, w, w)))
 end
 
 function _simplex_quadrature_rule(::Type{T}, ::Type{Tet}, ::Val{5}) where {T}
@@ -216,7 +226,7 @@ function _simplex_quadrature_rule(::Type{T}, ::Type{Tet}, ::Val{5}) where {T}
     w3 = T(0.00709100346284691107)
     points = SVector{14, Vec{3, T}}((_tetrahedron_orbit4(b1, a1)..., _tetrahedron_orbit4(b2, a2)..., _tetrahedron_orbit6(a3, b3)...))
     weights = SVector{14, T}((w1, w1, w1, w1, w2, w2, w2, w2, w3, w3, w3, w3, w3, w3))
-    QuadratureRule(points, weights)
+    QuadratureRule(Tet, points, weights)
 end
 
 function _simplex_quadrature_rule(::Type{T}, ::Type{Tet}, ::Val{7}) where {T}
@@ -238,5 +248,5 @@ function _simplex_quadrature_rule(::Type{T}, ::Type{Tet}, ::Val{7}) where {T}
     w4 = T(0.00135179513831722360)
     points = SVector{35, Vec{3, T}}(((q, q, q), _tetrahedron_orbit4(b1, a1)..., _tetrahedron_orbit6(a2, b2)..., _tetrahedron_orbit12(a3, b3, c3)..., _tetrahedron_orbit12(a4, b4, c4)...))
     weights = SVector{35, T}((w0, w1, w1, w1, w1, w2, w2, w2, w2, w2, w2, w3, w3, w3, w3, w3, w3, w3, w3, w3, w3, w3, w3, w4, w4, w4, w4, w4, w4, w4, w4, w4, w4, w4, w4))
-    QuadratureRule(points, weights)
+    QuadratureRule(Tet, points, weights)
 end
