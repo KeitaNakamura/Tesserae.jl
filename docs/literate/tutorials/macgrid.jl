@@ -1,7 +1,7 @@
 # # Marker-and-cell (MAC) method
 
 using Tesserae
-using Tesserae.Stencil # Staggered grid types and stencil operators (MAC layout)
+using Tesserae.Stencil # Staggered grid regions
 
 using Krylov: cg
 using LinearOperators: LinearOperator
@@ -52,18 +52,23 @@ function main()
 
     ## Background grid (staggered/MAC: pressure at cells, velocity components at faces)
     pad = 1
-    mesh = CartesianMesh(h, (0,3.22), (0,0.5), (0,2.5); pad)
+    domain = ((0,3.22), (0,0.5), (0,2.5))
+    mesh = CartesianMesh(h, domain...)
+    paddedmesh = CartesianMesh(h, domain...; pad)
 
-    cells = generate_grid(Cell(), CellProp, mesh)
-    facegrids = ntuple(d -> generate_grid(Face(d), FaceProp, mesh), dim)
+    cells = generate_grid(CellProp, macmesh(paddedmesh, Cell()))
+    facegrids = ntuple(d -> generate_grid(FaceProp, macmesh(paddedmesh, Face(d))), dim)
+
+    Ωc = Region(Cell(), physical, physical, physical; halowidth=pad)
+    Ωf = ntuple(d -> Region(Face(d), physical, physical, physical; halowidth=pad), dim)
 
     ## Gravity acts on the vertical velocity component (here: d=3)
-    inner(facegrids[3].b; pad, dropboundary=true) .= -g
+    fill!(view(facegrids[3].b, Ωf[3]), -g)
 
     ## Particles (sampled in the domain, then filtered to the fluid region)
-    particles = generate_particles(ParticleProp, mesh; alg=PoissonDiskSampling())
-    particles.V .= volume(mesh) / length(particles)
-    filter!(pt -> isinside(pt.x, inner(mesh; pad)) && 0<pt.x[1]<1.2 && 0<pt.x[3]<0.6, particles)
+    particles = generate_particles(ParticleProp, paddedmesh; alg=PoissonDiskSampling())
+    particles.V .= volume(paddedmesh) / length(particles)
+    filter!(pt -> isinside(pt.x, mesh) && 0<pt.x[1]<1.2 && 0<pt.x[3]<0.6, particles)
     @. particles.m = ρ * particles.V
     @show length(particles)
 
@@ -88,16 +93,18 @@ function main()
         @P2G cells=>i particles=>p cellweight=>ip begin
             V[i] = @∑ w[ip] * V[p]
         end
-        foldpad!(cells.V; pad)
-        for d in 1:dim
-            Stencil.outer(cells.V, d; pad) .= 0
+        for axis in 1:dim, halo_axis in (lowhalo, highhalo)
+            halo = wallregion(Cell(), halo_axis, axis; halowidth=pad)
+            fold!(cells.V, halo, axis, +1)
         end
-        @. cells.ϕ = cells.V / h^dim
+        fillzero!(cells.ϕ)
+        @views @. cells.ϕ[Ωc] = cells.V[Ωc] / h^dim
 
         ## P2G: transfer mass/momentum to faces, update face velocities, add viscosity+body force
         for d in 1:dim
             grid = facegrids[d]
             weights = faceweights[d]
+            Ω = Ωf[d]
             update!(weights, particles, grid.x)
 
             ## mass & momentum transfer
@@ -105,21 +112,30 @@ function main()
                 m[i]  = @∑ w[ip] * m[p]
                 mv[i] = @∑ w[ip] * m[p] * (v[p][d] + ∇v[p][d,:] ⋅ (x[i] - x[p]))
             end
-            foldpad!(grid.m; pad)
-            foldpad!(grid.mv; pad, flip = (d .== 1:dim)) # flip: consider slip boundary
+            for axis in 1:dim, halo_axis in (lowhalo, highhalo)
+                halo = wallregion(Face(d), halo_axis, axis; halowidth=pad)
+                sign = axis == d ? -1 : +1
+                fold!(grid.m, halo, axis, +1)
+                fold!(grid.mv, halo, axis, sign)
+            end
+            for boundary_axis in (lowboundary, highboundary)
+                boundary = wallregion(Face(d), boundary_axis, d; halowidth=pad)
+                view(grid.m, boundary) .*= 2
+                fill!(view(grid.mv, boundary), 0)
+            end
 
             # Face velocity component
-            @. grid.v = grid.mv / grid.m * !iszero(grid.m)
-            mirrorpad!(grid.v; pad, flip = (d .== 1:dim)) # flip: consider slip boundary
+            @views @. grid.v[Ω] = grid.mv[Ω] / grid.m[Ω] * !iszero(grid.m[Ω])
+            freeslip!(grid.v, d; halowidth=pad)
 
             # Viscous term: ν ∇²v, then explicit update with body force
-            stencil!(Laplacian(), grid.Δv, grid.v; pad, spacing=h)
-            @. grid.v += Δt * (ν * grid.Δv + grid.b)
-            mirrorpad!(grid.v; pad, flip = (d .== 1:dim))
+            laplacian!(grid.Δv, grid.v, Ω; spacing=h)
+            @views @. grid.v[Ω] += Δt * (ν * grid.Δv[Ω] + grid.b[Ω])
+            freeslip!(grid.v, d; halowidth=pad)
         end
 
         ## Compute divergence of face velocities at cell centers
-        stencil!(Divergence(), cells.q, getproperty.(facegrids, :v); pad, spacing=h)
+        divergence!(cells.q, getproperty.(facegrids, :v), Ωc; spacing=h)
 
         ## Setup fluid region using volume fraction
         mask = cells.ϕ .> 0  # active fluid region
@@ -127,24 +143,28 @@ function main()
 
         ## Solve Poisson for pressure on active (fluid) cells, then mirror pressure to padded region
         b = -dofmap(cells.q)
-        A = laplacian(; facegrids, cells, dofmap, pad, spacing=h, ρ, Δt)
+        A = laplacian(; cells, dofmap, Ωc, pad, spacing=h, ρ, Δt)
 
         fillzero!(cells.p)
         dofmap(cells.p) .= cg(A, b; verbose=0)[1]
-        mirrorpad!(cells.p; pad)
+        for axis in 1:dim, halo_axis in (lowhalo, highhalo)
+            halo = wallregion(Cell(), halo_axis, axis; halowidth=pad)
+            reflect!(cells.p, halo, axis, +1)
+        end
 
         ## Compute pressure gradient on faces
-        stencil!(Gradient(), getproperty.(facegrids, :∇p), cells.p; pad, spacing=h)
+        gradient!(getproperty.(facegrids, :∇p), cells.p, Ωf; spacing=h)
 
         fillzero!(particles.v)
         fillzero!(particles.∇v)
         for d in 1:dim
             grid = facegrids[d]
             weights = faceweights[d]
+            Ω = Ωf[d]
 
             ## Divergence-free projection
-            @. grid.v -= Δt/ρ * grid.∇p
-            mirrorpad!(grid.v; pad, flip = (d .== 1:dim))
+            @views @. grid.v[Ω] -= Δt/ρ * grid.∇p[Ω]
+            freeslip!(grid.v, d; halowidth=pad)
 
             ## Interpolate corrected face component back to particles (and its gradient)
             e = Vec{dim}(==(d)) # unit vector for component d
@@ -157,7 +177,7 @@ function main()
         end
         function update_position(x, v)
             x_new = x + v*Δt
-            isinside(x_new, inner(mesh; pad)) ? x_new : x
+            isinside(x_new, mesh) ? x_new : x
         end
         @. particles.x = update_position(particles.x, particles.v)
 
@@ -189,14 +209,85 @@ function main()
 end
 
 ## Matrix-free Laplacian operator for pressure Poisson (restricted to dofmap)
-function laplacian(; facegrids, cells, dofmap, pad, spacing, ρ, Δt)
-    dim = length(facegrids)
+function laplacian(; cells, dofmap, Ωc, pad, spacing, ρ, Δt)
     function mul!(y, x)
         fillzero!(cells.δp)
-        dofmap(cells.δp) .= x                                   # set `x` into cell field
-        mirrorpad!(cells.δp; pad)                               # set ghost values for boundary conditions (no flux)
-        stencil!(Laplacian(), cells.Δp, cells.δp; pad, spacing) # compute Laplacian
-        @. y = -Δt / ρ * $dofmap(cells.Δp) # gather back to DOF vector (A*x)
+        dofmap(cells.δp) .= x
+        for axis in 1:3, halo_axis in (lowhalo, highhalo)
+            halo = wallregion(Cell(), halo_axis, axis; halowidth=pad)
+            reflect!(cells.δp, halo, axis, +1)
+        end
+        laplacian!(cells.Δp, cells.δp, Ωc; spacing)
+        y .= (-Δt/ρ) .* dofmap(cells.Δp)
     end
     LinearOperator(Float64, ndofs(dofmap), ndofs(dofmap), true, true, mul!)
+end
+
+function macmesh(mesh::CartesianMesh{3}, location)
+    h = spacing(mesh)
+    firstnode = mesh[1, 1, 1]
+    nodes = ntuple(axis -> range(firstnode[axis]; step=h, length=size(mesh, axis)), 3)
+    centers = map(axis -> range(first(axis) + h/2; step=h, length=length(axis)-1), nodes)
+    coordinateaxes = ntuple(axis -> location == Face(axis) ? nodes[axis] : centers[axis], 3)
+    CartesianMesh(map(collect, coordinateaxes), h, inv(h))
+end
+
+function laplacian!(Δu, u, Ω; spacing)
+    e₁, e₂, e₃ = unitoffsets(Val(3))
+    @views @. Δu[Ω] = (
+        u[Ω - e₁] + u[Ω + e₁] +
+        u[Ω - e₂] + u[Ω + e₂] +
+        u[Ω - e₃] + u[Ω + e₃] - 6u[Ω]
+    ) / spacing^2
+    Δu
+end
+
+function divergence!(q, velocity, Ω; spacing)
+    e₁, e₂, e₃ = unitoffsets(Val(3))
+    u, v, w = velocity
+    @views @. q[Ω] = (
+        u[Ω + e₁/2] - u[Ω - e₁/2] +
+        v[Ω + e₂/2] - v[Ω - e₂/2] +
+        w[Ω + e₃/2] - w[Ω - e₃/2]
+    ) / spacing
+    q
+end
+
+function gradient!(∇p, p, Ωf; spacing)
+    e₁, e₂, e₃ = unitoffsets(Val(3))
+    ∇p₁, ∇p₂, ∇p₃ = ∇p
+    F₁, F₂, F₃ = Ωf
+    @views @. ∇p₁[F₁] = (p[F₁ + e₁/2] - p[F₁ - e₁/2]) / spacing
+    @views @. ∇p₂[F₂] = (p[F₂ + e₂/2] - p[F₂ - e₂/2]) / spacing
+    @views @. ∇p₃[F₃] = (p[F₃ + e₃/2] - p[F₃ - e₃/2]) / spacing
+    ∇p
+end
+
+function wallregion(location, axisregion::AxisRegion, axis::Int; halowidth::Int)
+    axisregions = ntuple(dimension -> dimension == axis ? axisregion : full, 3)
+    Region(location, axisregions; halowidth)
+end
+
+function fold!(A, halo, axis::Int, sign::Int)
+    @views @. A[reflect(halo, axis)] += sign * A[halo]
+    fill!(view(A, halo), 0)
+    A
+end
+
+function reflect!(A, halo, axis::Int, sign::Int)
+    @views @. A[halo] = sign * A[reflect(halo, axis)]
+    A
+end
+
+function freeslip!(A, d::Int; halowidth::Int)
+    for axis in 1:3, halo_axis in (lowhalo, highhalo)
+        halo = wallregion(Face(d), halo_axis, axis; halowidth)
+        sign = axis == d ? -1 : +1
+        reflect!(A, halo, axis, sign)
+    end
+    for boundary_axis in (lowboundary, highboundary)
+        boundary = wallregion(Face(d), boundary_axis, d; halowidth)
+        fill!(view(A, boundary), 0)
+    end
+    A
 end

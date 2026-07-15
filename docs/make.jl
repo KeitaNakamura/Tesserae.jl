@@ -30,6 +30,7 @@ makedocs(;
             ],
             "tutorials/collapse.md",
             "Incompressible fluid flow" => "tutorials/dam_break.md",
+            "Marker-and-cell method" => "tutorials/macgrid.md",
             "tutorials/rigid_body_contact.md",
             "tutorials/taylor_impact.md",
             "FEM" => [
