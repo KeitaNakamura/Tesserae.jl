@@ -1,5 +1,6 @@
 """
     FEMesh(shape, nodes, cellsupports)
+    FEMesh(shape, geometry::FEMesh)
     FEMesh(cartesian_mesh)
     FEMesh(shape, cartesian_mesh)
 
@@ -9,6 +10,12 @@ Create a finite-element mesh.
 `cellsupports` stores the node indices of each cell. `cells(mesh)` iterates over
 cell indices, while `supportnodes(mesh, cell)` returns the nodes used by one
 cell.
+
+`FEMesh(shape, geometry)` selects the geometry nodes that coincide with the
+reference nodes of `shape`, renumbers them contiguously, and stores their
+coordinates as a view of `geometry.nodes`. Every reference node of `shape`
+must exist in the geometry cell. Coordinate changes through either mesh are
+shared; connectivity changes made later are not.
 
 The Cartesian constructors are convenience constructors for structured test
 meshes and examples. `FEMesh(cartesian_mesh)` uses the default first-order cell
@@ -21,15 +28,31 @@ from the Cartesian grid.
 [`generate_basis_weights`](@ref) to create element-local basis storage, and
 `update!` to fill the element-local basis data.
 """
-struct FEMesh{S <: Shape, dim, T, L} <: AbstractMesh{dim, T, 1}
+struct FEMesh{S <: Shape, dim, T, L, V <: AbstractVector{Vec{dim, T}}} <: AbstractMesh{dim, T, 1}
     shape::S
-    nodes::Vector{Vec{dim, T}}
+    nodes::V
     cellsupports::Vector{SVector{L, Int}}
     usednodes::Vector{Int}
 end
 
-function FEMesh(shape::S, nodes::Vector{Vec{dim, T}}, cellsupports::Vector{SVector{L, Int}}) where {S <: Shape, dim, T, L}
-    FEMesh{S, dim, T, L}(shape, nodes, cellsupports, _collect_supportnodes(cellsupports))
+function FEMesh(shape::S, nodes::V, cellsupports::Vector{SVector{L, Int}}) where {S <: Shape, dim, T, L, V <: AbstractVector{Vec{dim, T}}}
+    FEMesh{S, dim, T, L, V}(shape, nodes, cellsupports, _collect_supportnodes(cellsupports))
+end
+
+function FEMesh(shape::Shape, geometry::FEMesh)
+    _reference_cell_family(shape) === _reference_cell_family(cellshape(geometry)) || throw(ArgumentError("field and geometry must use the same reference-cell family"))
+    geometry_localnodes = localnodes(cellshape(geometry))
+    localindices = map(localnodes(shape)) do node
+        index = findfirst(==(node), geometry_localnodes)
+        isnothing(index) && throw(ArgumentError("each field node must also be a node of the geometry cell"))
+        index
+    end
+    supports_in_geometry = map(indices -> indices[localindices], geometry.cellsupports)
+    nodeindices = _collect_supportnodes(supports_in_geometry)
+    nodemap = zeros(Int, length(geometry))
+    nodemap[nodeindices] .= eachindex(nodeindices)
+    field_supports = map(indices -> map(i -> nodemap[i], indices), supports_in_geometry)
+    FEMesh(shape, view(geometry.nodes, nodeindices), field_supports)
 end
 
 function _collect_supportnodes(cellsupports)
@@ -164,6 +187,7 @@ function extract_face(mesh::FEMesh, nodeindices::AbstractVector{Int})
 end
 
 function Base.merge!(dest::FEMesh{S}, src::FEMesh{S}) where {S}
+    dest.nodes isa Vector || throw(ArgumentError("merge! requires a resizable Vector of nodes"))
     isapproxzero(x) = dot(x,x) < eps(eltype(x))
 
     nodemap = Vector{Int}(undef, length(src))

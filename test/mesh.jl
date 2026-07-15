@@ -94,6 +94,25 @@ end
     )
     @test length(mesh_with_unused_node) == 3
     @test supportnodes(mesh_with_unused_node) == [1, 3]
+    compact_mesh = FEMesh(Tesserae.Line2(), mesh_with_unused_node)
+    @test length(compact_mesh) == 2
+    @test compact_mesh.cellsupports == [Tesserae.SVector(1, 2)]
+
+    geometry = FEMesh(Tesserae.Quad9(), CartesianMesh(1, (0,2), (0,1)))
+    velocity = @inferred FEMesh(Tesserae.Quad9(), geometry)
+    pressure = @inferred FEMesh(Tesserae.Quad4(), geometry)
+    @test length(geometry) == length(velocity) == 15
+    @test length(pressure) == 6
+    @test parent(velocity.nodes) === parent(pressure.nodes) === geometry.nodes
+    @test pressure.cellsupports == [Tesserae.SVector(1, 2, 5, 4), Tesserae.SVector(2, 3, 6, 5)]
+    @test supportnodes(pressure) == collect(eachindex(pressure))
+    geometry[1] = Vec(-1.0, -1.0)
+    @test velocity[1] == pressure[1] == geometry[1]
+    pressure[1] = Vec(-2.0, -2.0)
+    @test velocity[1] == geometry[1] == pressure[1]
+    @test_throws ArgumentError merge!(pressure, FEMesh(Tesserae.Quad4(), geometry))
+    @test_throws ArgumentError FEMesh(Tesserae.Tri3(), geometry)
+    @test_throws ArgumentError FEMesh(Tesserae.Line3(), FEMesh(Tesserae.Line4(), [Vec(0.0), Vec(1.0), Vec(1 / 3), Vec(2 / 3)], [Tesserae.SVector(1, 2, 3, 4)]))
 
     function compute_volume(mesh)
         dim = Tesserae.get_dimension(Tesserae.cellshape(mesh))
