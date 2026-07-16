@@ -161,10 +161,11 @@ end
 
 function extract(mesh::FEMesh, nodeindices::AbstractVector{Int})
     shape = cellshape(mesh)
+    nodeset = BitSet(nodeindices)
     supports = SVector{nlocalnodes(shape), Int}[]
     for cell in cells(mesh)
         indices = supportnodes(mesh, cell)
-        if all(in.(indices, Ref(nodeindices)))
+        if all(in(nodeset), indices)
             push!(supports, indices)
         end
     end

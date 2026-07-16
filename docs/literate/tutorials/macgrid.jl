@@ -14,6 +14,8 @@ function main()
     t_stop = 10.0 # final time
     Δt = 2.0e-3   # time step
     g = 9.81      # gravity magnitude
+    correctionsteps = 25 # reduce the volume error to 10% in this many steps
+    correctionrate = -log(0.1) / (correctionsteps * Δt)
 
     ## Material constants
     ρ = 1.0e3   # density
@@ -52,6 +54,12 @@ function main()
         ∇vᵈ :: Vec{dim, Float64}                        # scratch: grad of interpolated component
         p   :: Float64                                  # pressure
     end
+    QuadratureProp = @NamedTuple begin
+        x   :: Vec{dim, Float64}
+        φ   :: Float64
+        dV  :: Float64
+        dVᶠ :: Float64
+    end
 
     ## Background grid (staggered/MAC: pressure at cells, velocity components at faces)
     pad = 1
@@ -66,6 +74,18 @@ function main()
 
     Ωc = Region(Cell(), physical, physical, physical; halowidth=pad)
     Ωf = ntuple(d -> Region(Face(d), physical, physical, physical; halowidth=pad), dim)
+
+    ## Volume quadrature on the cell-centered dual mesh
+    dualindices = CartesianIndices(map(n -> pad:n-pad+1, size(cells)))
+    dualnodes = vec(LinearIndices(cells)[dualindices])
+    dualmesh = extract(FEMesh(cells.x), dualnodes)
+    map!(x -> clamp.(x, first(mesh), last(mesh)), dualmesh, dualmesh)
+
+    quadrature = generate_particles(QuadratureProp, dualmesh)
+    quadraturebasis = generate_basis_weights(dualmesh, size(quadrature); name=Val(:N))
+    update!(quadraturebasis, quadrature, dualmesh; measure=quadrature.dV)
+    Vₑ = vec(sum(quadrature.dV; dims=1))
+    transitioncells = Int[]
 
     ## Gravity acts on the vertical velocity component (here: d=3)
     fill!(view(facegrids[3].b, Ωf[3]), -g)
@@ -88,6 +108,7 @@ function main()
 
     t = 0.0
     step = 0
+    targetvolume = 0.0
     fps = 30
     savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
 
@@ -106,7 +127,7 @@ function main()
         @views @. cells.ϕ[Ωc] = cells.V[Ωc] / h^dim
 
         ## Reconstruct an implicit free surface from marker occupancy
-        reconstructsurface!(cells.φ, cells.φtmp, cells.V, Ωc; halowidth=pad)
+        reconstructsurface!(cells.φ, cells.φtmp, cells.V, Ωc; halowidth=pad, spacing=h)
         inversecutfractions!(getproperty.(facegrids, :invθ), cells.φ, Ωf)
 
         ## P2G: transfer mass/momentum to faces, update face velocities, add viscosity+body force
@@ -151,8 +172,29 @@ function main()
         @views @. fluid[Ωc] = cells.φ[Ωc] < 0
         dofmap = DofMap(reshape(fluid, 1, size(cells)...))
 
+        ## Correct accumulated changes in the reconstructed fluid volume
+        empty!(transitioncells)
+        currentvolume = 0.0
+        @inbounds for cell in eachindex(Vₑ)
+            φmin, φmax = extrema(view(cells.φ, supportnodes(dualmesh, cell)))
+            if φmax ≤ -h
+                currentvolume += Vₑ[cell]
+            elseif φmin < h
+                push!(transitioncells, cell)
+            end
+        end
+        points = view(quadrature, :, transitioncells)
+        basis = view(quadraturebasis, :, transitioncells)
+        @G2P cells=>i points=>p basis=>ip begin
+            φ[p]   = @∑ N[ip] * φ[i]
+            dVᶠ[p] = fluidindicator(φ[p], h) * dV[p]
+        end
+        currentvolume += sum(points.dVᶠ)
+        step == 0 && (targetvolume = currentvolume)
+        targetdivergence = correctionrate * (targetvolume - currentvolume) / currentvolume
+
         ## Solve Poisson for pressure on active (fluid) cells, then mirror pressure to padded region
-        b = -dofmap(cells.q)
+        b = targetdivergence .- dofmap(cells.q)
         A = pressurelaplacian(; cells, facegrids, dofmap, Ωc, Ωf, pad, spacing=h, ρ, Δt)
 
         fillzero!(cells.p)
@@ -172,7 +214,7 @@ function main()
             weights = faceweights[d]
             Ω = Ωf[d]
 
-            ## Divergence-free projection
+            ## Project to the target divergence
             @views @. grid.v[Ω] -= Δt/ρ * grid.∇p[Ω]
             freeslip!(grid.v, d; halowidth=pad)
 
@@ -236,9 +278,14 @@ function pressurelaplacian(; cells, facegrids, dofmap, Ωc, Ωf, pad, spacing, �
     LinearOperator(Float64, ndofs(dofmap), ndofs(dofmap), true, true, mul!)
 end
 
-function reconstructsurface!(φ, φtmp, volume, Ω; halowidth)
+function reconstructsurface!(φ, φtmp, volume, Ω; halowidth, spacing)
     @views @. φ[Ω] = ifelse(volume[Ω] > 0, -1.0, +1.0)
     smoothimplicit!(φ, φtmp, Ω; halowidth)
+    for axis in 1:3, halo_axis in (lowhalo, highhalo)
+        halo = wallregion(Cell(), halo_axis, axis; halowidth)
+        reflect!(φtmp, halo, axis, +1)
+    end
+    signeddistance!(view(φ, Ω), view(φtmp, Ω); spacing, bandwidth=(1 + sqrt(3)) * spacing)
     for axis in 1:3, halo_axis in (lowhalo, highhalo)
         halo = wallregion(Cell(), halo_axis, axis; halowidth)
         reflect!(φ, halo, axis, +1)
@@ -277,6 +324,50 @@ function inversecutfraction(φ₋, φ₊)
     φair = fluid₋ ? φ₊ : φ₋
     θ = φfluid / (φfluid - φair)
     inv(max(θ, 1.0e-6))
+end
+
+@inline function scatterdistance!(distance, point, radius)
+    coordinates = Tuple(point)
+    ranges = map(coordinates, size(distance)) do x, n
+        max(1, ceil(Int, x-radius)):min(n, floor(Int, x+radius))
+    end
+    radius² = radius^2
+    @inbounds for index in CartesianIndices(ranges)
+        squared = sum(abs2, Tuple(index) .- coordinates)
+        if squared ≤ radius²
+            distance[index] = min(distance[index], squared)
+        end
+    end
+end
+
+function signeddistance!(distance, implicit; spacing, bandwidth)
+    radius = bandwidth / spacing
+    fill!(distance, radius^2)
+    @inbounds for index in CartesianIndices(implicit)
+        iszero(implicit[index]) && scatterdistance!(distance, index, radius)
+    end
+    offsets = (CartesianIndex(1, 0, 0), CartesianIndex(0, 1, 0), CartesianIndex(0, 0, 1))
+    for offset in offsets
+        @inbounds for index in CartesianIndices(size(implicit) .- Tuple(offset))
+            a, b = implicit[index], implicit[index + offset]
+            if a*b < 0
+                fraction = a / (a-b)
+                point = ntuple(d -> index[d] + fraction*offset[d], Val(3))
+                scatterdistance!(distance, point, radius)
+            end
+        end
+    end
+    @. distance = copysign(sqrt(distance) * spacing, implicit)
+    distance
+end
+
+## Kim et al. (2007), "Simulation of Bubbles in Foam With The Volume Control Method," §4.2.
+## https://yingjie.math.gatech.edu/publications/VolumeControl.pdf
+@inline function fluidindicator(distance, halfwidth)
+    distance ≤ -halfwidth && return one(distance)
+    distance ≥ halfwidth && return zero(distance)
+    ratio = distance / halfwidth
+    one(ratio)/2 - 3ratio/4 + ratio^3/4
 end
 
 function macmesh(mesh::CartesianMesh{3}, location)

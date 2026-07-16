@@ -80,6 +80,11 @@ end
     @test supportnodes(mesh) === mesh.usednodes
     @test supportnodes(mesh) == collect(eachindex(mesh))
     @test mesh == vec(cmesh)
+    selectednodes = vec(LinearIndices(cmesh)[2:4, 2:6])
+    submesh = extract(mesh, selectednodes)
+    @test submesh.nodes === mesh.nodes
+    @test Tesserae.ncells(submesh) == 8
+    @test supportnodes(submesh) == sort(selectednodes)
     cmesh′ = CartesianMesh(0.5, (1,3), (1,4))
     mesh .= vec(cmesh′) # test setindex!
     @test mesh == vec(cmesh′)
