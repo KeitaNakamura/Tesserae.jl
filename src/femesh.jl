@@ -1,6 +1,5 @@
 """
     FEMesh(shape, nodes, cellsupports)
-    FEMesh(shape, geometry::FEMesh)
     FEMesh(cartesian_mesh)
     FEMesh(shape, cartesian_mesh)
 
@@ -10,12 +9,6 @@ Create a finite-element mesh.
 `cellsupports` stores the node indices of each cell. `cells(mesh)` iterates over
 cell indices, while `supportnodes(mesh, cell)` returns the nodes used by one
 cell.
-
-`FEMesh(shape, geometry)` selects the geometry nodes that coincide with the
-reference nodes of `shape`, renumbers them contiguously, and stores their
-coordinates as a view of `geometry.nodes`. Every reference node of `shape`
-must exist in the geometry cell. Coordinate changes through either mesh are
-shared; connectivity changes made later are not.
 
 The Cartesian constructors are convenience constructors for structured test
 meshes and examples. `FEMesh(cartesian_mesh)` uses the default first-order cell
@@ -37,39 +30,6 @@ end
 
 function FEMesh(shape::S, nodes::V, cellsupports::Vector{SVector{L, Int}}) where {S <: Shape, dim, T, L, V <: AbstractVector{Vec{dim, T}}}
     FEMesh{S, dim, T, L, V}(shape, nodes, cellsupports, _collect_supportnodes(cellsupports))
-end
-
-function FEMesh(shape::Shape, geometry::FEMesh)
-    _reference_cell_family(shape) === _reference_cell_family(cellshape(geometry)) || throw(ArgumentError("field and geometry must use the same reference-cell family"))
-    geometry_localnodes = localnodes(cellshape(geometry))
-    localindices = map(localnodes(shape)) do node
-        index = findfirst(==(node), geometry_localnodes)
-        isnothing(index) && throw(ArgumentError("each field node must also be a node of the geometry cell"))
-        index
-    end
-    supports_in_geometry = map(indices -> indices[localindices], geometry.cellsupports)
-    nodeindices = _collect_supportnodes(supports_in_geometry)
-    nodemap = zeros(Int, length(geometry))
-    nodemap[nodeindices] .= eachindex(nodeindices)
-    field_supports = map(indices -> map(i -> nodemap[i], indices), supports_in_geometry)
-    FEMesh(shape, view(geometry.nodes, nodeindices), field_supports)
-end
-
-function _collect_supportnodes(cellsupports)
-    nodes = Int[]
-    if !isempty(cellsupports)
-        sizehint!(nodes, length(cellsupports) * length(first(cellsupports)))
-    end
-    for indices in cellsupports
-        append!(nodes, indices)
-    end
-    unique!(sort!(nodes))
-end
-
-function _refresh_supportnodes!(mesh::FEMesh)
-    empty!(mesh.usednodes)
-    append!(mesh.usednodes, _collect_supportnodes(mesh.cellsupports))
-    mesh
 end
 
 Base.size(mesh::FEMesh) = size(mesh.nodes)
@@ -219,4 +179,133 @@ end
 function Base.merge(x::FEMesh{S}, y::FEMesh{S}, z::FEMesh{S}...) where {S}
     dest = FEMesh(cellshape(x), copy(x.nodes), copy(x.cellsupports))
     merge!(dest, y, z...)
+end
+
+"""
+    generate_field_meshes(meshes[, order])
+
+Construct consistently numbered field meshes from geometry meshes that share
+one node array. Maximum-dimensional cells define the field nodes;
+lower-dimensional meshes must match their faces or edges.
+
+Omit `order`, or pass the order already used by every shape, to preserve the
+geometry shapes. Pass `Order(1)` to replace them with first-order shapes. The
+returned meshes share a compact view of the geometry nodes. Tuple order and
+dictionary keys are preserved.
+"""
+function generate_field_meshes(meshes::Tuple{Vararg{FEMesh}}, order::Union{Nothing, Order}=nothing)
+    field_nodes, nodemap = _prepare_field_meshes(meshes, order)
+    map(mesh -> _build_field_mesh(mesh, field_nodes, nodemap, order), meshes)
+end
+
+function generate_field_meshes(meshes::AbstractDict{K, <: FEMesh}, order::Union{Nothing, Order}=nothing) where {K}
+    field_nodes, nodemap = _prepare_field_meshes(values(meshes), order)
+    Dict(key => _build_field_mesh(mesh, field_nodes, nodemap, order) for (key, mesh) in meshes)
+end
+
+# Return the requested field shape and the positions of its nodes in the geometry connectivity.
+_field_interpolation(shape::Shape, ::Nothing) = shape, eachindex(localnodes(shape))
+_field_interpolation(shape::Line, ::Order{1}) = Line2(), primarynodes_indices(shape)
+_field_interpolation(shape::Quad, ::Order{1}) = Quad4(), primarynodes_indices(shape)
+_field_interpolation(shape::Hex, ::Order{1}) = Hex8(), primarynodes_indices(shape)
+_field_interpolation(shape::Tri, ::Order{1}) = Tri3(), primarynodes_indices(shape)
+_field_interpolation(shape::Tet, ::Order{1}) = Tet4(), primarynodes_indices(shape)
+function _field_interpolation(shape::Shape, order::Order)
+    typeof(get_order(shape)) === typeof(order) && return shape, eachindex(localnodes(shape))
+    throw(ArgumentError("cannot generate an order-$(_order_value(order)) field from $(typeof(shape)) geometry; omit `order` to preserve the geometry shape or pass `Order(1)` to replace it with its first-order shape"))
+end
+
+# Preserve cell order and local orientation while translating connectivity to the shared field numbering.
+function _build_field_mesh(mesh::FEMesh, field_nodes, nodemap, order)
+    geometry_shape = cellshape(mesh)
+    field_shape, localindices = _field_interpolation(geometry_shape, order)
+
+    field_supports = map(cells(mesh)) do cell
+        indices = supportnodes(mesh, cell)
+        field_indices = nodemap[indices[localindices]]
+        # Zero marks a geometry node excluded from the field by the largest-dimensional cells.
+        any(iszero, field_indices) && throw(ArgumentError("each field node must belong to a maximum-dimensional field cell"))
+        field_indices
+    end
+
+    FEMesh(field_shape, field_nodes, field_supports)
+end
+
+# The largest-dimensional cells define the field. Lower-dimensional meshes may
+# only describe their faces or edges and cannot introduce field nodes.
+function _prepare_field_meshes(meshes, order)
+    isempty(meshes) && throw(ArgumentError("at least one geometry mesh is required"))
+
+    # Connectivity indices are comparable across meshes only when they index the same node array.
+    geometry_nodes = first(meshes).nodes
+    all(mesh -> mesh.nodes === geometry_nodes, meshes) || throw(ArgumentError("all geometry meshes must share the same node array and numbering"))
+    maxdim = maximum(mesh -> get_dimension(cellshape(mesh)), meshes)
+
+    # Pass 1: record every supplied lower-dimensional cell using its complete
+    # geometry connectivity, independently of the requested field order.
+    unmatched = [Set{Pair{Shape, SVector}}() for _ in 1:maxdim]
+    foreach(meshes) do mesh
+        shape = cellshape(mesh)
+        if get_dimension(shape) != maxdim
+            _field_interpolation(shape, order) # reject unsupported shape changes before constructing the numbering
+            for cell in cells(mesh)
+                indices = supportnodes(mesh, cell)
+                push!(unmatched[get_dimension(shape)], shape => sort(indices))
+            end
+        end
+    end
+
+    # Pass 2: largest-dimensional cells select the field nodes; walking their
+    # faces and edges removes the lower-dimensional cells recorded above.
+    active = falses(length(geometry_nodes))
+    foreach(meshes) do mesh
+        geometry_shape = cellshape(mesh)
+        if get_dimension(geometry_shape) == maxdim
+            _, localindices = _field_interpolation(geometry_shape, order)
+            for cell in cells(mesh)
+                geometry_indices = supportnodes(mesh, cell)
+                active[geometry_indices[localindices]] .= true
+                any(!isempty, unmatched) && _match_field_subentities!(unmatched, geometry_shape, geometry_indices)
+            end
+        end
+    end
+    # Anything left was not an actual face or edge of the largest-dimensional geometry.
+    all(isempty, unmatched) || throw(ArgumentError("each lower-dimensional geometry cell must be a subentity of a maximum-dimensional geometry cell"))
+
+    # Dense numbering avoids unused grid entries; the view keeps field coordinates shared with the geometry.
+    nodeindices = findall(active)
+    nodemap = zeros(Int, length(geometry_nodes))
+    nodemap[nodeindices] .= eachindex(nodeindices)
+    view(geometry_nodes, nodeindices), nodemap
+end
+
+# Walk the cell's faces recursively. Match by shape and complete node set while
+# ignoring local orientation.
+function _match_field_subentities!(unmatched, shape::Shape, indices)
+    delete!(unmatched[get_dimension(shape)], shape => sort(indices))
+    get_dimension(shape) == 1 && return
+
+    any(!isempty, @view unmatched[1:get_dimension(shape)-1]) || return
+
+    face_shape = faceshape(shape)
+    for face in faces(shape)
+        _match_field_subentities!(unmatched, face_shape, indices[face])
+    end
+end
+
+function _collect_supportnodes(cellsupports)
+    nodes = Int[]
+    if !isempty(cellsupports)
+        sizehint!(nodes, length(cellsupports) * length(first(cellsupports)))
+    end
+    for indices in cellsupports
+        append!(nodes, indices)
+    end
+    unique!(sort!(nodes))
+end
+
+function _refresh_supportnodes!(mesh::FEMesh)
+    empty!(mesh.usednodes)
+    append!(mesh.usednodes, _collect_supportnodes(mesh.cellsupports))
+    mesh
 end

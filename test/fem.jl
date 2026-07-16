@@ -76,7 +76,7 @@
             [Vec(0.0, 0.0), Vec(1.0, 0.0), Vec(0.0, 1.0), Vec(0.5, 0.0), Vec(0.0, 0.5), Vec(0.5, 0.5 + α / 4)],
             [Tesserae.SVector(1, 2, 3, 4, 5, 6)],
         )
-        field = FEMesh(Tesserae.Tri3(), geometry)
+        field = only(generate_field_meshes((geometry,), Order(1)))
         rule = generate_quadrature_rule(Tesserae.Tri6())
         points = generate_particles(@NamedTuple{x::Vec{2,Float64}, V::Float64}, geometry, rule)
         weights = generate_basis_weights(field, size(points); name=Val(:N))

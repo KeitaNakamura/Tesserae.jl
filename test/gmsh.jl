@@ -29,6 +29,11 @@ nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
         ((0.0, 0.0), (0.0, 1.0)),
         ((1.0, 0.0), (1.0, 1.0)),
     ]
+
+    fields = generate_field_meshes(meshes, Order(1))
+    @test fields["domain"].nodes === fields["boundary"].nodes
+    @test supportnodes(fields["domain"]) == supportnodes(fields["boundary"]) == [1, 2, 3, 4]
+
     reoriented_boundary = readtestmsh("square.msh"; reorient_boundary=true)["boundary"]
     @test sort([cellcoordinates(reoriented_boundary, cell) for cell in cells(reoriented_boundary)]) == [
         ((0.0, 1.0), (0.0, 0.0)),

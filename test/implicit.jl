@@ -305,8 +305,8 @@ end
 @testset "FEM sparse matrix pattern" begin
     cmesh = CartesianMesh(1, (0,1), (0,1))
     geometry = FEMesh(Tesserae.Quad9(), cmesh)
-    quad4 = FEMesh(Tesserae.Quad4(), geometry)
-    quad9 = FEMesh(Tesserae.Quad9(), geometry)
+    quad4 = only(generate_field_meshes((geometry,), Order(1)))
+    quad9 = only(generate_field_meshes((geometry,)))
 
     @test_throws UndefKeywordError create_sparse_matrix(quad4)
 
