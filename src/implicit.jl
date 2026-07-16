@@ -205,30 +205,23 @@ create_sparse_matrix(mesh::IGAMesh{dim}; ndofs) where {dim} = create_sparse_matr
 
 function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) where {T}
     mesh1 === mesh2 && return _create_cell_support_sparse_matrix(T, mesh1, ndofs)
+    _reference_cell_family(cellshape(mesh1)) === _reference_cell_family(cellshape(mesh2)) || throw(ArgumentError("FEM meshes must use the same reference-cell family"))
+    ncells(mesh1) == ncells(mesh2) || throw(DimensionMismatch("FEM meshes must have the same number of cells"))
 
     gdofs1 = LinearIndices((ndofs[1], length(mesh1)))
     gdofs2 = LinearIndices((ndofs[2], length(mesh2)))
-
-    nrow = length(gdofs1)
-    ncol = length(gdofs2)
+    primarynodes1 = primarynodes_indices(cellshape(mesh1))
+    primarynodes2 = primarynodes_indices(cellshape(mesh2))
 
     I, J = Int[], Int[]
-    for cell1 in cells(mesh1)
+    for (cell1, cell2) in zip(cells(mesh1), cells(mesh2))
         cellnodes1 = supportnodes(mesh1, cell1)
-        primary_cellnodes1 = cellnodes1[primarynodes_indices(cellshape(mesh1))]
-        celldofs1 = gdofs1[:, cellnodes1]
-
-        for cell2 in cells(mesh2)
-            cellnodes2 = supportnodes(mesh2, cell2)
-            primary_cellnodes2 = cellnodes2[primarynodes_indices(cellshape(mesh2))]
-            if mesh1[primary_cellnodes1] ≈ mesh2[primary_cellnodes2]
-                celldofs2 = gdofs2[:, cellnodes2]
-                append_dofs!(I, J, celldofs1, celldofs2)
-            end
-        end
+        cellnodes2 = supportnodes(mesh2, cell2)
+        mesh1[cellnodes1[primarynodes1]] ≈ mesh2[cellnodes2[primarynodes2]] || throw(ArgumentError("FEM meshes must describe the same cells in the same order and orientation; cell $cell1 does not match"))
+        append_dofs!(I, J, gdofs1[:, cellnodes1], gdofs2[:, cellnodes2])
     end
 
-    sparse(I, J, zeros(T, length(I)), nrow, ncol)
+    sparse(I, J, zeros(T, length(I)), length(gdofs1), length(gdofs2))
 end
 create_sparse_matrix(meshes::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) = create_sparse_matrix(Float64, meshes; ndofs)
 create_sparse_matrix(::Type{T}, mesh::FEMesh{<: Any, dim}; ndofs::Int) where {T, dim} = create_sparse_matrix(T, (mesh,mesh); ndofs=(ndofs,ndofs))

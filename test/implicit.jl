@@ -303,7 +303,7 @@ end
 end
 
 @testset "FEM sparse matrix pattern" begin
-    cmesh = CartesianMesh(1, (0,1), (0,1))
+    cmesh = CartesianMesh(1, (0,2), (0,1))
     geometry = FEMesh(Tesserae.Quad9(), cmesh)
     quad4 = only(generate_field_meshes((geometry,), Order(1)))
     quad9 = only(generate_field_meshes((geometry,)))
@@ -311,11 +311,32 @@ end
     @test_throws UndefKeywordError create_sparse_matrix(quad4)
 
     A = create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
-    @test size(A) == (18, 4)
-    @test Tesserae.SparseArrays.nnz(A) == prod(size(A))
+    @test size(A) == (30, 6)
+    @test Tesserae.SparseArrays.nnz(A) == 132
 
-    shifted = FEMesh(Tesserae.Quad4(), CartesianMesh(1, (2,3), (2,3)))
-    B = create_sparse_matrix((quad9, shifted); ndofs=(2, 1))
-    @test size(B) == (2length(quad9), length(shifted))
-    @test iszero(Tesserae.SparseArrays.nnz(B))
+    GridPropU = @NamedTuple{x::Vec{2,Float64}, u::Vec{2,Float64}}
+    GridPropP = @NamedTuple{x::Vec{2,Float64}, p::Float64}
+    PointProp = @NamedTuple{x::Vec{2,Float64}, V::Float64}
+    velocity_grid = generate_grid(GridPropU, quad9)
+    pressure_grid = generate_grid(GridPropP, quad4)
+    points = generate_particles(PointProp, geometry)
+    velocity_weights = generate_basis_weights(quad9, size(points); name=Val(:N))
+    pressure_weights = generate_basis_weights(quad4, size(points); name=Val(:N))
+    update!(velocity_weights, points, geometry; measure=points.V)
+    update!(pressure_weights, points, geometry)
+
+    @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
+        A[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
+    end
+    @test any(!iszero, Tesserae.SparseArrays.nonzeros(A))
+
+    shifted = FEMesh(Tesserae.Quad4(), CartesianMesh(1, (2,4), (0,1)))
+    @test_throws ArgumentError create_sparse_matrix((quad9, shifted); ndofs=(2, 1))
+
+    reversed_supports = supportnodes.(Ref(quad4), reverse(collect(cells(quad4))))
+    reversed = FEMesh(Tesserae.Quad4(), collect(quad4), reversed_supports)
+    @test_throws ArgumentError create_sparse_matrix((quad9, reversed); ndofs=(2, 1))
+
+    partial = FEMesh(Tesserae.Quad4(), collect(quad4[supportnodes(quad4, 1)]), [Tesserae.SVector(1, 2, 3, 4)])
+    @test_throws DimensionMismatch create_sparse_matrix((quad9, partial); ndofs=(2, 1))
 end
