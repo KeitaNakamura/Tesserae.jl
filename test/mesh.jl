@@ -87,32 +87,94 @@ end
     @test Tesserae.cellshape(FEMesh(CartesianMesh(1, (0,2), (0,3)))) == Tesserae.Quad4()
     @test Tesserae.cellshape(FEMesh(CartesianMesh(1, (0,2), (0,3), (0,4)))) == Tesserae.Hex8()
 
-    mesh_with_unused_node = Tesserae.FEMesh(
-        Tesserae.Line2(),
-        [Vec(0.0), Vec(1.0), Vec(2.0)],
-        [Tesserae.SVector(1, 3)],
-    )
-    @test length(mesh_with_unused_node) == 3
-    @test supportnodes(mesh_with_unused_node) == [1, 3]
-    compact_mesh = FEMesh(Tesserae.Line2(), mesh_with_unused_node)
-    @test length(compact_mesh) == 2
-    @test compact_mesh.cellsupports == [Tesserae.SVector(1, 2)]
+    @testset "generate_field_meshes" begin
+        geometry = FEMesh(Tesserae.Quad9(), CartesianMesh(1, (0,2), (0,1)))
+        # The unused first node makes compact field numbering observable.
+        geometry_nodes = [Vec(-1.0, -1.0), geometry...]
+        geometry_supports = map(cell -> supportnodes(geometry, cell) .+ 1, cells(geometry))
+        left = FEMesh(Tesserae.Quad9(), geometry_nodes, geometry_supports[1:1])
+        right = FEMesh(Tesserae.Quad9(), geometry_nodes, geometry_supports[2:2])
+        bottom_face = first(Tesserae.faces(Tesserae.Quad9()))
+        left_boundary = geometry_supports[1][bottom_face]
+        right_boundary = geometry_supports[2][bottom_face]
+        # Reverse the second boundary cell to test preservation of its local ordering.
+        boundary = FEMesh(Tesserae.Line3(), geometry_nodes, [left_boundary, Tesserae.SVector(right_boundary[2], right_boundary[1], right_boundary[3])])
+        geometries = (left, right, boundary)
 
-    geometry = FEMesh(Tesserae.Quad9(), CartesianMesh(1, (0,2), (0,1)))
-    velocity = @inferred FEMesh(Tesserae.Quad9(), geometry)
-    pressure = @inferred FEMesh(Tesserae.Quad4(), geometry)
-    @test length(geometry) == length(velocity) == 15
-    @test length(pressure) == 6
-    @test parent(velocity.nodes) === parent(pressure.nodes) === geometry.nodes
-    @test pressure.cellsupports == [Tesserae.SVector(1, 2, 5, 4), Tesserae.SVector(2, 3, 6, 5)]
-    @test supportnodes(pressure) == collect(eachindex(pressure))
-    geometry[1] = Vec(-1.0, -1.0)
-    @test velocity[1] == pressure[1] == geometry[1]
-    pressure[1] = Vec(-2.0, -2.0)
-    @test velocity[1] == geometry[1] == pressure[1]
-    @test_throws ArgumentError merge!(pressure, FEMesh(Tesserae.Quad4(), geometry))
-    @test_throws ArgumentError FEMesh(Tesserae.Tri3(), geometry)
-    @test_throws ArgumentError FEMesh(Tesserae.Line3(), FEMesh(Tesserae.Line4(), [Vec(0.0), Vec(1.0), Vec(1 / 3), Vec(2 / 3)], [Tesserae.SVector(1, 2, 3, 4)]))
+        @testset "construction and numbering" begin
+            velocity = @inferred generate_field_meshes(geometries)
+            @test Tesserae.cellshape.(velocity) == (Tesserae.Quad9(), Tesserae.Quad9(), Tesserae.Line3())
+            @test length.(velocity) == (15, 15, 15)
+            @test velocity[1].nodes === velocity[2].nodes === velocity[3].nodes
+            @test parent(velocity[1].nodes) === geometry_nodes
+            @test supportnodes(velocity[1], 1) == supportnodes(geometry, 1)
+            @test supportnodes(velocity[2], 1) == supportnodes(geometry, 2)
+
+            same_order = @inferred generate_field_meshes(geometries, Order(2))
+            @test Tesserae.cellshape.(same_order) == Tesserae.cellshape.(velocity)
+            @test length.(same_order) == length.(velocity)
+            @test map(mesh -> supportnodes.(Ref(mesh), cells(mesh)), same_order) == map(mesh -> supportnodes.(Ref(mesh), cells(mesh)), velocity)
+
+            pressure = @inferred generate_field_meshes(geometries, Order(1))
+            @test Tesserae.cellshape.(pressure) == (Tesserae.Quad4(), Tesserae.Quad4(), Tesserae.Line2())
+            @test length.(pressure) == (6, 6, 6)
+            @test pressure[1].nodes === pressure[2].nodes === pressure[3].nodes
+            @test supportnodes(pressure[1], 1) == Tesserae.SVector(1, 2, 5, 4)
+            @test supportnodes(pressure[2], 1) == Tesserae.SVector(2, 3, 6, 5)
+            @test supportnodes.(Ref(pressure[3]), cells(pressure[3])) == [Tesserae.SVector(1, 2), Tesserae.SVector(3, 2)]
+            @test supportnodes(pressure[1]) == [1, 2, 4, 5]
+            @test supportnodes(pressure[3]) == [1, 2, 3]
+
+            field_dict = generate_field_meshes(Dict("left" => left, "right" => right, "boundary" => boundary), Order(1))
+            @test Set(keys(field_dict)) == Set(("left", "right", "boundary"))
+            @test supportnodes(field_dict["left"], 1) == supportnodes(pressure[1], 1)
+            @test supportnodes(field_dict["right"], 1) == supportnodes(pressure[2], 1)
+            @test supportnodes.(Ref(field_dict["boundary"]), cells(field_dict["boundary"])) == supportnodes.(Ref(pressure[3]), cells(pressure[3]))
+            @test field_dict["left"].nodes === field_dict["right"].nodes === field_dict["boundary"].nodes
+
+            original_node = geometry_nodes[2]
+            geometry_nodes[2] = Vec(-2.0, -2.0)
+            @test velocity[1][1] == pressure[1][1] == geometry_nodes[2]
+            pressure[1][1] = Vec(-3.0, -3.0)
+            @test velocity[1][1] == geometry_nodes[2] == pressure[1][1]
+            geometry_nodes[2] = original_node
+            @test_throws ArgumentError merge!(pressure[1], pressure[1])
+        end
+
+        @testset "validation" begin
+            diagonal = FEMesh(Tesserae.Line3(), geometry_nodes, [geometry_supports[1][Tesserae.SVector(1, 3, 9)]])
+            @test_throws ArgumentError generate_field_meshes((left, diagonal))
+            wrong_midpoint = FEMesh(Tesserae.Line3(), geometry_nodes, [Tesserae.SVector(left_boundary[1], left_boundary[2], geometry_supports[1][9])])
+            @test_throws ArgumentError generate_field_meshes((left, wrong_midpoint))
+            separate_boundary = FEMesh(Tesserae.Line3(), copy(geometry_nodes), supportnodes.(Ref(boundary), cells(boundary)))
+            @test_throws ArgumentError generate_field_meshes((left, separate_boundary))
+            @test_throws ArgumentError generate_field_meshes(())
+            line4 = FEMesh(Tesserae.Line4(), [Vec(0.0), Vec(1.0), Vec(1 / 3), Vec(2 / 3)], [Tesserae.SVector(1, 2, 3, 4)])
+            @test_throws ArgumentError generate_field_meshes((line4,), Order(2))
+        end
+
+        @testset "shape families and traces" begin
+            for (geometry_shape, field_shape, cmesh) in (
+                    (Tesserae.Line3(), Tesserae.Line2(), CartesianMesh(1, (0,1))),
+                    (Tesserae.Quad9(), Tesserae.Quad4(), CartesianMesh(1, (0,1), (0,1))),
+                    (Tesserae.Hex27(), Tesserae.Hex8(), CartesianMesh(1, (0,1), (0,1), (0,1))),
+                    (Tesserae.Tri6(), Tesserae.Tri3(), CartesianMesh(1, (0,1), (0,1))),
+                    (Tesserae.Tet10(), Tesserae.Tet4(), CartesianMesh(1, (0,1), (0,1), (0,1))),
+                )
+                field = only(generate_field_meshes((FEMesh(geometry_shape, cmesh),), Order(1)))
+                @test Tesserae.cellshape(field) == field_shape
+            end
+
+            volume_geometry = FEMesh(Tesserae.Hex27(), CartesianMesh(1, (0,1), (0,1), (0,1)))
+            surface_support = supportnodes(volume_geometry, only(cells(volume_geometry)))[first(Tesserae.faces(Tesserae.Hex27()))]
+            edge_support = surface_support[first(Tesserae.faces(Tesserae.Quad9()))]
+            surface_geometry = FEMesh(Tesserae.Quad9(), volume_geometry.nodes, [surface_support])
+            edge_geometry = FEMesh(Tesserae.Line3(), volume_geometry.nodes, [edge_support])
+            fields3d = @inferred generate_field_meshes((volume_geometry, surface_geometry, edge_geometry), Order(1))
+            @test Tesserae.cellshape.(fields3d) == (Tesserae.Hex8(), Tesserae.Quad4(), Tesserae.Line2())
+            @test length.(supportnodes.(fields3d)) == (8, 4, 2)
+        end
+    end
 
     function compute_volume(mesh)
         dim = Tesserae.get_dimension(Tesserae.cellshape(mesh))

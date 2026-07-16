@@ -51,7 +51,7 @@
     @test all(iszero, (grid.x)::Array{Vec{3,Float32},3})
 
     geometry = FEMesh(Tesserae.Quad9(), CartesianMesh(1, (0,2), (0,1)))
-    field = FEMesh(Tesserae.Quad4(), geometry)
+    field = only(generate_field_meshes((geometry,), Order(1)))
     field_grid = @inferred generate_grid(@NamedTuple{x::Vec{2,Float64}, p::Float64}, field)
     @test field_grid.x === field
     @test length(field_grid) == 6

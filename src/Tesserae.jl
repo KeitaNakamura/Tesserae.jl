@@ -52,6 +52,7 @@ export
     findcell,
     extract,
     FEMesh,
+    generate_field_meshes,
     cells,
     boundaries,
     IGAPatch,
