@@ -26,7 +26,7 @@ mesh = IGAMesh(surface)
 inner_boundary = boundaries(mesh, 1, 2, -1)
 outer_boundary = boundaries(mesh, 1, 2, +1)
 
-plot_patch(surface)</code></pre><img src="75ccd7d7.svg" alt="Example block output"/><details class="admonition is-details" id="Plot-helpers-329b33676d6da428"><summary class="admonition-header">Plot helpers<a class="admonition-anchor" href="#Plot-helpers-329b33676d6da428" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">import Plots
+plot_patch(surface)</code></pre><img src="2e17c7c5.svg" alt="Example block output"/><details class="admonition is-details" id="Plot-helpers-329b33676d6da428"><summary class="admonition-header">Plot helpers<a class="admonition-anchor" href="#Plot-helpers-329b33676d6da428" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">import Plots
 
 function plot_line!(plt, points; kwargs...)
     xs = [point[1] for point in points]
@@ -128,7 +128,7 @@ end
 
 max_error = maximum(abs, gauss_points.u .- exact_solution.(gauss_points.x))
 
-round(max_error; sigdigits=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2.39e-5</code></pre><pre><code class="language-julia hljs">plot_solution(surface, grid.u)</code></pre><img src="1f5a9b6b.svg" alt="Example block output"/><details class="admonition is-details" id="Solution-helpers-fa58fb3bbdf81d2e"><summary class="admonition-header">Solution helpers<a class="admonition-anchor" href="#Solution-helpers-fa58fb3bbdf81d2e" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">function plot_solution(surface, u)
+round(max_error; sigdigits=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2.39e-5</code></pre><pre><code class="language-julia hljs">plot_solution(surface, grid.u)</code></pre><img src="35dc12e8.svg" alt="Example block output"/><details class="admonition is-details" id="Solution-helpers-fa58fb3bbdf81d2e"><summary class="admonition-header">Solution helpers<a class="admonition-anchor" href="#Solution-helpers-fa58fb3bbdf81d2e" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">function plot_solution(surface, u)
     solution = Tesserae.NURBS.ControlNet(
         surface.axes,
         map(value -&gt; Vec(value), reshape(u, size(surface.points))),
