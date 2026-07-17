@@ -21,7 +21,7 @@ domain = meshes[&quot;domain&quot;]
 outer_boundary = meshes[&quot;outer_boundary&quot;]
 hole_boundary = meshes[&quot;hole_boundary&quot;]
 
-plot_gmsh_groups(domain, outer_boundary, hole_boundary)</code></pre><img src="8d8f8533.svg" alt="Example block output"/><details class="admonition is-details" id="Plot-helpers-f7430c3a9be37ece"><summary class="admonition-header">Plot helpers<a class="admonition-anchor" href="#Plot-helpers-f7430c3a9be37ece" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">import Plots
+plot_gmsh_groups(domain, outer_boundary, hole_boundary)</code></pre><img src="2a7ca216.svg" alt="Example block output"/><details class="admonition is-details" id="Plot-helpers-f7430c3a9be37ece"><summary class="admonition-header">Plot helpers<a class="admonition-anchor" href="#Plot-helpers-f7430c3a9be37ece" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">import Plots
 
 function segment_coordinates(mesh)
     xs = Float64[]
@@ -117,7 +117,7 @@ dofmask[1, boundary_nodes] .= false
 free = DofMap(dofmask)
 free(grid.u) .= Symmetric(extract(K, free)) \ Array(free(grid.f))
 
-plot_solution(domain, grid.u, outer_boundary, hole_boundary)</code></pre><img src="d700a147.svg" alt="Example block output"/><details class="admonition is-details" id="Solution-plot-helpers-d65b983de770d9ef"><summary class="admonition-header">Solution plot helpers<a class="admonition-anchor" href="#Solution-plot-helpers-d65b983de770d9ef" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">import Plots
+plot_solution(domain, grid.u, outer_boundary, hole_boundary)</code></pre><img src="f4415de3.svg" alt="Example block output"/><details class="admonition is-details" id="Solution-plot-helpers-d65b983de770d9ef"><summary class="admonition-header">Solution plot helpers<a class="admonition-anchor" href="#Solution-plot-helpers-d65b983de770d9ef" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">import Plots
 
 function plot_solution(mesh, u, outer_boundary, hole_boundary)
     shapes = Plots.Shape[]
