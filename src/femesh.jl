@@ -45,8 +45,9 @@ end
 end
 
 cellshape(mesh::FEMesh) = mesh.shape
-ncells(mesh::FEMesh) = length(mesh.cellsupports)
-cells(mesh::FEMesh) = eachindex(mesh.cellsupports)
+cellsupports(mesh::FEMesh) = getfield(mesh, :cellsupports)
+ncells(mesh::FEMesh) = length(cellsupports(mesh))
+cells(mesh::FEMesh) = eachindex(cellsupports(mesh))
 
 """
     supportnodes(mesh::FEMesh)
@@ -55,8 +56,8 @@ cells(mesh::FEMesh) = eachindex(mesh.cellsupports)
 Return the sorted node indices used by `mesh`, or the local support node
 indices of `cell`.
 """
-@inline supportnodes(mesh::FEMesh) = mesh.usednodes
-@inline supportnodes(mesh::FEMesh, cell::Int) = (@_propagate_inbounds_meta; mesh.cellsupports[cell])
+@inline supportnodes(mesh::FEMesh) = getfield(mesh, :usednodes)
+@inline supportnodes(mesh::FEMesh, cell::Int) = (@_propagate_inbounds_meta; cellsupports(mesh)[cell])
 
 FEMesh(mesh::CartesianMesh) = FEMesh(default_cellshape(mesh), mesh)
 default_cellshape(::CartesianMesh{1}) = Line2()
@@ -163,12 +164,12 @@ function Base.merge!(dest::FEMesh{S}, src::FEMesh{S}) where {S}
         end
     end
 
-    sortedinds_src = map(inds -> sort(nodemap[inds]), src.cellsupports)
-    sortedinds_dst = map(sort, dest.cellsupports)
+    sortedinds_src = map(inds -> sort(nodemap[inds]), cellsupports(src))
+    sortedinds_dst = map(sort, cellsupports(dest))
     for cell in cells(src)
         inds_src = sortedinds_src[cell]
         if all(inds_dest -> inds_src !== inds_dest, sortedinds_dst)
-            push!(dest.cellsupports, nodemap[supportnodes(src, cell)])
+            push!(cellsupports(dest), nodemap[supportnodes(src, cell)])
         end
     end
     _refresh_supportnodes!(dest)
@@ -177,7 +178,7 @@ function Base.merge!(dest::FEMesh{S}, src1::FEMesh{S}, src2::FEMesh{S}, others::
     merge!(merge!(dest, src1), src2, others...)
 end
 function Base.merge(x::FEMesh{S}, y::FEMesh{S}, z::FEMesh{S}...) where {S}
-    dest = FEMesh(cellshape(x), copy(x.nodes), copy(x.cellsupports))
+    dest = FEMesh(cellshape(x), copy(x.nodes), copy(cellsupports(x)))
     merge!(dest, y, z...)
 end
 
@@ -305,7 +306,7 @@ function _collect_supportnodes(cellsupports)
 end
 
 function _refresh_supportnodes!(mesh::FEMesh)
-    empty!(mesh.usednodes)
-    append!(mesh.usednodes, _collect_supportnodes(mesh.cellsupports))
+    empty!(supportnodes(mesh))
+    append!(supportnodes(mesh), _collect_supportnodes(cellsupports(mesh)))
     mesh
 end

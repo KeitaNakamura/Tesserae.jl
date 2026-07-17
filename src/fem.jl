@@ -7,13 +7,12 @@ end
 end
 
 """
-    update!(weights::BasisWeightArray{<:Shape}, points::QuadraturePoints, geometry::FEMesh; measure=nothing, normal=nothing)
+    update!(weights::BasisWeightArray{<:Shape}, points::QuadraturePoints, fieldmesh::FEMesh; geometry=fieldmesh, measure=nothing, normal=nothing)
 
-Evaluate the FEM field basis stored by `weights` at the reference points in
-`quadrature_rule(points)`. `geometry` supplies the mapping to physical space.
-The field and geometry may use different shapes from the same reference-cell
-family, provided that they describe the same cells in the same order and
-orientation.
+Evaluate the basis of `fieldmesh` using the quadrature rule stored in `points`,
+with `geometry` defining the physical mapping. `geometry` defaults to
+`fieldmesh`. If they differ, the meshes must describe the same cells in the
+same order and orientation.
 
 For full-dimensional cells, `weights` stores basis values and physical
 gradients. For boundary cells, it stores basis values. `measure` receives the
@@ -21,16 +20,20 @@ physical quadrature measure, and `normal` receives boundary unit normals.
 """
 function update!(
         weights::BasisWeightArray{S}, points::QuadraturePoints,
-        geometry::FEMesh{<: Shape{pdim}, dim};
+        fieldmesh::FEMesh{S, dim};
+        geometry::FEMesh=fieldmesh,
         measure::Union{Nothing, AbstractArray}=nothing,
         normal::Union{Nothing, AbstractArray}=nothing,
     ) where {pdim, dim, S <: Shape{pdim}}
+    length(eltype(geometry)) == dim || throw(DimensionMismatch("field and geometry physical dimensions must match"))
     _reference_cell_family(basis(weights)) === _reference_cell_family(cellshape(geometry)) || throw(ArgumentError("field and geometry must use the same reference-cell family"))
+    ncells(fieldmesh) == ncells(geometry) || throw(DimensionMismatch("field and geometry must have the same number of cells"))
+    set_cellsupports!(getfield(weights, :indices), cellsupports(fieldmesh))
     is_domain = pdim == dim
     mode = pdim == dim ? Val(:domain) : Val(:boundary)
     rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
 
-    field_shape = basis(weights)
+    field_shape = cellshape(fieldmesh)
     geometry_shape = cellshape(geometry)
     field_qdata = jet.(Ref(Order(1)), Ref(field_shape), rule.points)
     geometry_qdata = field_shape === geometry_shape ? field_qdata : jet.(Ref(Order(1)), Ref(geometry_shape), rule.points)

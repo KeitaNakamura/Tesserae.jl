@@ -352,6 +352,6 @@ plot_solution(domain, grid.u, outer_boundary, hole_boundary)
 FEMesh
 generate_field_meshes
 supportnodes(::FEMesh)
-update!(::BasisWeightArray{S}, ::QuadraturePoints, ::FEMesh{<:Tesserae.Shape{pdim},dim}) where {pdim,dim,S<:Tesserae.Shape{pdim}}
+update!(::BasisWeightArray{S}, ::QuadraturePoints, ::FEMesh{S,dim}) where {pdim,dim,S<:Tesserae.Shape{pdim}}
 readmsh
 ```

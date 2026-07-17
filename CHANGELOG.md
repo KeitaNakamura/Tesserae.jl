@@ -44,8 +44,9 @@ macros.
 - `CPDI` on `SpGrid` is now rejected explicitly; use a dense grid for CPDI.
   (#130)
 - `feupdate!` has been removed. Use
-  `update!(weights, points, geometry; measure=nothing, normal=nothing)` instead;
-  `points` carries the quadrature rule.
+  `update!(weights, points, fieldmesh; geometry=fieldmesh, measure=nothing,
+  normal=nothing)` instead; `points` carries the quadrature rule. For mixed
+  interpolation, pass the geometry mesh with the `geometry` keyword.
 - The finite-element mesh type has been renamed from `UnstructuredMesh` to
   `FEMesh`; the old name is no longer available. (#156)
 

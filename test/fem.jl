@@ -20,6 +20,7 @@
 
         @test_throws ArgumentError generate_particles(@NamedTuple{x::Vec{2,Float64}}, geometry, generate_quadrature_rule(Tesserae.Tri6()))
         @test quadrature_rule(points) === rule
+        @test Tesserae.cellsupports(getfield(weights, :indices)) === Tesserae.cellsupports(field)
         @test points[1,1] == parent(points)[1,1]
         points_view = @inferred view(points, :, [1])
         @test quadrature_rule(points_view) === rule
@@ -34,7 +35,7 @@
         @test parent(adapted_points) isa Tesserae.StructArray
         @test quadrature_rule(adapted_points) === rule
         @test supportnodes(weights[1,1]) == Tesserae.SVector(2, 3, 4, 5)
-        @test (@inferred update!(weights, points, geometry; measure=points.V)) === weights
+        @test (@inferred update!(weights, points, field; geometry, measure=points.V)) === weights
         for (q, (point, weight)) in enumerate(zip(rule.points, rule.weights))
             ξ, η = point
             N, dNdξ = Tesserae.jet(Order(1), Tesserae.Quad4(), point)
@@ -46,6 +47,11 @@
             @test points.V[q,1] ≈ weight * det(J)
         end
         @test sum(points.V) ≈ 1 + 2α / 3
+
+        other_field = FEMesh(Tesserae.Quad4(), field.nodes, [Tesserae.SVector(1, 2, 3, 4)])
+        update!(weights, points, other_field; geometry)
+        @test Tesserae.cellsupports(getfield(weights, :indices)) === Tesserae.cellsupports(other_field)
+        @test supportnodes(weights[1,1]) == Tesserae.SVector(1, 2, 3, 4)
     end
 
     @testset "Higher-order field" begin
@@ -62,8 +68,8 @@
 
         @test supportnodes(weights[1,1]) == Tesserae.SVector(2, 3, 4, 5, 6, 7, 8, 9, 10)
         value_weights = generate_basis_weights(field, size(points); derivative=Order(0))
-        @test_throws ArgumentError update!(value_weights, points, geometry)
-        @test update!(weights, points, geometry; measure=points.V) === weights
+        @test_throws ArgumentError update!(value_weights, points, field; geometry)
+        @test update!(weights, points, field; geometry, measure=points.V) === weights
         @test all(q -> weights[q,1].N ≈ Tesserae.value(Tesserae.Quad9(), rule.points[q]), eachindex(rule.points))
         @test all(q -> weights[q,1].∇N ≈ last(Tesserae.jet(Order(1), Tesserae.Quad9(), rule.points[q])) .⊡ Ref(inv(J)), eachindex(rule.points))
         @test points.V[:,1] ≈ rule.weights / 4
@@ -81,7 +87,7 @@
         points = generate_particles(@NamedTuple{x::Vec{2,Float64}, V::Float64}, geometry, rule)
         weights = generate_basis_weights(field, size(points); name=Val(:N))
 
-        update!(weights, points, geometry; measure=points.V)
+        update!(weights, points, field; geometry, measure=points.V)
         for (q, (point, weight)) in enumerate(zip(rule.points, rule.weights))
             @test weights[q,1].N ≈ Tesserae.value(Tesserae.Tri3(), point)
             @test supportnodes(weights[q,1]) == Tesserae.SVector(1, 2, 3)
@@ -98,7 +104,7 @@
         points = generate_particles(@NamedTuple{x::Vec{2,Float64}, dS::Float64, n::Vec{2,Float64}}, geometry, rule)
         weights = generate_basis_weights(field, size(points); name=Val(:N))
 
-        update!(weights, points, geometry; measure=points.dS, normal=points.n)
+        update!(weights, points, field; geometry, measure=points.dS, normal=points.n)
         for (q, (point, weight)) in enumerate(zip(rule.points, rule.weights))
             tangent = Vec(0.5, -2h * point[1])
             scale = norm(tangent)

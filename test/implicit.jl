@@ -322,8 +322,8 @@ end
     points = generate_particles(PointProp, geometry)
     velocity_weights = generate_basis_weights(quad9, size(points); name=Val(:N))
     pressure_weights = generate_basis_weights(quad4, size(points); name=Val(:N))
-    update!(velocity_weights, points, geometry; measure=points.V)
-    update!(pressure_weights, points, geometry)
+    update!(velocity_weights, points, quad9; geometry, measure=points.V)
+    update!(pressure_weights, points, quad4; geometry)
 
     @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
         A[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
