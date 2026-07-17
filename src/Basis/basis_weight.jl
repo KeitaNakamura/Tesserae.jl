@@ -292,7 +292,31 @@ end
 _generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
 
 # FEMesh
-_generate_supportnodes(::Shape, mesh::FEMesh, dims::Dims{2}) = _generate_cell_supportnodes(mesh, dims)
+mutable struct CellSupportMatrix{T, V <: AbstractVector{T}} <: AbstractMatrix{T}
+    const dims::Dims{2}
+    cellsupports::V
+end
+
+function CellSupportMatrix(supports::V, nq::Int, ncells::Int) where {T, V <: AbstractVector{T}}
+    ncells == length(supports) || throw(DimensionMismatch("the second basis-weight dimension must equal the number of cells"))
+    CellSupportMatrix{T, V}((nq, ncells), supports)
+end
+
+Base.size(A::CellSupportMatrix) = A.dims
+Base.IndexStyle(::Type{<: CellSupportMatrix}) = IndexCartesian()
+cellsupports(A::CellSupportMatrix) = getfield(A, :cellsupports)
+@inline function Base.getindex(A::CellSupportMatrix, q::Int, cell::Int)
+    @boundscheck checkbounds(A, q, cell)
+    @inbounds cellsupports(A)[cell]
+end
+
+function set_cellsupports!(A::CellSupportMatrix{T, V}, supports::V) where {T, V}
+    length(supports) == size(A, 2) || throw(DimensionMismatch("the number of cells must match the second basis-weight dimension"))
+    setfield!(A, :cellsupports, supports)
+    A
+end
+
+_generate_supportnodes(::Shape, mesh::FEMesh, dims::Dims{2}) = CellSupportMatrix(cellsupports(mesh), dims...)
 _generate_supportnodes(::Shape, ::FEMesh, ::Dims) = throw(DimensionMismatch("FEM basis weights must have dimensions (quadrature points, cells)"))
 
 function _generate_cell_supportnodes(mesh, dims::Dims{2})

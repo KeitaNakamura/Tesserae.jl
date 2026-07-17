@@ -68,8 +68,8 @@ end
 # FEMesh
 function KernelAbstractions.get_backend(mesh::FEMesh)
     backend = get_backend(mesh.nodes)
-    @assert get_backend(mesh.cellsupports) == backend
-    @assert get_backend(mesh.usednodes) == backend
+    @assert get_backend(cellsupports(mesh)) == backend
+    @assert get_backend(supportnodes(mesh)) == backend
     backend
 end
 
@@ -81,6 +81,9 @@ Adapt.adapt_structure(to, points::QuadraturePoints) = QuadraturePoints(adapt(to,
 KernelAbstractions.get_backend(points::QuadraturePoints) = get_backend(parent(points))
 
 # BasisWeightArray
+Adapt.adapt_structure(to, A::CellSupportMatrix) = CellSupportMatrix(adapt(to, cellsupports(A)), size(A)...)
+KernelAbstractions.get_backend(A::CellSupportMatrix) = get_backend(cellsupports(A))
+
 function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
     vals = map(a -> adapt(to, a), getfield(weights, :vals))

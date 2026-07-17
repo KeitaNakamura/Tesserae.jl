@@ -76,8 +76,8 @@ end
     @test length(mesh) == 35
     @test Tesserae.ncells(mesh) == 24
     @test collect(cells(mesh)) == collect(1:Tesserae.ncells(mesh))
-    @test supportnodes(mesh, 1) === mesh.cellsupports[1]
-    @test supportnodes(mesh) === mesh.usednodes
+    @test supportnodes(mesh, 1) === Tesserae.cellsupports(mesh)[1]
+    @test supportnodes(mesh) === getfield(mesh, :usednodes)
     @test supportnodes(mesh) == collect(eachindex(mesh))
     @test mesh == vec(cmesh)
     cmesh′ = CartesianMesh(0.5, (1,3), (1,4))
