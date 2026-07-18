@@ -166,10 +166,8 @@ plot_gmsh_groups(domain, outer_boundary, hole_boundary)
 Use the `domain` physical group as the finite-element mesh. From the transfer
 macros, the objects have the same roles as in MPM: `grid` stores nodal fields,
 `gauss_points` is the point array, and `weights` connects each point to the
-grid nodes. The meaning of the point array is different, though. For a
-`FEMesh`, `generate_particles` uses the cell quadrature rule by default and
-returns an `nq × ncells(domain)` array. Each column contains the Gauss points
-for one cell, ordered by the quadrature rule of the cell shape.
+grid nodes. `gauss_points` has one row per quadrature point and one column per
+cell.
 
 ```@example fem_plate
 GridProp = @NamedTuple begin
@@ -184,7 +182,8 @@ GaussProp = @NamedTuple begin
 end
 
 grid = generate_grid(GridProp, domain)
-gauss_points = generate_particles(GaussProp, domain)
+rule = generate_quadrature_rule(basis(domain))
+gauss_points = generate_particles(GaussProp, domain, rule)
 weights = generate_basis_weights(domain, size(gauss_points); name=Val(:N))
 
 update!(weights, gauss_points, domain; measure=gauss_points.V)
@@ -240,7 +239,8 @@ BoundaryGaussProp = @NamedTuple begin
     n :: Vec{2, Float64}
 end
 
-hole_gauss_points = generate_particles(BoundaryGaussProp, hole_boundary)
+boundary_rule = generate_quadrature_rule(basis(hole_boundary))
+hole_gauss_points = generate_particles(BoundaryGaussProp, hole_boundary, boundary_rule)
 hole_weights = generate_basis_weights(hole_boundary, size(hole_gauss_points); name=Val(:N))
 
 update!(

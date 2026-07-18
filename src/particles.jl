@@ -122,24 +122,24 @@ function generate_particles(mesh::CartesianMesh{dim, T}; alg::SamplingAlgorithm=
 end
 
 """
-    generate_particles(ParticleProp, mesh::FEMesh, rule=generate_quadrature_rule(cellshape(mesh)))
+    generate_particles(ParticleProp, mesh::FEMesh, rule::QuadratureRule)
 
 Generate one point-property record for each point of `rule` in every finite
 element cell. The result is a [`QuadraturePoints`](@ref) matrix whose rows are
 rule points and whose columns are cells.
 """
-function generate_particles(::Type{ParticleProp}, mesh::FEMesh, rule::QuadratureRule=generate_quadrature_rule(cellshape(mesh))) where {ParticleProp}
+function generate_particles(::Type{ParticleProp}, mesh::FEMesh, rule::QuadratureRule) where {ParticleProp}
     QuadraturePoints(_generate_particles(ParticleProp, generate_points(rule, mesh)), rule)
 end
 
 """
-    generate_particles(ParticleProp, mesh::IGAMesh, rule=generate_quadrature_rule(igabasis(mesh)))
+    generate_particles(ParticleProp, mesh::IGAMesh, rule::QuadratureRule)
 
 Generate one point-property record for each point of `rule` in every nonzero
 knot span. The result is a [`QuadraturePoints`](@ref) matrix whose rows are rule
 points and whose columns are cells.
 """
-function generate_particles(::Type{ParticleProp}, mesh::IGAMesh, rule::QuadratureRule=generate_quadrature_rule(igabasis(mesh))) where {ParticleProp}
+function generate_particles(::Type{ParticleProp}, mesh::IGAMesh, rule::QuadratureRule) where {ParticleProp}
     QuadraturePoints(_generate_particles(ParticleProp, generate_points(rule, mesh)), rule)
 end
 
