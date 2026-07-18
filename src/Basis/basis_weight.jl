@@ -291,7 +291,7 @@ end
 # CartesianMesh
 _generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
 
-# FEMesh
+# FEM/IGA
 mutable struct CellSupportMatrix{T, V <: AbstractVector{T}} <: AbstractMatrix{T}
     const dims::Dims{2}
     cellsupports::V
@@ -321,8 +321,7 @@ _generate_supportnodes(::Shape, ::FEMesh, ::Dims) = throw(DimensionMismatch("FEM
 
 function _generate_cell_supportnodes(mesh, dims::Dims{2})
     dims[2] == ncells(mesh) || throw(DimensionMismatch("the second basis-weight dimension must equal the number of cells"))
-    cell_supports = map(cell -> supportnodes(mesh, cell), cells(mesh))
-    map(I -> cell_supports[I[2]], CartesianIndices(dims))
+    CellSupportMatrix(map(cell -> supportnodes(mesh, cell), cells(mesh)), dims...)
 end
 
 _todims(x::Tuple{Vararg{Int}}) = x

@@ -50,33 +50,65 @@ function update!(
 end
 
 """
-    update!(weights::BasisWeightArray{<:IGABasis}, points::QuadraturePoints, geometry::IGAMesh; measure=nothing, normal=nothing)
+    update!(weights::BasisWeightArray{<:IGABasis}, points::QuadraturePoints, fieldmesh::IGAMesh; geometry=fieldmesh, measure=nothing, normal=nothing)
 
-Evaluate the IGA basis of `geometry` at the reference points in
-`quadrature_rule(points)` and store the result in `weights`. `measure` and
-`normal` have the same roles as in the FEM method.
+Evaluate the basis of `fieldmesh` using `geometry` for the physical mapping.
+The meshes may have different degrees and control-point numbering, but must
+have corresponding patches with the same nonzero knot-span intervals. `measure`
+and `normal` have the same roles as in the FEM method.
 """
 function update!(
         weights::BasisWeightArray{B}, points::QuadraturePoints,
-        geometry::IGAMesh{dim, pdim};
+        fieldmesh::IGAMesh{dim, pdim, T, Degrees};
+        geometry::IGAMesh{dim, pdim}=fieldmesh,
         measure::Union{Nothing, AbstractArray}=nothing,
         normal::Union{Nothing, AbstractArray}=nothing,
-    ) where {dim, pdim, B <: IGABasis{pdim}}
-    degrees(basis(weights)) == degrees(igabasis(geometry)) || throw(ArgumentError("IGA field and geometry degrees must match"))
+    ) where {dim, pdim, T, Degrees, B <: IGABasis{pdim, Degrees}}
     is_domain = pdim == dim
     mode = pdim == dim ? Val(:domain) : Val(:boundary)
     rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
+    fieldmesh === geometry && return _update_iga!(mode, weights, rule, fieldmesh, measure, normal)
+    _check_iga_cell_partition(fieldmesh, geometry)
 
-    for cell in cells(geometry)
-        indices = supportnodes(geometry, cell)
-        supportnodes(weights[1,cell]) == indices || throw(ArgumentError("IGA basis weights and geometry must use the same cell connectivity"))
-        x = geometry[indices]
-        patch = patches(geometry, cell.patch)
+    field_supports = cellsupports(getfield(weights, :indices))
+    for (field_cell, geometry_cell) in zip(cells(fieldmesh), cells(geometry))
+        field_indices = supportnodes(fieldmesh, field_cell)
+        @inbounds field_supports[field_cell] = field_indices
+        geometry_indices = supportnodes(geometry, geometry_cell)
+        field_patch = patches(fieldmesh, field_cell.patch)
+        geometry_patch = patches(geometry, geometry_cell.patch)
+        x = geometry[geometry_indices]
+        for q in eachindex(rule.points, rule.weights)
+            field_ξ = span_point(field_patch, field_cell.span, rule.points[q])
+            N, dNdξ = iga_basis_values_and_gradients(field_patch, field_cell.span, field_ξ)
+            if fieldmesh.weights !== nothing
+                N, dNdξ = rational_basis_values_and_gradients(N, dNdξ, fieldmesh.weights[field_indices])
+            end
+            geometry_ξ = span_point(geometry_patch, geometry_cell.span, rule.points[q])
+            geometry_N, geometry_dNdξ = iga_basis_values_and_gradients(geometry_patch, geometry_cell.span, geometry_ξ)
+            if geometry.weights !== nothing
+                _, geometry_dNdξ = rational_basis_values_and_gradients(geometry_N, geometry_dNdξ, geometry.weights[geometry_indices])
+            end
+            J = sum(x .⊗ geometry_dNdξ)
+            weight = span_weight(geometry_patch, geometry_cell.span, rule.weights[q])
+            _set_quadrature_data!(mode, weights[q,field_cell], measure, normal, q, geometry_cell, N, dNdξ, J, weight)
+        end
+    end
+    weights
+end
+
+function _update_iga!(mode, weights, rule, mesh, measure, normal)
+    field_supports = cellsupports(getfield(weights, :indices))
+    for cell in cells(mesh)
+        indices = supportnodes(mesh, cell)
+        @inbounds field_supports[cell] = indices
+        x = mesh[indices]
+        patch = patches(mesh, cell.patch)
         for q in eachindex(rule.points, rule.weights)
             ξ = span_point(patch, cell.span, rule.points[q])
             N, dNdξ = iga_basis_values_and_gradients(patch, cell.span, ξ)
-            if geometry.weights !== nothing
-                N, dNdξ = rational_basis_values_and_gradients(N, dNdξ, geometry.weights[indices])
+            if mesh.weights !== nothing
+                N, dNdξ = rational_basis_values_and_gradients(N, dNdξ, mesh.weights[indices])
             end
             J = sum(x .⊗ dNdξ)
             weight = span_weight(patch, cell.span, rule.weights[q])
@@ -84,6 +116,23 @@ function update!(
         end
     end
     weights
+end
+
+function _check_iga_cell_partition(fieldmesh, geometry)
+    length(patches(fieldmesh)) == length(patches(geometry)) || throw(DimensionMismatch("field and geometry must have the same number of patches"))
+    for (field_patch, geometry_patch) in zip(patches(fieldmesh), patches(geometry))
+        for d in eachindex(degrees(field_patch))
+            field_knots = field_patch.knot_vectors[d]
+            geometry_knots = geometry_patch.knot_vectors[d]
+            field_spans = Iterators.filter(i -> _has_positive_span(field_knots, i), _active_span_range(field_knots, degrees(field_patch, d)))
+            geometry_spans = Iterators.filter(i -> _has_positive_span(geometry_knots, i), _active_span_range(geometry_knots, degrees(geometry_patch, d)))
+            _span_count(field_knots, degrees(field_patch, d)) == _span_count(geometry_knots, degrees(geometry_patch, d)) || throw(DimensionMismatch("field and geometry must have the same number of nonzero knot spans"))
+            for (field_span, geometry_span) in zip(field_spans, geometry_spans)
+                field_knots[field_span] == geometry_knots[geometry_span] && field_knots[field_span+1] == geometry_knots[geometry_span+1] || throw(ArgumentError("field and geometry must have the same nonzero knot spans"))
+            end
+        end
+    end
+    nothing
 end
 
 function _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
