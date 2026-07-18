@@ -68,7 +68,7 @@ function update!(
     mode = pdim == dim ? Val(:domain) : Val(:boundary)
     rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
     fieldmesh === geometry && return _update_iga!(mode, weights, rule, fieldmesh, measure, normal)
-    _check_iga_cell_partition(fieldmesh, geometry)
+    check_matching_cell_partitions(fieldmesh, geometry)
 
     field_supports = cellsupports(getfield(weights, :indices))
     for (field_cell, geometry_cell) in zip(cells(fieldmesh), cells(geometry))
@@ -116,23 +116,6 @@ function _update_iga!(mode, weights, rule, mesh, measure, normal)
         end
     end
     weights
-end
-
-function _check_iga_cell_partition(fieldmesh, geometry)
-    length(patches(fieldmesh)) == length(patches(geometry)) || throw(DimensionMismatch("field and geometry must have the same number of patches"))
-    for (field_patch, geometry_patch) in zip(patches(fieldmesh), patches(geometry))
-        for d in eachindex(degrees(field_patch))
-            field_knots = field_patch.knot_vectors[d]
-            geometry_knots = geometry_patch.knot_vectors[d]
-            field_spans = Iterators.filter(i -> _has_positive_span(field_knots, i), _active_span_range(field_knots, degrees(field_patch, d)))
-            geometry_spans = Iterators.filter(i -> _has_positive_span(geometry_knots, i), _active_span_range(geometry_knots, degrees(geometry_patch, d)))
-            _span_count(field_knots, degrees(field_patch, d)) == _span_count(geometry_knots, degrees(geometry_patch, d)) || throw(DimensionMismatch("field and geometry must have the same number of nonzero knot spans"))
-            for (field_span, geometry_span) in zip(field_spans, geometry_spans)
-                field_knots[field_span] == geometry_knots[geometry_span] && field_knots[field_span+1] == geometry_knots[geometry_span+1] || throw(ArgumentError("field and geometry must have the same nonzero knot spans"))
-            end
-        end
-    end
-    nothing
 end
 
 function _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)

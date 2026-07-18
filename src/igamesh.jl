@@ -277,6 +277,24 @@ function cells(mesh::IGAMesh)
 end
 _patch_cells(p, patch) = ((p, span) for span in _span_indices(patch))
 
+# Check that both meshes enumerate the same nonzero knot-span cells in the same order.
+function check_matching_cell_partitions(mesh1::IGAMesh, mesh2::IGAMesh)
+    length(patches(mesh1)) == length(patches(mesh2)) || throw(DimensionMismatch("IGA meshes must have the same number of patches"))
+    for (patch1, patch2) in zip(patches(mesh1), patches(mesh2))
+        for d in eachindex(degrees(patch1))
+            knots1 = patch1.knot_vectors[d]
+            knots2 = patch2.knot_vectors[d]
+            spans1 = Iterators.filter(i -> _has_positive_span(knots1, i), _active_span_range(knots1, degrees(patch1, d)))
+            spans2 = Iterators.filter(i -> _has_positive_span(knots2, i), _active_span_range(knots2, degrees(patch2, d)))
+            _span_count(knots1, degrees(patch1, d)) == _span_count(knots2, degrees(patch2, d)) || throw(DimensionMismatch("IGA meshes must have the same number of nonzero knot spans"))
+            for (span1, span2) in zip(spans1, spans2)
+                knots1[span1] == knots2[span2] && knots1[span1+1] == knots2[span2+1] || throw(ArgumentError("IGA meshes must have the same nonzero knot spans"))
+            end
+        end
+    end
+    nothing
+end
+
 """
     supportnodes(mesh::IGAMesh)
     supportnodes(mesh::IGAMesh, cell::IGACell)
