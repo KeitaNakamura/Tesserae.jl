@@ -254,10 +254,45 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test sum(measure[:, meshcells[1]]) ≈ 1/16
         @test sum(measure) ≈ 1
 
+        field = IGAMesh(cmesh; degree=Linear(), weights=range(1.0, 1.5; length=length(cmesh)))
+        geometry = IGAMesh(cmesh; degree=Quadratic(), weights=range(1.0, 2.0; length=length(mesh)))
+        mixed_points = generate_particles(@NamedTuple{x::Vec{2,Float64}}, geometry, qrule)
+        mixed_weights = generate_basis_weights(field, size(mixed_points); name=Val(:N))
+        mixed_measure = zeros(Float64, size(mixed_weights))
+        @test (@inferred update!(mixed_weights, mixed_points, field; geometry, measure=mixed_measure)) === mixed_weights
+
+        field_cell = first(cells(field))
+        geometry_cell = first(cells(geometry))
+        field_patch = Tesserae.patches(field, field_cell.patch)
+        geometry_patch = Tesserae.patches(geometry, geometry_cell.patch)
+        field_ids = supportnodes(field, field_cell)
+        geometry_ids = supportnodes(geometry, geometry_cell)
+        for q in eachindex(qrule.points, qrule.weights)
+            field_ξ = Tesserae.span_point(field_patch, field_cell.span, qrule.points[q])
+            N, dNdξ = Tesserae.iga_basis_values_and_gradients(field_patch, field_cell.span, field_ξ)
+            N, dNdξ = Tesserae.rational_basis_values_and_gradients(N, dNdξ, field.weights[field_ids])
+            geometry_ξ = Tesserae.span_point(geometry_patch, geometry_cell.span, qrule.points[q])
+            geometry_N, geometry_dNdξ = Tesserae.iga_basis_values_and_gradients(geometry_patch, geometry_cell.span, geometry_ξ)
+            _, geometry_dNdξ = Tesserae.rational_basis_values_and_gradients(geometry_N, geometry_dNdξ, geometry.weights[geometry_ids])
+            J = sum(geometry[geometry_ids] .⊗ geometry_dNdξ)
+            @test mixed_weights[q,field_cell].N ≈ N
+            @test mixed_weights[q,field_cell].∇N ≈ dNdξ .⊡ Ref(inv(J))
+            @test supportnodes(mixed_weights[q,field_cell]) == field_ids
+            @test mixed_measure[q,geometry_cell] ≈ Tesserae.span_weight(geometry_patch, geometry_cell.span, qrule.weights[q]) * sqrt(det(J'J))
+        end
+
         reversed_patch = IGAPatch(iga_test_degrees(patch), map(copy, iga_test_knot_vectors(patch)), reverse(patch.controlpoint_ids))
         reversed_mesh = IGAMesh([reversed_patch], mesh.controlpoints)
-        reversed_weights = generate_basis_weights(reversed_mesh, size(points))
-        @test_throws ArgumentError update!(reversed_weights, points, mesh)
+        reversed_weights = generate_basis_weights(mesh, size(points))
+        @test update!(reversed_weights, points, reversed_mesh; geometry=mesh) === reversed_weights
+        @test supportnodes(reversed_weights[1,first(meshcells)]) == supportnodes(reversed_mesh, first(cells(reversed_mesh)))
+
+        mismatched_knots = map(copy, iga_test_knot_vectors(patch))
+        mismatched_knots[1][4] = 0.2
+        mismatched_patch = IGAPatch(iga_test_degrees(patch), mismatched_knots, copy(patch.controlpoint_ids))
+        mismatched_field = IGAMesh([mismatched_patch], mesh.controlpoints)
+        mismatched_weights = generate_basis_weights(mismatched_field, size(points))
+        @test_throws ArgumentError update!(mismatched_weights, points, mismatched_field; geometry=mesh)
 
         # Rational updates should use rational basis values in both N and ∇N.
         rational_mesh = IGAMesh(cmesh; degree=Quadratic(), weights=range(1.0, 2.0; length=length(mesh)))

@@ -67,14 +67,20 @@ struct IGAMesh{dim, pdim, T, Degrees <: NTuple{pdim, Degree}} <: AbstractMesh{di
     end
 end
 
-function IGAMesh(patches::Vector{IGAPatch{pdim, T, Degrees}}, controlpoints::Vector{Vec{dim, T}}, weights=nothing) where {dim, T, pdim, Degrees <: NTuple{pdim, Degree}}
-    IGAMesh{dim, pdim, T, Degrees}(patches, controlpoints, _controlpoint_weights(T, weights))
+function _check_iga_mesh(patches, controlpoints, weights)
+    isempty(patches) && throw(ArgumentError("patches must not be empty"))
+    _check_controlpoint_weights(weights, controlpoints)
+    for patch in patches
+        ids = patch.controlpoint_ids
+        minimum(ids) < 1 && throw(ArgumentError("controlpoint ids must be positive"))
+        maximum(ids) > length(controlpoints) && throw(ArgumentError("controlpoint ids must not exceed the number of control points"))
+    end
+    nothing
 end
-
-function IGAMesh(mesh::CartesianMesh{dim, T}; degree::Degree, weights=nothing) where {dim, T}
-    patch_degrees = _uniform_degrees(degree, Val(dim))
-    patch, controlpoints = _patch_from_cartesian_mesh(mesh, patch_degrees)
-    IGAMesh([patch], controlpoints, _controlpoint_weights(T, weights))
+_check_controlpoint_weights(::Nothing, controlpoints) = nothing
+function _check_controlpoint_weights(weights::AbstractVector, controlpoints)
+    length(weights) == length(controlpoints) || throw(ArgumentError("weights length must match controlpoints length"))
+    nothing
 end
 
 function _collect_used_controlpoint_ids(patches::AbstractVector{<: IGAPatch})
@@ -83,6 +89,16 @@ function _collect_used_controlpoint_ids(patches::AbstractVector{<: IGAPatch})
         append!(nodes, patch.controlpoint_ids)
     end
     unique!(sort!(nodes))
+end
+
+function IGAMesh(patches::Vector{IGAPatch{pdim, T, Degrees}}, controlpoints::Vector{Vec{dim, T}}, weights=nothing) where {dim, T, pdim, Degrees <: NTuple{pdim, Degree}}
+    IGAMesh{dim, pdim, T, Degrees}(patches, controlpoints, _controlpoint_weights(T, weights))
+end
+
+function IGAMesh(mesh::CartesianMesh{dim, T}; degree::Degree, weights=nothing) where {dim, T}
+    patch_degrees = _uniform_degrees(degree, Val(dim))
+    patch, controlpoints = _patch_from_cartesian_mesh(mesh, patch_degrees)
+    IGAMesh([patch], controlpoints, _controlpoint_weights(T, weights))
 end
 
 """
@@ -107,7 +123,7 @@ function IGAMesh(nets::AbstractVector{<: NURBS.ControlNet{dim, pdim, T}}; merge:
     weights = T[]
     for net in nets
         degrees(net) == patch_degrees || throw(ArgumentError("control net degrees must match"))
-        ids = controlpoint_ids!(controlpoints, weights, net; merge, atol, rtol)
+        ids = register_controlpoints_and_weights!(controlpoints, weights, net; merge, atol, rtol)
         push!(patches, IGAPatch(patch_degrees, knot_vectors(net), ids))
     end
     IGAMesh(patches, controlpoints, weights)
@@ -116,7 +132,7 @@ end
 degrees(net::NURBS.ControlNet) = map(axis -> Degree(axis.degree), net.axes)
 knot_vectors(net::NURBS.ControlNet) = map(axis -> copy(axis.knot_vector), net.axes)
 
-function controlpoint_ids!(controlpoints, weights, net::NURBS.ControlNet; merge::Bool, atol, rtol)
+function register_controlpoints_and_weights!(controlpoints, weights, net::NURBS.ControlNet; merge::Bool, atol, rtol)
     controlpoint_ids = Array{Int}(undef, size(net.points))
     for I in CartesianIndices(net.points)
         id = merge ? matching_controlpoint(controlpoints, weights, net.points[I], net.weights[I], atol, rtol) : 0
@@ -198,22 +214,6 @@ end
 @inline function Base.setindex!(mesh::IGAMesh, x, i::Int)
     @_propagate_inbounds_meta
     mesh.controlpoints[i] = x
-end
-
-function _check_iga_mesh(patches, controlpoints, weights)
-    isempty(patches) && throw(ArgumentError("patches must not be empty"))
-    _check_controlpoint_weights(weights, controlpoints)
-    for patch in patches
-        ids = patch.controlpoint_ids
-        minimum(ids) < 1 && throw(ArgumentError("controlpoint ids must be positive"))
-        maximum(ids) > length(controlpoints) && throw(ArgumentError("controlpoint ids must not exceed the number of control points"))
-    end
-    nothing
-end
-_check_controlpoint_weights(::Nothing, controlpoints) = nothing
-function _check_controlpoint_weights(weights::AbstractVector, controlpoints)
-    length(weights) == length(controlpoints) || throw(ArgumentError("weights length must match controlpoints length"))
-    nothing
 end
 
 """

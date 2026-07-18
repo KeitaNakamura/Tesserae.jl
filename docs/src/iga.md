@@ -403,7 +403,7 @@ IGAPatch
 IGAMesh
 IGABasis
 boundaries
-update!(::BasisWeightArray{B}, ::QuadraturePoints, ::IGAMesh{dim,pdim}) where {dim,pdim,B<:IGABasis{pdim}}
+update!(::BasisWeightArray{B}, ::QuadraturePoints, ::IGAMesh{dim,pdim,T,Degrees}) where {dim,pdim,T,Degrees,B<:IGABasis{pdim,Degrees}}
 ```
 
 ### NURBS
