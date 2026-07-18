@@ -367,6 +367,38 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test size(C) == (2 * length(mesh), length(mesh))
         @test eltype(C) === Float32
         @test stored_pattern(C) == mixed_pattern
+
+        # Distinct row and column spaces use their own support nodes in each corresponding span.
+        linear_mesh = IGAMesh(cmesh; degree=Linear())
+        linear_patch = Tesserae.patches(linear_mesh, 1)
+        reversed_patch = IGAPatch(iga_test_degrees(linear_patch), map(copy, iga_test_knot_vectors(linear_patch)), reverse(linear_patch.controlpoint_ids))
+        column_mesh = IGAMesh([reversed_patch], linear_mesh.controlpoints)
+        rectangular_pattern = Set{Tuple{Int,Int}}()
+        column_dofs = LinearIndices((1, length(column_mesh)))
+        for (rowcell, colcell) in zip(cells(mesh), cells(column_mesh))
+            rownodes = supportnodes(mesh, rowcell)
+            colnodes = supportnodes(column_mesh, colcell)
+            for j in colnodes, i in rownodes, col in column_dofs[:,j], row in row_dofs[:,i]
+                push!(rectangular_pattern, (row, col))
+            end
+        end
+
+        D = @inferred create_sparse_matrix((mesh, column_mesh); ndofs=(2, 1))
+        D32 = @inferred create_sparse_matrix(Float32, (mesh, column_mesh); ndofs=(2, 1))
+        @test size(D) == (2 * length(mesh), length(column_mesh))
+        @test eltype(D32) === Float32
+        @test stored_pattern(D) == rectangular_pattern
+        @test stored_pattern(D32) == rectangular_pattern
+
+        # Equal cell counts are insufficient when the span endpoints differ.
+        mismatched_knots = map(copy, iga_test_knot_vectors(patch))
+        mismatched_knots[1][4] = 0.2
+        mismatched_patch = IGAPatch(iga_test_degrees(patch), mismatched_knots, copy(patch.controlpoint_ids))
+        mismatched_mesh = IGAMesh([mismatched_patch], mesh.controlpoints)
+        @test_throws ArgumentError create_sparse_matrix((mesh, mismatched_mesh); ndofs=(2, 1))
+
+        coarse_mesh = IGAMesh(CartesianMesh(0.5, (0,1), (0,1)); degree=Linear())
+        @test_throws DimensionMismatch create_sparse_matrix((mesh, coarse_mesh); ndofs=(2, 1))
     end
 
     @testset "Heat problem" begin

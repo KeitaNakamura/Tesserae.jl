@@ -71,12 +71,16 @@ function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
 end
 
 """
+    create_sparse_matrix(mesh; ndofs)
+    create_sparse_matrix((rowmesh, colmesh); ndofs=(row_ndofs, col_ndofs))
     create_sparse_matrix(basis, mesh; ndofs)
 
 Create a sparse matrix.
 Since the created matrix accounts for all nodes in the mesh,
 it needs to be extracted for active nodes using the `DofMap`.
 `ndofs` specifies the number of DoFs for a field and must be provided explicitly.
+For a mesh pair, the first mesh defines the rows and the second defines the
+columns.
 
 ```jldoctest
 julia> mesh = CartesianMesh(1, (0,10), (0,10));
@@ -202,6 +206,20 @@ _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Int) where {T} = _create_
 _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
 create_sparse_matrix(::Type{T}, mesh::IGAMesh{dim}; ndofs) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
 create_sparse_matrix(mesh::IGAMesh{dim}; ndofs) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
+
+function create_sparse_matrix(::Type{T}, (rowmesh,colmesh)::Tuple{IGAMesh{dim,pdim}, IGAMesh{dim,pdim}}; ndofs::Tuple{Int, Int}) where {T, dim, pdim}
+    rowmesh === colmesh && return _create_cell_support_sparse_matrix(T, rowmesh, ndofs)
+    check_matching_cell_partitions(rowmesh, colmesh)
+
+    row_dofs = LinearIndices((ndofs[1], length(rowmesh)))
+    col_dofs = LinearIndices((ndofs[2], length(colmesh)))
+    I, J = Int[], Int[]
+    for (rowcell, colcell) in zip(cells(rowmesh), cells(colmesh))
+        append_dofs!(I, J, row_dofs[:, supportnodes(rowmesh, rowcell)], col_dofs[:, supportnodes(colmesh, colcell)])
+    end
+    sparse(I, J, zeros(T, length(I)), length(row_dofs), length(col_dofs))
+end
+create_sparse_matrix(meshes::Tuple{IGAMesh{dim,pdim}, IGAMesh{dim,pdim}}; ndofs::Tuple{Int, Int}) where {dim, pdim} = create_sparse_matrix(Float64, meshes; ndofs)
 
 function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) where {T}
     mesh1 === mesh2 && return _create_cell_support_sparse_matrix(T, mesh1, ndofs)
