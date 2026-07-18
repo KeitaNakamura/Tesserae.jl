@@ -319,7 +319,8 @@ end
     PointProp = @NamedTuple{x::Vec{2,Float64}, V::Float64}
     velocity_grid = generate_grid(GridPropU, quad9)
     pressure_grid = generate_grid(GridPropP, quad4)
-    points = generate_particles(PointProp, geometry)
+    rule = generate_quadrature_rule(basis(geometry))
+    points = generate_particles(PointProp, geometry, rule)
     velocity_weights = generate_basis_weights(quad9, size(points); name=Val(:N))
     pressure_weights = generate_basis_weights(quad4, size(points); name=Val(:N))
     update!(velocity_weights, points, quad9; geometry, measure=points.V)

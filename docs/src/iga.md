@@ -249,9 +249,7 @@ plot_patch(surface)
 
 From the transfer macros, the objects have the same roles as in MPM and FEM:
 `grid` stores the control-point fields, `gauss_points` is the point array, and
-`weights` connects each Gauss point to the active control points. For an
-[`IGAMesh`](@ref), `generate_particles` uses the tensor-product Gauss rule for
-the patch degree and returns an `nq × ncells(mesh)` array.
+`weights` connects each Gauss point to the active control points.
 
 ```@example iga_annulus
 GridProp = @NamedTuple begin
@@ -267,7 +265,8 @@ GaussProp = @NamedTuple begin
 end
 
 grid = generate_grid(GridProp, mesh)
-gauss_points = generate_particles(GaussProp, mesh)
+rule = generate_quadrature_rule(basis(mesh))
+gauss_points = generate_particles(GaussProp, mesh, rule)
 weights = generate_basis_weights(mesh, size(gauss_points); name=Val(:N))
 
 update!(weights, gauss_points, mesh; measure=gauss_points.V)

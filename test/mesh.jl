@@ -182,7 +182,8 @@ end
             x      :: Vec{dim, Float64}
             detJdV :: Float64
         end
-        points = generate_particles(ParticleProp, mesh)
+        rule = generate_quadrature_rule(basis(mesh))
+        points = generate_particles(ParticleProp, mesh, rule)
         weights = generate_basis_weights(mesh, size(points))
         update!(weights, points, mesh; measure=points.detJdV)
         sum(points.detJdV)
@@ -212,7 +213,8 @@ end
             detJdA :: Float64
         end
         mesh_face = Tesserae.extract_face(mesh_body, 1:length(mesh_body))
-        points = generate_particles(ParticleProp, mesh_face)
+        rule = generate_quadrature_rule(basis(mesh_face))
+        points = generate_particles(ParticleProp, mesh_face, rule)
         weights = generate_basis_weights(mesh_face, size(points))
         update!(weights, points, mesh_face; normal=points.n, measure=points.detJdA)
         sum(points.detJdA)
@@ -240,7 +242,8 @@ end
         n      :: Vec{3, Float64}
         detJdL :: Float64
     end
-    line_points = generate_particles(LinePointProp, line_mesh)
+    line_rule = generate_quadrature_rule(basis(line_mesh))
+    line_points = generate_particles(LinePointProp, line_mesh, line_rule)
     line_weights = generate_basis_weights(line_mesh, size(line_points))
     update!(line_weights, line_points, line_mesh; measure=line_points.detJdL)
     @test sum(line_points.detJdL) ≈ 3

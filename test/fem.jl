@@ -18,6 +18,8 @@
         points = @inferred generate_particles(@NamedTuple{x::Vec{2,Float64}, V::Float64}, geometry, rule)
         weights = @inferred generate_basis_weights(field, size(points); name=Val(:N))
 
+        @test (@inferred basis(geometry)) === Tesserae.cellshape(geometry)
+        @test_throws MethodError generate_particles(@NamedTuple{x::Vec{2,Float64}}, geometry)
         @test_throws ArgumentError generate_particles(@NamedTuple{x::Vec{2,Float64}}, geometry, generate_quadrature_rule(Tesserae.Tri6()))
         @test quadrature_rule(points) === rule
         @test Tesserae.cellsupports(getfield(weights, :indices)) === Tesserae.cellsupports(field)
@@ -117,7 +119,8 @@
 
     @testset "Empty domain" begin
         mesh = FEMesh(Tesserae.Quad4(), Vec{2,Float64}[], Tesserae.SVector{4,Int}[])
-        points = generate_particles(@NamedTuple{x::Vec{2,Float64}, V::Float64}, mesh)
+        rule = generate_quadrature_rule(basis(mesh))
+        points = generate_particles(@NamedTuple{x::Vec{2,Float64}, V::Float64}, mesh, rule)
         weights = generate_basis_weights(mesh, size(points))
         @test update!(weights, points, mesh; measure=points.V) === weights
     end

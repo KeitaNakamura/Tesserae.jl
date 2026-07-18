@@ -28,7 +28,8 @@ function main()
     grid = generate_grid(GridProp, mesh)
 
     ## Integration points
-    points = generate_particles(PointProp, mesh)
+    rule = generate_quadrature_rule(basis(mesh))
+    points = generate_particles(PointProp, mesh, rule)
 
     ## Basis weights
     weights = generate_basis_weights(mesh, size(points); name=Val(:N))

@@ -15,8 +15,8 @@ const nurbs_cubic = Tesserae.NURBS.cubic
     cmesh = CartesianMesh(0.25, (0,1), (0,1))
     mesh = IGAMesh(cmesh; degree=Quadratic())
     meshcells = collect(cells(mesh))
-    basis = @inferred Tesserae.igabasis(mesh)
-    qrule = generate_quadrature_rule(basis)
+    mesh_basis = @inferred basis(mesh)
+    qrule = generate_quadrature_rule(mesh_basis)
     patch = Tesserae.patches(mesh, 1)
     span = first(meshcells).span
     ξ = Tesserae.span_point(patch, span, first(qrule.points))
@@ -30,9 +30,9 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test meshcells[1] == IGACell(1, 1, CartesianIndex(3,3))
         @test meshcells[end] == IGACell(16, 1, CartesianIndex(6,6))
         @test iga_test_degrees(patch) == (Quadratic(), Quadratic())
-        @test typeof(basis) === IGABasis{2, Tuple{Quadratic, Quadratic}}
-        @test iga_test_degrees(basis) == (Quadratic(), Quadratic())
-        @test (@inferred Tesserae.nsupportnodes(basis)) === 9
+        @test typeof(mesh_basis) === IGABasis{2, Tuple{Quadratic, Quadratic}}
+        @test iga_test_degrees(mesh_basis) == (Quadratic(), Quadratic())
+        @test (@inferred Tesserae.nsupportnodes(mesh_basis)) === 9
         @test supportnodes(mesh) === mesh.used_controlpoint_ids
         @test supportnodes(mesh) == collect(eachindex(mesh))
         @test (@inferred supportnodes(mesh, meshcells[1])) === Tesserae.SVector(1, 2, 3, 7, 8, 9, 13, 14, 15)
@@ -134,7 +134,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test length(high_order_rule.points) == 21
         @test eltype(high_order_rule.weights) === Float32
         @test sum(high_order_rule.weights) ≈ 4
-        @test_throws ArgumentError generate_quadrature_rule(BigFloat, basis)
+        @test_throws ArgumentError generate_quadrature_rule(BigFloat, mesh_basis)
         anisotropic_rule = @inferred generate_quadrature_rule(IGABasis((Linear(), Quadratic())))
         @test length(anisotropic_rule.points) == 6
         @test sum(anisotropic_rule.weights) ≈ 4
@@ -208,7 +208,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         # direct mesh support queries.
         igaweights = @inferred generate_basis_weights(Float64, mesh, 2, Tesserae.ncells(mesh))
         @test size(igaweights) == (2, Tesserae.ncells(mesh))
-        @test typeof(Tesserae.basis(igaweights)) === typeof(basis)
+        @test typeof(Tesserae.basis(igaweights)) === typeof(mesh_basis)
         @test size(igaweights[1, meshcells[end]].w) == (9,)
         @test size(igaweights[1, meshcells[end]].∇w) == (9,)
         @test length(supportnodes(igaweights[1, meshcells[end]])) == 9
@@ -224,7 +224,8 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         PointProp = @NamedTuple{x::Vec{2,Float64}, V::Float64}
 
         # IGA particles are the physical images of the basis quadrature points.
-        points = @inferred generate_particles(PointProp, mesh)
+        @test_throws MethodError generate_particles(PointProp, mesh)
+        points = @inferred generate_particles(PointProp, mesh, qrule)
         indices = supportnodes(mesh, first(meshcells))
         N, _ = Tesserae.iga_basis_values_and_gradients(patch, span, ξ)
         @test size(points) == (length(qrule.points), Tesserae.ncells(mesh))
@@ -233,7 +234,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
         # Rational geometry uses rational basis values for the same mapping.
         rational_mesh = IGAMesh(cmesh; degree=Quadratic(), weights=range(1.0, 2.0; length=length(mesh)))
-        rational_points = @inferred generate_particles(PointProp, rational_mesh)
+        rational_points = @inferred generate_particles(PointProp, rational_mesh, qrule)
         rational_cell = first(cells(rational_mesh))
         rational_patch = Tesserae.patches(rational_mesh, rational_cell.patch)
         rational_ξ = Tesserae.span_point(rational_patch, rational_cell.span, first(qrule.points))
@@ -296,7 +297,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
         # Rational updates should use rational basis values in both N and ∇N.
         rational_mesh = IGAMesh(cmesh; degree=Quadratic(), weights=range(1.0, 2.0; length=length(mesh)))
-        rational_points = generate_particles(@NamedTuple{x::Vec{2,Float64}}, rational_mesh)
+        rational_points = generate_particles(@NamedTuple{x::Vec{2,Float64}}, rational_mesh, qrule)
         rational_weights = generate_basis_weights(Float64, rational_mesh, size(rational_points))
         rational_measure = zeros(Float64, size(rational_weights))
         @test update!(rational_weights, rational_points, rational_mesh; measure=rational_measure) === rational_weights
@@ -317,7 +318,8 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         boundary_patch = IGAPatch((Quadratic(),), (copy(iga_test_knot_vectors(patch)[1]),), Array(patch.controlpoint_ids[:,1]))
         boundary_mesh = IGAMesh([boundary_patch], mesh.controlpoints)
         @test supportnodes(boundary_mesh) == collect(patch.controlpoint_ids[:,1])
-        boundary_points = generate_particles(@NamedTuple{x::Vec{2,Float64}}, boundary_mesh)
+        boundary_rule = generate_quadrature_rule(basis(boundary_mesh))
+        boundary_points = generate_particles(@NamedTuple{x::Vec{2,Float64}}, boundary_mesh, boundary_rule)
         boundary_weights = generate_basis_weights(boundary_mesh, size(boundary_points); name=Val(:N))
         measure = zeros(Float64, size(boundary_weights))
         normal = zeros(Vec{2, Float64}, size(boundary_weights))
@@ -333,7 +335,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         end
 
         @test_throws UndefKeywordError create_sparse_matrix(mesh)
-        @test_throws UndefKeywordError create_sparse_matrix(basis, mesh)
+        @test_throws UndefKeywordError create_sparse_matrix(mesh_basis, mesh)
 
         # The scalar matrix pattern must be exactly the union of each cell's
         # support-node pairings. Values are assembled later by @P2G_Matrix.
@@ -346,7 +348,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         end
 
         A = @inferred create_sparse_matrix(mesh; ndofs=1)
-        B = @inferred create_sparse_matrix(basis, mesh; ndofs=1)
+        B = @inferred create_sparse_matrix(mesh_basis, mesh; ndofs=1)
         @test size(A) == (length(mesh), length(mesh))
         @test stored_pattern(A) == scalar_pattern
         @test stored_pattern(B) == scalar_pattern
@@ -363,7 +365,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
             end
         end
 
-        C = @inferred create_sparse_matrix(Float32, basis, mesh; ndofs=(2, 1))
+        C = @inferred create_sparse_matrix(Float32, mesh_basis, mesh; ndofs=(2, 1))
         @test size(C) == (2 * length(mesh), length(mesh))
         @test eltype(C) === Float32
         @test stored_pattern(C) == mixed_pattern
@@ -409,7 +411,8 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
         function heat_norm(mesh)
             grid = generate_grid(GridProp, mesh)
-            points = generate_particles(PointProp, mesh)
+            rule = generate_quadrature_rule(basis(mesh))
+            points = generate_particles(PointProp, mesh, rule)
             weights = generate_basis_weights(mesh, size(points); name=Val(:N))
             update!(weights, points, mesh; measure=points.V)
             K = create_sparse_matrix(mesh; ndofs=1)

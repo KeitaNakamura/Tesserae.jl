@@ -8,7 +8,7 @@ struct IGABasis{dim, Degrees <: NTuple{dim, Degree}} <: Basis
 end
 
 degrees(basis::IGABasis) = basis.degrees
-igabasis(mesh::IGAMesh) = IGABasis(degrees(first(patches(mesh))))
+basis(mesh::IGAMesh) = IGABasis(degrees(first(patches(mesh))))
 nsupportnodes(basis::IGABasis) = prod(degree -> _degree(degree) + 1, degrees(basis))
 
 initial_supportnodes(basis::IGABasis, mesh::IGAMesh) = zero(SVector{nsupportnodes(basis), Int})
@@ -21,7 +21,7 @@ function allocate_static_basis_values(::Type{Vec{dim, T}}, basis::IGABasis; kwar
     _allocate_basis_values(A, Vec{dim, T}; kwargs...)
 end
 
-generate_basis_weights(::Type{T}, mesh::IGAMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, igabasis(mesh), mesh, _todims(dims...); kwargs...)
+generate_basis_weights(::Type{T}, mesh::IGAMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, basis(mesh), mesh, _todims(dims...); kwargs...)
 generate_basis_weights(mesh::IGAMesh, dims...; kwargs...) = generate_basis_weights(Float64, mesh, dims...; kwargs...)
 
 """

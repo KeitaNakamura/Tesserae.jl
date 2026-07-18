@@ -154,7 +154,7 @@ BasisWeight(::Type{T}, basis::Basis, mesh::CartesianMesh; kwargs...) where {T} =
 BasisWeight(basis::Basis, mesh::CartesianMesh; kwargs...) = _basis_weight(Float64, basis, mesh; kwargs...)
 
 # FEMesh
-BasisWeight(::Type{T}, mesh::FEMesh; kwargs...) where {T} = _basis_weight(T, cellshape(mesh), mesh; kwargs...)
+BasisWeight(::Type{T}, mesh::FEMesh; kwargs...) where {T} = _basis_weight(T, basis(mesh), mesh; kwargs...)
 BasisWeight(mesh::FEMesh; kwargs...) = BasisWeight(Float64, mesh; kwargs...)
 
 Base.propertynames(bw::BasisWeight) = propertynames(getfield(bw, :vals))
@@ -178,10 +178,13 @@ end
 @inline scalartype(bw::BasisWeight) = eltype(nodal_basis_values(bw, Order(0)))
 
 """
+    basis(mesh::FEMesh)
+    basis(mesh::IGAMesh)
     basis(weight)
 
-Return the basis object used by a [`BasisWeight`](@ref) or [`BasisWeightArray`](@ref).
+Return the basis associated with a mesh or basis-weight storage.
 """
+@inline basis(mesh::FEMesh) = cellshape(mesh)
 @inline basis(bw::BasisWeight) = getfield(bw, :basis)
 
 """
@@ -341,8 +344,8 @@ generate_basis_weights(::Type{T}, basis::Basis, mesh::CartesianMesh, dims...; kw
 generate_basis_weights(basis::Basis, mesh::CartesianMesh, dims...; kwargs...) = _generate_basis_weights(Float64, basis, mesh, _todims(dims...); kwargs...)
 
 # FEMesh
-generate_basis_weights(::Type{T}, mesh::FEMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, cellshape(mesh), mesh, _todims(dims...); kwargs...)
-generate_basis_weights(mesh::FEMesh, dims...; kwargs...) = _generate_basis_weights(Float64, cellshape(mesh), mesh, _todims(dims...); kwargs...)
+generate_basis_weights(::Type{T}, mesh::FEMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, basis(mesh), mesh, _todims(dims...); kwargs...)
+generate_basis_weights(mesh::FEMesh, dims...; kwargs...) = _generate_basis_weights(Float64, basis(mesh), mesh, _todims(dims...); kwargs...)
 
 Base.size(x::BasisWeightArray) = size(getfield(x, :indices))
 
