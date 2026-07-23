@@ -401,6 +401,23 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
         coarse_mesh = IGAMesh(CartesianMesh(0.5, (0,1), (0,1)); degree=Linear())
         @test_throws DimensionMismatch create_sparse_matrix((mesh, coarse_mesh); ndofs=(2, 1))
+
+        # IGA cells with disjoint control-point supports can assemble directly
+        # into the same CSC matrix from different threads.
+        grid = generate_grid(@NamedTuple{x::Vec{2,Float64}}, mesh)
+        points = generate_particles(@NamedTuple{x::Vec{2,Float64}, V::Float64}, mesh, qrule)
+        weights = generate_basis_weights(mesh, size(points); name=Val(:N))
+        update!(weights, points, mesh; measure=points.V)
+        K_sequential = create_sparse_matrix(mesh; ndofs=1)
+        K_threaded = create_sparse_matrix(mesh; ndofs=1)
+        @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
+            K_sequential[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
+        end
+        partition = ThreadPartition(mesh)
+        @threaded @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) partition begin
+            K_threaded[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
+        end
+        @test K_threaded ≈ K_sequential
     end
 
     @testset "Heat problem" begin

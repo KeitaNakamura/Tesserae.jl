@@ -474,28 +474,28 @@ end
 
 threadsafe_groups(cs::CellStrategy) = cs.threadsafe_groups
 
-function CellStrategy(mesh::FEMesh)
+function CellStrategy(mesh::Union{FEMesh, IGAMesh})
     g = _cell_conflict_graph(mesh)
 
     coloring = Graphs.degree_greedy_color(g)
 
     groups = [Int[] for _ in 1:coloring.num_colors]
-    @inbounds for cell in cells(mesh)
-        push!(groups[coloring.colors[cell]], cell)
+    @inbounds for (cellid, cell) in enumerate(cells(mesh))
+        push!(groups[coloring.colors[cellid]], cellid)
     end
 
     CellStrategy(groups)
 end
 
-function _cell_conflict_graph(mesh::FEMesh)
+function _cell_conflict_graph(mesh::Union{FEMesh, IGAMesh})
     nc = ncells(mesh)
     nn = length(mesh)
     graph = SimpleGraph(nc)
 
     node2cells = [Int[] for _ in 1:nn]
-    @inbounds for cell in cells(mesh)
+    @inbounds for (cellid, cell) in enumerate(cells(mesh))
         for i in supportnodes(mesh, cell)
-            push!(node2cells[i], cell)
+            push!(node2cells[i], cellid)
         end
     end
 
@@ -515,6 +515,7 @@ end
 """
     ThreadPartition(::CartesianMesh)
     ThreadPartition(::FEMesh)
+    ThreadPartition(::IGAMesh)
 
 `ThreadPartition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
 to avoid write conflicts during threaded particle-to-grid transfers.
@@ -528,7 +529,7 @@ to avoid write conflicts during threaded particle-to-grid transfers.
 partition = ThreadPartition(mesh)
 
 # Update partition using current particle positions
-update!(partition, particles.x) # Required for `CartesianMesh`; not needed for `FEMesh` (FEM).
+update!(partition, particles.x) # Required only for `CartesianMesh`.
 
 # P2G transfer
 @threaded @P2G grid=>i particles=>p weights=>ip partition begin
@@ -550,7 +551,7 @@ particle_indices(partition::ThreadPartition{<: CellStrategy}, particles, cell) =
     (CartesianIndex(p, cell) for p in 1:size(particles, 1))
 
 ThreadPartition(mesh::CartesianMesh) = ThreadPartition(BlockStrategy(mesh))
-ThreadPartition(mesh::FEMesh) = ThreadPartition(CellStrategy(mesh))
+ThreadPartition(mesh::Union{FEMesh, IGAMesh}) = ThreadPartition(CellStrategy(mesh))
 update!(partition::ThreadPartition, args...) = update!(strategy(partition), args...)
 
 reorder_particles!(particles::StructVector, partition::ThreadPartition{<: BlockStrategy}; kwargs...) =

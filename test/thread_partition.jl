@@ -123,6 +123,24 @@
         @test sort(allcells) == collect(1:Tesserae.ncells(mesh))
         @test collect(Tesserae.particle_indices(partition, zeros(3, Tesserae.ncells(mesh)), first(first(groups)))) ==
               [CartesianIndex(p, first(first(groups))) for p in 1:3]
+
+        iga_mesh = IGAMesh(CartesianMesh(0.25, (0,2), (0,2)); degree=Quadratic())
+        iga_partition = @inferred ThreadPartition(iga_mesh)
+        iga_groups = Tesserae.threadsafe_groups(iga_partition)
+        iga_cells = collect(cells(iga_mesh))
+        @test all(!isempty, iga_groups)
+        for group in iga_groups
+            for i in 1:length(group)-1, j in i+1:length(group)
+                nodes1 = supportnodes(iga_mesh, iga_cells[group[i]])
+                nodes2 = supportnodes(iga_mesh, iga_cells[group[j]])
+                @test isempty(intersect(Set(nodes1), Set(nodes2)))
+            end
+        end
+        iga_allcells = reduce(vcat, iga_groups)
+        @test length(iga_allcells) == Tesserae.ncells(iga_mesh)
+        @test sort(iga_allcells) == collect(1:Tesserae.ncells(iga_mesh))
+        @test collect(Tesserae.particle_indices(iga_partition, zeros(3, Tesserae.ncells(iga_mesh)), first(first(iga_groups)))) ==
+              [CartesianIndex(p, first(first(iga_groups))) for p in 1:3]
     end
     @testset "Utilities" begin
         @test Tesserae.nodeindices_in_block(CartesianIndex(1,1), (20,20); block_size_log2=Val(2)) === CartesianIndices((1:5,1:5))
