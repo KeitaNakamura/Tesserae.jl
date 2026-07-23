@@ -28,13 +28,15 @@ For scattering operations, prefix `@P2G` with `@threaded` and use [`ThreadPartit
 
 ```julia
 partition = ThreadPartition(mesh)
-update!(partition, particles.x)
+update!(partition, particles.x) # CartesianMesh only
 @threaded @P2G grid=>i particles=>p weights=>ip partition begin
     # your code here
 end
 ```
 
-Same applies to `@G2P2G` and `@P2G_Matrix`.
+For [`FEMesh`](@ref) and [`IGAMesh`](@ref), the partition is built from the
+fixed cell connectivity, so it does not need an `update!` call. The same
+partitioning applies to `@G2P2G` and `@P2G_Matrix`.
 
 ### Updating basis weights
 

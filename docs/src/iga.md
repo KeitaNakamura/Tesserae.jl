@@ -293,11 +293,15 @@ As in the FEM example, the global matrix is assembled with
 
 ```@example iga_annulus
 K = create_sparse_matrix(mesh; ndofs=1)
+partition = ThreadPartition(mesh)
 
-@P2G_Matrix grid=>(i,j) gauss_points=>p weights=>(ip,jp) begin
+@threaded @P2G_Matrix grid=>(i,j) gauss_points=>p weights=>(ip,jp) partition begin
     K[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
 end
 ```
+
+The IGA partition is determined entirely by the fixed knot-span connectivity,
+so it can be constructed once and reused for subsequent assemblies.
 
 ### Boundary Conditions
 

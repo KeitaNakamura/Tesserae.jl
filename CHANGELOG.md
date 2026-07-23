@@ -2,6 +2,13 @@
 
 All notable changes to Tesserae.jl will be documented in this file.
 
+## v0.7.1
+
+### Added
+
+- Added threaded CPU transfers and matrix assembly for `IGAMesh` through
+  `ThreadPartition(mesh)`.
+
 ## v0.7.0
 
 v0.7.0 focuses on larger and more inspectable MPM workflows: sparse-grid GPU
