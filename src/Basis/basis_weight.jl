@@ -199,11 +199,6 @@ When `domain` is a `Grid`, `SpGrid`, or mesh, the returned nodes are checked aga
 @inline function supportnodes(bw::BasisWeight, grid::Grid)
     supportnodes(bw, get_mesh(grid))
 end
-@inline function supportnodes(bw::BasisWeight, mesh::CartesianMesh)
-    inds = supportnodes(bw)
-    @boundscheck checkbounds(mesh, inds)
-    inds
-end
 # SpGrid always use CartesianMesh
 @inline function supportnodes(bw::BasisWeight, grid::SpGrid)
     inds = supportnodes(bw)
@@ -214,12 +209,7 @@ end
     neighbors
 end
 
-@inline function supportnodes(bw::BasisWeight, mesh::FEMesh)
-    inds = supportnodes(bw)
-    @boundscheck checkbounds(mesh, inds)
-    inds
-end
-@inline function supportnodes(bw::BasisWeight, mesh::IGAMesh)
+@inline function supportnodes(bw::BasisWeight, mesh::AbstractMesh)
     inds = supportnodes(bw)
     @boundscheck checkbounds(mesh, inds)
     inds
@@ -402,20 +392,18 @@ end
     @debug checkbounds(A, indices)
     true
 end
-
 @inline has_full_support(bw::BasisWeight, indices) = size(nodal_basis_values(bw, Order(0))) == size(indices)
-@inline has_full_support(bw::BasisWeight, indices, ::Trues) = has_full_support(bw, indices)
 @inline has_full_support(bw::BasisWeight, indices, filter::AbstractArray{Bool}) = has_full_support(bw, indices) && alltrue(filter, indices)
 
-@inline function _check_filter(b, ::AbstractArray{Bool})
+@inline function _check_filter(b)
     _supports_filtered_updates(b) || throw(ArgumentError("$(typeof(b)) does not support filtered updates"))
     nothing
 end
 @inline _supports_filtered_updates(::Any) = false
-@inline _check_filter(weights::BasisWeightArray, filter::AbstractArray{Bool}, ::Integer) = _check_filter(basis(weights), filter)
-@inline function _check_filter(weights::AbstractArray{<: BasisWeight}, filter::AbstractArray{Bool}, n::Integer)
+@inline _check_filter(weights::BasisWeightArray, ::Integer) = _check_filter(basis(weights))
+@inline function _check_filter(weights::AbstractArray{<: BasisWeight}, n::Integer)
     @inbounds for p in 1:n
-        _check_filter(basis(weights[p]), filter)
+        _check_filter(basis(weights[p]))
     end
 end
 
@@ -442,7 +430,7 @@ end
 end
 @inline function update!(bw::BasisWeight, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @assert size(mesh) == size(filter)
-    _check_filter(basis(bw), filter)
+    _check_filter(basis(bw))
     update_basis!(bw, pt, mesh, filter)
     bw
 end
@@ -477,24 +465,25 @@ end
 where [`LazyRow`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
 """
 function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray{Bool}=Trues(size(mesh)))
-    @assert length(weights) ≥ length(particles)
+    n = length(particles)
+    @assert length(weights) ≥ n
     @assert size(mesh) == size(filter)
-    if !(filter isa Trues) && !isempty(particles)
-        _check_filter(weights, filter, length(particles))
+    if !(filter isa Trues) && n != 0
+        _check_filter(weights, n)
     end
 
     # check backend
     backend = get_backend(weights)
-    @assert get_backend(weights) == get_backend(particles) == get_backend(mesh) == backend
+    @assert get_backend(particles) == get_backend(mesh) == backend
     @assert filter isa Trues || get_backend(filter) == backend
 
     if backend isa CPU
-        @threaded for p in 1:length(particles)
+        @threaded for p in 1:n
             @inbounds update!(weights[p], LazyRow(particles, p), mesh, filter)
         end
     else
         kernel = gpukernel_update_weight(backend)
-        kernel(weights, particles, mesh, filter; ndrange=length(particles))
+        kernel(weights, particles, mesh, filter; ndrange=n)
     end
     weights
 end

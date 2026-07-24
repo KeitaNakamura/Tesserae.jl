@@ -163,11 +163,30 @@ end # BasisWeight
             end
         end
     end
+    @testset "Steffen boundary correction with full storage" begin
+        mesh = CartesianMesh(0.1, (0,0.4))
+        for (spline, x) in ((SteffenBSpline(Quadratic()), Vec(0.05)),
+                            (SteffenBSpline(Cubic()), Vec(0.1)))
+            bw = BasisWeight(spline, mesh)
+            update!(bw, x, mesh)
+            indices = supportnodes(bw)
+            @test size(indices) == size(bw.w)
+            for ip in eachindex(indices)
+                vals = Tesserae.basis_jet(Order(1), spline, x, mesh, indices[ip])
+                @test bw.w[ip] ≈ vals[1]
+                @test bw.∇w[ip] ≈ vals[2]
+            end
+        end
+    end
 
     @testset "Supported B-spline degrees" begin
         mesh = CartesianMesh(0.1, (0,1))
         @test_throws ArgumentError BasisWeight(BSpline(Tesserae.Degree(6)), mesh)
         @test_throws ArgumentError BasisWeight(SteffenBSpline(Tesserae.Quartic()), mesh)
+        for spline in (SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()))
+            @test (@inferred Tesserae.jet(Order(2), spline, 0, 1)) ==
+                  Tesserae.jet(Order(2), spline, 0.0, 1)
+        end
     end
 
     @testset "uGIMP()" begin

@@ -18,12 +18,14 @@ support_width(wls::WLS) = support_width(wls.kernel)
 @inline supportnodes(wls::WLS, pt, mesh::CartesianMesh) = supportnodes(wls.kernel, pt, mesh)
 @inline _supports_filtered_updates(::WLS) = true
 
-@inline function update_basis_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline update_basis_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh) =
+    update_basis_values!(bw, wls, pt, mesh, Trues(size(mesh)))
+@inline function update_basis_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
     update_wls_values!(bw, wls, pt, mesh, filter)
 end
 
 # a bit faster implementation for B-splines
-@inline function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
     indices = supportnodes(bw)
     if has_full_support(bw, indices, filter)
         kernel = wls.kernel
@@ -73,7 +75,7 @@ end
     end
 end
 
-function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool} = Trues(size(mesh))) where {dim}
+function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
     if filter isa Trues
         # For MultiLinear, we can decompose into axis-wise Linear bases.
         # If the problem is 1D, MultiLinear == Linear, so use the direct fast path.
@@ -92,7 +94,7 @@ function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadrat
                 bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(indices_1d))
                 # Must be inlined: creates/updates a small StaticArray (MVector/MArray) on the GPU.
                 # If not inlined, the temporary may escape and trigger dynamic allocation (gpu_gc_pool_alloc).
-                update_wls_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
+                update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
                 # Get scalar value from Vec{1} for each property.
                 _extract_scalar_values(order, bw_1d)
             end

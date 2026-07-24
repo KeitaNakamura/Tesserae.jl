@@ -21,7 +21,9 @@ support_width(kc::KernelCorrection) = support_width(kc.kernel)
 @inline supportnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = supportnodes(kc.kernel, pt, mesh)
 @inline _supports_filtered_updates(::KernelCorrection) = true
 
-@inline function update_basis_values!(bw::BasisWeight, kc::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline update_basis_values!(bw::BasisWeight, kc::KernelCorrection, pt, mesh::CartesianMesh) =
+    update_basis_values!(bw, kc, pt, mesh, Trues(size(mesh)))
+@inline function update_basis_values!(bw::BasisWeight, kc::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
     indices = supportnodes(bw)
     if has_full_support(bw, indices, filter)
         update_basis_values!(bw, kc.kernel, pt, mesh)

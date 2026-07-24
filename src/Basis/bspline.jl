@@ -1,25 +1,34 @@
 abstract type AbstractBSpline{D <: Degree} <: Kernel end
 
+"""
+    BSpline(degree)
+
+B-spline kernel.
+`degree` is one of `Linear()`, `Quadratic()` or `Cubic()`.
+
+!!! warning
+    `BSpline(Quadratic())` and `BSpline(Cubic())` cannot handle boundaries correctly
+    because the kernel values are merely truncated, which leads to unstable behavior.
+    Therefore, it is recommended to use either `SteffenBSpline` or `KernelCorrection`
+    in cases where proper handling of boundaries is necessary.
+"""
+struct BSpline{D} <: AbstractBSpline{D}
+    degree::D
+end
+_maximum_bspline_degree(::BSpline) = 5
+Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
+
 @inline function support_width(spline::AbstractBSpline{Degree{n}}) where {n}
     max_degree = _maximum_bspline_degree(spline)
     0 ≤ n ≤ max_degree || throw(ArgumentError("$(nameof(typeof(spline))) degree must be between 0 and $max_degree"))
     n + 1
 end
 
-@inline function supportnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
+@inline function supportnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh)
     x = getx(pt)
-    ξ = Tuple(normalize(x, mesh))
-    dims = size(mesh)
-    isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
-    offset = _supportnodes_offset(eltype(x), spline)
-    r = support_width(spline) - 1
-    start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
-    stop = @. start + r
-    imin = Tuple(@. max(start, 1))
-    imax = Tuple(@. min(stop, dims))
-    CartesianIndices(UnitRange.(imin, imax))
+    T = eltype(x)
+    supportnodes(x, T(support_width(spline)) / T(2), mesh)
 end
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{n}}) where {T, n} = T(n - 1) / T(2)
 
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
@@ -71,7 +80,7 @@ function _bspline_values1d_expr(k::Int, degree::Int)
     Expr(:tuple, values...)
 end
 
-@generated function values1d(::Order{k}, spline::AbstractBSpline{Degree{n}}, x::Real) where {k, n}
+@generated function values1d(::Order{k}, spline::BSpline{Degree{n}}, x::Real) where {k, n}
     0 ≤ n || error("B-spline degree must be non-negative")
     ξ_expr = isodd(n) ? :(fract(x)) : :(fract(x - T(0.5)))
     values_expr = _bspline_values1d_expr(k, n)
@@ -83,7 +92,7 @@ end
     end
 end
 
-@inline function update_basis_values!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+@inline function update_basis_values!(bw::BasisWeight, spline::BSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     if has_full_support(bw, indices)
         update_bspline_full!(bw, derivative_order(bw), spline, getx(pt), mesh)
@@ -132,7 +141,7 @@ end
 
 # Fill the full-support BasisWeight arrays directly, avoiding prod_each_dimension
 # and the following copyto! into BasisWeight storage.
-@generated function update_bspline_full!(bw::BasisWeight, order::Order{k}, spline::AbstractBSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
+@generated function update_bspline_full!(bw::BasisWeight, order::Order{k}, spline::BSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
     dims = ntuple(_ -> n + 1, dim)
     node_assignments = map(enumerate(CartesianIndices(dims))) do (i, I)
         # Load all 1D basis values needed at this support node.
@@ -159,24 +168,6 @@ end
         bw
     end
 end
-
-"""
-    BSpline(degree)
-
-B-spline kernel.
-`degree` is one of `Linear()`, `Quadratic()` or `Cubic()`.
-
-!!! warning
-    `BSpline(Quadratic())` and `BSpline(Cubic())` cannot handle boundaries correctly
-    because the kernel values are merely truncated, which leads to unstable behavior.
-    Therefore, it is recommended to use either `SteffenBSpline` or `KernelCorrection`
-    in cases where proper handling of boundaries is necessary.
-"""
-struct BSpline{D} <: AbstractBSpline{D}
-    degree::D
-end
-_maximum_bspline_degree(::BSpline) = 5
-Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
 
 @inline function value(::BSpline{Constant}, ξ::Real)
     ξ = abs(ξ)
@@ -236,6 +227,27 @@ end
 _maximum_bspline_degree(::SteffenBSpline) = 3
 Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", spline.degree, ")")
 
+@inline function update_basis_values!(bw::BasisWeight, spline::SteffenBSpline, pt, mesh::CartesianMesh)
+    indices = supportnodes(bw)
+    uses_cardinal_values = spline isa Union{SteffenBSpline{Constant}, SteffenBSpline{Linear}} ||
+                           _has_steffen_interior_support(indices, mesh)
+    if uses_cardinal_values
+        update_basis_values!(bw, BSpline(spline.degree), pt, mesh)
+    else
+        update_basis_values_nodewise!(bw, spline, pt, mesh)
+    end
+end
+# Steffen differs from the cardinal B-spline only at the two boundary nodes.
+@inline function _has_steffen_interior_support(indices::CartesianIndices{dim}, mesh::CartesianMesh{dim}) where {dim}
+    @inbounds for d in 1:dim
+        nodes = indices.indices[d]
+        axis = mesh.axes[d]
+        first(nodes) - firstindex(axis) > 1 || return false
+        lastindex(axis) - last(nodes) > 1 || return false
+    end
+    true
+end
+
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
 # International journal for numerical methods in engineering, 76(6), 922-948.
@@ -245,7 +257,8 @@ end
 function value(::SteffenBSpline{Linear}, ξ::Real, pos::Int)
     value(BSpline(Linear()), ξ)
 end
-function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)::typeof(ξ)
+function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)
+    ξ = ξ / one(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 0.5 ? (3 - 4ξ^2) / 3 :
@@ -260,7 +273,8 @@ function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)::typeof(ξ)
         value(BSpline(Quadratic()), ξ)
     end
 end
-function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
+function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)
+    ξ = ξ / one(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 4 :
