@@ -16,7 +16,7 @@ end
 
 [^CPDI]: [Sadeghirad, A., Brannon, R.M. and Burghardt, J., 2011. A convected particle domain interpolation technique to extend applicability of the material point method for problems involving massive deformations. International Journal for numerical methods in Engineering, 86(12), pp.1435-1456.](https://doi.org/10.1002/nme.3110)
 """
-struct CPDI <: Kernel end
+struct CPDI <: Basis end
 
 _cpdi_spgrid_error(context) =
     error("$context: CPDI is currently supported only on dense Grid, not SpGrid")
@@ -33,7 +33,8 @@ Base.size(x::CPDISupportNodes) = (x.len,)
     @inbounds x.indices[i]
 end
 
-@generated function allocate_basis_values(::Type{Vec{dim, T}}, ::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
+@generated function allocate_basis_values(::Type{Vec{dim, T}}, ::CPDI; derivative::Order{k}=Order(1), name::Val{sym}=Val(:w)) where {dim, T, k, sym}
+    k == 1 || return :(throw(ArgumentError("CPDI supports derivative=Order(1) only")))
     w = sym
     ∇w = Symbol(:∇, sym)
     quote
@@ -48,7 +49,7 @@ function initial_supportnodes(::CPDI, mesh::CartesianMesh{dim}) where {dim}
     CPDISupportNodes(indices, 0)
 end
 
-function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{1})
+function update_basis!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{1})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2)
     x₁ = xₚ - r₁
@@ -69,7 +70,7 @@ function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{1})
     end
 end
 
-function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
+function update_basis!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2,0)
     r₂ = pt.F * Vec(0,pt.l/2)
@@ -97,7 +98,7 @@ function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
     end
 end
 
-function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{3})
+function update_basis!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{3})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2,0,0)
     r₂ = pt.F * Vec(0,pt.l/2,0)

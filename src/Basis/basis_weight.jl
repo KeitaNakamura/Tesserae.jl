@@ -21,12 +21,14 @@ function evaluated at `pt`.
 function basis_jet end
 
 """
-    jet(order, object, x, args...)
+    jet(order, f, x, args...)
 
-Return the value and derivatives up to `order` in `object`'s natural local or
+Return the value and derivatives up to `order` in `f`'s natural local or
 reference coordinate system.
 """
-function jet end
+@inline function jet(::Order{k}, f, x, args...) where {k}
+    reverse(∂{k}(y -> value(f, y, args...), x, :all))
+end
 
 #=
 Standard Cartesian basis extension:
@@ -39,10 +41,10 @@ By default, `BasisWeight` uses `support_width(basis)` to allocate arrays for
 `allocate_basis_values` only when a basis does not fit this fixed Cartesian
 storage layout.
 
-Specialized bases may instead define `update!` for their own `BasisWeight`;
-for example, CPDI defines `update!(bw::BasisWeight{CPDI}, pt, mesh)`.
-Such methods must update `supportnodes(bw)` and `nodal_basis_values(bw, order)`
-with matching local indices.
+Specialized bases may instead define `update_basis!` for their own
+`BasisWeight`; CPDI uses this route because its support storage is variable.
+Such methods must update `supportnodes(bw)` and
+`nodal_basis_values(bw, order)` with matching local indices.
 =#
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
@@ -405,23 +407,50 @@ end
 @inline has_full_support(bw::BasisWeight, indices, ::Trues) = has_full_support(bw, indices)
 @inline has_full_support(bw::BasisWeight, indices, filter::AbstractArray{Bool}) = has_full_support(bw, indices) && alltrue(filter, indices)
 
+@inline function _check_filter(b, ::AbstractArray{Bool})
+    _supports_filtered_updates(b) || throw(ArgumentError("$(typeof(b)) does not support filtered updates"))
+    nothing
+end
+@inline _supports_filtered_updates(::Any) = false
+@inline _check_filter(weights::BasisWeightArray, filter::AbstractArray{Bool}, ::Integer) = _check_filter(basis(weights), filter)
+@inline function _check_filter(weights::AbstractArray{<: BasisWeight}, filter::AbstractArray{Bool}, n::Integer)
+    @inbounds for p in 1:n
+        _check_filter(basis(weights[p]), filter)
+    end
+end
+
+@inline function update_basis_values!(bw::BasisWeight, kernel::Kernel, pt, mesh::CartesianMesh)
+    update_basis_values_nodewise!(bw, kernel, pt, mesh)
+end
+@inline function update_basis_values_nodewise!(bw::BasisWeight, kernel::Kernel, pt, mesh::CartesianMesh)
+    indices = supportnodes(bw)
+    order = derivative_order(bw)
+    @inbounds for ip in eachindex(indices)
+        set_values!(bw, ip, basis_jet(order, kernel, pt, mesh, indices[ip]))
+    end
+    bw
+end
+
 @inline function update!(bw::BasisWeight, pt, mesh::AbstractMesh)
+    update_basis!(bw, pt, mesh)
+    bw
+end
+@inline function update_basis!(bw::BasisWeight, pt, mesh::AbstractMesh)
     b = basis(bw)
     supportnodes_storage(bw)[] = supportnodes(b, pt, mesh)
     update_basis_values!(bw, b, pt, mesh)
-    bw
 end
 @inline function update!(bw::BasisWeight, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @assert size(mesh) == size(filter)
-    b = basis(bw)
-    supportnodes_storage(bw)[] = supportnodes(b, pt, mesh)
-    update_basis_values!(bw, b, pt, mesh, filter)
+    _check_filter(basis(bw), filter)
+    update_basis!(bw, pt, mesh, filter)
     bw
 end
 @inline update!(bw::BasisWeight, pt, mesh::AbstractMesh, ::Trues) = update!(bw, pt, mesh)
-@inline function update_basis_values!(bw::BasisWeight, basis, pt, mesh::AbstractMesh, filter)
-    @assert filter isa Trues
-    update_basis_values!(bw, basis, pt, mesh)
+@inline function update_basis!(bw::BasisWeight, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
+    b = basis(bw)
+    supportnodes_storage(bw)[] = supportnodes(b, pt, mesh)
+    update_basis_values!(bw, b, pt, mesh, filter)
 end
 
 # accelerations
@@ -447,8 +476,12 @@ end
 
 where [`LazyRow`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
 """
-function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray=Trues(size(mesh)))
+function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray{Bool}=Trues(size(mesh)))
     @assert length(weights) ≥ length(particles)
+    @assert size(mesh) == size(filter)
+    if !(filter isa Trues) && !isempty(particles)
+        _check_filter(weights, filter, length(particles))
+    end
 
     # check backend
     backend = get_backend(weights)

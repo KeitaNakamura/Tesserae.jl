@@ -1,11 +1,10 @@
 abstract type AbstractBSpline{D <: Degree} <: Kernel end
 
-support_width(::AbstractBSpline{Degree{0}}) = 1
-support_width(::AbstractBSpline{Degree{1}}) = 2
-support_width(::AbstractBSpline{Degree{2}}) = 3
-support_width(::AbstractBSpline{Degree{3}}) = 4
-support_width(::AbstractBSpline{Degree{4}}) = 5
-support_width(::AbstractBSpline{Degree{5}}) = 6
+@inline function support_width(spline::AbstractBSpline{Degree{n}}) where {n}
+    max_degree = _maximum_bspline_degree(spline)
+    0 ≤ n ≤ max_degree || throw(ArgumentError("$(nameof(typeof(spline))) degree must be between 0 and $max_degree"))
+    n + 1
+end
 
 @inline function supportnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
     x = getx(pt)
@@ -20,12 +19,7 @@ support_width(::AbstractBSpline{Degree{5}}) = 6
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{0}}) where {T} = T(-0.5)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{1}}) where {T} = T(0.0)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{2}}) where {T} = T(0.5)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{3}}) where {T} = T(1.0)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{4}}) where {T} = T(1.5)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{5}}) where {T} = T(2.0)
+@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{n}}) where {T, n} = T(n - 1) / T(2)
 
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
@@ -92,21 +86,10 @@ end
 @inline function update_basis_values!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     if has_full_support(bw, indices)
-        update_basis_values_full!(bw, spline, pt, mesh)
+        update_bspline_full!(bw, derivative_order(bw), spline, getx(pt), mesh)
     else
-        update_basis_values_truncated!(bw, spline, pt, mesh)
+        update_basis_values_nodewise!(bw, spline, pt, mesh)
     end
-end
-
-function update_basis_values_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
-    indices = supportnodes(bw)
-    @inbounds for ip in eachindex(indices)
-        i = indices[ip]
-        set_values!(bw, ip, basis_jet(derivative_order(bw), spline, getx(pt), mesh, i))
-    end
-end
-@inline function update_basis_values_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
-    direct_set_values!(bw, derivative_order(bw), spline, getx(pt), mesh)
 end
 
 _bspline_var(r, d) = Symbol(:v, r, :_, d)
@@ -149,7 +132,7 @@ end
 
 # Fill the full-support BasisWeight arrays directly, avoiding prod_each_dimension
 # and the following copyto! into BasisWeight storage.
-@generated function direct_set_values!(bw::BasisWeight, order::Order{k}, spline::AbstractBSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
+@generated function update_bspline_full!(bw::BasisWeight, order::Order{k}, spline::AbstractBSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
     dims = ntuple(_ -> n + 1, dim)
     node_assignments = map(enumerate(CartesianIndices(dims))) do (i, I)
         # Load all 1D basis values needed at this support node.
@@ -192,6 +175,7 @@ B-spline kernel.
 struct BSpline{D} <: AbstractBSpline{D}
     degree::D
 end
+_maximum_bspline_degree(::BSpline) = 5
 Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
 
 @inline function value(::BSpline{Constant}, ξ::Real)
@@ -225,10 +209,6 @@ end
     ξ < 3 ? ((3-ξ)^5) / 120                          : zero(ξ)
 end
 
-@inline function jet(::Order{k}, spline::BSpline, ξ::Real) where {k}
-    reverse(∂{k}(ξ -> value(spline, ξ), ξ, :all))
-end
-
 @generated function basis_jet(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
@@ -253,6 +233,7 @@ See also [`KernelCorrection`](@ref).
 struct SteffenBSpline{D} <: AbstractBSpline{D}
     degree::D
 end
+_maximum_bspline_degree(::SteffenBSpline) = 3
 Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", spline.degree, ")")
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
@@ -293,10 +274,6 @@ function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
     else
         value(BSpline(Cubic()), ξ)
     end
-end
-
-@inline function jet(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
-    reverse(∂{k}(ξ -> value(spline, ξ, pos), ξ, :all))
 end
 
 @generated function basis_jet(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
