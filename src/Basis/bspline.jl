@@ -24,10 +24,19 @@ Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
     n + 1
 end
 
-@inline function supportnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh)
+# Equivalent to supportnodes(x, (n + 1) / 2, mesh), with one floor per axis.
+@inline function supportnodes(::AbstractBSpline{Degree{n}}, pt, mesh::CartesianMesh{dim}) where {n, dim}
     x = getx(pt)
+    ξ = Tuple(normalize(x, mesh))
+    dims = size(mesh)
+    isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
     T = eltype(x)
-    supportnodes(x, T(support_width(spline)) / T(2), mesh)
+    offset = T(n - 1) / T(2)
+    start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
+    stop = @. start + n
+    imin = Tuple(@. max(start, 1))
+    imax = Tuple(@. min(stop, dims))
+    CartesianIndices(UnitRange.(imin, imax))
 end
 
 @inline fract(x) = x - floor(x)
@@ -229,10 +238,10 @@ Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", splin
 
 @inline function update_basis_values!(bw::BasisWeight, spline::SteffenBSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
-    uses_cardinal_values = spline isa Union{SteffenBSpline{Constant}, SteffenBSpline{Linear}} ||
-                           _has_steffen_interior_support(indices, mesh)
-    if uses_cardinal_values
+    if spline isa Union{SteffenBSpline{Constant}, SteffenBSpline{Linear}}
         update_basis_values!(bw, BSpline(spline.degree), pt, mesh)
+    elseif has_full_support(bw, indices) && _has_steffen_interior_support(indices, mesh)
+        update_bspline_full!(bw, derivative_order(bw), BSpline(spline.degree), getx(pt), mesh)
     else
         update_basis_values_nodewise!(bw, spline, pt, mesh)
     end
@@ -258,7 +267,7 @@ function value(::SteffenBSpline{Linear}, ξ::Real, pos::Int)
     value(BSpline(Linear()), ξ)
 end
 function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)
-    ξ = ξ / one(ξ)
+    ξ = float(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 0.5 ? (3 - 4ξ^2) / 3 :
@@ -274,7 +283,7 @@ function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)
     end
 end
 function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)
-    ξ = ξ / one(ξ)
+    ξ = float(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 4 :
