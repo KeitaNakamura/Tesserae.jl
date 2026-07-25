@@ -18,10 +18,8 @@ end
 """
 struct CPDI <: Basis end
 
-_cpdi_spgrid_error(context) =
-    error("$context: CPDI is currently supported only on dense Grid, not SpGrid")
-
-@inline supportnodes(::BasisWeight{CPDI}, ::SpGrid) = _cpdi_spgrid_error("supportnodes")
+@inline supportnodes(::BasisWeight{CPDI}, ::SpGrid) =
+    error("supportnodes: CPDI is currently supported only on dense Grid, not SpGrid")
 
 struct CPDISupportNodes{T, V <: AbstractVector{T}} <: AbstractVector{T}
     indices::V

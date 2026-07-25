@@ -76,35 +76,29 @@ end
 end
 
 function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
-    if filter isa Trues
-        # For MultiLinear, we can decompose into axis-wise Linear bases.
-        # If the problem is 1D, MultiLinear == Linear, so use the direct fast path.
-        wls_1d = WLS(wls.kernel, Polynomial(Linear()))
-        if dim == 1
-            update_basis_values!(bw, wls_1d, pt, mesh, filter)
-        else
-            # For dim > 1: decompose into 1D Linear along each axis,
-            # compute axis-wise contribution, then combine by tensor product.
-            T = scalartype(bw)
-            order = derivative_order(bw)
-            vals_axes = ntuple(Val(dim)) do d
-                mesh_1d = axismesh(mesh, d)
-                vals_1d = allocate_static_basis_values(Vec{1,T}, wls_1d; derivative=order)
-                indices_1d = CartesianIndices((supportnodes(bw).indices[d],))
-                bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(indices_1d))
-                # Must be inlined: creates/updates a small StaticArray (MVector/MArray) on the GPU.
-                # If not inlined, the temporary may escape and trigger dynamic allocation (gpu_gc_pool_alloc).
-                update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
-                # Get scalar value from Vec{1} for each property.
-                _extract_scalar_values(order, bw_1d)
-            end
-            # Combine axis-wise results into MultiLinear tensor product.
-            set_values!(bw, _prod_each_dimension(order, vals_axes))
-        end
-    else
-        # Fallback for masked cases: use general method.
-        update_wls_values!(bw, wls, pt, mesh, filter)
+    # Masked cases require the general moment matrix.
+    filter isa Trues || return update_wls_values!(bw, wls, pt, mesh, filter)
+
+    # For MultiLinear, decompose into axis-wise Linear bases.
+    wls_1d = WLS(wls.kernel, Polynomial(Linear()))
+    if dim == 1
+        return update_basis_values!(bw, wls_1d, pt, mesh, filter)
     end
+
+    T = scalartype(bw)
+    order = derivative_order(bw)
+    vals_axes = ntuple(Val(dim)) do d
+        mesh_1d = axismesh(mesh, d)
+        vals_1d = allocate_static_basis_values(Vec{1,T}, wls_1d; derivative=order)
+        indices_1d = CartesianIndices((supportnodes(bw).indices[d],))
+        bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(indices_1d))
+        # Must be inlined: creates/updates a small StaticArray (MVector/MArray) on the GPU.
+        # If not inlined, the temporary may escape and trigger dynamic allocation (gpu_gc_pool_alloc).
+        update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
+        # Get scalar value from Vec{1} for each property.
+        _extract_scalar_values(order, bw_1d)
+    end
+    set_values!(bw, _prod_each_dimension(order, vals_axes))
 end
 @inline function _extract_scalar_values(::Order{k}, bw) where {k}
     ntuple(a -> map(only, Tuple(nodal_basis_values(bw, Order(a-1)))), Val(k+1))

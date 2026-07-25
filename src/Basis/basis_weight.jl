@@ -407,9 +407,7 @@ end
     end
 end
 
-@inline function update_basis_values!(bw::BasisWeight, kernel::Kernel, pt, mesh::CartesianMesh)
-    update_basis_values_nodewise!(bw, kernel, pt, mesh)
-end
+@inline update_basis_values!(bw::BasisWeight, kernel::Kernel, pt, mesh::CartesianMesh) = update_basis_values_nodewise!(bw, kernel, pt, mesh)
 @inline function update_basis_values_nodewise!(bw::BasisWeight, kernel::Kernel, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     order = derivative_order(bw)
