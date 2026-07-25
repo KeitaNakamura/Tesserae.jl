@@ -326,6 +326,10 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test (@inferred update!(boundary_weights, boundary_points, boundary_mesh; measure, normal)) === boundary_weights
         @test sum(measure) ≈ 1
         @test all(n -> n ≈ Vec(0.0, -1.0), normal)
+        for weight in boundary_weights
+            @test sum(weight.∇N) ≈ zero(Vec{2, Float64})
+            @test all(∇N -> iszero(∇N[2]), weight.∇N)
+        end
     end
 
     @testset "Sparse matrix" begin

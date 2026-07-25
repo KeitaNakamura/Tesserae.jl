@@ -105,15 +105,43 @@
         rule = generate_quadrature_rule(Tesserae.Line3())
         points = generate_particles(@NamedTuple{x::Vec{2,Float64}, dS::Float64, n::Vec{2,Float64}}, geometry, rule)
         weights = generate_basis_weights(field, size(points); name=Val(:N))
+        value_weights = generate_basis_weights(field, size(points); derivative=Order(0), name=Val(:N))
 
         update!(weights, points, field; geometry, measure=points.dS, normal=points.n)
+        @test (@inferred update!(value_weights, points, field; geometry)) === value_weights
+        @test propertynames(value_weights) === (:N,)
         for (q, (point, weight)) in enumerate(zip(rule.points, rule.weights))
             tangent = Vec(0.5, -2h * point[1])
             scale = norm(tangent)
-            @test weights[q,1].N ≈ Tesserae.value(Tesserae.Line2(), point)
+            N, dNdξ = Tesserae.jet(Order(1), Tesserae.Line2(), point)
+            ∇N = map(dN -> only(dN) * tangent / scale^2, dNdξ)
+            @test weights[q,1].N ≈ value_weights[q,1].N ≈ N
+            @test weights[q,1].∇N ≈ ∇N
             @test supportnodes(weights[q,1]) == Tesserae.SVector(2, 3)
             @test points.dS[q,1] ≈ weight * scale
             @test points.n[q,1] ≈ Vec(tangent[2], -tangent[1]) / scale
+        end
+    end
+
+    @testset "Surface boundary" begin
+        geometry = FEMesh(
+            Tesserae.Quad4(),
+            [Vec(0.0, 0.0, 0.0), Vec(1.0, 0.0, 0.0), Vec(1.0, 1.0, 0.0), Vec(0.0, 1.0, 0.0)],
+            [Tesserae.SVector(1, 2, 3, 4)],
+        )
+        rule = generate_quadrature_rule(Tesserae.Quad4())
+        points = generate_particles(@NamedTuple{x::Vec{3,Float64}, dS::Float64, n::Vec{3,Float64}}, geometry, rule)
+        weights = generate_basis_weights(geometry, size(points); name=Val(:N))
+
+        @test (@inferred update!(weights, points, geometry; measure=points.dS, normal=points.n)) === weights
+        for (q, (point, weight)) in enumerate(zip(rule.points, rule.weights))
+            N, dNdξ = Tesserae.jet(Order(1), Tesserae.Quad4(), point)
+            J = sum(geometry.nodes .⊗ dNdξ)
+            ∇N = dNdξ .⊡ Ref(inv(J'J) * J')
+            @test weights[q,1].N ≈ N
+            @test weights[q,1].∇N ≈ ∇N
+            @test points.dS[q,1] ≈ weight * sqrt(det(J'J))
+            @test points.n[q,1] ≈ Vec(0.0, 0.0, 1.0)
         end
     end
 
