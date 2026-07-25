@@ -89,7 +89,7 @@ function _bspline_values1d_expr(k::Int, degree::Int)
     Expr(:tuple, values...)
 end
 
-@generated function values1d(::Order{k}, spline::BSpline{Degree{n}}, x::Real) where {k, n}
+@generated function bspline_axis_values(::Order{k}, spline::BSpline{Degree{n}}, x::Real) where {k, n}
     0 ≤ n || error("B-spline degree must be non-negative")
     ξ_expr = isodd(n) ? :(fract(x)) : :(fract(x - T(0.5)))
     values_expr = _bspline_values1d_expr(k, n)
@@ -104,7 +104,7 @@ end
 @inline function update_basis_values!(bw::BasisWeight, spline::BSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     if has_full_support(bw, indices)
-        update_bspline_full!(bw, derivative_order(bw), spline, getx(pt), mesh)
+        update_bspline_full_support!(bw, derivative_order(bw), spline, getx(pt), mesh)
     else
         update_basis_values_nodewise!(bw, spline, pt, mesh)
     end
@@ -150,7 +150,7 @@ end
 
 # Fill the full-support BasisWeight arrays directly, avoiding prod_each_dimension
 # and the following copyto! into BasisWeight storage.
-@generated function update_bspline_full!(bw::BasisWeight, order::Order{k}, spline::BSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
+@generated function update_bspline_full_support!(bw::BasisWeight, order::Order{k}, spline::BSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
     dims = ntuple(_ -> n + 1, dim)
     node_assignments = map(enumerate(CartesianIndices(dims))) do (i, I)
         # Load all 1D basis values needed at this support node.
@@ -168,7 +168,7 @@ end
         xmin = get_xmin(mesh)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - xmin) * h⁻¹
-        vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
+        vals1d = @ntuple $dim d -> bspline_axis_values(order, spline, ξ[d])
         @nexprs $(k + 1) r -> vals_{r-1} = nodal_basis_values(bw, Order(r-1))
         @nexprs $k r -> hpow_r = h⁻¹^r
         @inbounds begin
@@ -209,7 +209,7 @@ end
     ξ < 3 ? ((3-ξ)^5) / 120                          : zero(ξ)
 end
 
-@generated function basis_jet(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function nodal_basis_jet(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
@@ -241,7 +241,7 @@ Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", splin
     if spline isa Union{SteffenBSpline{Constant}, SteffenBSpline{Linear}}
         update_basis_values!(bw, BSpline(spline.degree), pt, mesh)
     elseif has_full_support(bw, indices) && _has_steffen_interior_support(indices, mesh)
-        update_bspline_full!(bw, derivative_order(bw), BSpline(spline.degree), getx(pt), mesh)
+        update_bspline_full_support!(bw, derivative_order(bw), BSpline(spline.degree), getx(pt), mesh)
     else
         update_basis_values_nodewise!(bw, spline, pt, mesh)
     end
@@ -299,22 +299,22 @@ function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)
     end
 end
 
-@generated function basis_jet(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function nodal_basis_jet(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
-        pos = node_position(mesh, i)
+        pos = steffen_node_position(mesh, i)
         vals1d = @ntuple $dim d -> jet(order, spline, ξ[d], pos[d])
         vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
 end
 
-@inline function node_position(ax::AbstractVector, i::Int)
+@inline function steffen_node_position(ax::AbstractVector, i::Int)
     left = i - firstindex(ax)
     right = lastindex(ax) - i
     ifelse(left < right, left, -right)
 end
-node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(node_position, mesh.axes, Tuple(index)))
+steffen_node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(steffen_node_position, mesh.axes, Tuple(index)))

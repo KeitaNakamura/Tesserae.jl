@@ -16,7 +16,7 @@ WLS(k::Kernel) = WLS(k, Polynomial(Linear()))
 
 support_width(wls::WLS) = support_width(wls.kernel)
 @inline supportnodes(wls::WLS, pt, mesh::CartesianMesh) = supportnodes(wls.kernel, pt, mesh)
-@inline _supports_filtered_updates(::WLS) = true
+@inline supports_filtered_updates(::WLS) = true
 
 @inline update_basis_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh) =
     update_basis_values!(bw, wls, pt, mesh, Trues(size(mesh)))
@@ -30,7 +30,7 @@ end
     if has_full_support(bw, indices, filter)
         kernel = wls.kernel
         @inbounds for ip in eachindex(indices)
-            nodal_basis_values(bw, Order(0))[ip] = only(basis_jet(Order(0), kernel, pt, mesh, indices[ip]))
+            nodal_basis_values(bw, Order(0))[ip] = only(nodal_basis_jet(Order(0), kernel, pt, mesh, indices[ip]))
         end
         apply_wls_correction!(bw, wls, pt, mesh, full_support_moment_matrix_inv(kernel, mesh))
     else
@@ -50,7 +50,7 @@ end
         @inbounds begin
             i = indices[ip]
             xᵢ = mesh[i]
-            w = nodal_basis_values(bw, Order(0))[ip] = only(basis_jet(Order(0), kernel, pt, mesh, i)) * filter[i]
+            w = nodal_basis_values(bw, Order(0))[ip] = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)) * filter[i]
             P = value(poly, xᵢ - xₚ)
             w * P ⊗ P
         end
@@ -96,14 +96,14 @@ function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadrat
         # If not inlined, the temporary may escape and trigger dynamic allocation (gpu_gc_pool_alloc).
         update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
         # Get scalar value from Vec{1} for each property.
-        _extract_scalar_values(order, bw_1d)
+        scalarize_axis_values(order, bw_1d)
     end
-    set_values!(bw, _prod_each_dimension(order, vals_axes))
+    set_values!(bw, tensor_product_axis_values(order, vals_axes))
 end
-@inline function _extract_scalar_values(::Order{k}, bw) where {k}
+@inline function scalarize_axis_values(::Order{k}, bw) where {k}
     ntuple(a -> map(only, Tuple(nodal_basis_values(bw, Order(a-1)))), Val(k+1))
 end
-@generated function _prod_each_dimension(::Order{k}, vals) where {k}
+@generated function tensor_product_axis_values(::Order{k}, vals) where {k}
     quote
         @_inline_meta
         @ntuple $(k+1) a -> prod_each_dimension(Order(a-1), vals...)

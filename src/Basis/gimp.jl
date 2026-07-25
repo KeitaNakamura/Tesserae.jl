@@ -37,7 +37,7 @@ end
     ξ < 1+l/2 ? (1+l/2-ξ)^2 / 2l  : zero(ξ)
 end
 
-@generated function basis_jet(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function nodal_basis_jet(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)

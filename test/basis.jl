@@ -3,8 +3,8 @@ struct TestLinearKernel <: Tesserae.Kernel end
 Tesserae.support_width(::TestLinearKernel) = 2
 Tesserae.supportnodes(::TestLinearKernel, pt, mesh::CartesianMesh) =
     Tesserae.supportnodes(BSpline(Linear()), pt, mesh)
-Tesserae.basis_jet(order::Order, ::TestLinearKernel, pt, mesh::CartesianMesh, i) =
-    Tesserae.basis_jet(order, BSpline(Linear()), pt, mesh, i)
+Tesserae.nodal_basis_jet(order::Order, ::TestLinearKernel, pt, mesh::CartesianMesh, i) =
+    Tesserae.nodal_basis_jet(order, BSpline(Linear()), pt, mesh, i)
 
 @testset "BasisWeight" begin
 
@@ -172,7 +172,7 @@ end # BasisWeight
             indices = supportnodes(bw)
             @test size(indices) == size(bw.w)
             for ip in eachindex(indices)
-                vals = Tesserae.basis_jet(Order(1), spline, x, mesh, indices[ip])
+                vals = Tesserae.nodal_basis_jet(Order(1), spline, x, mesh, indices[ip])
                 @test bw.w[ip] ≈ vals[1]
                 @test bw.∇w[ip] ≈ vals[2]
             end
@@ -406,7 +406,7 @@ end
             nodeindices = supportnodes(bw)
             for ip in eachindex(nodeindices)
                 i = nodeindices[ip]
-                vals = @inferred Tesserae.basis_jet(Order(k), spline, xp, mesh, i)
+                vals = @inferred Tesserae.nodal_basis_jet(Order(k), spline, xp, mesh, i)
                 for a in 0:k
                     @test Tesserae.nodal_basis_values(bw, Order(a))[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end

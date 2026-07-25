@@ -19,7 +19,7 @@ KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(MultiLinear()))
 
 support_width(kc::KernelCorrection) = support_width(kc.kernel)
 @inline supportnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = supportnodes(kc.kernel, pt, mesh)
-@inline _supports_filtered_updates(::KernelCorrection) = true
+@inline supports_filtered_updates(::KernelCorrection) = true
 
 @inline update_basis_values!(bw::BasisWeight, kc::KernelCorrection, pt, mesh::CartesianMesh) =
     update_basis_values!(bw, kc, pt, mesh, Trues(size(mesh)))
