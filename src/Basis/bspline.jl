@@ -1,31 +1,43 @@
 abstract type AbstractBSpline{D <: Degree} <: Kernel end
 
-support_width(::AbstractBSpline{Degree{0}}) = 1
-support_width(::AbstractBSpline{Degree{1}}) = 2
-support_width(::AbstractBSpline{Degree{2}}) = 3
-support_width(::AbstractBSpline{Degree{3}}) = 4
-support_width(::AbstractBSpline{Degree{4}}) = 5
-support_width(::AbstractBSpline{Degree{5}}) = 6
+"""
+    BSpline(degree)
 
-@inline function supportnodes(spline::AbstractBSpline, pt, mesh::CartesianMesh{dim}) where {dim}
+B-spline kernel.
+`degree` is one of `Linear()`, `Quadratic()` or `Cubic()`.
+
+!!! warning
+    `BSpline(Quadratic())` and `BSpline(Cubic())` cannot handle boundaries correctly
+    because the kernel values are merely truncated, which leads to unstable behavior.
+    Therefore, it is recommended to use either `SteffenBSpline` or `KernelCorrection`
+    in cases where proper handling of boundaries is necessary.
+"""
+struct BSpline{D} <: AbstractBSpline{D}
+    degree::D
+end
+_maximum_bspline_degree(::BSpline) = 5
+Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
+
+@inline function support_width(spline::AbstractBSpline{Degree{n}}) where {n}
+    max_degree = _maximum_bspline_degree(spline)
+    0 ≤ n ≤ max_degree || throw(ArgumentError("$(nameof(typeof(spline))) degree must be between 0 and $max_degree"))
+    n + 1
+end
+
+# Equivalent to supportnodes(x, (n + 1) / 2, mesh), with one floor per axis.
+@inline function supportnodes(::AbstractBSpline{Degree{n}}, pt, mesh::CartesianMesh{dim}) where {n, dim}
     x = getx(pt)
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
-    offset = _supportnodes_offset(eltype(x), spline)
-    r = support_width(spline) - 1
+    T = eltype(x)
+    offset = T(n - 1) / T(2)
     start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
-    stop = @. start + r
+    stop = @. start + n
     imin = Tuple(@. max(start, 1))
     imax = Tuple(@. min(stop, dims))
     CartesianIndices(UnitRange.(imin, imax))
 end
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{0}}) where {T} = T(-0.5)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{1}}) where {T} = T(0.0)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{2}}) where {T} = T(0.5)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{3}}) where {T} = T(1.0)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{4}}) where {T} = T(1.5)
-@inline _supportnodes_offset(::Type{T}, ::AbstractBSpline{Degree{5}}) where {T} = T(2.0)
 
 @inline fract(x) = x - floor(x)
 # Fast calculations for value, gradient and hessian
@@ -77,7 +89,7 @@ function _bspline_values1d_expr(k::Int, degree::Int)
     Expr(:tuple, values...)
 end
 
-@generated function values1d(::Order{k}, spline::AbstractBSpline{Degree{n}}, x::Real) where {k, n}
+@generated function bspline_axis_values(::Order{k}, spline::BSpline{Degree{n}}, x::Real) where {k, n}
     0 ≤ n || error("B-spline degree must be non-negative")
     ξ_expr = isodd(n) ? :(fract(x)) : :(fract(x - T(0.5)))
     values_expr = _bspline_values1d_expr(k, n)
@@ -89,24 +101,13 @@ end
     end
 end
 
-@inline function update_basis_values!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
+@inline function update_basis_values!(bw::BasisWeight, spline::BSpline, pt, mesh::CartesianMesh)
     indices = supportnodes(bw)
     if has_full_support(bw, indices)
-        update_basis_values_full!(bw, spline, pt, mesh)
+        update_bspline_full_support!(bw, derivative_order(bw), spline, getx(pt), mesh)
     else
-        update_basis_values_truncated!(bw, spline, pt, mesh)
+        update_basis_values_nodewise!(bw, spline, pt, mesh)
     end
-end
-
-function update_basis_values_truncated!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh)
-    indices = supportnodes(bw)
-    @inbounds for ip in eachindex(indices)
-        i = indices[ip]
-        set_values!(bw, ip, basis_jet(derivative_order(bw), spline, getx(pt), mesh, i))
-    end
-end
-@inline function update_basis_values_full!(bw::BasisWeight, spline::AbstractBSpline, pt, mesh::CartesianMesh)
-    direct_set_values!(bw, derivative_order(bw), spline, getx(pt), mesh)
 end
 
 _bspline_var(r, d) = Symbol(:v, r, :_, d)
@@ -149,7 +150,7 @@ end
 
 # Fill the full-support BasisWeight arrays directly, avoiding prod_each_dimension
 # and the following copyto! into BasisWeight storage.
-@generated function direct_set_values!(bw::BasisWeight, order::Order{k}, spline::AbstractBSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
+@generated function update_bspline_full_support!(bw::BasisWeight, order::Order{k}, spline::BSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
     dims = ntuple(_ -> n + 1, dim)
     node_assignments = map(enumerate(CartesianIndices(dims))) do (i, I)
         # Load all 1D basis values needed at this support node.
@@ -167,7 +168,7 @@ end
         xmin = get_xmin(mesh)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - xmin) * h⁻¹
-        vals1d = @ntuple $dim d -> values1d(order, spline, ξ[d])
+        vals1d = @ntuple $dim d -> bspline_axis_values(order, spline, ξ[d])
         @nexprs $(k + 1) r -> vals_{r-1} = nodal_basis_values(bw, Order(r-1))
         @nexprs $k r -> hpow_r = h⁻¹^r
         @inbounds begin
@@ -176,23 +177,6 @@ end
         bw
     end
 end
-
-"""
-    BSpline(degree)
-
-B-spline kernel.
-`degree` is one of `Linear()`, `Quadratic()` or `Cubic()`.
-
-!!! warning
-    `BSpline(Quadratic())` and `BSpline(Cubic())` cannot handle boundaries correctly
-    because the kernel values are merely truncated, which leads to unstable behavior.
-    Therefore, it is recommended to use either `SteffenBSpline` or `KernelCorrection`
-    in cases where proper handling of boundaries is necessary.
-"""
-struct BSpline{D} <: AbstractBSpline{D}
-    degree::D
-end
-Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
 
 @inline function value(::BSpline{Constant}, ξ::Real)
     ξ = abs(ξ)
@@ -225,11 +209,7 @@ end
     ξ < 3 ? ((3-ξ)^5) / 120                          : zero(ξ)
 end
 
-@inline function jet(::Order{k}, spline::BSpline, ξ::Real) where {k}
-    reverse(∂{k}(ξ -> value(spline, ξ), ξ, :all))
-end
-
-@generated function basis_jet(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function nodal_basis_jet(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
@@ -253,7 +233,30 @@ See also [`KernelCorrection`](@ref).
 struct SteffenBSpline{D} <: AbstractBSpline{D}
     degree::D
 end
+_maximum_bspline_degree(::SteffenBSpline) = 3
 Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", spline.degree, ")")
+
+@inline function update_basis_values!(bw::BasisWeight, spline::SteffenBSpline, pt, mesh::CartesianMesh)
+    indices = supportnodes(bw)
+    if spline isa Union{SteffenBSpline{Constant}, SteffenBSpline{Linear}}
+        update_basis_values!(bw, BSpline(spline.degree), pt, mesh)
+    elseif has_steffen_interior_support(bw, indices, mesh)
+        update_bspline_full_support!(bw, derivative_order(bw), BSpline(spline.degree), getx(pt), mesh)
+    else
+        update_basis_values_nodewise!(bw, spline, pt, mesh)
+    end
+end
+# Steffen differs from the cardinal B-spline only at the two boundary nodes.
+@inline function has_steffen_interior_support(bw::BasisWeight, indices::CartesianIndices{dim}, mesh::CartesianMesh{dim}) where {dim}
+    has_full_support(bw, indices) || return false
+    @inbounds for d in 1:dim
+        nodes = indices.indices[d]
+        axis = mesh.axes[d]
+        first(nodes) - firstindex(axis) > 1 || return false
+        lastindex(axis) - last(nodes) > 1 || return false
+    end
+    true
+end
 
 # Steffen, M., Kirby, R. M., & Berzins, M. (2008).
 # Analysis and reduction of quadrature errors in the material point method (MPM).
@@ -264,7 +267,8 @@ end
 function value(::SteffenBSpline{Linear}, ξ::Real, pos::Int)
     value(BSpline(Linear()), ξ)
 end
-function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)::typeof(ξ)
+function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)
+    ξ = float(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 0.5 ? (3 - 4ξ^2) / 3 :
@@ -279,7 +283,8 @@ function value(::SteffenBSpline{Quadratic}, ξ::Real, pos::Int)::typeof(ξ)
         value(BSpline(Quadratic()), ξ)
     end
 end
-function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
+function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)
+    ξ = float(ξ)
     if pos == 0
         ξ = abs(ξ)
         ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 4 :
@@ -295,26 +300,22 @@ function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)::typeof(ξ)
     end
 end
 
-@inline function jet(::Order{k}, spline::SteffenBSpline, ξ::Real, pos::Int) where {k}
-    reverse(∂{k}(ξ -> value(spline, ξ, pos), ξ, :all))
-end
-
-@generated function basis_jet(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function nodal_basis_jet(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
-        pos = node_position(mesh, i)
+        pos = steffen_node_position(mesh, i)
         vals1d = @ntuple $dim d -> jet(order, spline, ξ[d], pos[d])
         vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
     end
 end
 
-@inline function node_position(ax::AbstractVector, i::Int)
+@inline function steffen_node_position(ax::AbstractVector, i::Int)
     left = i - firstindex(ax)
     right = lastindex(ax) - i
     ifelse(left < right, left, -right)
 end
-node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(node_position, mesh.axes, Tuple(index)))
+steffen_node_position(mesh::CartesianMesh, index::CartesianIndex) = Vec(map(steffen_node_position, mesh.axes, Tuple(index)))

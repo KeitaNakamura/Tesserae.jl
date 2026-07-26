@@ -18,9 +18,11 @@ struct uGIMP <: Kernel end
 support_width(::uGIMP) = 3
 
 @inline function supportnodes(::uGIMP, pt, mesh::CartesianMesh)
-    h⁻¹ = spacing_inv(mesh)
-    supportnodes(getx(pt), 1+pt.l*h⁻¹, mesh)
+    l = _normalized_particle_length(pt, mesh)
+    zero(l) ≤ l ≤ one(l) || throw(ArgumentError("uGIMP requires 0 ≤ pt.l ≤ spacing(mesh)"))
+    supportnodes(getx(pt), one(l) + l/2, mesh)
 end
+@inline _normalized_particle_length(pt, mesh::CartesianMesh) = pt.l / spacing(mesh)
 
 # simple uGIMP calculation
 # See Eq.(40) in
@@ -35,27 +37,15 @@ end
     ξ < 1+l/2 ? (1+l/2-ξ)^2 / 2l  : zero(ξ)
 end
 
-@inline function jet(::Order{k}, gimp::uGIMP, ξ::Real, l::Real) where {k}
-    reverse(∂{k}(ξ -> value(gimp, ξ, l), ξ, :all))
-end
-
-@generated function basis_jet(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+@generated function nodal_basis_jet(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
     quote
         @_inline_meta
         x = getx(pt)
         h⁻¹ = spacing_inv(mesh)
         ξ = (x - mesh[i]) * h⁻¹
-        l = pt.l * h⁻¹
+        l = _normalized_particle_length(pt, mesh)
         vals′ = @ntuple $dim d -> jet(order, spline, ξ[d], l)
         vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals′...))
         @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
-end
-
-@inline function update_basis_values!(bw::BasisWeight, gimp::uGIMP, pt, mesh::CartesianMesh)
-    indices = supportnodes(bw)
-    @inbounds for ip in eachindex(indices)
-        i = indices[ip]
-        set_values!(bw, ip, basis_jet(derivative_order(bw), gimp, pt, mesh, i))
     end
 end

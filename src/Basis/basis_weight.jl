@@ -13,20 +13,22 @@ Abstract subtype for compact-support kernels.
 abstract type Kernel <: Basis end
 
 """
-    basis_jet(order, basis, pt, mesh, i)
+    nodal_basis_jet(order, basis, pt, mesh, i)
 
 Return the value and spatial derivatives up to `order` of the `i`th basis
 function evaluated at `pt`.
 """
-function basis_jet end
+function nodal_basis_jet end
 
 """
-    jet(order, object, x, args...)
+    jet(order, f, x, args...)
 
-Return the value and derivatives up to `order` in `object`'s natural local or
+Return the value and derivatives up to `order` in `f`'s natural local or
 reference coordinate system.
 """
-function jet end
+@inline function jet(::Order{k}, f, x, args...) where {k}
+    reverse(∂{k}(y -> value(f, y, args...), x, :all))
+end
 
 #=
 Standard Cartesian basis extension:
@@ -39,10 +41,10 @@ By default, `BasisWeight` uses `support_width(basis)` to allocate arrays for
 `allocate_basis_values` only when a basis does not fit this fixed Cartesian
 storage layout.
 
-Specialized bases may instead define `update!` for their own `BasisWeight`;
-for example, CPDI defines `update!(bw::BasisWeight{CPDI}, pt, mesh)`.
-Such methods must update `supportnodes(bw)` and `nodal_basis_values(bw, order)`
-with matching local indices.
+Specialized bases may instead define `update_basis_weight!` for their own
+`BasisWeight`; CPDI uses this route because its support storage is variable.
+Such methods must update `supportnodes(bw)` and
+`nodal_basis_values(bw, order)` with matching local indices.
 =#
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
@@ -61,21 +63,21 @@ function allocate_static_basis_values(::Type{Vec{dim, T}}, shape::Shape; kwargs.
 end
 @generated function _allocate_basis_values(::Type{A}, ::Type{Vec{dim, T}}; derivative::Order{k}=Order(1), name=nothing) where {A, dim, T, k}
     quote
-        names = @ntuple $(k+1) i -> create_name(Order(i-1), name)
-        vals = @ntuple $(k+1) i -> fill(zero(create_elval(Vec{dim, T}, Order(i-1))), A)
+        names = @ntuple $(k+1) i -> basis_value_name(Order(i-1), name)
+        vals = @ntuple $(k+1) i -> fill(zero_basis_value(Vec{dim, T}, Order(i-1)), A)
         NamedTuple{names}(vals)
     end
 end
 
-create_elval(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
-create_elval(::Type{Vec{dim, T}}, ::Order{1}) where {dim, T} = zero(Vec{dim, T})
-create_elval(::Type{Vec{dim, T}}, ::Order{k}) where {dim, T, k} = zero(Tensor{Tuple{@Symmetry{ntuple(i->dim, k)...}}, T})
-create_name(::Order{0}, ::Val{name}) where {name} = name
-create_name(::Order{0}, ::Nothing) = :w
+zero_basis_value(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
+zero_basis_value(::Type{Vec{dim, T}}, ::Order{1}) where {dim, T} = zero(Vec{dim, T})
+zero_basis_value(::Type{Vec{dim, T}}, ::Order{k}) where {dim, T, k} = zero(Tensor{Tuple{@Symmetry{ntuple(i->dim, k)...}}, T})
+basis_value_name(::Order{0}, ::Val{name}) where {name} = name
+basis_value_name(::Order{0}, ::Nothing) = :w
 for (k, nabla) in enumerate((:∇, :∇², :∇³, :∇⁴, :∇⁵, :∇⁶, :∇⁷, :∇⁸, :∇⁹))
     @eval begin
-        create_name(::Order{$k}, ::Val{name}) where {name} = Symbol($(QuoteNode(nabla)), name)
-        create_name(::Order{$k}, ::Nothing) = $(QuoteNode(Symbol(nabla, :w)))
+        basis_value_name(::Order{$k}, ::Val{name}) where {name} = Symbol($(QuoteNode(nabla)), name)
+        basis_value_name(::Order{$k}, ::Nothing) = $(QuoteNode(Symbol(nabla, :w)))
     end
 end
 
@@ -197,11 +199,6 @@ When `domain` is a `Grid`, `SpGrid`, or mesh, the returned nodes are checked aga
 @inline function supportnodes(bw::BasisWeight, grid::Grid)
     supportnodes(bw, get_mesh(grid))
 end
-@inline function supportnodes(bw::BasisWeight, mesh::CartesianMesh)
-    inds = supportnodes(bw)
-    @boundscheck checkbounds(mesh, inds)
-    inds
-end
 # SpGrid always use CartesianMesh
 @inline function supportnodes(bw::BasisWeight, grid::SpGrid)
     inds = supportnodes(bw)
@@ -212,12 +209,7 @@ end
     neighbors
 end
 
-@inline function supportnodes(bw::BasisWeight, mesh::FEMesh)
-    inds = supportnodes(bw)
-    @boundscheck checkbounds(mesh, inds)
-    inds
-end
-@inline function supportnodes(bw::BasisWeight, mesh::IGAMesh)
+@inline function supportnodes(bw::BasisWeight, mesh::AbstractMesh)
     inds = supportnodes(bw)
     @boundscheck checkbounds(mesh, inds)
     inds
@@ -226,18 +218,18 @@ end
 @inline supportnodes_storage(bw::BasisWeight) = getfield(bw, :indices)
 
 @inline function derivative_order(bw::BasisWeight)
-    @debug check_weight_values(bw)
+    @debug check_basis_value_names(bw)
     k = length(propertynames(bw)) - 1
     Order(k)
 end
-@inline function check_weight_values(bw::BasisWeight)
+@inline function check_basis_value_names(bw::BasisWeight)
     k = length(propertynames(bw)) - 1
-    _check_weight_values(bw, Val(k))
+    check_basis_value_names(bw, Val(k))
 end
-@generated function _check_weight_values(bw::BasisWeight, ::Val{k}) where {k}
+@generated function check_basis_value_names(bw::BasisWeight, ::Val{k}) where {k}
     quote
         @_inline_meta
-        @assert @nall $(k+1) i -> create_name(Order(i-1), Val(propertynames(bw)[1])) === propertynames(bw)[i]
+        @assert @nall $(k+1) i -> basis_value_name(Order(i-1), Val(propertynames(bw)[1])) === propertynames(bw)[i]
     end
 end
 
@@ -400,28 +392,51 @@ end
     @debug checkbounds(A, indices)
     true
 end
-
 @inline has_full_support(bw::BasisWeight, indices) = size(nodal_basis_values(bw, Order(0))) == size(indices)
-@inline has_full_support(bw::BasisWeight, indices, ::Trues) = has_full_support(bw, indices)
 @inline has_full_support(bw::BasisWeight, indices, filter::AbstractArray{Bool}) = has_full_support(bw, indices) && alltrue(filter, indices)
 
+@inline function require_filtered_update_support(b)
+    supports_filtered_updates(b) || throw(ArgumentError("$(typeof(b)) does not support filtered updates"))
+    nothing
+end
+@inline supports_filtered_updates(::Any) = false
+@inline require_filtered_update_support(weights::BasisWeightArray, ::Integer) = require_filtered_update_support(basis(weights))
+@inline function require_filtered_update_support(weights::AbstractArray{<: BasisWeight}, n::Integer)
+    @inbounds for p in 1:n
+        require_filtered_update_support(basis(weights[p]))
+    end
+end
+
+@inline update_basis_values!(bw::BasisWeight, kernel::Kernel, pt, mesh::CartesianMesh) = update_basis_values_nodewise!(bw, kernel, pt, mesh)
+@inline function update_basis_values_nodewise!(bw::BasisWeight, kernel::Kernel, pt, mesh::CartesianMesh)
+    indices = supportnodes(bw)
+    order = derivative_order(bw)
+    @inbounds for ip in eachindex(indices)
+        set_values!(bw, ip, nodal_basis_jet(order, kernel, pt, mesh, indices[ip]))
+    end
+    bw
+end
+
 @inline function update!(bw::BasisWeight, pt, mesh::AbstractMesh)
+    update_basis_weight!(bw, pt, mesh)
+    bw
+end
+@inline function update_basis_weight!(bw::BasisWeight, pt, mesh::AbstractMesh)
     b = basis(bw)
     supportnodes_storage(bw)[] = supportnodes(b, pt, mesh)
     update_basis_values!(bw, b, pt, mesh)
-    bw
 end
 @inline function update!(bw::BasisWeight, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
     @assert size(mesh) == size(filter)
-    b = basis(bw)
-    supportnodes_storage(bw)[] = supportnodes(b, pt, mesh)
-    update_basis_values!(bw, b, pt, mesh, filter)
+    require_filtered_update_support(basis(bw))
+    update_basis_weight!(bw, pt, mesh, filter)
     bw
 end
 @inline update!(bw::BasisWeight, pt, mesh::AbstractMesh, ::Trues) = update!(bw, pt, mesh)
-@inline function update_basis_values!(bw::BasisWeight, basis, pt, mesh::AbstractMesh, filter)
-    @assert filter isa Trues
-    update_basis_values!(bw, basis, pt, mesh)
+@inline function update_basis_weight!(bw::BasisWeight, pt, mesh::AbstractMesh, filter::AbstractArray{Bool})
+    b = basis(bw)
+    supportnodes_storage(bw)[] = supportnodes(b, pt, mesh)
+    update_basis_values!(bw, b, pt, mesh, filter)
 end
 
 # accelerations
@@ -447,21 +462,26 @@ end
 
 where [`LazyRow`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
 """
-function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray=Trues(size(mesh)))
-    @assert length(weights) ≥ length(particles)
+function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray{Bool}=Trues(size(mesh)))
+    n = length(particles)
+    @assert length(weights) ≥ n
+    @assert size(mesh) == size(filter)
+    if !(filter isa Trues) && n != 0
+        require_filtered_update_support(weights, n)
+    end
 
     # check backend
     backend = get_backend(weights)
-    @assert get_backend(weights) == get_backend(particles) == get_backend(mesh) == backend
+    @assert get_backend(particles) == get_backend(mesh) == backend
     @assert filter isa Trues || get_backend(filter) == backend
 
     if backend isa CPU
-        @threaded for p in 1:length(particles)
+        @threaded for p in 1:n
             @inbounds update!(weights[p], LazyRow(particles, p), mesh, filter)
         end
     else
         kernel = gpukernel_update_weight(backend)
-        kernel(weights, particles, mesh, filter; ndrange=length(particles))
+        kernel(weights, particles, mesh, filter; ndrange=n)
     end
     weights
 end

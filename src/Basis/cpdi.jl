@@ -16,12 +16,10 @@ end
 
 [^CPDI]: [Sadeghirad, A., Brannon, R.M. and Burghardt, J., 2011. A convected particle domain interpolation technique to extend applicability of the material point method for problems involving massive deformations. International Journal for numerical methods in Engineering, 86(12), pp.1435-1456.](https://doi.org/10.1002/nme.3110)
 """
-struct CPDI <: Kernel end
+struct CPDI <: Basis end
 
-_cpdi_spgrid_error(context) =
-    error("$context: CPDI is currently supported only on dense Grid, not SpGrid")
-
-@inline supportnodes(::BasisWeight{CPDI}, ::SpGrid) = _cpdi_spgrid_error("supportnodes")
+cpdi_spgrid_error(context) = error("$context: CPDI is currently supported only on dense Grid, not SpGrid")
+@inline supportnodes(::BasisWeight{CPDI}, ::SpGrid) = cpdi_spgrid_error("supportnodes")
 
 struct CPDISupportNodes{T, V <: AbstractVector{T}} <: AbstractVector{T}
     indices::V
@@ -33,7 +31,8 @@ Base.size(x::CPDISupportNodes) = (x.len,)
     @inbounds x.indices[i]
 end
 
-@generated function allocate_basis_values(::Type{Vec{dim, T}}, ::CPDI; name::Val{sym}=Val(:w)) where {dim, T, sym}
+@generated function allocate_basis_values(::Type{Vec{dim, T}}, ::CPDI; derivative::Order{k}=Order(1), name::Val{sym}=Val(:w)) where {dim, T, k, sym}
+    k == 1 || return :(throw(ArgumentError("CPDI supports derivative=Order(1) only")))
     w = sym
     ∇w = Symbol(:∇, sym)
     quote
@@ -48,28 +47,28 @@ function initial_supportnodes(::CPDI, mesh::CartesianMesh{dim}) where {dim}
     CPDISupportNodes(indices, 0)
 end
 
-function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{1})
+function update_basis_weight!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{1})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2)
     x₁ = xₚ - r₁
     x₂ = xₚ + r₁
     Vₚ = 2r₁[1]
 
-    indices = find_supportnodes_cpdi(Val(4), (x₁, x₂), mesh)
+    indices = collect_cpdi_supportnodes(Val(4), (x₁, x₂), mesh)
     supportnodes_storage(bw)[] = indices
 
     spline = BSpline(Linear())
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        w₁ = only(basis_jet(Order(0), spline, x₁, mesh, i))
-        w₂ = only(basis_jet(Order(0), spline, x₂, mesh, i))
+        w₁ = only(nodal_basis_jet(Order(0), spline, x₁, mesh, i))
+        w₂ = only(nodal_basis_jet(Order(0), spline, x₂, mesh, i))
         w = (w₁ + w₂) / 2
         ∇w = Vec(w₂ - w₁) / Vₚ
         set_values!(bw, ip, (w,∇w))
     end
 end
 
-function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
+function update_basis_weight!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2,0)
     r₂ = pt.F * Vec(0,pt.l/2)
@@ -79,7 +78,7 @@ function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
     x₄ = xₚ - r₁ + r₂
     Vₚ = 4 * abs(r₁ × r₂)
 
-    indices = find_supportnodes_cpdi(Val(16), (x₁, x₂, x₃, x₄), mesh)
+    indices = collect_cpdi_supportnodes(Val(16), (x₁, x₂, x₃, x₄), mesh)
     supportnodes_storage(bw)[] = indices
 
     a = Vec(r₁[2]-r₂[2], r₂[1]-r₁[1])
@@ -87,17 +86,17 @@ function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{2})
     spline = BSpline(Linear())
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        w₁ = only(basis_jet(Order(0), spline, x₁, mesh, i))
-        w₂ = only(basis_jet(Order(0), spline, x₂, mesh, i))
-        w₃ = only(basis_jet(Order(0), spline, x₃, mesh, i))
-        w₄ = only(basis_jet(Order(0), spline, x₄, mesh, i))
+        w₁ = only(nodal_basis_jet(Order(0), spline, x₁, mesh, i))
+        w₂ = only(nodal_basis_jet(Order(0), spline, x₂, mesh, i))
+        w₃ = only(nodal_basis_jet(Order(0), spline, x₃, mesh, i))
+        w₄ = only(nodal_basis_jet(Order(0), spline, x₄, mesh, i))
         w = (w₁ + w₂ + w₃ + w₄) / 4
         ∇w = ((w₁-w₃)*a + (w₂-w₄)*b) / Vₚ
         set_values!(bw, ip, (w,∇w))
     end
 end
 
-function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{3})
+function update_basis_weight!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{3})
     xₚ = getx(pt)
     r₁ = pt.F * Vec(pt.l/2,0,0)
     r₂ = pt.F * Vec(0,pt.l/2,0)
@@ -112,28 +111,28 @@ function update!(bw::BasisWeight{CPDI}, pt, mesh::CartesianMesh{3})
     x₈ = xₚ - r₁ + r₂ + r₃
     Vₚ = 8 * (r₁ × r₂) ⋅ r₃
 
-    indices = find_supportnodes_cpdi(Val(64), (x₁, x₂, x₃, x₄, x₅, x₆, x₇, x₈), mesh)
+    indices = collect_cpdi_supportnodes(Val(64), (x₁, x₂, x₃, x₄, x₅, x₆, x₇, x₈), mesh)
     supportnodes_storage(bw)[] = indices
 
     A = hcat(r₂×r₃, r₃×r₁, r₁×r₂) / Vₚ
     spline = BSpline(Linear())
     @inbounds for ip in eachindex(indices)
         i = indices[ip]
-        w₁ = only(basis_jet(Order(0), spline, x₁, mesh, i))
-        w₂ = only(basis_jet(Order(0), spline, x₂, mesh, i))
-        w₃ = only(basis_jet(Order(0), spline, x₃, mesh, i))
-        w₄ = only(basis_jet(Order(0), spline, x₄, mesh, i))
-        w₅ = only(basis_jet(Order(0), spline, x₅, mesh, i))
-        w₆ = only(basis_jet(Order(0), spline, x₆, mesh, i))
-        w₇ = only(basis_jet(Order(0), spline, x₇, mesh, i))
-        w₈ = only(basis_jet(Order(0), spline, x₈, mesh, i))
+        w₁ = only(nodal_basis_jet(Order(0), spline, x₁, mesh, i))
+        w₂ = only(nodal_basis_jet(Order(0), spline, x₂, mesh, i))
+        w₃ = only(nodal_basis_jet(Order(0), spline, x₃, mesh, i))
+        w₄ = only(nodal_basis_jet(Order(0), spline, x₄, mesh, i))
+        w₅ = only(nodal_basis_jet(Order(0), spline, x₅, mesh, i))
+        w₆ = only(nodal_basis_jet(Order(0), spline, x₆, mesh, i))
+        w₇ = only(nodal_basis_jet(Order(0), spline, x₇, mesh, i))
+        w₈ = only(nodal_basis_jet(Order(0), spline, x₈, mesh, i))
         w = (w₁ + w₂ + w₃ + w₄ + w₅ + w₆ + w₇ + w₈) / 8
         ∇w = A * Vec(-w₁+w₂+w₃-w₄-w₅+w₆+w₇-w₈, -w₁-w₂+w₃+w₄-w₅-w₆+w₇+w₈, -w₁-w₂-w₃-w₄+w₅+w₆+w₇+w₈)
         set_values!(bw, ip, (w,∇w))
     end
 end
 
-@inline function find_supportnodes_cpdi(::Val{L}, corners, mesh::CartesianMesh{dim}) where {L, dim}
+@inline function collect_cpdi_supportnodes(::Val{L}, corners, mesh::CartesianMesh{dim}) where {L, dim}
     indices = MVector{L, CartesianIndex{dim}}(undef) # this works on GPU (https://discourse.julialang.org/t/cudanative-dynamic-allocation/35435/5)
     count = 0
     @inbounds for x in corners

@@ -142,9 +142,15 @@ end
 end
 
 @inline function _set_quadrature_data!(::Val{:boundary}, bw, measure, normal, q, cell, N, dNdξ, J, weight)
-    set_values!(bw, (N,))
+    metric = J'J
+    if derivative_order(bw) isa Order{0}
+        set_values!(bw, (N,))
+    else
+        # Contracting with the left pseudoinverse gives the ambient tangential gradient.
+        set_values!(bw, (N, dNdξ .⊡ Ref(inv(metric) * J')))
+    end
     if measure !== nothing
-        measure[q,cell] = weight * sqrt(det(J'J))
+        measure[q,cell] = weight * sqrt(det(metric))
     end
     if normal !== nothing
         n = _get_normal(J)

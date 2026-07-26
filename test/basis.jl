@@ -1,3 +1,11 @@
+struct TestLinearKernel <: Tesserae.Kernel end
+
+Tesserae.support_width(::TestLinearKernel) = 2
+Tesserae.supportnodes(::TestLinearKernel, pt, mesh::CartesianMesh) =
+    Tesserae.supportnodes(BSpline(Linear()), pt, mesh)
+Tesserae.nodal_basis_jet(order::Order, ::TestLinearKernel, pt, mesh::CartesianMesh, i) =
+    Tesserae.nodal_basis_jet(order, BSpline(Linear()), pt, mesh, i)
+
 @testset "BasisWeight" begin
 
 function check_weight_layout(bw::Union{BasisWeight, Tesserae.BasisWeightArray}, ::Type{T}, ::Val{dim}, derivative) where {T, dim}
@@ -155,28 +163,95 @@ end # BasisWeight
             end
         end
     end
+    @testset "Steffen boundary correction with full storage" begin
+        mesh = CartesianMesh(0.1, (0,0.4))
+        for (spline, x) in ((SteffenBSpline(Quadratic()), Vec(0.05)),
+                            (SteffenBSpline(Cubic()), Vec(0.1)))
+            bw = BasisWeight(spline, mesh)
+            update!(bw, x, mesh)
+            indices = supportnodes(bw)
+            @test size(indices) == size(bw.w)
+            for ip in eachindex(indices)
+                vals = Tesserae.nodal_basis_jet(Order(1), spline, x, mesh, indices[ip])
+                @test bw.w[ip] ≈ vals[1]
+                @test bw.∇w[ip] ≈ vals[2]
+            end
+        end
+    end
+
+    @testset "Supported B-spline degrees" begin
+        mesh = CartesianMesh(0.1, (0,1))
+        @test_throws ArgumentError BasisWeight(BSpline(Tesserae.Degree(6)), mesh)
+        @test_throws ArgumentError BasisWeight(SteffenBSpline(Tesserae.Quartic()), mesh)
+        for spline in (SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()))
+            @test (@inferred Tesserae.jet(Order(2), spline, 0, 1)) ==
+                  Tesserae.jet(Order(2), spline, 0.0, 1)
+        end
+    end
 
     @testset "uGIMP()" begin
         gimp = uGIMP()
+        @test Tesserae.jet(Order(1), BSpline(Quadratic()), 0) == (0.75, 0.0)
+        @test Tesserae.jet(Order(1), gimp, 0, 1) == (0.75, 0.0)
         for dim in (1,2,3)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             bw = BasisWeight(gimp, mesh)
             l = 0.5*spacing(mesh)
             x = interior_point(Val(dim))
-            check_update!(bw, (;x,l), x, mesh; partition=true, reproduces_linear=true, truncated=false)
+            check_update!(bw, (;x,l), x, mesh; partition=true, reproduces_linear=true)
             x = boundary_point(Val(dim))
             check_update!(bw, (;x,l), x, mesh; partition=false, reproduces_linear=false, truncated=true)
+
+            # At the largest supported particle length, uGIMP still has at
+            # most three support nodes per axis and fits its fixed storage.
+            l = spacing(mesh)
+            x = Vec{dim}(_ -> 0.44)
+            indices = Tesserae.supportnodes(gimp, (;x,l), mesh)
+            @test all(size(indices) .≤ size(bw.w))
+            check_update!(bw, (;x,l), x, mesh; partition=true, reproduces_linear=true)
         end
+
+        mesh = CartesianMesh(0.1, (0,1))
+        bw = BasisWeight(gimp, mesh)
+        check_update!(bw, (;x=Vec(0.44), l=0.0), Vec(0.44), mesh;
+                      partition=true, reproduces_linear=true)
+        @test_throws ArgumentError update!(bw, (;x=Vec(0.44), l=1.01spacing(mesh)), mesh)
+
+        l = 0.5spacing(mesh)
+        @test size(Tesserae.supportnodes(gimp, (;x=Vec(0.40), l), mesh)) == (3,)
+        @test size(Tesserae.supportnodes(gimp, (;x=Vec(0.44), l), mesh)) == (2,)
+
+        h = 0.003694869486948695
+        mesh32 = CartesianMesh(Float32, h, (0,1); warn=false)
+        @test eltype(mesh32) == Vec{1,Float32}
+        l32 = spacing(mesh32)
+        @test_nowarn Tesserae.supportnodes(gimp, (;x=Vec(100l32), l=l32), mesh32)
+    end
+
+    @testset "Kernel extension" begin
+        mesh = CartesianMesh(0.1, (0,1), (0,1))
+        kernel = TestLinearKernel()
+        x = interior_point(Val(2))
+        bw = BasisWeight(kernel, mesh)
+        check_update!(bw, x, x, mesh; partition=true, reproduces_linear=true, truncated=false)
     end
 
     @testset "CPDI" begin
         cpdi = CPDI()
+        @test cpdi isa Basis
+        @test !(cpdi isa Tesserae.Kernel)
+        @test_throws MethodError WLS(cpdi)
+        @test_throws MethodError KernelCorrection(cpdi)
         for dim in (1,2,3)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
             bw = BasisWeight(cpdi, mesh)
+            @test_throws ArgumentError BasisWeight(cpdi, mesh; derivative=Order(0))
             l = 0.5*spacing(mesh)
             F = one(Mat{dim,dim})
             x = interior_point(Val(dim))
+            filter = trues(size(mesh))
+            filter[begin] = false
+            @test_throws ArgumentError update!(bw, (;x,l,F), mesh, filter)
             check_update!(bw, (;x,l,F), x, mesh; partition=true, reproduces_linear=true)
 
             GridProp = NamedTuple{(:x, :m), Tuple{Vec{dim, Float64}, Float64}}
@@ -189,6 +264,32 @@ end # BasisWeight
             end
             @test err isa String && occursin("CPDI is currently supported only on dense Grid, not SpGrid", err)
         end
+
+        mesh = CartesianMesh(0.1, (0,1), (0,1))
+        l = 0.5spacing(mesh)
+        F = one(Mat{2,2})
+        particles = Tesserae.StructArray((
+            x=[Vec(0.45,0.46), Vec(0.5,0.5)],
+            l=fill(l, 2),
+            F=[0.2F, F],
+        ))
+        weights = generate_basis_weights(cpdi, mesh, length(particles))
+        @test update!(weights, particles, mesh) === weights
+        @test map(length ∘ supportnodes, weights) == [4, 9]
+        for p in eachindex(particles)
+            particle = (;x=particles.x[p], l=particles.l[p], F=particles.F[p])
+            scalar = BasisWeight(cpdi, mesh)
+            update!(scalar, particle, mesh)
+            @test collect(supportnodes(weights[p])) == collect(supportnodes(scalar))
+            @test weights[p].w ≈ scalar.w
+            @test weights[p].∇w ≈ scalar.∇w
+            @test check_partition_of_unity(weights[p], particles.x[p])
+            @test check_linear_field_reproduction(weights[p], particles.x[p], mesh)
+        end
+
+        filter = trues(size(mesh))
+        filter[begin] = false
+        @test_throws ArgumentError update!(weights, particles, mesh, filter)
     end
 
     @testset "WLS branches" begin
@@ -233,6 +334,49 @@ end # BasisWeight
         end
     end
 
+    @testset "Filtered corrections" begin
+        mesh = CartesianMesh(0.1, (0,1), (0,1))
+        x = interior_point(Val(2))
+        particles = Tesserae.StructArray((x=[x],))
+        filter = trues(size(mesh))
+        filter[first(Tesserae.supportnodes(BSpline(Quadratic()), x, mesh))] = false
+        @test_throws ArgumentError update!(BasisWeight(BSpline(Quadratic()), mesh), x, mesh, filter)
+
+        mixed_weights = BasisWeight[
+            BasisWeight(WLS(BSpline(Quadratic())), mesh),
+            BasisWeight(BSpline(Quadratic()), mesh),
+        ]
+        mixed_particles = Tesserae.StructArray((x=[x, x],))
+        @test_throws ArgumentError update!(mixed_weights, mixed_particles, mesh, filter)
+
+        empty_particles = Tesserae.StructArray((x=Vec{2,Float64}[],))
+        empty_weights = generate_basis_weights(BSpline(Quadratic()), mesh, 0)
+        @test update!(empty_weights, empty_particles, mesh, filter) === empty_weights
+
+        for basis in (WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())))
+            filter = trues(size(mesh))
+            masked_node = first(Tesserae.supportnodes(basis, x, mesh))
+            filter[masked_node] = false
+
+            scalar = BasisWeight(basis, mesh)
+            update!(scalar, x, mesh)
+            update!(scalar, x, mesh, filter)
+            @test check_partition_of_unity(scalar, x)
+            @test check_linear_field_reproduction(scalar, x, mesh)
+            masked_local_index = findfirst(==(masked_node), supportnodes(scalar))
+            @test !isnothing(masked_local_index)
+            @test iszero(scalar.w[masked_local_index])
+            @test iszero(scalar.∇w[masked_local_index])
+
+            weights = generate_basis_weights(basis, mesh, 1)
+            update!(weights, particles, mesh)
+            @test update!(weights, particles, mesh, filter) === weights
+            @test supportnodes(weights[1]) == supportnodes(scalar)
+            @test weights[1].w ≈ scalar.w
+            @test weights[1].∇w ≈ scalar.∇w
+        end
+    end
+
     @testset "$(Wrapper(kernel)) coverage" for Wrapper in (WLS, KernelCorrection),
                                                   kernel in (BSpline(Cubic()), BSpline(Tesserae.Quartic()), BSpline(Tesserae.Quintic()), SteffenBSpline(Linear()), SteffenBSpline(Quadratic()), SteffenBSpline(Cubic()))
         basis = Wrapper(kernel)
@@ -262,7 +406,7 @@ end
             nodeindices = supportnodes(bw)
             for ip in eachindex(nodeindices)
                 i = nodeindices[ip]
-                vals = Tesserae.basis_jet(Order(k), spline, xp, mesh, i)
+                vals = @inferred Tesserae.nodal_basis_jet(Order(k), spline, xp, mesh, i)
                 for a in 0:k
                     @test Tesserae.nodal_basis_values(bw, Order(a))[ip] ≈ vals[a+1] atol=sqrt(eps(Float64))
                 end
@@ -413,7 +557,7 @@ end
     function check_polynomial(poly, ::Val{max_order}, ::Type{T}, ::Val{dim}; check_values=true) where {max_order,T,dim}
         x = polynomial_point(T, Val(dim))
         exps = exponents(poly, Val(dim))
-        vals = Tesserae.jet(Order(max_order), poly, x)
+        vals = @inferred Tesserae.jet(Order(max_order), poly, x)
         @test all(v -> eltype(v) == T, vals)
         check_values || return
 

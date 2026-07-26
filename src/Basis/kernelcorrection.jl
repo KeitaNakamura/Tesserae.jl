@@ -17,25 +17,19 @@ end
 
 KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(MultiLinear()))
 
-get_kernel(kc::KernelCorrection) = kc.kernel
-get_polynomial(kc::KernelCorrection) = kc.poly
-support_width(kc::KernelCorrection) = support_width(get_kernel(kc))
-@inline supportnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = supportnodes(get_kernel(kc), pt, mesh)
+support_width(kc::KernelCorrection) = support_width(kc.kernel)
+@inline supportnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = supportnodes(kc.kernel, pt, mesh)
+@inline supports_filtered_updates(::KernelCorrection) = true
 
-@inline function update_basis_values!(bw::BasisWeight, kc::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool} = Trues(size(mesh)))
+@inline update_basis_values!(bw::BasisWeight, kc::KernelCorrection, pt, mesh::CartesianMesh) =
+    update_basis_values!(bw, kc, pt, mesh, Trues(size(mesh)))
+@inline function update_basis_values!(bw::BasisWeight, kc::KernelCorrection, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
     indices = supportnodes(bw)
     if has_full_support(bw, indices, filter)
-        update_basis_values_full!(bw, kc, pt, mesh)
+        update_basis_values!(bw, kc.kernel, pt, mesh)
     else
-        update_basis_values_truncated!(bw, kc, pt, mesh, filter)
+        update_basis_values!(bw, WLS(kc.kernel, kc.poly), pt, mesh, filter)
     end
 end
 
-function update_basis_values_truncated!(bw::BasisWeight, kc::KernelCorrection, pt, mesh, filter)
-    update_basis_values!(bw, WLS(get_kernel(kc), get_polynomial(kc)), pt, mesh, filter)
-end
-@inline function update_basis_values_full!(bw::BasisWeight, kc::KernelCorrection, pt, mesh)
-    update_basis_values!(bw, get_kernel(kc), pt, mesh)
-end
-
-Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", get_kernel(kc), ", ", get_polynomial(kc), ")")
+Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", kc.kernel, ", ", kc.poly, ")")
