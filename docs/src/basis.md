@@ -11,7 +11,7 @@ Because particles move through the mesh, basis weights are updated before transf
 The basis type determines the support nodes of each particle, affecting both the transfer behavior and computational cost.
 
 ```@docs
-update!(::AbstractArray{<: BasisWeight}, ::Tesserae.StructArray, ::Tesserae.AbstractMesh, ::AbstractArray)
+update!(::AbstractArray{<: BasisWeight}, ::Tesserae.StructArray, ::Tesserae.AbstractMesh, ::AbstractArray{Bool})
 ```
 
 ## Basis types
