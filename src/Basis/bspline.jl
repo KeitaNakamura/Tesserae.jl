@@ -240,14 +240,15 @@ Base.show(io::IO, spline::SteffenBSpline) = print(io, SteffenBSpline, "(", splin
     indices = supportnodes(bw)
     if spline isa Union{SteffenBSpline{Constant}, SteffenBSpline{Linear}}
         update_basis_values!(bw, BSpline(spline.degree), pt, mesh)
-    elseif has_full_support(bw, indices) && _has_steffen_interior_support(indices, mesh)
+    elseif has_steffen_interior_support(bw, indices, mesh)
         update_bspline_full_support!(bw, derivative_order(bw), BSpline(spline.degree), getx(pt), mesh)
     else
         update_basis_values_nodewise!(bw, spline, pt, mesh)
     end
 end
 # Steffen differs from the cardinal B-spline only at the two boundary nodes.
-@inline function _has_steffen_interior_support(indices::CartesianIndices{dim}, mesh::CartesianMesh{dim}) where {dim}
+@inline function has_steffen_interior_support(bw::BasisWeight, indices::CartesianIndices{dim}, mesh::CartesianMesh{dim}) where {dim}
+    has_full_support(bw, indices) || return false
     @inbounds for d in 1:dim
         nodes = indices.indices[d]
         axis = mesh.axes[d]
