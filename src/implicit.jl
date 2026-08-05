@@ -499,8 +499,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     lmat_assign = Any[]
     lmat_add = Any[]
     lmat2gmat = Any[]
-    for k in eachindex(equations)
-        (; lhs, rhs, op) = equations[k]
+    for equation in equations
+        (; lhs, rhs, op) = equation
         @capture(lhs, gmat_[gi_,gj_]) || error("@P2G_Matrix: Invalid global matrix expression, got `$lhs`")
         ((gi == i && gj == j) || (gi == j && gj == i)) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
         gmat in gmats && error("@P2G_Matrix: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
@@ -584,16 +584,14 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     end
 
     # cache for local matrices
-    arraydicts = Any[]
-    for gmat in gmats
+    arraydicts = map(gmats) do gmat
         arraydict = Symbol(gmat, :dict)
         Tarraydict = Symbol(:T, arraydict)
-        ex = quote
+        quote
             $Tarraydict = Dict{Tuple{Int,Int}, Matrix{eltype($gmat)}}
             $arraydict = $TaskLocalValue{$Tarraydict}(() -> $Tarraydict())
             $arraydict[] # initialize
         end
-        push!(arraydicts, ex)
     end
 
     body = quote
