@@ -396,6 +396,31 @@ end
 matrix_assembler(args...) = nothing
 matrix_assembler(matrix::SparseMatrixCSC, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis) = CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 
+function P2G_Matrix(f, device::CPUDevice, schedule::Val, grids, particles, weights, partition)
+    P2G((grids, particles, weights, p) -> (@inline f(grids, particles, weights, (p,))), device, schedule, grids, particles, weights, partition)
+end
+
+function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::QuadraturePoints,
+                    weights::Tuple{<:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, <:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}},
+                    ::Nothing) where {scheduler}
+    scheduler == :nothing || @warn "@P2G_Matrix: `ThreadPartition` must be given for threaded computation" maxlog=1
+
+    for cell in axes(particles, 2)
+        particle_indices = (CartesianIndex(q, cell) for q in axes(particles, 1))
+        @inline f(grids, particles, weights, particle_indices)
+    end
+end
+
+function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::QuadraturePoints,
+                    weights::Tuple{<:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, <:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}},
+                    partition::ThreadPartition{<:CellStrategy}) where {scheduler}
+    for group in threadsafe_groups(partition)
+        tforeach(group, scheduler) do cell
+            @inline f(grids, particles, weights, particle_indices(partition, particles, cell))
+        end
+    end
+end
+
 """
     @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) [partition] begin
         equations...
@@ -431,7 +456,7 @@ function P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, partition
 end
 
 function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particles,p), ((weights_i,weights_j),(ip,jp)), partition, program::TransferProgram)
-    @gensym grid_i′ grid_j′ weights_i′ weights_j′ bw_i bw_j gridindices_i gridindices_j
+    @gensym grid_i′ grid_j′ weights_i′ weights_j′ bw_i bw_j gridindices_i gridindices_j particle_indices remaining_particles
 
     equations = program.equations
     isempty(equations) && error("@P2G_Matrix: at least one equation is required")
@@ -452,7 +477,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     lmat_init = Any[]
     local_jdofs = Any[]
     local_idofs = Any[]
-    lmat_asm = Any[]
+    lmat_assign = Any[]
+    lmat_add = Any[]
     lmat2gmat = Any[]
     for k in eachindex(equations)
         (; lhs, rhs, op) = equations[k]
@@ -489,7 +515,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         end)
         push!(local_jdofs, :($J = Tesserae.local_dofs($ldofs_j, $jp)))
         push!(local_idofs, :($I = Tesserae.local_dofs($ldofs_i, $ip)))
-        push!(lmat_asm, :(@inbounds $lmat[$I,$J] .= $rhs))
+        push!(lmat_assign, :(@inbounds $lmat[$I,$J] .= $rhs))
+        push!(lmat_add, :(@inbounds @views $lmat[$I,$J] .+= $rhs))
         if gi == i && gj == j
             push!(assemblers_init, :($assembler = Tesserae.matrix_assembler($gmat, Tesserae.get_mesh($grid_i), Tesserae.get_mesh($grid_j), Tesserae.basis($weights_i), Tesserae.basis($weights_j))))
             push!(lmat2gmat, quote
@@ -519,22 +546,37 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         :(($gridindices_i, $gridindices_j) = Tesserae.matrix_supportnodes($bw_i, $grid_i′, $bw_j, $grid_j′))
     end
 
-    body = quote
+    particle_init = quote
         $(replaced[3]...)
         $(hoist_exprs...)
         $bw_i, $bw_j = $weights_i′[$p], $weights_j′[$p]
+    end
+
+    function assemble_particle(lmat_asm)
+        quote
+            for $jp in eachindex($gridindices_j)
+                $j = $gridindices_j[$jp]
+                $(cached_replacements(scope, 2, 5)...)
+                $(local_jdofs...)
+                for $ip in eachindex($gridindices_i)
+                    $i = $gridindices_i[$ip]
+                    $(cached_replacements(scope, 1, 4)...)
+                    $(local_idofs...)
+                    $(lmat_asm...)
+                end
+            end
+        end
+    end
+
+    body = quote
+        $p, $remaining_particles = Base.Iterators.peel($particle_indices)
+        $particle_init
         $supportnodes_expr
         $(lmat_init...)
-        for $jp in eachindex($gridindices_j)
-            $j = $gridindices_j[$jp]
-            $(cached_replacements(scope, 2, 5)...)
-            $(local_jdofs...)
-            for $ip in eachindex($gridindices_i)
-                $i = $gridindices_i[$ip]
-                $(cached_replacements(scope, 1, 4)...)
-                $(local_idofs...)
-                $(lmat_asm...)
-            end
+        $(assemble_particle(lmat_assign))
+        for $p in $remaining_particles
+            $particle_init
+            $(assemble_particle(lmat_add))
         end
         $(lmat2gmat...)
     end
@@ -564,7 +606,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
             $(fillzeros...)
             $(gdofs_init...)
             $(assemblers_init...)
-            $P2G((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $p) -> $body, $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
+            Tesserae.P2G_Matrix((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $particle_indices) -> $body,
+                                $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
         end
     end
 
