@@ -13,8 +13,10 @@
     @testset "square matrix" begin
         A = create_sparse_matrix(basis, mesh; ndofs=2)
         B = create_sparse_matrix(basis, mesh; ndofs=2)
+        A_dense = zeros(size(A))
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             A[i,j] = @∑ w[ip] * sum(∇w[jp])
+            A_dense[i,j] = @∑ w[ip] * sum(∇w[jp])
         end
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             B[j,i] = @∑ w[jp] * sum(∇w[ip])
@@ -22,6 +24,7 @@
         @test !(A ≈ A')
         @test !(B ≈ B')
         @test A ≈ B
+        @test A ≈ A_dense
     end
     @testset "multiple matrices" begin
         A = create_sparse_matrix(basis, mesh; ndofs=2)
@@ -162,6 +165,12 @@
         A = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
         B = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
 
+        assembler = @inferred Tesserae.matrix_assembler(A, mesh, mesh, basis, basis)
+        @test assembler.matrix === A
+        @test Tesserae.matrix_assembler(Matrix(A), mesh, mesh, basis, basis) === nothing
+        invalid = Tesserae.SparseArrays.dropzeros!(copy(A))
+        @test_throws ArgumentError Tesserae.matrix_assembler(invalid, mesh, mesh, basis, basis)
+
         table_i, table_j = Tesserae.matrix_dof_tables(A, grid, grid)
         @test size(table_i) == (2, size(grid)...)
         @test size(table_j) == (1, size(grid)...)
@@ -191,6 +200,22 @@
         scalar_table_i, scalar_table_j = Tesserae.matrix_dof_tables(create_sparse_matrix(basis, mesh; ndofs=1), grid, grid)
         scalar_dofs_i, scalar_dofs_j = Tesserae.support_dofs(scalar_table_i, nodes_i, scalar_table_j, nodes_j)
         @test scalar_dofs_i === scalar_dofs_j
+    end
+    @testset "Cartesian sparse scatter" begin
+        for dims in ((5,), (5, 6, 7))
+            scatter_mesh = CartesianMesh(1, ((0, n - 1) for n in dims)...)
+            direct = create_sparse_matrix(basis, scatter_mesh; ndofs=(2, 3))
+            merge = copy(direct)
+            nodes = CartesianIndices(ntuple(_ -> 1:3, length(dims)))
+            local_matrix = reshape(collect(1.0:6length(nodes)^2), 2length(nodes), 3length(nodes))
+            row_dofs = LinearIndices((2, dims...))
+            col_dofs = LinearIndices((3, dims...))
+
+            assembler = Tesserae.matrix_assembler(direct, scatter_mesh, scatter_mesh, basis, basis)
+            Tesserae.add!(assembler, nodes, nodes, local_matrix)
+            Tesserae.add!(merge, vec(row_dofs[:, nodes]), vec(col_dofs[:, nodes]), local_matrix)
+            @test direct == merge
+        end
     end
 end
 

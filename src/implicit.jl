@@ -306,6 +306,96 @@ function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int},
     @inbounds @views A[I,J] .+= K
 end
 
+struct CartesianSparseMatrixAssembler{A <: SparseMatrixCSC, N}
+    matrix::A
+    mesh_size::Dims{N}
+    sparsity_radius::Int
+    row_dofs_per_node::Int
+    col_dofs_per_node::Int
+end
+
+function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, mesh_size::Dims, sparsity_radius::Int)
+    node_count = prod(mesh_size)
+    node_count > 0 || throw(ArgumentError("mesh must contain at least one node"))
+    row_dofs_per_node, row_remainder = divrem(size(A, 1), node_count)
+    col_dofs_per_node, col_remainder = divrem(size(A, 2), node_count)
+    iszero(row_remainder) && iszero(col_remainder) || throw(DimensionMismatch("matrix dimensions must be multiples of the number of mesh nodes"))
+    row_dofs_per_node > 0 && col_dofs_per_node > 0 || throw(DimensionMismatch("matrix must have at least one row and column DoF per node"))
+    sparsity_radius ≥ 0 || throw(ArgumentError("sparsity radius must be nonnegative"))
+    assembler = CartesianSparseMatrixAssembler(A, mesh_size, sparsity_radius, row_dofs_per_node, col_dofs_per_node)
+    has_cartesian_sparse_pattern(assembler) || throw(ArgumentError("Cartesian sparse matrix must use the canonical sparsity pattern"))
+    assembler
+end
+
+function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
+    size(row_mesh) == size(col_mesh) || throw(DimensionMismatch("row and column meshes must have the same size"))
+    row_sparsity_radius = support_width(row_basis) - 1
+    col_sparsity_radius = support_width(col_basis) - 1
+    row_sparsity_radius == col_sparsity_radius || throw(ArgumentError("row and column bases must have the same support width"))
+    CartesianSparseMatrixAssembler(A, size(row_mesh), row_sparsity_radius)
+end
+
+function cartesian_neighbor_nodes(node::CartesianIndex{N}, mesh_size::Dims{N}, sparsity_radius::Int) where {N}
+    shift = sparsity_radius * oneunit(CartesianIndex{N})
+    ((node-shift) : (node+shift)) ∩ CartesianIndices(mesh_size)
+end
+
+function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler)
+    (; matrix, mesh_size, sparsity_radius, row_dofs_per_node, col_dofs_per_node) = assembler
+    row_dofs = LinearIndices((row_dofs_per_node, mesh_size...))
+    col_dofs = LinearIndices((col_dofs_per_node, mesh_size...))
+    rows = rowvals(matrix)
+    for col_node in CartesianIndices(mesh_size), b in 1:col_dofs_per_node
+        col = col_dofs[b, col_node]
+        indices = nzrange(matrix, col)
+        k = first(indices)
+        stop = last(indices) + 1
+        for row_node in cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius), a in 1:row_dofs_per_node
+            k < stop || return false
+            rows[k] == row_dofs[a, row_node] || return false
+            k += 1
+        end
+        k == stop || return false
+    end
+    true
+end
+
+@inline function add!(assembler::CartesianSparseMatrixAssembler{A, N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}, K::AbstractMatrix) where {A, N}
+    (; matrix, mesh_size, sparsity_radius, row_dofs_per_node, col_dofs_per_node) = assembler
+
+    mesh_nodes = CartesianIndices(mesh_size)
+    @boundscheck begin
+        checkbounds(mesh_nodes, row_nodes)
+        checkbounds(mesh_nodes, col_nodes)
+        size(K) == (row_dofs_per_node * length(row_nodes), col_dofs_per_node * length(col_nodes)) || throw(DimensionMismatch("local matrix size does not match Cartesian support DoFs"))
+        all(row_nodes ⊆ cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius) for col_node in col_nodes) || throw(ArgumentError("local matrix contains entries outside the Cartesian sparsity pattern"))
+    end
+
+    values = nonzeros(matrix)
+    col_dofs = LinearIndices((col_dofs_per_node, mesh_size...))
+    @inbounds for (jp, col_node) in enumerate(col_nodes), b in 1:col_dofs_per_node
+        col = col_dofs[b, col_node]
+        neighboring_nodes = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
+        col_start = first(nzrange(matrix, col))
+        local_col = col_dofs_per_node * (jp - 1) + b
+        local_row = 1
+        for tail_node in CartesianIndices(Base.tail(row_nodes.indices))
+            first_row_node = CartesianIndex(first(row_nodes)[1], tail_node)
+            local_node = first_row_node - first(neighboring_nodes) + oneunit(first_row_node)
+            slot = col_start + (LinearIndices(neighboring_nodes)[local_node] - 1) * row_dofs_per_node
+            for _ in 1:size(row_nodes, 1), a in 1:row_dofs_per_node
+                values[slot] += K[local_row, local_col]
+                slot += 1
+                local_row += 1
+            end
+        end
+    end
+    matrix
+end
+
+matrix_assembler(args...) = nothing
+matrix_assembler(matrix::SparseMatrixCSC, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis) = CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
+
 """
     @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) [partition] begin
         equations...
@@ -357,12 +447,12 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     fillzeros = Any[]
     gmats = Any[]
     gdofs_init = Any[]
+    assemblers_init = Any[]
     hoist_exprs = Any[]
     lmat_init = Any[]
     local_jdofs = Any[]
     local_idofs = Any[]
     lmat_asm = Any[]
-    gdofs_extract = Any[]
     lmat2gmat = Any[]
     for k in eachindex(equations)
         (; lhs, rhs, op) = equations[k]
@@ -375,6 +465,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         gdofs_j = gensym(Symbol(gmat, :gdofs_j))
         ldofs_i = gensym(Symbol(gmat, :ldofs_i))
         ldofs_j = gensym(Symbol(gmat, :ldofs_j))
+        assembler = gensym(Symbol(gmat, :assembler))
         dofs_i = gensym(Symbol(gmat, :dofs_i))
         dofs_j = gensym(Symbol(gmat, :dofs_j))
         I = gensym(Symbol(gmat, :I))
@@ -399,11 +490,26 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         push!(local_jdofs, :($J = Tesserae.local_dofs($ldofs_j, $jp)))
         push!(local_idofs, :($I = Tesserae.local_dofs($ldofs_i, $ip)))
         push!(lmat_asm, :(@inbounds $lmat[$I,$J] .= $rhs))
-        push!(gdofs_extract, :(($dofs_i, $dofs_j) = Tesserae.support_dofs($gdofs_i, $gridindices_i, $gdofs_j, $gridindices_j)))
         if gi == i && gj == j
-            push!(lmat2gmat, :(Tesserae.add!($gmat, $dofs_i, $dofs_j, $lmat)))
+            push!(assemblers_init, :($assembler = Tesserae.matrix_assembler($gmat, Tesserae.get_mesh($grid_i), Tesserae.get_mesh($grid_j), Tesserae.basis($weights_i), Tesserae.basis($weights_j))))
+            push!(lmat2gmat, quote
+                if $assembler === nothing
+                    ($dofs_i, $dofs_j) = Tesserae.support_dofs($gdofs_i, $gridindices_i, $gdofs_j, $gridindices_j)
+                    Tesserae.add!($gmat, $dofs_i, $dofs_j, $lmat)
+                else
+                    Tesserae.add!($assembler, $gridindices_i, $gridindices_j, $lmat)
+                end
+            end)
         else
-            push!(lmat2gmat, :(Tesserae.add!($gmat, $dofs_j, $dofs_i, $lmat')))
+            push!(assemblers_init, :($assembler = Tesserae.matrix_assembler($gmat, Tesserae.get_mesh($grid_j), Tesserae.get_mesh($grid_i), Tesserae.basis($weights_j), Tesserae.basis($weights_i))))
+            push!(lmat2gmat, quote
+                if $assembler === nothing
+                    ($dofs_j, $dofs_i) = Tesserae.support_dofs($gdofs_j, $gridindices_j, $gdofs_i, $gridindices_i)
+                    Tesserae.add!($gmat, $dofs_j, $dofs_i, $lmat')
+                else
+                    Tesserae.add!($assembler, $gridindices_j, $gridindices_i, $lmat')
+                end
+            end)
         end
     end
 
@@ -430,7 +536,6 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
                 $(lmat_asm...)
             end
         end
-        $(gdofs_extract...)
         $(lmat2gmat...)
     end
 
@@ -458,6 +563,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
             $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
             $(fillzeros...)
             $(gdofs_init...)
+            $(assemblers_init...)
             $P2G((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $p) -> $body, $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
         end
     end
