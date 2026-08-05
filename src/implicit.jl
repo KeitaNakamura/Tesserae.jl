@@ -517,21 +517,13 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         lmat_dims = Symbol(lmat, :dims)
         push!(gmats, gmat)
-        if gi == i && gj == j
-            row_grid, col_grid = grid_i, grid_j
-            row_weights, col_weights = weights_i, weights_j
-            dof_table_i = :($(assembler).row_dof_table)
-            dof_table_j = :($(assembler).col_dof_table)
-            row_nodes, col_nodes = gridindices_i, gridindices_j
-            scatter_lmat = lmat
-        else
-            row_grid, col_grid = grid_j, grid_i
-            row_weights, col_weights = weights_j, weights_i
-            dof_table_i = :($(assembler).col_dof_table)
-            dof_table_j = :($(assembler).row_dof_table)
-            row_nodes, col_nodes = gridindices_j, gridindices_i
-            scatter_lmat = :($lmat')
-        end
+        forward = gi == i && gj == j
+        reorder_pair = forward ? identity : reverse
+        row_grid, col_grid = reorder_pair((grid_i, grid_j))
+        row_weights, col_weights = reorder_pair((weights_i, weights_j))
+        dof_table_i, dof_table_j = reorder_pair((:($(assembler).row_dof_table), :($(assembler).col_dof_table)))
+        row_nodes, col_nodes = reorder_pair((gridindices_i, gridindices_j))
+        scatter_lmat = forward ? lmat : :($lmat')
         push!(lmat_init, quote
             $ldofs_i = Tesserae.local_dof_table($dof_table_i, $gridindices_i)
             $ldofs_j = Tesserae.local_dof_table($dof_table_j, $gridindices_j)
