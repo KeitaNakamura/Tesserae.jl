@@ -165,13 +165,19 @@
         A = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
         B = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
 
+        table_i, table_j = Tesserae.matrix_dof_tables(A, grid, grid)
         assembler = @inferred Tesserae.matrix_assembler(A, mesh, mesh, basis, basis)
         @test assembler.matrix === A
-        @test Tesserae.matrix_assembler(Matrix(A), mesh, mesh, basis, basis) === nothing
+        @test assembler.row_dof_table == table_i
+        @test assembler.col_dof_table == table_j
+        dense = Matrix(A)
+        generic_assembler = @inferred Tesserae.matrix_assembler(dense, mesh, mesh, basis, basis)
+        @test generic_assembler.matrix === dense
+        @test generic_assembler.row_dof_table == table_i
+        @test generic_assembler.col_dof_table == table_j
         invalid = Tesserae.SparseArrays.dropzeros!(copy(A))
         @test_throws ArgumentError Tesserae.matrix_assembler(invalid, mesh, mesh, basis, basis)
 
-        table_i, table_j = Tesserae.matrix_dof_tables(A, grid, grid)
         @test size(table_i) == (2, size(grid)...)
         @test size(table_j) == (1, size(grid)...)
         @test size(A) == (length(table_i), length(table_j))
