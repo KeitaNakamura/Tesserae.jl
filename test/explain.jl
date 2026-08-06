@@ -632,8 +632,7 @@
         shown = sprint(show, MIME("text/plain"), ex)
         @test occursin("Tesserae.matrix_dof_tables(A, grid, grid)", shown)
         @test occursin("Tesserae.matrix_supportnodes(bw_i, grid)", shown)
-        @test occursin("Tesserae.local_dof_table(A_table_i, nodes_i)", shown)
-        @test occursin("Tesserae.local_dofs(A_local_i, ip)", shown)
+        @test occursin("Tesserae.local_dofs(size(A_table_i, 1), local_ip)", shown)
         @test occursin("Tesserae.support_dofs(A_table_i, nodes_i, A_table_j, nodes_j)", shown)
         @test occursin("A[A_dofs_i, A_dofs_j] .+= A_local", shown)
         @test occursin("A_local[A_i, A_j] .= ", shown)
@@ -644,7 +643,7 @@
         @test !occursin("LinearIndices", shown)
         @test !occursin("vec(view", shown)
         @test !occursin(r"(?m)^begin\b", shown)
-        @test occursin("for ip in eachindex(nodes_i)", shown)
+        @test occursin("for (local_ip, ip) in enumerate(eachindex(nodes_i))", shown)
         @test !occursin("for ip =", shown)
         @test occursin("Threads.@threads :dynamic for region in group", sprint(show, MIME("text/plain"), ex_threaded))
 
@@ -881,15 +880,13 @@ for p in eachindex(particles)
     bw_i = weights[p]
     bw_j = bw_i
     (nodes_i, nodes_j) = Tesserae.matrix_supportnodes(bw_i, grid)
-    A_local_i = Tesserae.local_dof_table(A_table_i, nodes_i)
-    A_local_j = Tesserae.local_dof_table(A_table_j, nodes_j)
-    A_local = zeros(eltype(A), (length(A_local_i), length(A_local_j)))
-    for jp in eachindex(nodes_j)
+    A_local = zeros(eltype(A), (size(A_table_i, 1) * length(nodes_i), size(A_table_j, 1) * length(nodes_j)))
+    for (local_jp, jp) in enumerate(eachindex(nodes_j))
         j = nodes_j[jp]
-        A_j = Tesserae.local_dofs(A_local_j, jp)
-        for ip in eachindex(nodes_i)
+        A_j = Tesserae.local_dofs(size(A_table_j, 1), local_jp)
+        for (local_ip, ip) in enumerate(eachindex(nodes_i))
             i = nodes_i[ip]
-            A_i = Tesserae.local_dofs(A_local_i, ip)
+            A_i = Tesserae.local_dofs(size(A_table_i, 1), local_ip)
             A_local[A_i, A_j] .= begin
                 K = bw_i.∇w[ip] ⊗ bw_j.∇w[jp]
                 K
@@ -913,15 +910,13 @@ for p in eachindex(particles)
     bw_i = weights_u[p]
     bw_j = weights_p[p]
     (nodes_i, nodes_j) = Tesserae.matrix_supportnodes(bw_i, grid_u, bw_j, grid_p)
-    A_local_i = Tesserae.local_dof_table(A_table_i, nodes_i)
-    A_local_j = Tesserae.local_dof_table(A_table_j, nodes_j)
-    A_local = zeros(eltype(A), (length(A_local_i), length(A_local_j)))
-    for jp in eachindex(nodes_j)
+    A_local = zeros(eltype(A), (size(A_table_i, 1) * length(nodes_i), size(A_table_j, 1) * length(nodes_j)))
+    for (local_jp, jp) in enumerate(eachindex(nodes_j))
         j = nodes_j[jp]
-        A_j = Tesserae.local_dofs(A_local_j, jp)
-        for ip in eachindex(nodes_i)
+        A_j = Tesserae.local_dofs(size(A_table_j, 1), local_jp)
+        for (local_ip, ip) in enumerate(eachindex(nodes_i))
             i = nodes_i[ip]
-            A_i = Tesserae.local_dofs(A_local_i, ip)
+            A_i = Tesserae.local_dofs(size(A_table_i, 1), local_ip)
             A_local[A_i, A_j] .= bw_i.∇N[ip] * bw_j.N[jp]
         end
     end

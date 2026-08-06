@@ -481,44 +481,39 @@ end
 #  LocalMatrixBuffer
 # -----------------------------------------------------------------------------
 
-struct LocalMatrixBuffer{M <: Matrix, R <: LinearIndices, C <: LinearIndices}
+struct LocalMatrixBuffer{M <: Matrix}
     matrix::M
-    row_dof_table::R
-    col_dof_table::C
+    row_ndofs::Int
+    col_ndofs::Int
 end
 
-function local_matrix_cache(assembler, row_weights, col_weights)
-    T = eltype(assembler.matrix)
+function local_matrix_cache(matrix, dof_table_i, weights_i, dof_table_j, weights_j)
+    T = eltype(matrix)
     TaskLocalValue{Matrix{T}}() do
-        row_size = size(assembler.row_dof_table, 1) * nsupportnodes(basis(row_weights))
-        col_size = size(assembler.col_dof_table, 1) * nsupportnodes(basis(col_weights))
+        row_size = size(dof_table_i, 1) * nsupportnodes(basis(weights_i))
+        col_size = size(dof_table_j, 1) * nsupportnodes(basis(weights_j))
         Matrix{T}(undef, row_size, col_size)
     end
 end
 
 @inline function local_matrix_buffer(cache::TaskLocalValue{<:Matrix}, row_dof_table, row_nodes, col_dof_table, col_nodes)
-    row_dof_table = local_dof_table(row_dof_table, row_nodes)
-    col_dof_table = local_dof_table(col_dof_table, col_nodes)
-    dims = length(row_dof_table), length(col_dof_table)
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    dims = row_ndofs * length(row_nodes), col_ndofs * length(col_nodes)
     matrix = cache[]
     @boundscheck size(matrix) == dims || throw(DimensionMismatch("local matrix size changed during assembly"))
-    LocalMatrixBuffer(matrix, row_dof_table, col_dof_table)
+    LocalMatrixBuffer(matrix, row_ndofs, col_ndofs)
 end
 
 # ---- DoF indexing ----
 
-function local_dof_table(dof_table, nodes)
+function local_dofs(ndofs::Int, index::Integer)
     @_propagate_inbounds_meta
-    LinearIndices((size(dof_table, 1), size(nodes)...))
+    vec(view(LinearIndices((ndofs, index)), :, index))
 end
 
-function local_dofs(local_table, ip)
-    @_propagate_inbounds_meta
-    vec(view(local_table, :, ip))
-end
-
-matrix_row_dofs(buffer::LocalMatrixBuffer, ip) = (@_propagate_inbounds_meta; local_dofs(buffer.row_dof_table, ip))
-matrix_col_dofs(buffer::LocalMatrixBuffer, jp) = (@_propagate_inbounds_meta; local_dofs(buffer.col_dof_table, jp))
+matrix_row_dofs(buffer::LocalMatrixBuffer, ip) = (@_propagate_inbounds_meta; local_dofs(buffer.row_ndofs, ip))
+matrix_col_dofs(buffer::LocalMatrixBuffer, jp) = (@_propagate_inbounds_meta; local_dofs(buffer.col_ndofs, jp))
 matrix_row_dofs(::Nothing, ip) = nothing
 matrix_col_dofs(::Nothing, jp) = nothing
 
@@ -909,10 +904,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     j_replacements = cached_replacements(scope, j, jp)
     inner_symbols = p2g_cached_symbols(cached_replacements(scope, i, j, ip, jp))
 
-    fillzeros = Any[]
     gmats = Any[]
-    assemblers_init = Any[]
-    matrix_caches = Any[]
+    matrices_init = Any[]
     hoist_exprs = Any[]
     buffers_init = Any[]
     block_buffers_init = Any[]
@@ -934,7 +927,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         I = gensym(Symbol(gmat, :I))
         J = gensym(Symbol(gmat, :J))
 
-        op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($gmat)))
+        fillzero = op == :(=) ? :(Tesserae.fillzero!($gmat)) : nothing
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         push!(gmats, gmat)
@@ -944,12 +937,17 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         row_grid, col_grid = reorder_pair((grid_i, grid_j))
         row_weights, col_weights = reorder_pair((weights_i, weights_j))
         dof_table_i, dof_table_j = reorder_pair((:($(assembler).row_dof_table), :($(assembler).col_dof_table)))
-        push!(matrix_caches, :($(Symbol(gmat,:cache)) = Tesserae.local_matrix_cache($assembler, $row_weights, $col_weights)))
+        matrix_cache = Symbol(gmat, :cache)
+        push!(matrices_init, quote
+            $fillzero
+            $assembler = Tesserae.matrix_assembler($gmat, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
+            $matrix_cache = Tesserae.local_matrix_cache($gmat, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
+        end)
         push!(buffers_init, quote
             if $matrix_assembly isa Tesserae.ParticleAssembly
                 $buffer = nothing
             elseif $matrix_assembly isa Tesserae.CellAssembly
-                $buffer = Tesserae.local_matrix_buffer($(Symbol(gmat,:cache)), $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
+                $buffer = Tesserae.local_matrix_buffer($matrix_cache, $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
             else
                 error("BlockAssembly must use block assembly")
             end
@@ -960,7 +958,6 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         push!(assemble_first, :(Tesserae.assemble_first!($assembler, $buffer, $orientation, $i, $j, $I, $J, $rhs)))
         push!(assemble_add, :(Tesserae.assemble_add!($assembler, $buffer, $orientation, $i, $j, $I, $J, $rhs)))
         push!(assemble_block_entries, :(Tesserae.assemble_block_entry!($assembler, $buffer, $matrix_assembly, $orientation, $i, $j, $rhs)))
-        push!(assemblers_init, :($assembler = Tesserae.matrix_assembler($gmat, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))))
         push!(finish_assemblies, :(Tesserae.finish_assembly!($assembler, $buffer, $orientation, $gridindices_i, $gridindices_j)))
         push!(finish_block_assemblies, :(Tesserae.finish_block_assembly!($assembler, $buffer, $matrix_assembly, $orientation)))
     end
@@ -1040,9 +1037,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         let
             $check_arguments_for_P2G_Matrix($grid_i, $particles, $weights_i, $partition)
             $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
-            $(fillzeros...)
-            $(assemblers_init...)
-            $(matrix_caches...)
+            $(matrices_init...)
             Tesserae.P2G_Matrix((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $particle_indices, $matrix_assembly) -> $body,
                                 $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
         end

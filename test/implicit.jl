@@ -218,12 +218,10 @@
         @test Tesserae.matrix_block_supportnodes(weights, particle_indices, grid) ==
               first_node:last_node
 
-        local_i = Tesserae.local_dof_table(table_i, nodes_i)
-        local_j = Tesserae.local_dof_table(table_j, nodes_j)
-        ip = first(eachindex(nodes_i))
-        jp = first(eachindex(nodes_j))
-        @test Tesserae.local_dofs(local_i, ip) == vec(view(local_i, :, ip))
-        @test Tesserae.local_dofs(local_j, jp) == vec(view(local_j, :, jp))
+        ip = length(nodes_i)
+        jp = length(nodes_j)
+        @test Tesserae.local_dofs(2, ip) == (2ip-1):2ip
+        @test Tesserae.local_dofs(1, jp) == jp:jp
 
         dofs_i, dofs_j = Tesserae.support_dofs(table_i, nodes_i, table_j, nodes_j)
         @test dofs_i == vec(table_i[:, nodes_i])
@@ -393,6 +391,7 @@ end
     @test_throws UndefKeywordError create_sparse_matrix(quad4)
 
     A = create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
+    B = create_sparse_matrix((quad4, quad9); ndofs=(1, 2))
     @test size(A) == (30, 6)
     @test Tesserae.SparseArrays.nnz(A) == 132
 
@@ -410,8 +409,10 @@ end
 
     @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
         A[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
+        B[j,i] = @∑ ∇N[ip] * N[jp] * V[p]
     end
     @test any(!iszero, Tesserae.SparseArrays.nonzeros(A))
+    @test B ≈ A'
 
     shifted = FEMesh(Tesserae.Quad4(), CartesianMesh(1, (2,4), (0,1)))
     @test_throws ArgumentError create_sparse_matrix((quad9, shifted); ndofs=(2, 1))

@@ -46,7 +46,7 @@ function cached_replacements(scope::TransferScope, indices...)
     exprs = Expr[]
     for index in indices
         haskey(scope.replacements, index) || error("index `$index` is not bound in this transfer scope")
-        append_unique_exprs!(exprs, scope.replacements[index])
+        union!(exprs, scope.replacements[index])
     end
     exprs
 end
@@ -67,13 +67,6 @@ end
 function push_unique!(xs::Vector, x)
     x in xs || push!(xs, x)
     xs
-end
-
-function append_unique_exprs!(dst::Vector{Expr}, src::Vector{Expr})
-    for x in src
-        push_unique!(dst, x)
-    end
-    dst
 end
 
 """
