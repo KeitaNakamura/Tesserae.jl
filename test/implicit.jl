@@ -105,6 +105,25 @@
         @test B ≈ Bref
         @test A ≈ B'
     end
+    @testset "block partition" begin
+        partition = ThreadPartition(mesh)
+        update!(partition, particles.x)
+
+        reference = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        block_sparse = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        block_dense = zeros(length(grid), 2length(grid))
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            reference[i,j] = @∑ ∇w[ip] * w[jp]
+        end
+        @threaded :static @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
+            block_sparse[i,j] = @∑ ∇w[ip] * w[jp]
+            block_dense[j,i] = @∑ ∇w[ip] * w[jp]
+        end
+
+        @test block_sparse ≈ reference
+        @test block_dense ≈ Matrix(reference')
+    end
     @testset "duplicate matrix" begin
         ex = quote
             @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
