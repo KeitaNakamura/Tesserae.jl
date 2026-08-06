@@ -206,11 +206,14 @@ const nurbs_cubic = Tesserae.NURBS.cubic
     @testset "Basis weights" begin
         # IGA basis-weight arrays should carry the same support-node layout as
         # direct mesh support queries.
-        igaweights = @inferred generate_basis_weights(Float64, mesh, 2, Tesserae.ncells(mesh))
+        WeightProp = @NamedTuple{w::Float64, ψ::Vec{2,Float32}}
+        igaweights = @inferred generate_basis_weights(WeightProp, mesh, 2, Tesserae.ncells(mesh))
         @test size(igaweights) == (2, Tesserae.ncells(mesh))
         @test typeof(Tesserae.basis(igaweights)) === typeof(mesh_basis)
         @test size(igaweights[1, meshcells[end]].w) == (9,)
         @test size(igaweights[1, meshcells[end]].∇w) == (9,)
+        @test size(igaweights[1, meshcells[end]].ψ) == (9,)
+        @test all(iszero, igaweights.ψ)
         @test length(supportnodes(igaweights[1, meshcells[end]])) == 9
 
         vals = (w=reshape(collect(1.0:16.0), 1, 16),)

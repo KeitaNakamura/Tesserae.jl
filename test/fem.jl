@@ -16,7 +16,9 @@
         )
         rule = generate_quadrature_rule(Tesserae.Quad9())
         points = @inferred generate_particles(@NamedTuple{x::Vec{2,Float64}, V::Float64}, geometry, rule)
-        weights = @inferred generate_basis_weights(field, size(points); name=Val(:N))
+        WeightProp = @NamedTuple{N::Float64, ψ::Float32}
+        weights = @inferred generate_basis_weights(WeightProp, field, size(points))
+        weights.ψ .= 1
 
         @test (@inferred basis(geometry)) === Tesserae.cellshape(geometry)
         @test_throws MethodError generate_particles(@NamedTuple{x::Vec{2,Float64}}, geometry)
@@ -38,6 +40,7 @@
         @test quadrature_rule(adapted_points) === rule
         @test supportnodes(weights[1,1]) == Tesserae.SVector(2, 3, 4, 5)
         @test (@inferred update!(weights, points, field; geometry, measure=points.V)) === weights
+        @test all(==(1), weights.ψ)
         for (q, (point, weight)) in enumerate(zip(rule.points, rule.weights))
             ξ, η = point
             N, dNdξ = Tesserae.jet(Order(1), Tesserae.Quad4(), point)

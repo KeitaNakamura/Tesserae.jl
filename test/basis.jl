@@ -331,7 +331,9 @@ end # BasisWeight
         @test_throws MethodError KernelCorrection(cpdi)
         for dim in (1,2,3)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            bw = BasisWeight(cpdi, mesh)
+            Prop = NamedTuple{(:w, :ψ), Tuple{Float64, Vec{dim,Float64}}}
+            bw = BasisWeight(Prop, cpdi, mesh)
+            bw.ψ .= Ref(ones(Vec{dim,Float64}))
             @test_throws ArgumentError BasisWeight(cpdi, mesh; derivative=Order(0))
             l = 0.5*spacing(mesh)
             F = one(Mat{dim,dim})
@@ -340,6 +342,7 @@ end # BasisWeight
             filter[begin] = false
             @test_throws ArgumentError update!(bw, (;x,l,F), mesh, filter)
             check_update!(bw, (;x,l,F), x, mesh; partition=true, reproduces_linear=true)
+            @test all(==(ones(Vec{dim,Float64})), bw.ψ)
 
             GridProp = NamedTuple{(:x, :m), Tuple{Vec{dim, Float64}, Float64}}
             spgrid = generate_grid(SpArray, GridProp, mesh)
