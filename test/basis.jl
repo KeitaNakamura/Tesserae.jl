@@ -129,6 +129,12 @@ end
 
     @test Tesserae.derivative_order(bw) isa Order{1}
     @test propertynames(bw) === (:w, :∇w, :ψ)
+    @test_throws ArgumentError Tesserae.nodal_basis_values(bw, Order(2))
+    @test_throws DimensionMismatch Tesserae.set_values!(bw, 1, (1.0, Vec(1.0, 2.0), Vec(3.0, 4.0)))
+    @test_throws DimensionMismatch Tesserae.set_values!(bw, (bw.w, bw.∇w, bw.ψ))
+    @test iszero(bw.w[1])
+    @test iszero(bw.∇w[1])
+    @test bw.ψ[1] == Vec(1.0, 2.0)
     update!(bw, Vec(2.2, 3.4), mesh)
     @test all(==(Vec(1.0, 2.0)), bw.ψ)
 end
@@ -155,6 +161,19 @@ end
     @test eltype(weights.ψ) === Vec{2,Float64}
     @test Tesserae.derivative_order(weights) isa Order{1}
     @test Tesserae.derivative_order(first(weights)) isa Order{1}
+
+    fill!(weights.ψ, Vec(1.0, 2.0))
+    weights_view = @inferred view(weights, 2:2)
+    @test propertynames(weights_view) === (:N, :∇N, :ψ)
+    @test parent(weights_view.ψ) === weights.ψ
+    @test Tesserae.derivative_order(weights_view) isa Order{1}
+    @test Tesserae.derivative_order(first(weights_view)) isa Order{1}
+
+    adapted = Tesserae.Adapt.adapt(Array, weights)
+    @test propertynames(adapted) === (:N, :∇N, :ψ)
+    @test adapted.ψ == weights.ψ
+    @test Tesserae.derivative_order(adapted) isa Order{1}
+    @test Tesserae.derivative_order(first(adapted)) isa Order{1}
 end
 
 @testset "BasisWeightArray views" begin

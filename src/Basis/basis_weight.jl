@@ -207,8 +207,9 @@ derivatives of the requested `order`.
 This array may be larger than `supportnodes(weight)`. After an update, only
 entries corresponding to `eachindex(supportnodes(weight))` are valid.
 """
-@inline function nodal_basis_values(bw::BasisWeight, ::Order{k}) where {k}
-    getfield(bw, :vals)[k+1]
+@generated function nodal_basis_values(bw::BasisWeight{B, Vals, Indices, Order{n}}, ::Order{k}) where {B, Vals, Indices, n, k}
+    k ≤ n || return :(throw(ArgumentError("basis weight stores derivatives through Order($n), got Order($k)")))
+    :(getfield(bw, :vals)[$(k+1)])
 end
 
 @inline scalartype(bw::BasisWeight) = eltype(nodal_basis_values(bw, Order(0)))
@@ -252,14 +253,16 @@ end
 @inline supportnodes_storage(bw::BasisWeight) = getfield(bw, :indices)
 @inline derivative_order(bw::BasisWeight) = getfield(bw, :order)
 
-@generated function set_values!(bw::BasisWeight, ip, vals::Tuple{Vararg{Any, N}}) where {N}
+@generated function set_values!(bw::BasisWeight{B, Vals, Indices, Order{k}}, ip, vals::Tuple{Vararg{Any, N}}) where {B, Vals, Indices, k, N}
+    N ≤ k+1 || return :(throw(DimensionMismatch("cannot write $N basis-value derivatives to Order($k) storage")))
     quote
         @_inline_meta
         @_propagate_inbounds_meta
         @nexprs $N i -> nodal_basis_values(bw, Order(i-1))[ip] = vals[i]
     end
 end
-@generated function set_values!(bw::BasisWeight, vals::Tuple{Vararg{Any, N}}) where {N}
+@generated function set_values!(bw::BasisWeight{B, Vals, Indices, Order{k}}, vals::Tuple{Vararg{Any, N}}) where {B, Vals, Indices, k, N}
+    N ≤ k+1 || return :(throw(DimensionMismatch("cannot write $N basis-value derivatives to Order($k) storage")))
     quote
         @_inline_meta
         @nexprs $N i -> copyto!(nodal_basis_values(bw, Order(i-1)), vals[i])
