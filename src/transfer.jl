@@ -23,29 +23,32 @@ function split_sum_equations(program::TransferProgram, macroname::String)
     equations[issum], equations[.!issum]
 end
 
-struct TransferBinding
-    parent::Symbol
-    index::Any
-end
-
 struct TransferScope
-    bindings::Vector{TransferBinding}
-    replacements::Union{Nothing, Vector{Vector{Expr}}}
+    bindings::Dict{Any,Symbol}
+    replacements::Union{Nothing,Dict{Any,Vector{Expr}}}
 end
 
 function TransferScope(maps::Vector{<: Pair}; cache::Bool=false)
-    bindings = map(maps) do map
-        TransferBinding(map.first, map.second)
+    bindings = Dict{Any,Symbol}()
+    for map in maps
+        parent, index = map
+        haskey(bindings, index) && error("transfer index `$index` is bound more than once")
+        bindings[index] = parent
     end
-    replacements = cache ? replacement_groups(length(bindings)) : nothing
+    replacements = cache ? Dict{Any,Vector{Expr}}(index => Expr[] for index in keys(bindings)) : nothing
     TransferScope(bindings, replacements)
 end
 
 uncached(scope::TransferScope) = TransferScope(scope.bindings, nothing)
 
-function cached_replacements(scope::TransferScope, groups::Integer...)
+function cached_replacements(scope::TransferScope, indices...)
     scope.replacements === nothing && error("reference cache is not enabled for this transfer scope")
-    replacements(scope.replacements, groups...)
+    exprs = Expr[]
+    for index in indices
+        haskey(scope.replacements, index) || error("index `$index` is not bound in this transfer scope")
+        union!(exprs, scope.replacements[index])
+    end
+    exprs
 end
 
 function resolve_equation(eq::TransferEquation, scope::TransferScope)
@@ -59,28 +62,6 @@ function resolve_sum_equations(equations::Vector{TransferEquation}, scope::Trans
         idx == index || error("$macroname: invalid LHS index in `@∑` equation: $(eq.lhs) (must be [$index])")
         TransferEquation(eq.kind, resolve_refs(eq.lhs, lhs_scope), resolve_refs(eq.rhs, scope), eq.op)
     end
-end
-
-replacement_groups(n::Integer) = [Expr[] for _ in 1:n]
-
-function push_unique_expr!(xs::Vector{Expr}, x::Expr)
-    x in xs || push!(xs, x)
-    xs
-end
-
-function append_unique_exprs!(dst::Vector{Expr}, src::Vector{Expr})
-    for x in src
-        push_unique_expr!(dst, x)
-    end
-    dst
-end
-
-function replacements(replaced::Vector{Vector{Expr}}, groups::Integer...)
-    exprs = Expr[]
-    for group in groups
-        append_unique_exprs!(exprs, replaced[group])
-    end
-    exprs
 end
 
 function push_unique!(xs::Vector, x)
@@ -205,8 +186,9 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
 
     scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
-    replaced = scope.replacements
-    inner_symbols = p2g_cached_symbols(replaced, 1, 3)
+    particle_replacements = cached_replacements(scope, p)
+    inner_replacements = cached_replacements(scope, i, ip)
+    inner_symbols = p2g_cached_symbols(inner_replacements)
 
     fillzeros = Any[]
     hoist_exprs = Any[]
@@ -220,14 +202,14 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     end
 
     body = quote
-        $(replaced[2]...)
+        $(particle_replacements...)
         $(hoist_exprs...)
         $bw = $weights[$p]
         $gridindices = supportnodes($bw, $grid)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $gridwriteindex = Tesserae.p2g_write_index($grid, $i)
-            $(cached_replacements(scope, 1, 3)...)
+            $(inner_replacements...)
             $(sum_exprs...)
         end
     end
@@ -235,9 +217,9 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     Expr(:block, fillzeros...), body
 end
 
-function p2g_cached_symbols(replaced::Vector{Vector{Expr}}, groups::Integer...)
+function p2g_cached_symbols(replacements)
     symbols = Set{Symbol}()
-    for ex in Iterators.flatten(replaced[group] for group in groups)
+    for ex in replacements
         Meta.isexpr(ex, :(=), 2) && ex.args[1] isa Symbol && push!(symbols, ex.args[1])
     end
     symbols
@@ -580,7 +562,8 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
 
     if !isempty(sum_equations)
         sum_equations = resolve_sum_equations(sum_equations, scope, "@G2P", p)
-        replaced = scope.replacements
+        particle_replacements = cached_replacements(scope, p)
+        inner_replacements = cached_replacements(scope, i, ip)
 
         inits = []
         saves = []
@@ -594,13 +577,13 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         end
 
         code = quote
-            $(replaced[2]...)
+            $(particle_replacements...)
             $(inits...)
             $bw = $weights[$p]
             $gridindices = supportnodes($bw, $grid)
             for $ip in eachindex($gridindices)
                 $i = $gridindices[$ip]
-                $(cached_replacements(scope, 1, 3)...)
+                $(inner_replacements...)
                 $(sum_exprs...)
             end
             $(saves...)
@@ -861,17 +844,13 @@ end
 
 function resolve_refs(expr, scope::TransferScope)
     MacroTools.postwalk(expr) do ex
-        if @capture(ex, x_[i_])
-            for (k, binding) in enumerate(scope.bindings)
-                if i == binding.index
-                    parent = binding.parent
-                    resolved = :($parent.$x[$i])
-                    scope.replacements === nothing && return resolved
-                    sym = Symbol(resolved)
-                    push_unique_expr!(scope.replacements[k], :($sym = $resolved))
-                    return sym
-                end
-            end
+        if @capture(ex, x_[i_]) && haskey(scope.bindings, i)
+            parent = scope.bindings[i]
+            resolved = :($parent.$x[$i])
+            scope.replacements === nothing && return resolved
+            sym = Symbol(resolved)
+            push_unique!(scope.replacements[i], :($sym = $resolved))
+            return sym
         end
         ex
     end

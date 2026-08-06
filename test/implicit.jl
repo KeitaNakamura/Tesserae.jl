@@ -11,34 +11,39 @@
     @test_throws UndefKeywordError create_sparse_matrix(basis, mesh)
 
     @testset "square matrix" begin
+        entry = Mat{2,2}(1.0, 2.0, 2.0, 3.0)
         A = create_sparse_matrix(basis, mesh; ndofs=2)
         B = create_sparse_matrix(basis, mesh; ndofs=2)
+        A_dense = zeros(size(A))
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-            A[i,j] = @∑ w[ip] * sum(∇w[jp])
+            A[i,j] = @∑ w[ip] * sum(∇w[jp]) * entry
+            A_dense[i,j] = @∑ w[ip] * sum(∇w[jp]) * entry
         end
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-            B[j,i] = @∑ w[jp] * sum(∇w[ip])
+            B[j,i] = @∑ w[jp] * sum(∇w[ip]) * entry
         end
         @test !(A ≈ A')
         @test !(B ≈ B')
         @test A ≈ B
+        @test A ≈ A_dense
     end
     @testset "multiple matrices" begin
+        entry = Mat{2,2}(1.0, 2.0, 2.0, 3.0)
         A = create_sparse_matrix(basis, mesh; ndofs=2)
         B = create_sparse_matrix(basis, mesh; ndofs=2)
         Aref = create_sparse_matrix(basis, mesh; ndofs=2)
         Bref = create_sparse_matrix(basis, mesh; ndofs=2)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-            A[i,j] = @∑ w[ip] * w[jp]
-            B[i,j] = @∑ sum(∇w[ip]) * sum(∇w[jp])
+            A[i,j] = @∑ w[ip] * w[jp] * entry
+            B[i,j] = @∑ sum(∇w[ip]) * sum(∇w[jp]) * entry
         end
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-            Aref[i,j] = @∑ w[ip] * w[jp]
+            Aref[i,j] = @∑ w[ip] * w[jp] * entry
         end
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
-            Bref[i,j] = @∑ sum(∇w[ip]) * sum(∇w[jp])
+            Bref[i,j] = @∑ sum(∇w[ip]) * sum(∇w[jp]) * entry
         end
 
         @test A ≈ Aref
@@ -102,6 +107,25 @@
         @test B ≈ Bref
         @test A ≈ B'
     end
+    @testset "block partition" begin
+        partition = ThreadPartition(mesh)
+        update!(partition, particles.x)
+
+        reference = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        block_sparse = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        block_dense = zeros(length(grid), 2length(grid))
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            reference[i,j] = @∑ ∇w[ip] * w[jp]
+        end
+        @threaded :static @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
+            block_sparse[i,j] = @∑ ∇w[ip] * w[jp]
+            block_dense[j,i] = @∑ ∇w[ip] * w[jp]
+        end
+
+        @test block_sparse ≈ reference
+        @test block_dense ≈ Matrix(reference')
+    end
     @testset "duplicate matrix" begin
         ex = quote
             @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
@@ -163,6 +187,18 @@
         B = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
 
         table_i, table_j = Tesserae.matrix_dof_tables(A, grid, grid)
+        assembler = @inferred Tesserae.matrix_assembler(A, mesh, mesh, basis, basis)
+        @test assembler.matrix === A
+        @test assembler.row_dof_table == table_i
+        @test assembler.col_dof_table == table_j
+        dense = Matrix(A)
+        generic_assembler = @inferred Tesserae.matrix_assembler(dense, mesh, mesh, basis, basis)
+        @test generic_assembler.matrix === dense
+        @test generic_assembler.row_dof_table == table_i
+        @test generic_assembler.col_dof_table == table_j
+        invalid = Tesserae.SparseArrays.dropzeros!(copy(A))
+        @test_throws ArgumentError Tesserae.matrix_assembler(invalid, mesh, mesh, basis, basis)
+
         @test size(table_i) == (2, size(grid)...)
         @test size(table_j) == (1, size(grid)...)
         @test size(A) == (length(table_i), length(table_j))
@@ -177,12 +213,17 @@
         @test nodes_i === nodes_j
         @test Tesserae.matrix_supportnodes(bw, grid, bw, grid) == (nodes_i, nodes_j)
 
-        local_i = Tesserae.local_dof_table(table_i, nodes_i)
-        local_j = Tesserae.local_dof_table(table_j, nodes_j)
-        ip = first(eachindex(nodes_i))
-        jp = first(eachindex(nodes_j))
-        @test Tesserae.local_dofs(local_i, ip) == vec(view(local_i, :, ip))
-        @test Tesserae.local_dofs(local_j, jp) == vec(view(local_j, :, jp))
+        particle_indices = firstindex(particles):(firstindex(particles) + 2)
+        particle_nodes = map(p -> supportnodes(weights[p]), particle_indices)
+        first_node = CartesianIndex(map(min, Tuple.(first.(particle_nodes))...))
+        last_node = CartesianIndex(map(max, Tuple.(last.(particle_nodes))...))
+        @test Tesserae.matrix_block_supportnodes(weights, particle_indices, grid) ==
+              first_node:last_node
+
+        ip = length(nodes_i)
+        jp = length(nodes_j)
+        @test Tesserae.local_dofs(2, ip) == (2ip-1):2ip
+        @test Tesserae.local_dofs(1, jp) == jp:jp
 
         dofs_i, dofs_j = Tesserae.support_dofs(table_i, nodes_i, table_j, nodes_j)
         @test dofs_i == vec(table_i[:, nodes_i])
@@ -191,6 +232,67 @@
         scalar_table_i, scalar_table_j = Tesserae.matrix_dof_tables(create_sparse_matrix(basis, mesh; ndofs=1), grid, grid)
         scalar_dofs_i, scalar_dofs_j = Tesserae.support_dofs(scalar_table_i, nodes_i, scalar_table_j, nodes_j)
         @test scalar_dofs_i === scalar_dofs_j
+    end
+    @testset "matrix entry sizes" begin
+        @test Tesserae.check_matrix_entry_size(1.0, 1, 1)
+        @test_throws DimensionMismatch Tesserae.check_matrix_entry_size(1.0, 2, 1)
+        @test Tesserae.check_matrix_entry_size(zeros(2), 2, 1)
+        @test Tesserae.check_matrix_entry_size(zeros(2), 1, 2)
+        @test_throws DimensionMismatch Tesserae.check_matrix_entry_size(zeros(2), 2, 2)
+        @test Tesserae.check_matrix_entry_size(zeros(2, 3), 2, 3)
+        @test_throws DimensionMismatch Tesserae.check_matrix_entry_size(zeros(2, 2), 2, 3)
+    end
+    @testset "Block matrix buffer pool" begin
+        scatter_mesh = CartesianMesh(1, (0, 4))
+        matrix = create_sparse_matrix(basis, scatter_mesh; ndofs=(2, 3))
+        assembler = Tesserae.matrix_assembler(matrix, scatter_mesh, scatter_mesh, basis, basis)
+        nodes = CartesianIndices((1:3,))
+        buffer = Tesserae.BlockMatrixBuffer(Tesserae.BlockMatrixBufferKey(assembler, nodes, nodes))
+        pool = Tesserae.BlockMatrixBufferPool()
+
+        fill!(buffer.values, 1)
+        @test Tesserae.release!(pool, buffer) === nothing
+        reused_buffer = Tesserae.acquire!(pool, buffer.key)
+        @test reused_buffer === buffer
+        @test all(iszero, reused_buffer.values)
+    end
+    @testset "Cartesian sparse scatter" begin
+        for dims in ((5,), (5, 6, 7))
+            scatter_mesh = CartesianMesh(1, ((0, n - 1) for n in dims)...)
+            nodes = CartesianIndices(ntuple(_ -> 1:3, length(dims)))
+            tail_ranges = ntuple(_ -> 1:3, length(dims) - 1)
+            shifted_row_nodes = CartesianIndices((1:2, tail_ranges...))
+            shifted_col_nodes = CartesianIndices((2:3, tail_ranges...))
+            row_dofs = LinearIndices((2, dims...))
+            col_dofs = LinearIndices((3, dims...))
+
+            for (row_nodes, col_nodes) in ((nodes, nodes), (shifted_row_nodes, shifted_col_nodes))
+                direct = create_sparse_matrix(basis, scatter_mesh; ndofs=(2, 3))
+                merge = copy(direct)
+                block_matrix = copy(direct)
+                row_size = 2length(row_nodes)
+                col_size = 3length(col_nodes)
+                local_matrix = reshape(collect(1.0:row_size*col_size), row_size, col_size)
+
+                assembler = Tesserae.matrix_assembler(direct, scatter_mesh, scatter_mesh, basis, basis)
+                buffer = Tesserae.BlockMatrixBuffer(Tesserae.BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
+                for (jp, col_node) in enumerate(col_nodes), (ip, row_node) in enumerate(row_nodes)
+                    I = (2ip-1):2ip
+                    J = (3jp-2):3jp
+                    Tesserae.add_entry!(buffer, row_nodes, col_nodes, row_node, col_node, @view(local_matrix[I,J]))
+                end
+                block_assembler = Tesserae.matrix_assembler(block_matrix, scatter_mesh, scatter_mesh, basis, basis)
+                @test Tesserae.scatter!(block_assembler, buffer, row_nodes, col_nodes) === block_matrix
+                for (jp, col_node) in enumerate(col_nodes), (ip, row_node) in enumerate(row_nodes)
+                    I = (2ip-1):2ip
+                    J = (3jp-2):3jp
+                    Tesserae.add_entry!(assembler, row_node, col_node, @view(local_matrix[I,J]))
+                end
+                Tesserae.add!(merge, vec(row_dofs[:, row_nodes]), vec(col_dofs[:, col_nodes]), local_matrix)
+                @test direct == merge
+                @test block_matrix == merge
+            end
+        end
     end
 end
 
@@ -311,6 +413,7 @@ end
     @test_throws UndefKeywordError create_sparse_matrix(quad4)
 
     A = create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
+    B = create_sparse_matrix((quad4, quad9); ndofs=(1, 2))
     @test size(A) == (30, 6)
     @test Tesserae.SparseArrays.nnz(A) == 132
 
@@ -328,8 +431,10 @@ end
 
     @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
         A[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
+        B[j,i] = @∑ ∇N[ip] * N[jp] * V[p]
     end
     @test any(!iszero, Tesserae.SparseArrays.nonzeros(A))
+    @test B ≈ A'
 
     shifted = FEMesh(Tesserae.Quad4(), CartesianMesh(1, (2,4), (0,1)))
     @test_throws ArgumentError create_sparse_matrix((quad9, shifted); ndofs=(2, 1))

@@ -5,6 +5,7 @@ abstract type Shape{dim} end
 localnodes(s::Shape) = localnodes(Float64, s)
 
 nlocalnodes(s::Shape) = length(localnodes(s))
+nsupportnodes(s::Shape) = nlocalnodes(s)
 
 get_dimension(::Shape{dim}) where {dim} = dim
 

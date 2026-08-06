@@ -8,14 +8,29 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 - Added property schemas for `BasisWeight` and `generate_basis_weights`, allowing
   basis-value names, scalar types, and custom fields to be defined with a
-  `NamedTuple` type.
+  `NamedTuple` type. (#178)
+- Added `view` support for `BasisWeightArray`, allowing matching particle and
+  basis-weight subsets to be passed to transfer macros. (#177)
+
+### Performance
+
+- Optimized `@P2G_Matrix` assembly with direct CSC updates for Cartesian
+  matrices, cellwise scatter aggregation for FEM and IGA, and blockwise
+  aggregation for threaded Cartesian transfers. (#176)
 
 ## v0.7.2
 
-### Added
+### Changed
 
-- Added `view` support for `BasisWeightArray`, allowing matching particle and
-  basis-weight subsets to be passed to transfer macros. (#177)
+- Simplified basis-weight update dispatch while preserving the specialized
+  B-spline, WLS, and kernel-correction paths, and made filtered-update support
+  explicit. (#175)
+- Tightened uGIMP and CPDI validation and extension behavior. (#175)
+- Computed ambient tangential gradients for FEM and IGA boundary bases. (#175)
+
+### Dependencies
+
+- Raised the minimum Tensorial version to 0.20.5. (#175)
 
 ## v0.7.1
 

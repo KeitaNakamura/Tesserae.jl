@@ -34,6 +34,12 @@ function BlockUpdateWorkspace(blkdims::Dims{dim}) where {dim}
     )
 end
 
+struct BlockMatrixBufferPool
+    lock::ReentrantLock
+    buffers::Dict{Any, Vector{Any}}
+end
+BlockMatrixBufferPool() = BlockMatrixBufferPool(ReentrantLock(), Dict{Any, Vector{Any}}())
+
 struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: PartitionStrategy
     mesh::Mesh
     particleindices::Vector{Int}
@@ -43,6 +49,7 @@ struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: PartitionStrategy
     activegroups::Vector{Vector{CartesianIndex{dim}}}
     blockcolors::Array{Int, dim}
     update_workspace::BlockUpdateWorkspace{dim}
+    matrix_buffer_pool::BlockMatrixBufferPool
 end
 
 function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
@@ -64,6 +71,7 @@ function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
         activegroups,
         blockcolors,
         BlockUpdateWorkspace(blkdims),
+        BlockMatrixBufferPool(),
     )
 end
 
