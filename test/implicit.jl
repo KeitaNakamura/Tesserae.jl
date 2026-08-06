@@ -270,6 +270,12 @@
             Tesserae.add!(merge, vec(row_dofs[:, nodes]), vec(col_dofs[:, nodes]), local_matrix)
             @test direct == merge
             @test block_matrix == merge
+
+            Tesserae.fillzero!(reused_buffer.values)
+            for col_node in nodes, row_node in nodes
+                Tesserae.add_entry!(reused_buffer, nodes, nodes, row_node, col_node, 1.0)
+            end
+            @test all(isone, reused_buffer.values)
         end
     end
 end

@@ -315,9 +315,11 @@ end
 orient_matrix_entry(::typeof(identity), value) = value
 orient_matrix_entry(::typeof(reverse), value) = value'
 
-@noinline function check_matrix_entry_size(::Number, row_ndofs, col_ndofs)
-    (row_ndofs, col_ndofs) == (1, 1) || throw(DimensionMismatch("scalar value requires a scalar matrix entry"))
-end
+# Scalars broadcast over every entry in the DoF block.
+check_matrix_entry_size(::Number, row_ndofs, col_ndofs) = nothing
+matrix_entry_value(value::Number, index) = value
+matrix_entry_value(value, index) = value[index]
+
 @noinline function check_matrix_entry_size(value::AbstractVector, row_ndofs, col_ndofs)
     expected_length = col_ndofs == 1 ? row_ndofs : col_ndofs
     (row_ndofs == 1 || col_ndofs == 1) && length(value) == expected_length ||
@@ -404,7 +406,7 @@ end
         col = col_dof_table[b, col_node]
         slot = first(nzrange(matrix, col)) + row_offset
         for a in 1:row_ndofs
-            values[slot] += value[(b - 1) * row_ndofs + a]
+            values[slot] += matrix_entry_value(value, (b - 1) * row_ndofs + a)
             slot += 1
         end
     end
@@ -445,7 +447,7 @@ end
     col_ndofs = size(col_dof_table, 1)
     @boundscheck check_matrix_entry_size(value, row_ndofs, col_ndofs)
     @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
-        matrix[row_dof_table[a,row_node], col_dof_table[b,col_node]] += value[(b - 1) * row_ndofs + a]
+        matrix[row_dof_table[a,row_node], col_dof_table[b,col_node]] += matrix_entry_value(value, (b - 1) * row_ndofs + a)
     end
     matrix
 end
@@ -648,8 +650,8 @@ function add_entry!(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{
     local_col = LinearIndices(col_size)[local_col_node]
 
     slot = node_colstarts[local_col] + (local_row - 1) * row_ndofs * col_ndofs
-    for index in eachindex(value)
-        values[slot] += value[index]
+    for index in 1:row_ndofs * col_ndofs
+        values[slot] += matrix_entry_value(value, index)
         slot += 1
     end
 
