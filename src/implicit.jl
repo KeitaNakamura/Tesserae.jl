@@ -487,15 +487,20 @@ struct LocalMatrixBuffer{M <: Matrix, R <: LinearIndices, C <: LinearIndices}
     col_dof_table::C
 end
 
-@inline function local_matrix_buffer(cache::TaskLocalValue{Union{Nothing,Matrix{T}}}, row_dof_table, row_nodes, col_dof_table, col_nodes) where {T}
+function local_matrix_cache(assembler, row_weights, col_weights)
+    T = eltype(assembler.matrix)
+    TaskLocalValue{Matrix{T}}() do
+        row_size = size(assembler.row_dof_table, 1) * nsupportnodes(basis(row_weights))
+        col_size = size(assembler.col_dof_table, 1) * nsupportnodes(basis(col_weights))
+        Matrix{T}(undef, row_size, col_size)
+    end
+end
+
+@inline function local_matrix_buffer(cache::TaskLocalValue{<:Matrix}, row_dof_table, row_nodes, col_dof_table, col_nodes)
     row_dof_table = local_dof_table(row_dof_table, row_nodes)
     col_dof_table = local_dof_table(col_dof_table, col_nodes)
     dims = length(row_dof_table), length(col_dof_table)
     matrix = cache[]
-    if matrix === nothing
-        matrix = Matrix{T}(undef, dims)
-        cache[] = matrix
-    end
     @boundscheck size(matrix) == dims || throw(DimensionMismatch("local matrix size changed during assembly"))
     LocalMatrixBuffer(matrix, row_dof_table, col_dof_table)
 end
@@ -907,6 +912,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     fillzeros = Any[]
     gmats = Any[]
     assemblers_init = Any[]
+    matrix_caches = Any[]
     hoist_exprs = Any[]
     buffers_init = Any[]
     block_buffers_init = Any[]
@@ -938,6 +944,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         row_grid, col_grid = reorder_pair((grid_i, grid_j))
         row_weights, col_weights = reorder_pair((weights_i, weights_j))
         dof_table_i, dof_table_j = reorder_pair((:($(assembler).row_dof_table), :($(assembler).col_dof_table)))
+        push!(matrix_caches, :($(Symbol(gmat,:cache)) = Tesserae.local_matrix_cache($assembler, $row_weights, $col_weights)))
         push!(buffers_init, quote
             if $matrix_assembly isa Tesserae.ParticleAssembly
                 $buffer = nothing
@@ -1029,23 +1036,13 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         body = :(@inbounds $body)
     end
 
-    # cache for local matrices
-    matrix_caches = map(gmats) do gmat
-        matrix_cache = Symbol(gmat, :cache)
-        Tmatrix_cache = Symbol(:T, matrix_cache)
-        quote
-            $Tmatrix_cache = Union{Nothing,Matrix{eltype($gmat)}}
-            $matrix_cache = $TaskLocalValue{$Tmatrix_cache}(() -> nothing)
-        end
-    end
-
     body = quote
         let
-            $(matrix_caches...)
             $check_arguments_for_P2G_Matrix($grid_i, $particles, $weights_i, $partition)
             $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
             $(fillzeros...)
             $(assemblers_init...)
+            $(matrix_caches...)
             Tesserae.P2G_Matrix((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $particle_indices, $matrix_assembly) -> $body,
                                 $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
         end
