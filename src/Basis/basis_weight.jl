@@ -124,9 +124,23 @@ end
 @inline tuple_otimes(x::Tuple) = SArray(⊗(map(Vec, x)...))
 
 """
-    BasisWeight([T,] basis, mesh)
+    BasisWeight([T,] basis, mesh; derivative=Order(1), name=Val(:w))
+    BasisWeight(Prop, basis, mesh; derivative=Order(1))
 
 `BasisWeight` stores basis function values and their spatial derivatives.
+
+In the first form, the scalar type defaults to `Float64`. `name` sets the name
+of the basis value, and `derivative` sets the highest derivative order to
+store.
+
+In the second form, `Prop` must be a non-empty `NamedTuple` type. Its first
+field defines the basis value name and scalar type. Fields generated through
+`derivative` are inserted after the first field, followed by the remaining
+fields of `Prop` in their original order.
+
+For example, `@NamedTuple{N::Float32, ψ::Vec{2,Float64}}` with
+`derivative=Order(2)` creates storage for `N`, `∇N`, `∇²N`, and `ψ`.
+Custom field names must not overlap generated derivative names.
 
 ```jldoctest
 julia> mesh = CartesianMesh(1.0, (0,5), (0,5));
@@ -162,11 +176,13 @@ struct BasisWeight{B, Vals <: NamedTuple, Indices <: AbstractArray{<: Any}, O <:
 end
 
 # AbstractMesh
-function _basis_weight(::Type{T}, basis, mesh::AbstractMesh{dim}; derivative::Order=Order(1), name=Val(:w)) where {T, dim}
-    Prop = basis_property_type(T, name)
+function _basis_weight(::Type{Prop}, basis, mesh::AbstractMesh{dim}; derivative::Order=Order(1)) where {Prop <: NamedTuple, dim}
     vals = allocate_basis_values(Prop, basis, Val(dim); derivative)
     indices = initial_supportnodes(basis, mesh)
     BasisWeight(basis, vals, fill(indices), derivative)
+end
+function _basis_weight(::Type{T}, basis, mesh::AbstractMesh; derivative::Order=Order(1), name=Val(:w)) where {T}
+    _basis_weight(basis_property_type(T, name), basis, mesh; derivative)
 end
 
 # CartesianMesh
@@ -279,13 +295,15 @@ function BasisWeightArray(basis::B, vals::Vals, indices::Indices, order::O) wher
 end
 
 # AbstractMesh
-function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1), name=Val(:w)) where {T, dim}
-    Prop = basis_property_type(T, name)
+function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1)) where {Prop <: NamedTuple, dim}
     vals = map(allocate_basis_values(Prop, basis, Val(dim); derivative)) do vals
         fill(zero(eltype(vals)), size(vals)..., dims...)
     end
     indices = _generate_supportnodes(basis, mesh, dims)
     BasisWeightArray(basis, vals, indices, derivative)
+end
+function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh, dims::Dims; derivative::Order=Order(1), name=Val(:w)) where {T}
+    _generate_basis_weights(basis_property_type(T, name), basis, mesh, dims; derivative)
 end
 
 # CartesianMesh
@@ -328,11 +346,18 @@ _todims(x::Tuple{Vararg{Int}}) = x
 _todims(x::Vararg{Int}) = x
 
 """
-    generate_basis_weights([T,] ::Basis, mesh, dims...)
-    generate_basis_weights([T,] ::FEMesh, dims...)
+    generate_basis_weights([T,] ::Basis, mesh, dims...; derivative=Order(1), name=Val(:w))
+    generate_basis_weights([T,] ::FEMesh, dims...; derivative=Order(1), name=Val(:w))
+    generate_basis_weights(Prop, ::Basis, mesh, dims...; derivative=Order(1))
+    generate_basis_weights(Prop, ::FEMesh, dims...; derivative=Order(1))
 
 Generate an array of [`BasisWeight`](@ref)s for `basis` on `mesh`.
 For `FEMesh`, the mesh cell shape is used as the basis.
+
+In the `Prop` forms, `Prop` follows the same rules as in
+`BasisWeight(Prop, basis, mesh)`: its first field defines the basis value name
+and scalar type, generated derivative fields follow it, and its remaining
+fields are appended as custom storage.
 """
 function generate_basis_weights end
 

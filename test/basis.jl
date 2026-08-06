@@ -133,6 +133,30 @@ end
     @test all(==(Vec(1.0, 2.0)), bw.ψ)
 end
 
+@testset "Property schema" begin
+    mesh = CartesianMesh(1, (0,10), (0,10))
+    basis = BSpline(Linear())
+    Prop = @NamedTuple{N::Float32, ψ::Vec{2,Float64}}
+
+    bw = @inferred BasisWeight(Prop, basis, mesh; derivative=Order(2))
+    @test propertynames(bw) === (:N, :∇N, :∇²N, :ψ)
+    @test eltype(bw.N) === Float32
+    @test eltype(bw.∇N) === Vec{2,Float32}
+    @test eltype(bw.∇²N) <: SymmetricSecondOrderTensor{2,Float32}
+    @test eltype(bw.ψ) === Vec{2,Float64}
+    bw.ψ .= Ref(Vec(1.0, 2.0))
+    update!(bw, Vec(2.2, 3.4), mesh)
+    @test all(==(Vec(1.0, 2.0)), bw.ψ)
+
+    weights = @inferred generate_basis_weights(Prop, basis, mesh, 2; derivative=Order(1))
+    @test propertynames(weights) === (:N, :∇N, :ψ)
+    @test eltype(weights.N) === Float32
+    @test eltype(weights.∇N) === Vec{2,Float32}
+    @test eltype(weights.ψ) === Vec{2,Float64}
+    @test Tesserae.derivative_order(weights) isa Order{1}
+    @test Tesserae.derivative_order(first(weights)) isa Order{1}
+end
+
 @testset "BasisWeightArray views" begin
     mesh = CartesianMesh(1, (0,10), (0,10))
     basis = BSpline(Linear())
