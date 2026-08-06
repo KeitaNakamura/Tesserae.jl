@@ -50,22 +50,40 @@ Such methods must update `supportnodes(bw)` and
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 initial_supportnodes(shape::Shape, mesh::FEMesh) = zero(SVector{nlocalnodes(shape), Int})
 
-function allocate_basis_values(::Type{Vec{dim, T}}, basis; derivative::Order{k}, name=nothing) where {dim, T, k}
-    map(Array, allocate_static_basis_values(Vec{dim, T}, basis; derivative, name))
+function basis_property_type(::Type{T}, name) where {T}
+    NamedTuple{(basis_value_name(Order(0), name),), Tuple{T}}
 end
-function allocate_static_basis_values(::Type{Vec{dim, T}}, basis::Basis; kwargs...) where {dim, T}
+
+function allocate_basis_values(::Type{Prop}, basis, ::Val{dim}; derivative::Order) where {Prop <: NamedTuple, dim}
+    map(Array, allocate_static_basis_values(Prop, basis, Val(dim); derivative))
+end
+function allocate_static_basis_values(::Type{Prop}, basis::Basis, ::Val{dim}; kwargs...) where {Prop <: NamedTuple, dim}
     A = MArray{Tuple{nfill(support_width(basis), Val(dim))...}}
-    _allocate_basis_values(A, Vec{dim, T}; kwargs...)
+    _allocate_basis_values(A, Prop, Val(dim); kwargs...)
 end
-function allocate_static_basis_values(::Type{Vec{dim, T}}, shape::Shape; kwargs...) where {dim, T}
+function allocate_static_basis_values(::Type{Prop}, shape::Shape, ::Val{dim}; kwargs...) where {Prop <: NamedTuple, dim}
     A = MArray{Tuple{nlocalnodes(shape)}}
-    _allocate_basis_values(A, Vec{dim, T}; kwargs...)
+    _allocate_basis_values(A, Prop, Val(dim); kwargs...)
 end
-@generated function _allocate_basis_values(::Type{A}, ::Type{Vec{dim, T}}; derivative::Order{k}, name=nothing) where {A, dim, T, k}
+
+function _allocate_basis_values(::Type{A}, ::Type{Prop}, ::Val{dim}; derivative::Order) where {A, Prop <: NamedTuple, dim}
+    map(v -> fill(v, A), basis_value_zeros(Prop, Val(dim), derivative))
+end
+
+@generated function basis_value_zeros(::Type{Prop}, ::Val{dim}, ::Order{k}) where {Prop <: NamedTuple, dim, k}
+    prop_names = fieldnames(Prop)
+    isempty(prop_names) && return :(throw(ArgumentError("basis-weight property type must have at least one field")))
+    T = fieldtype(Prop, 1)
+
+    jet_names = ntuple(i -> basis_value_name(Order(i-1), Val(first(prop_names))), k+1)
+    names = (jet_names..., Base.tail(prop_names)...)
+    allunique(names) || return :(throw(ArgumentError("generated basis-value names overlap custom property names")))
+    jet_zeros = [:(zero_basis_value(Vec{$dim, $T}, Order($(i-1)))) for i in 1:k+1]
+    custom_zeros = [:(zero_recursive($(fieldtype(Prop, i)))) for i in 2:fieldcount(Prop)]
+
     quote
-        names = @ntuple $(k+1) i -> basis_value_name(Order(i-1), name)
-        vals = @ntuple $(k+1) i -> fill(zero_basis_value(Vec{dim, T}, Order(i-1)), A)
-        NamedTuple{names}(vals)
+        @_inline_meta
+        NamedTuple{$names}(($(jet_zeros...), $(custom_zeros...)))
     end
 end
 
@@ -73,11 +91,9 @@ zero_basis_value(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{1}) where {dim, T} = zero(Vec{dim, T})
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{k}) where {dim, T, k} = zero(Tensor{Tuple{@Symmetry{ntuple(i->dim, k)...}}, T})
 basis_value_name(::Order{0}, ::Val{name}) where {name} = name
-basis_value_name(::Order{0}, ::Nothing) = :w
 for (k, nabla) in enumerate((:∇, :∇², :∇³, :∇⁴, :∇⁵, :∇⁶, :∇⁷, :∇⁸, :∇⁹))
     @eval begin
         basis_value_name(::Order{$k}, ::Val{name}) where {name} = Symbol($(QuoteNode(nabla)), name)
-        basis_value_name(::Order{$k}, ::Nothing) = $(QuoteNode(Symbol(nabla, :w)))
     end
 end
 
@@ -146,8 +162,9 @@ struct BasisWeight{B, Vals <: NamedTuple, Indices <: AbstractArray{<: Any}, O <:
 end
 
 # AbstractMesh
-function _basis_weight(::Type{T}, basis, mesh::AbstractMesh{dim}; derivative::Order=Order(1), kwargs...) where {T, dim}
-    vals = allocate_basis_values(Vec{dim, T}, basis; derivative, kwargs...)
+function _basis_weight(::Type{T}, basis, mesh::AbstractMesh{dim}; derivative::Order=Order(1), name=Val(:w)) where {T, dim}
+    Prop = basis_property_type(T, name)
+    vals = allocate_basis_values(Prop, basis, Val(dim); derivative)
     indices = initial_supportnodes(basis, mesh)
     BasisWeight(basis, vals, fill(indices), derivative)
 end
@@ -262,8 +279,9 @@ function BasisWeightArray(basis::B, vals::Vals, indices::Indices, order::O) wher
 end
 
 # AbstractMesh
-function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1), kwargs...) where {T, dim}
-    vals = map(allocate_basis_values(Vec{dim, T}, basis; derivative, kwargs...)) do vals
+function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1), name=Val(:w)) where {T, dim}
+    Prop = basis_property_type(T, name)
+    vals = map(allocate_basis_values(Prop, basis, Val(dim); derivative)) do vals
         fill(zero(eltype(vals)), size(vals)..., dims...)
     end
     indices = _generate_supportnodes(basis, mesh, dims)

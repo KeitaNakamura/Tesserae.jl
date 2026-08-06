@@ -31,14 +31,10 @@ Base.size(x::CPDISupportNodes) = (x.len,)
     @inbounds x.indices[i]
 end
 
-@generated function allocate_basis_values(::Type{Vec{dim, T}}, ::CPDI; derivative::Order{k}, name::Val{sym}=Val(:w)) where {dim, T, k, sym}
-    k == 1 || return :(throw(ArgumentError("CPDI supports derivative=Order(1) only")))
-    w = sym
-    ∇w = Symbol(:∇, sym)
-    quote
-        len = 2^dim * 2^dim # maximum length
-        (; $w=fill(zero(T), len), $∇w=fill(zero(Vec{dim, T}), len))
-    end
+function allocate_basis_values(::Type{Prop}, ::CPDI, ::Val{dim}; derivative::Order{k}) where {Prop <: NamedTuple, dim, k}
+    k == 1 || throw(ArgumentError("CPDI supports derivative=Order(1) only"))
+    len = 2^dim * 2^dim # maximum length
+    map(v -> fill(v, len), basis_value_zeros(Prop, Val(dim), derivative))
 end
 
 function initial_supportnodes(::CPDI, mesh::CartesianMesh{dim}) where {dim}

@@ -43,6 +43,23 @@ function check_weight_layout(bw::Union{BasisWeight, Tesserae.BasisWeightArray}, 
     end
 end
 
+@testset "Basis-value allocation" begin
+    Prop = @NamedTuple{N::Float64, ψ::Vec{2,Float64}}
+    zeros = @inferred Tesserae.basis_value_zeros(Prop, Val(2), Order(2))
+    @test propertynames(zeros) === (:N, :∇N, :∇²N, :ψ)
+    @test zeros === (; N=0.0, ∇N=zero(Vec{2,Float64}), ∇²N=zero(SymmetricSecondOrderTensor{2,Float64}), ψ=zero(Vec{2,Float64}))
+
+    vals = @inferred Tesserae.allocate_basis_values(Prop, BSpline(Linear()), Val(2); derivative=Order(2))
+    @test propertynames(vals) === propertynames(zeros)
+    @test eltype(vals.N) === Float64
+    @test eltype(vals.∇N) === Vec{2,Float64}
+    @test eltype(vals.∇²N) <: SymmetricSecondOrderTensor{2,Float64}
+    @test eltype(vals.ψ) === Vec{2,Float64}
+
+    @test_throws ArgumentError Tesserae.basis_value_zeros(NamedTuple{(),Tuple{}}, Val(2), Order(1))
+    @test_throws ArgumentError Tesserae.basis_value_zeros(@NamedTuple{w::Float64, ∇w::Vec{2,Float64}}, Val(2), Order(1))
+end
+
 @testset "CartesianMesh layout" begin
     basis = BSpline(Quadratic())
     n = 2
