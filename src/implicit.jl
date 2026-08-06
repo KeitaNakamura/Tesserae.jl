@@ -362,39 +362,58 @@ function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler)
     true
 end
 
-@inline function add!(assembler::CartesianSparseMatrixAssembler, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}, K::AbstractMatrix) where {N}
+# Expand a scalar, vector, or matrix value into one node-pair DoF block.
+@propagate_inbounds matrix_entry_value(value::Number, a, b, row_ndofs, col_ndofs) = value
+@propagate_inbounds matrix_entry_value(value::AbstractVector, a, b, row_ndofs, col_ndofs) = col_ndofs == 1 ? value[a] : value[b]
+@propagate_inbounds matrix_entry_value(value::AbstractMatrix, a, b, row_ndofs, col_ndofs) = value[ifelse(size(value, 1) == 1, 1, a), ifelse(size(value, 2) == 1, 1, b)]
+
+@noinline check_matrix_entry_size(::Number, row_ndofs, col_ndofs) = nothing
+@noinline function check_matrix_entry_size(value::AbstractVector, row_ndofs, col_ndofs)
+    expected_length = col_ndofs == 1 ? row_ndofs : col_ndofs
+    (row_ndofs == 1 || col_ndofs == 1) && length(value) == expected_length ||
+        throw(DimensionMismatch("vector value is incompatible with matrix entry dimensions"))
+end
+@noinline function check_matrix_entry_size(value::AbstractMatrix, row_ndofs, col_ndofs)
+    (size(value, 1) == 1 || size(value, 1) == row_ndofs) &&
+        (size(value, 2) == 1 || size(value, 2) == col_ndofs) ||
+        throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
+end
+
+# The canonical Cartesian CSC pattern allows its destination slots to be computed directly.
+@inline function add_entry!(assembler::CartesianSparseMatrixAssembler, row_node::CartesianIndex, col_node::CartesianIndex, value)
+    @boundscheck check_cartesian_matrix_entry(assembler, row_node, col_node, value)
+
     (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
     mesh_size = Base.tail(size(row_dof_table))
-    row_dofs_per_node = size(row_dof_table, 1)
-    col_dofs_per_node = size(col_dof_table, 1)
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    neighboring_nodes = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
 
-    mesh_nodes = CartesianIndices(mesh_size)
-    @boundscheck begin
-        checkbounds(mesh_nodes, row_nodes)
-        checkbounds(mesh_nodes, col_nodes)
-        size(K) == (row_dofs_per_node * length(row_nodes), col_dofs_per_node * length(col_nodes)) || throw(DimensionMismatch("local matrix size does not match Cartesian support DoFs"))
-        all(row_nodes ⊆ cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius) for col_node in col_nodes) || throw(ArgumentError("local matrix contains entries outside the Cartesian sparsity pattern"))
-    end
-
+    neighboring_node = row_node - first(neighboring_nodes) + oneunit(row_node)
+    row_offset = (LinearIndices(neighboring_nodes)[neighboring_node] - 1) * row_ndofs
     values = nonzeros(matrix)
-    @inbounds for (jp, col_node) in enumerate(col_nodes), b in 1:col_dofs_per_node
+
+    @inbounds for b in 1:col_ndofs
         col = col_dof_table[b, col_node]
-        neighboring_nodes = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
-        col_start = first(nzrange(matrix, col))
-        local_col = col_dofs_per_node * (jp - 1) + b
-        local_row = 1
-        for tail_node in CartesianIndices(Base.tail(row_nodes.indices))
-            first_row_node = CartesianIndex(first(row_nodes)[1], tail_node)
-            local_node = first_row_node - first(neighboring_nodes) + oneunit(first_row_node)
-            slot = col_start + (LinearIndices(neighboring_nodes)[local_node] - 1) * row_dofs_per_node
-            for _ in 1:size(row_nodes, 1), a in 1:row_dofs_per_node
-                values[slot] += K[local_row, local_col]
-                slot += 1
-                local_row += 1
-            end
+        slot = first(nzrange(matrix, col)) + row_offset
+        for a in 1:row_ndofs
+            values[slot] += matrix_entry_value(value, a, b, row_ndofs, col_ndofs)
+            slot += 1
         end
     end
+
     matrix
+end
+
+@noinline function check_cartesian_matrix_entry(assembler::CartesianSparseMatrixAssembler, row_node::CartesianIndex, col_node::CartesianIndex, value)
+    (; row_dof_table, col_dof_table, sparsity_radius) = assembler
+    mesh_size = Base.tail(size(row_dof_table))
+    mesh_nodes = CartesianIndices(mesh_size)
+    checkbounds(mesh_nodes, row_node)
+    checkbounds(mesh_nodes, col_node)
+    row_node ∈ cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius) || throw(ArgumentError("matrix entry is outside the Cartesian sparsity pattern"))
+    check_matrix_entry_size(value, size(row_dof_table, 1), size(col_dof_table, 1))
+    nothing
 end
 
 struct GenericMatrixAssembler{A <: AbstractMatrix, R <: LinearIndices, C <: LinearIndices}
@@ -403,21 +422,322 @@ struct GenericMatrixAssembler{A <: AbstractMatrix, R <: LinearIndices, C <: Line
     col_dof_table::C
 end
 
-@inline function add!(assembler::GenericMatrixAssembler, row_nodes, col_nodes, local_matrix)
+function add!(assembler::GenericMatrixAssembler, row_nodes, col_nodes, local_matrix)
     @_propagate_inbounds_meta
     (; matrix, row_dof_table, col_dof_table) = assembler
     row_dofs, col_dofs = support_dofs(row_dof_table, row_nodes, col_dof_table, col_nodes)
     add!(matrix, row_dofs, col_dofs, local_matrix)
 end
 
+# Fallback for matrices that do not have the canonical Cartesian CSC pattern.
+@inline function add_entry!(assembler::GenericMatrixAssembler, row_node, col_node, value)
+    (; matrix, row_dof_table, col_dof_table) = assembler
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    @boundscheck check_matrix_entry_size(value, row_ndofs, col_ndofs)
+    @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
+        matrix[row_dof_table[a,row_node], col_dof_table[b,col_node]] += matrix_entry_value(value, a, b, row_ndofs, col_ndofs)
+    end
+    matrix
+end
+
+function support_dofs(table_i, nodes_i, table_j, nodes_j)
+    @_propagate_inbounds_meta
+    if size(table_i, 1) == size(table_j, 1) && nodes_i === nodes_j
+        dofs = vec(table_i[:, nodes_i])
+        return dofs, dofs
+    else
+        return vec(table_i[:, nodes_i]), vec(table_j[:, nodes_j])
+    end
+end
+
 function matrix_assembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
     GenericMatrixAssembler(matrix, row_dof_table, col_dof_table)
 end
-matrix_assembler(matrix::SparseMatrixCSC, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis) = CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
+function matrix_assembler(matrix::SparseMatrixCSC, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
+    CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
+end
+
+function matrix_dof_tables(gmat, row_grid, col_grid)
+    row_table = LinearIndices((size(gmat, 1) ÷ length(row_grid), size(row_grid)...))
+    col_table = LinearIndices((size(gmat, 2) ÷ length(col_grid), size(col_grid)...))
+    @assert size(gmat) == (length(row_table), length(col_table))
+    row_table, col_table
+end
+
+struct ParticleAssembly end
+struct CellAssembly end
+struct BlockAssembly{I <: CartesianIndices}
+    nodes_i::I
+    nodes_j::I
+    matrix_buffer_pool::BlockMatrixBufferPool
+end
+
+#-------------------
+# LocalMatrixBuffer
+#-------------------
+
+struct LocalMatrixBuffer{M <: Matrix, R <: LinearIndices, C <: LinearIndices}
+    matrix::M
+    row_dof_table::R
+    col_dof_table::C
+end
+
+@inline function local_matrix_buffer(cache, ::Type{T}, row_dof_table, row_nodes, col_dof_table, col_nodes) where {T}
+    row_dof_table = local_dof_table(row_dof_table, row_nodes)
+    col_dof_table = local_dof_table(col_dof_table, col_nodes)
+    dims = length(row_dof_table), length(col_dof_table)
+    matrix = get!(() -> Matrix{T}(undef, dims), cache, dims)
+    LocalMatrixBuffer(matrix, row_dof_table, col_dof_table)
+end
+
+function assemble_first!(assembler, buffer::LocalMatrixBuffer, orientation, row_node, col_node, I, J, value)
+    @_propagate_inbounds_meta
+    buffer.matrix[I,J] .= value
+    buffer
+end
+
+function assemble_add!(assembler, buffer::LocalMatrixBuffer, orientation, row_node, col_node, I, J, value)
+    @_propagate_inbounds_meta
+    @views buffer.matrix[I,J] .+= value
+    buffer
+end
+
+function finish_assembly!(assembler, buffer::LocalMatrixBuffer, orientation, row_nodes, col_nodes)
+    @_propagate_inbounds_meta
+    row_nodes, col_nodes = orientation((row_nodes, col_nodes))
+    add!(assembler, row_nodes, col_nodes, orient_matrix_entry(orientation, buffer.matrix))
+end
+
+function assemble_first!(assembler, ::Nothing, orientation, row_node, col_node, I, J, value)
+    @_propagate_inbounds_meta
+    row_node, col_node = orientation((row_node, col_node))
+    add_entry!(assembler, row_node, col_node, orient_matrix_entry(orientation, value))
+end
+
+function assemble_add!(assembler, ::Nothing, orientation, row_node, col_node, I, J, value)
+    @_propagate_inbounds_meta
+    row_node, col_node = orientation((row_node, col_node))
+    add_entry!(assembler, row_node, col_node, orient_matrix_entry(orientation, value))
+end
+
+finish_assembly!(assembler, ::Nothing, orientation, row_nodes, col_nodes) = assembler.matrix
+
+#-------------------
+# BlockMatrixBuffer
+#-------------------
+
+struct BlockMatrixBufferKey{T,N}
+    row_size::Dims{N}
+    col_size::Dims{N}
+    col_offset::CartesianIndex{N}
+    row_ndofs::Int
+    col_ndofs::Int
+    sparsity_radius::Int
+end
+
+struct BlockMatrixBuffer{T,N}
+    values::Vector{T}
+    node_colptr::Vector{Int}
+    key::BlockMatrixBufferKey{T,N}
+end
+
+function BlockMatrixBufferKey(assembler::CartesianSparseMatrixAssembler, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {N}
+    (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
+    BlockMatrixBufferKey{eltype(matrix),N}(
+        size(row_nodes),
+        size(col_nodes),
+        first(col_nodes) - first(row_nodes),
+        size(row_dof_table, 1),
+        size(col_dof_table, 1),
+        sparsity_radius,
+    )
+end
+
+function BlockMatrixBuffer(key::BlockMatrixBufferKey{T,N}) where {T,N}
+    (; row_size, col_size, col_offset, row_ndofs, col_ndofs, sparsity_radius) = key
+    node_colptr = Vector{Int}(undef, prod(col_size) + 1)
+    slot = 1
+    for (col, col_node) in enumerate(CartesianIndices(col_size))
+        node_colptr[col] = slot
+        row_nodes = cartesian_neighbor_nodes(col_node + col_offset, row_size, sparsity_radius)
+        slot += row_ndofs * col_ndofs * length(row_nodes)
+    end
+    node_colptr[end] = slot
+    BlockMatrixBuffer(zeros(T, slot - 1), node_colptr, key)
+end
+
+function BlockMatrixBuffer(assembler::CartesianSparseMatrixAssembler, row_nodes::CartesianIndices, col_nodes::CartesianIndices)
+    BlockMatrixBuffer(BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
+end
+
+function acquire!(pool::BlockMatrixBufferPool, key::BlockMatrixBufferKey{T,N}) where {T,N}
+    lock(pool.lock)
+    buffer = try
+        buffers = get!(Vector{Any}, pool.buffers, key)
+        isempty(buffers) ? nothing : pop!(buffers)
+    finally
+        unlock(pool.lock)
+    end
+    buffer === nothing && return BlockMatrixBuffer(key)
+    buffer = buffer::BlockMatrixBuffer{T,N}
+    fillzero!(buffer.values)
+    buffer
+end
+
+function release!(pool::BlockMatrixBufferPool, buffer::BlockMatrixBuffer)
+    lock(pool.lock)
+    try
+        push!(get!(Vector{Any}, pool.buffers, buffer.key), buffer)
+    finally
+        unlock(pool.lock)
+    end
+    nothing
+end
+
+# Canonical Cartesian CSC matrices use a block buffer. Matrices using
+# GenericMatrixAssembler are written directly within the thread-safe block schedule.
+function block_matrix_buffer(assembler::CartesianSparseMatrixAssembler, assembly::BlockAssembly, orientation)
+    row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
+    acquire!(assembly.matrix_buffer_pool, BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
+end
+
+block_matrix_buffer(::GenericMatrixAssembler, ::BlockAssembly, orientation) = nothing
+
+function add_entry!(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}, row_node::CartesianIndex{N}, col_node::CartesianIndex{N}, value) where {T,N}
+    @_propagate_inbounds_meta
+    @boundscheck check_block_matrix_entry(buffer, row_nodes, col_nodes, row_node, col_node, value)
+
+    (; values, node_colptr, key) = buffer
+    (; row_size, col_size, col_offset, row_ndofs, col_ndofs, sparsity_radius) = key
+
+    local_row_node = row_node - first(row_nodes) + oneunit(row_node)
+    local_col_node = col_node - first(col_nodes) + oneunit(col_node)
+    neighboring_rows = cartesian_neighbor_nodes(local_col_node + col_offset, row_size, sparsity_radius)
+    neighboring_row = local_row_node - first(neighboring_rows) + oneunit(local_row_node)
+    local_row = LinearIndices(neighboring_rows)[neighboring_row]
+    local_col = LinearIndices(col_size)[local_col_node]
+
+    for b in 1:col_ndofs
+        slot = node_colptr[local_col] + ((b - 1) * length(neighboring_rows) + local_row - 1) * row_ndofs
+        for a in 1:row_ndofs
+            values[slot] += matrix_entry_value(value, a, b, row_ndofs, col_ndofs)
+            slot += 1
+        end
+    end
+
+    buffer
+end
+
+@noinline function check_block_matrix_entry(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}, row_node::CartesianIndex{N}, col_node::CartesianIndex{N}, value) where {T,N}
+    (; key) = buffer
+    (; row_size, col_size, col_offset, row_ndofs, col_ndofs, sparsity_radius) = key
+    size(row_nodes) == row_size || throw(DimensionMismatch("row support size does not match block matrix buffer"))
+    size(col_nodes) == col_size || throw(DimensionMismatch("column support size does not match block matrix buffer"))
+    first(col_nodes) - first(row_nodes) == col_offset || throw(DimensionMismatch("support offset does not match block matrix buffer"))
+    row_node ∈ row_nodes || throw(BoundsError(row_nodes, row_node))
+    col_node ∈ col_nodes || throw(BoundsError(col_nodes, col_node))
+    check_matrix_entry_size(value, row_ndofs, col_ndofs)
+    local_row_node = row_node - first(row_nodes) + oneunit(row_node)
+    local_col_node = col_node - first(col_nodes) + oneunit(col_node)
+    neighboring_rows = cartesian_neighbor_nodes(local_col_node + col_offset, row_size, sparsity_radius)
+    local_row_node ∈ neighboring_rows || throw(ArgumentError("matrix entry is outside the block sparsity pattern"))
+    nothing
+end
+
+function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {T,N}
+    @_propagate_inbounds_meta
+    @boundscheck check_block_matrix_scatter(assembler, buffer, row_nodes, col_nodes)
+
+    (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
+    (; values, node_colptr, key) = buffer
+    (; row_size, col_size, col_offset, row_ndofs, col_ndofs) = key
+
+    mesh_size = Base.tail(size(row_dof_table))
+    matrix_values = nonzeros(matrix)
+    first_row_node = first(row_nodes)
+    first_col_node = first(col_nodes)
+    for (local_col, local_col_node) in enumerate(CartesianIndices(col_size))
+        col_node = local_col_node + first_col_node - oneunit(first_col_node)
+        neighboring_rows = cartesian_neighbor_nodes(local_col_node + col_offset, row_size, sparsity_radius)
+        matrix_neighboring_rows = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
+        for b in 1:col_ndofs
+            col = col_dof_table[b,col_node]
+            matrix_col_start = first(nzrange(matrix, col))
+            local_slot = node_colptr[local_col] + (b - 1) * length(neighboring_rows) * row_ndofs
+            for local_row_node in neighboring_rows
+                row_node = local_row_node + first_row_node - oneunit(first_row_node)
+                matrix_neighboring_row = row_node - first(matrix_neighboring_rows) + oneunit(row_node)
+                matrix_slot = matrix_col_start + (LinearIndices(matrix_neighboring_rows)[matrix_neighboring_row] - 1) * row_ndofs
+                for _ in 1:row_ndofs
+                    matrix_values[matrix_slot] += values[local_slot]
+                    matrix_slot += 1
+                    local_slot += 1
+                end
+            end
+        end
+    end
+
+    matrix
+end
+
+@noinline function check_block_matrix_scatter(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, row_nodes::CartesianIndices, col_nodes::CartesianIndices)
+    (; row_dof_table, col_dof_table, sparsity_radius) = assembler
+    (; key) = buffer
+    (; row_size, col_size, col_offset, row_ndofs, col_ndofs) = key
+    mesh_size = Base.tail(size(row_dof_table))
+    size(row_nodes) == row_size || throw(DimensionMismatch("row support size does not match block matrix buffer"))
+    size(col_nodes) == col_size || throw(DimensionMismatch("column support size does not match block matrix buffer"))
+    first(col_nodes) - first(row_nodes) == col_offset || throw(DimensionMismatch("support offset does not match block matrix buffer"))
+    Base.tail(size(col_dof_table)) == mesh_size || throw(DimensionMismatch("row and column DoF tables must have the same mesh size"))
+    size(row_dof_table, 1) == row_ndofs || throw(DimensionMismatch("row DoF count does not match block matrix buffer"))
+    size(col_dof_table, 1) == col_ndofs || throw(DimensionMismatch("column DoF count does not match block matrix buffer"))
+    sparsity_radius == key.sparsity_radius || throw(DimensionMismatch("sparsity radius does not match block matrix buffer"))
+    mesh_nodes = CartesianIndices(mesh_size)
+    checkbounds(mesh_nodes, row_nodes)
+    checkbounds(mesh_nodes, col_nodes)
+    nothing
+end
+
+# --- helpers ---
+
+function local_dof_table(dof_table, nodes)
+    @_propagate_inbounds_meta
+    LinearIndices((size(dof_table, 1), size(nodes)...))
+end
+
+function local_dofs(local_table, ip)
+    @_propagate_inbounds_meta
+    vec(view(local_table, :, ip))
+end
+
+matrix_row_dofs(buffer::LocalMatrixBuffer, ip) = (@_propagate_inbounds_meta; local_dofs(buffer.row_dof_table, ip))
+matrix_col_dofs(buffer::LocalMatrixBuffer, jp) = (@_propagate_inbounds_meta; local_dofs(buffer.col_dof_table, jp))
+matrix_row_dofs(::Nothing, ip) = nothing
+matrix_col_dofs(::Nothing, jp) = nothing
+
+orient_matrix_entry(::typeof(identity), value) = value
+orient_matrix_entry(::typeof(reverse), value) = value'
+
+#------------
+# P2G_Matrix
+#------------
 
 function P2G_Matrix(f, device::CPUDevice, schedule::Val, grids, particles, weights, partition)
-    P2G((grids, particles, weights, p) -> (@inline f(grids, particles, weights, (p,))), device, schedule, grids, particles, weights, partition)
+    P2G((grids, particles, weights, p) -> (@inline f(grids, particles, weights, (p,), ParticleAssembly())), device, schedule, grids, particles, weights, partition)
+end
+
+function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles, weights, partition::ThreadPartition{<:BlockStrategy}) where {scheduler}
+    matrix_buffer_pool = strategy(partition).matrix_buffer_pool
+    for group in threadsafe_groups(partition)
+        tforeach(group, scheduler) do block
+            block_particle_indices = particle_indices(partition, particles, block)
+            nodes_i = matrix_block_supportnodes(weights[1], block_particle_indices, grids[1])
+            nodes_j = grids[1] === grids[2] && weights[1] === weights[2] ? nodes_i : matrix_block_supportnodes(weights[2], block_particle_indices, grids[2])
+            @inline f(grids, particles, weights, block_particle_indices, BlockAssembly(nodes_i, nodes_j, matrix_buffer_pool))
+        end
+    end
 end
 
 function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::QuadraturePoints,
@@ -427,7 +747,7 @@ function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::Quadratu
 
     for cell in axes(particles, 2)
         particle_indices = (CartesianIndex(q, cell) for q in axes(particles, 1))
-        @inline f(grids, particles, weights, particle_indices)
+        @inline f(grids, particles, weights, particle_indices, CellAssembly())
     end
 end
 
@@ -436,7 +756,7 @@ function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::Quadratu
                     partition::ThreadPartition{<:CellStrategy}) where {scheduler}
     for group in threadsafe_groups(partition)
         tforeach(group, scheduler) do cell
-            @inline f(grids, particles, weights, particle_indices(partition, particles, cell))
+            @inline f(grids, particles, weights, particle_indices(partition, particles, cell), CellAssembly())
         end
     end
 end
@@ -476,7 +796,7 @@ function P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, partition
 end
 
 function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particles,p), ((weights_i,weights_j),(ip,jp)), partition, program::TransferProgram)
-    @gensym grid_i′ grid_j′ weights_i′ weights_j′ bw_i bw_j gridindices_i gridindices_j particle_indices remaining_particles
+    @gensym grid_i′ grid_j′ weights_i′ weights_j′ bw_i bw_j gridindices_i gridindices_j particle_indices matrix_assembly remaining_particles
 
     equations = program.equations
     isempty(equations) && error("@P2G_Matrix: at least one equation is required")
@@ -493,21 +813,19 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     gmats = Any[]
     assemblers_init = Any[]
     hoist_exprs = Any[]
-    lmat_init = Any[]
+    buffers_init = Any[]
     local_jdofs = Any[]
     local_idofs = Any[]
-    lmat_assign = Any[]
-    lmat_add = Any[]
-    lmat2gmat = Any[]
+    assemble_first = Any[]
+    assemble_add = Any[]
+    finish_assemblies = Any[]
     for equation in equations
         (; lhs, rhs, op) = equation
         @capture(lhs, gmat_[gi_,gj_]) || error("@P2G_Matrix: Invalid global matrix expression, got `$lhs`")
         ((gi == i && gj == j) || (gi == j && gj == i)) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
         gmat in gmats && error("@P2G_Matrix: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
 
-        lmat = gensym(gmat)
-        ldofs_i = gensym(Symbol(gmat, :ldofs_i))
-        ldofs_j = gensym(Symbol(gmat, :ldofs_j))
+        buffer = gensym(Symbol(gmat, :buffer))
         assembler = gensym(Symbol(gmat, :assembler))
         I = gensym(Symbol(gmat, :I))
         J = gensym(Symbol(gmat, :J))
@@ -515,27 +833,28 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         op == :(=)  && push!(fillzeros, :(Tesserae.fillzero!($gmat)))
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
-        lmat_dims = Symbol(lmat, :dims)
         push!(gmats, gmat)
         forward = gi == i && gj == j
         reorder_pair = forward ? identity : reverse
+        orientation = forward ? :(Base.identity) : :(Base.reverse)
         row_grid, col_grid = reorder_pair((grid_i, grid_j))
         row_weights, col_weights = reorder_pair((weights_i, weights_j))
         dof_table_i, dof_table_j = reorder_pair((:($(assembler).row_dof_table), :($(assembler).col_dof_table)))
-        row_nodes, col_nodes = reorder_pair((gridindices_i, gridindices_j))
-        scatter_lmat = forward ? lmat : :($lmat')
-        push!(lmat_init, quote
-            $ldofs_i = Tesserae.local_dof_table($dof_table_i, $gridindices_i)
-            $ldofs_j = Tesserae.local_dof_table($dof_table_j, $gridindices_j)
-            $lmat_dims = length($ldofs_i), length($ldofs_j)
-            $lmat = get!(()->Array{eltype($gmat)}(undef, $lmat_dims), $(Symbol(gmat,:dict))[], $lmat_dims)
+        push!(buffers_init, quote
+            if $matrix_assembly isa Tesserae.ParticleAssembly
+                $buffer = nothing
+            elseif $matrix_assembly isa Tesserae.CellAssembly
+                $buffer = Tesserae.local_matrix_buffer($(Symbol(gmat,:dict))[], eltype($gmat), $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
+            else
+                error("BlockAssembly must use block assembly")
+            end
         end)
-        push!(local_jdofs, :($J = Tesserae.local_dofs($ldofs_j, $jp)))
-        push!(local_idofs, :($I = Tesserae.local_dofs($ldofs_i, $ip)))
-        push!(lmat_assign, :(@inbounds $lmat[$I,$J] .= $rhs))
-        push!(lmat_add, :(@inbounds @views $lmat[$I,$J] .+= $rhs))
+        push!(local_jdofs, :($J = Tesserae.matrix_col_dofs($buffer, $jp)))
+        push!(local_idofs, :($I = Tesserae.matrix_row_dofs($buffer, $ip)))
+        push!(assemble_first, :(Tesserae.assemble_first!($assembler, $buffer, $orientation, $i, $j, $I, $J, $rhs)))
+        push!(assemble_add, :(Tesserae.assemble_add!($assembler, $buffer, $orientation, $i, $j, $I, $J, $rhs)))
         push!(assemblers_init, :($assembler = Tesserae.matrix_assembler($gmat, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))))
-        push!(lmat2gmat, :(Tesserae.add!($assembler, $row_nodes, $col_nodes, $scatter_lmat)))
+        push!(finish_assemblies, :(Tesserae.finish_assembly!($assembler, $buffer, $orientation, $gridindices_i, $gridindices_j)))
     end
 
     supportnodes_expr = if grid_i == grid_j && weights_i == weights_j
@@ -550,7 +869,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         $bw_i, $bw_j = $weights_i′[$p], $weights_j′[$p]
     end
 
-    function assemble_particle(lmat_asm)
+    function assemble_particle(assembly)
         quote
             for $jp in eachindex($gridindices_j)
                 $j = $gridindices_j[$jp]
@@ -560,7 +879,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
                     $i = $gridindices_i[$ip]
                     $(cached_replacements(scope, 1, 4)...)
                     $(local_idofs...)
-                    $(lmat_asm...)
+                    $(assembly...)
                 end
             end
         end
@@ -570,13 +889,13 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         $p, $remaining_particles = Base.Iterators.peel($particle_indices)
         $particle_init
         $supportnodes_expr
-        $(lmat_init...)
-        $(assemble_particle(lmat_assign))
+        $(buffers_init...)
+        $(assemble_particle(assemble_first))
         for $p in $remaining_particles
             $particle_init
-            $(assemble_particle(lmat_add))
+            $(assemble_particle(assemble_add))
         end
-        $(lmat2gmat...)
+        $(finish_assemblies...)
     end
 
     if !DEBUG
@@ -601,7 +920,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
             $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
             $(fillzeros...)
             $(assemblers_init...)
-            Tesserae.P2G_Matrix((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $particle_indices) -> $body,
+            Tesserae.P2G_Matrix((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $particle_indices, $matrix_assembly) -> $body,
                                 $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
         end
     end
@@ -631,31 +950,20 @@ end
     nodes_i, nodes_j
 end
 
-function matrix_dof_tables(gmat, row_grid, col_grid)
-    row_table = LinearIndices((size(gmat, 1) ÷ length(row_grid), size(row_grid)...))
-    col_table = LinearIndices((size(gmat, 2) ÷ length(col_grid), size(col_grid)...))
-    @assert size(gmat) == (length(row_table), length(col_table))
-    row_table, col_table
-end
-
-@inline function local_dof_table(dof_table, nodes)
+function matrix_block_supportnodes(weights, particle_indices, grid)
     @_propagate_inbounds_meta
-    LinearIndices((size(dof_table, 1), size(nodes)...))
-end
-
-@inline function local_dofs(local_table, ip)
-    @_propagate_inbounds_meta
-    vec(view(local_table, :, ip))
-end
-
-@inline function support_dofs(table_i, nodes_i, table_j, nodes_j)
-    @_propagate_inbounds_meta
-    if size(table_i, 1) == size(table_j, 1) && nodes_i === nodes_j
-        dofs = vec(table_i[:, nodes_i])
-        return dofs, dofs
-    else
-        return vec(table_i[:, nodes_i]), vec(table_j[:, nodes_j])
+    p, remaining_particles = Iterators.peel(particle_indices)
+    nodes = supportnodes(weights[p])
+    first_node = first(nodes)
+    last_node = last(nodes)
+    for p in remaining_particles
+        nodes = supportnodes(weights[p])
+        first_node = CartesianIndex(map(min, Tuple(first_node), Tuple(first(nodes))))
+        last_node = CartesianIndex(map(max, Tuple(last_node), Tuple(last(nodes))))
     end
+    nodes = first_node:last_node
+    @boundscheck checkbounds(get_mesh(grid), nodes)
+    nodes
 end
 
 function unpair2(ex::Expr)

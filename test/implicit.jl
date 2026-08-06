@@ -192,6 +192,13 @@
         @test nodes_i === nodes_j
         @test Tesserae.matrix_supportnodes(bw, grid, bw, grid) == (nodes_i, nodes_j)
 
+        particle_indices = firstindex(particles):(firstindex(particles) + 2)
+        particle_nodes = map(p -> supportnodes(weights[p]), particle_indices)
+        first_node = CartesianIndex(map(min, Tuple.(first.(particle_nodes))...))
+        last_node = CartesianIndex(map(max, Tuple.(last.(particle_nodes))...))
+        @test Tesserae.matrix_block_supportnodes(weights, particle_indices, grid) ==
+              first_node:last_node
+
         local_i = Tesserae.local_dof_table(table_i, nodes_i)
         local_j = Tesserae.local_dof_table(table_j, nodes_j)
         ip = first(eachindex(nodes_i))
@@ -218,9 +225,35 @@
             col_dofs = LinearIndices((3, dims...))
 
             assembler = Tesserae.matrix_assembler(direct, scatter_mesh, scatter_mesh, basis, basis)
-            Tesserae.add!(assembler, nodes, nodes, local_matrix)
+            buffer = Tesserae.BlockMatrixBuffer(assembler, nodes, nodes)
+            @test buffer.key.row_size == size(nodes)
+            @test buffer.key.col_size == size(nodes)
+            @test iszero(buffer.key.col_offset)
+            @test length(buffer.node_colptr) == length(nodes) + 1
+            @test buffer.node_colptr[end] == length(buffer.values) + 1
+            pool = Tesserae.BlockMatrixBufferPool()
+            fill!(buffer.values, 1)
+            @test Tesserae.release!(pool, buffer) === nothing
+            reused_buffer = Tesserae.acquire!(pool, buffer.key)
+            @test reused_buffer === buffer
+            @test all(iszero, reused_buffer.values)
+            for (jp, col_node) in enumerate(nodes), (ip, row_node) in enumerate(nodes)
+                I = (2ip-1):2ip
+                J = (3jp-2):3jp
+                Tesserae.add_entry!(reused_buffer, nodes, nodes, row_node, col_node, @view(local_matrix[I,J]))
+            end
+            @test sort(reused_buffer.values) == sort(vec(local_matrix))
+            block_matrix = copy(direct)
+            block_assembler = Tesserae.matrix_assembler(block_matrix, scatter_mesh, scatter_mesh, basis, basis)
+            @test Tesserae.scatter!(block_assembler, reused_buffer, nodes, nodes) === block_matrix
+            for (jp, col_node) in enumerate(nodes), (ip, row_node) in enumerate(nodes)
+                I = (2ip-1):2ip
+                J = (3jp-2):3jp
+                Tesserae.add_entry!(assembler, row_node, col_node, @view(local_matrix[I,J]))
+            end
             Tesserae.add!(merge, vec(row_dofs[:, nodes]), vec(col_dofs[:, nodes]), local_matrix)
             @test direct == merge
+            @test block_matrix == merge
         end
     end
 end
