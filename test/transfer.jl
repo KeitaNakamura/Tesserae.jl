@@ -190,6 +190,29 @@
         @test actual.v ≈ expected.v
     end
 
+    @testset "transfer with views" begin
+        grid, particles, weights = transfer_fixture()
+        expected = deepcopy(grid)
+        actual = deepcopy(grid)
+        subset = 2:length(particles)-1
+        particle_view = view(particles, subset)
+        weight_view = view(weights, subset)
+
+        fillzero!(expected.m)
+        for p in eachindex(particle_view)
+            bw = weight_view[p]
+            for (ip, i) in enumerate(supportnodes(bw, expected))
+                expected.m[i] += bw.w[ip] * particle_view.m[p]
+            end
+        end
+
+        @P2G actual=>i particle_view=>p weight_view=>ip begin
+            m[i] = @∑ w[ip] * m[p]
+        end
+
+        @test actual.m ≈ expected.m
+    end
+
     @testset "P2G RHS product hoisting" begin
         hoist_exprs = Any[]
         rhs = Tesserae.hoist_p2g_rhs!(hoist_exprs, Set([:wi, :∇wi]), :(2 * a * b * wi * c * d * ∇wi * e * f))
