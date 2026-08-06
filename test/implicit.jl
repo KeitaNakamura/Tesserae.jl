@@ -248,8 +248,7 @@
             @test buffer.key.row_size == size(nodes)
             @test buffer.key.col_size == size(nodes)
             @test iszero(buffer.key.col_offset)
-            @test length(buffer.node_colptr) == length(nodes) + 1
-            @test buffer.node_colptr[end] == length(buffer.values) + 1
+            @test length(buffer.node_colstarts) == length(nodes)
             pool = Tesserae.BlockMatrixBufferPool()
             fill!(buffer.values, 1)
             @test Tesserae.release!(pool, buffer) === nothing

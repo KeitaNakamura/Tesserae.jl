@@ -487,11 +487,16 @@ struct LocalMatrixBuffer{M <: Matrix, R <: LinearIndices, C <: LinearIndices}
     col_dof_table::C
 end
 
-@inline function local_matrix_buffer(cache, ::Type{T}, row_dof_table, row_nodes, col_dof_table, col_nodes) where {T}
+@inline function local_matrix_buffer(cache::TaskLocalValue{Union{Nothing,Matrix{T}}}, row_dof_table, row_nodes, col_dof_table, col_nodes) where {T}
     row_dof_table = local_dof_table(row_dof_table, row_nodes)
     col_dof_table = local_dof_table(col_dof_table, col_nodes)
     dims = length(row_dof_table), length(col_dof_table)
-    matrix = get!(() -> Matrix{T}(undef, dims), cache, dims)
+    matrix = cache[]
+    if matrix === nothing
+        matrix = Matrix{T}(undef, dims)
+        cache[] = matrix
+    end
+    @boundscheck size(matrix) == dims || throw(DimensionMismatch("local matrix size changed during assembly"))
     LocalMatrixBuffer(matrix, row_dof_table, col_dof_table)
 end
 
@@ -567,7 +572,7 @@ end
 
 struct BlockMatrixBuffer{T,N}
     values::Vector{T}
-    node_colptr::Vector{Int}
+    node_colstarts::Vector{Int}
     key::BlockMatrixBufferKey{T,N}
 end
 
@@ -585,15 +590,14 @@ end
 
 function BlockMatrixBuffer(key::BlockMatrixBufferKey{T,N}) where {T,N}
     (; row_size, col_size, col_offset, row_ndofs, col_ndofs, sparsity_radius) = key
-    node_colptr = Vector{Int}(undef, prod(col_size) + 1)
+    node_colstarts = Vector{Int}(undef, prod(col_size))
     slot = 1
     for (col, col_node) in enumerate(CartesianIndices(col_size))
-        node_colptr[col] = slot
+        node_colstarts[col] = slot
         row_nodes = cartesian_neighbor_nodes(col_node + col_offset, row_size, sparsity_radius)
         slot += row_ndofs * col_ndofs * length(row_nodes)
     end
-    node_colptr[end] = slot
-    BlockMatrixBuffer(zeros(T, slot - 1), node_colptr, key)
+    BlockMatrixBuffer(zeros(T, slot - 1), node_colstarts, key)
 end
 
 # ---- buffer pool ----
@@ -639,7 +643,7 @@ function add_entry!(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{
     @_propagate_inbounds_meta
     @boundscheck check_block_matrix_entry(buffer, row_nodes, col_nodes, row_node, col_node, value)
 
-    (; values, node_colptr, key) = buffer
+    (; values, node_colstarts, key) = buffer
     (; row_size, col_size, col_offset, row_ndofs, col_ndofs, sparsity_radius) = key
 
     local_row_node = row_node - first(row_nodes) + oneunit(row_node)
@@ -649,7 +653,7 @@ function add_entry!(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{
     local_row = LinearIndices(neighboring_rows)[neighboring_row]
     local_col = LinearIndices(col_size)[local_col_node]
 
-    slot = node_colptr[local_col] + (local_row - 1) * row_ndofs * col_ndofs
+    slot = node_colstarts[local_col] + (local_row - 1) * row_ndofs * col_ndofs
     for index in eachindex(value)
         values[slot] += value[index]
         slot += 1
@@ -679,7 +683,7 @@ function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrix
     @boundscheck check_block_matrix_scatter(assembler, buffer, row_nodes, col_nodes)
 
     (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
-    (; values, node_colptr, key) = buffer
+    (; values, node_colstarts, key) = buffer
     (; row_size, col_size, col_offset, row_ndofs, col_ndofs) = key
 
     mesh_size = Base.tail(size(row_dof_table))
@@ -694,7 +698,7 @@ function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrix
             col = col_dof_table[b,col_node]
             matrix_col_start = first(nzrange(matrix, col))
             for (local_row, local_row_node) in enumerate(neighboring_rows)
-                local_slot = node_colptr[local_col] + ((local_row - 1) * col_ndofs + b - 1) * row_ndofs
+                local_slot = node_colstarts[local_col] + ((local_row - 1) * col_ndofs + b - 1) * row_ndofs
                 row_node = local_row_node + first_row_node - oneunit(first_row_node)
                 matrix_neighboring_row = row_node - first(matrix_neighboring_rows) + oneunit(row_node)
                 matrix_slot = matrix_col_start + (LinearIndices(matrix_neighboring_rows)[matrix_neighboring_row] - 1) * row_ndofs
@@ -938,7 +942,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
             if $matrix_assembly isa Tesserae.ParticleAssembly
                 $buffer = nothing
             elseif $matrix_assembly isa Tesserae.CellAssembly
-                $buffer = Tesserae.local_matrix_buffer($(Symbol(gmat,:dict))[], eltype($gmat), $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
+                $buffer = Tesserae.local_matrix_buffer($(Symbol(gmat,:cache)), $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
             else
                 error("BlockAssembly must use block assembly")
             end
@@ -1026,18 +1030,18 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     end
 
     # cache for local matrices
-    arraydicts = map(gmats) do gmat
-        arraydict = Symbol(gmat, :dict)
-        Tarraydict = Symbol(:T, arraydict)
+    matrix_caches = map(gmats) do gmat
+        matrix_cache = Symbol(gmat, :cache)
+        Tmatrix_cache = Symbol(:T, matrix_cache)
         quote
-            $Tarraydict = Dict{Tuple{Int,Int}, Matrix{eltype($gmat)}}
-            $arraydict = $TaskLocalValue{$Tarraydict}(() -> $Tarraydict())
+            $Tmatrix_cache = Union{Nothing,Matrix{eltype($gmat)}}
+            $matrix_cache = $TaskLocalValue{$Tmatrix_cache}(() -> nothing)
         end
     end
 
     body = quote
         let
-            $(arraydicts...)
+            $(matrix_caches...)
             $check_arguments_for_P2G_Matrix($grid_i, $particles, $weights_i, $partition)
             $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
             $(fillzeros...)

@@ -64,21 +64,16 @@ function resolve_sum_equations(equations::Vector{TransferEquation}, scope::Trans
     end
 end
 
-function push_unique_expr!(xs::Vector{Expr}, x::Expr)
+function push_unique!(xs::Vector, x)
     x in xs || push!(xs, x)
     xs
 end
 
 function append_unique_exprs!(dst::Vector{Expr}, src::Vector{Expr})
     for x in src
-        push_unique_expr!(dst, x)
+        push_unique!(dst, x)
     end
     dst
-end
-
-function push_unique!(xs::Vector, x)
-    x in xs || push!(xs, x)
-    xs
 end
 
 """
@@ -861,7 +856,7 @@ function resolve_refs(expr, scope::TransferScope)
             resolved = :($parent.$x[$i])
             scope.replacements === nothing && return resolved
             sym = Symbol(resolved)
-            push_unique_expr!(scope.replacements[i], :($sym = $resolved))
+            push_unique!(scope.replacements[i], :($sym = $resolved))
             return sym
         end
         ex
