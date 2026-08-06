@@ -2,6 +2,13 @@
 
 All notable changes to Tesserae.jl will be documented in this file.
 
+## v0.7.2
+
+### Added
+
+- Added `view` support for `BasisWeightArray`, allowing matching particle and
+  basis-weight subsets to be passed to transfer macros. (#177)
+
 ## v0.7.1
 
 ### Added
