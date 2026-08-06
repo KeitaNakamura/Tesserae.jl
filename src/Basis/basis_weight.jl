@@ -341,6 +341,12 @@ generate_basis_weights(mesh::FEMesh, dims...; kwargs...) = _generate_basis_weigh
 
 Base.size(x::BasisWeightArray) = size(getfield(x, :indices))
 
+@inline function Base.view(x::BasisWeightArray, I...)
+    indices = view(getfield(x, :indices), I...)
+    vals = map(vals -> viewcol(vals, Val(ndims(x)), I...), getfield(x, :vals))
+    BasisWeightArray(getfield(x, :basis), vals, indices)
+end
+
 Base.propertynames(x::BasisWeightArray) = propertynames(getfield(x, :vals))
 @inline function Base.getproperty(x::BasisWeightArray, name::Symbol)
     getproperty(getfield(x, :vals), name)
@@ -362,6 +368,9 @@ end
 end
 
 @inline function viewcol(A::AbstractArray, I::Vararg{Integer, N}) where {N}
+    viewcol(A, Val(N), I...)
+end
+@inline function viewcol(A::AbstractArray, ::Val{N}, I...) where {N}
     colons = nfill(:, Val(ndims(A)-N))
     @boundscheck checkbounds(A, colons..., I...)
     @inbounds view(A, colons..., I...)

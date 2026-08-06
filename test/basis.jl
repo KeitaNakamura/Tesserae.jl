@@ -102,6 +102,38 @@ end
     end
 end
 
+@testset "BasisWeightArray views" begin
+    mesh = CartesianMesh(1, (0,10), (0,10))
+    basis = BSpline(Linear())
+    weights = generate_basis_weights(basis, mesh, 4)
+    weights.w .= reshape(collect(eachindex(weights.w)), size(weights.w))
+
+    weights_view = @inferred view(weights, 2:3)
+    @test weights_view isa Tesserae.BasisWeightArray
+    @test size(weights_view) == (2,)
+    @test Tesserae.basis(weights_view) === basis
+    @test weights_view[1].w == weights[2].w
+    @test weights_view[2].w == weights[3].w
+    @test parent(weights_view.w) === weights.w
+    @test parent(weights_view.∇w) === weights.∇w
+
+    weights_view.w[1, 1, 1] = -1
+    @test weights.w[1, 1, 2] == -1
+
+    matrix_weights = generate_basis_weights(basis, mesh, 3, 4)
+    matrix_view = @inferred view(matrix_weights, :, 2:3)
+    @test size(matrix_view) == (3, 2)
+    @test matrix_view[2, 1].w == matrix_weights[2, 2].w
+
+    column_view = @inferred view(matrix_weights, :, 2)
+    @test size(column_view) == (3,)
+    @test column_view[2].w == matrix_weights[2, 2].w
+
+    cartesian_view = @inferred view(matrix_weights, CartesianIndex(2, 3))
+    @test size(cartesian_view) == ()
+    @test cartesian_view[].w == matrix_weights[2, 3].w
+end
+
 end # BasisWeight
 
 @testset "Basis functions" begin
