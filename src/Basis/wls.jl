@@ -89,9 +89,9 @@ function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadrat
     order = derivative_order(bw)
     vals_axes = ntuple(Val(dim)) do d
         mesh_1d = axismesh(mesh, d)
-        vals_1d = allocate_static_basis_values(Vec{1,T}, wls_1d; derivative=order)
+        vals_1d = allocate_static_basis_values(@NamedTuple{w::T}, wls_1d, Val(1); derivative=order)
         indices_1d = CartesianIndices((supportnodes(bw).indices[d],))
-        bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(indices_1d))
+        bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(indices_1d), order)
         # Must be inlined: creates/updates a small StaticArray (MVector/MArray) on the GPU.
         # If not inlined, the temporary may escape and trigger dynamic allocation (gpu_gc_pool_alloc).
         update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))

@@ -43,6 +43,23 @@ function check_weight_layout(bw::Union{BasisWeight, Tesserae.BasisWeightArray}, 
     end
 end
 
+@testset "Basis-value allocation" begin
+    Prop = @NamedTuple{N::Float64, ψ::Vec{2,Float64}}
+    zeros = @inferred Tesserae.basis_value_zeros(Prop, Val(2), Order(2))
+    @test propertynames(zeros) === (:N, :∇N, :∇²N, :ψ)
+    @test zeros === (; N=0.0, ∇N=zero(Vec{2,Float64}), ∇²N=zero(SymmetricSecondOrderTensor{2,Float64}), ψ=zero(Vec{2,Float64}))
+
+    vals = @inferred Tesserae.allocate_basis_values(Prop, BSpline(Linear()), Val(2); derivative=Order(2))
+    @test propertynames(vals) === propertynames(zeros)
+    @test eltype(vals.N) === Float64
+    @test eltype(vals.∇N) === Vec{2,Float64}
+    @test eltype(vals.∇²N) <: SymmetricSecondOrderTensor{2,Float64}
+    @test eltype(vals.ψ) === Vec{2,Float64}
+
+    @test_throws ArgumentError Tesserae.basis_value_zeros(NamedTuple{(),Tuple{}}, Val(2), Order(1))
+    @test_throws ArgumentError Tesserae.basis_value_zeros(@NamedTuple{w::Float64, ∇w::Vec{2,Float64}}, Val(2), Order(1))
+end
+
 @testset "CartesianMesh layout" begin
     basis = BSpline(Quadratic())
     n = 2
@@ -100,6 +117,63 @@ end
             @test typeof(weights[end]) === eltype(weights)
         end
     end
+end
+
+@testset "Explicit derivative order" begin
+    mesh = CartesianMesh(1, (0,10), (0,10))
+    basis = BSpline(Linear())
+    original = BasisWeight(basis, mesh; derivative=Order(1))
+    ψ = fill(Vec(1.0, 2.0), size(original.w))
+    vals = merge(getfield(original, :vals), (; ψ))
+    bw = Tesserae.BasisWeight(basis, vals, getfield(original, :indices), Order(1))
+
+    @test Tesserae.derivative_order(bw) isa Order{1}
+    @test propertynames(bw) === (:w, :∇w, :ψ)
+    @test_throws ArgumentError Tesserae.nodal_basis_values(bw, Order(2))
+    @test_throws DimensionMismatch Tesserae.set_values!(bw, 1, (1.0, Vec(1.0, 2.0), Vec(3.0, 4.0)))
+    @test_throws DimensionMismatch Tesserae.set_values!(bw, (bw.w, bw.∇w, bw.ψ))
+    @test iszero(bw.w[1])
+    @test iszero(bw.∇w[1])
+    @test bw.ψ[1] == Vec(1.0, 2.0)
+    update!(bw, Vec(2.2, 3.4), mesh)
+    @test all(==(Vec(1.0, 2.0)), bw.ψ)
+end
+
+@testset "Property schema" begin
+    mesh = CartesianMesh(1, (0,10), (0,10))
+    basis = BSpline(Linear())
+    Prop = @NamedTuple{N::Float32, ψ::Vec{2,Float64}}
+
+    bw = @inferred BasisWeight(Prop, basis, mesh; derivative=Order(2))
+    @test propertynames(bw) === (:N, :∇N, :∇²N, :ψ)
+    @test eltype(bw.N) === Float32
+    @test eltype(bw.∇N) === Vec{2,Float32}
+    @test eltype(bw.∇²N) <: SymmetricSecondOrderTensor{2,Float32}
+    @test eltype(bw.ψ) === Vec{2,Float64}
+    bw.ψ .= Ref(Vec(1.0, 2.0))
+    update!(bw, Vec(2.2, 3.4), mesh)
+    @test all(==(Vec(1.0, 2.0)), bw.ψ)
+
+    weights = @inferred generate_basis_weights(Prop, basis, mesh, 2; derivative=Order(1))
+    @test propertynames(weights) === (:N, :∇N, :ψ)
+    @test eltype(weights.N) === Float32
+    @test eltype(weights.∇N) === Vec{2,Float32}
+    @test eltype(weights.ψ) === Vec{2,Float64}
+    @test Tesserae.derivative_order(weights) isa Order{1}
+    @test Tesserae.derivative_order(first(weights)) isa Order{1}
+
+    fill!(weights.ψ, Vec(1.0, 2.0))
+    weights_view = @inferred view(weights, 2:2)
+    @test propertynames(weights_view) === (:N, :∇N, :ψ)
+    @test parent(weights_view.ψ) === weights.ψ
+    @test Tesserae.derivative_order(weights_view) isa Order{1}
+    @test Tesserae.derivative_order(first(weights_view)) isa Order{1}
+
+    adapted = Tesserae.Adapt.adapt(Array, weights)
+    @test propertynames(adapted) === (:N, :∇N, :ψ)
+    @test adapted.ψ == weights.ψ
+    @test Tesserae.derivative_order(adapted) isa Order{1}
+    @test Tesserae.derivative_order(first(adapted)) isa Order{1}
 end
 
 @testset "BasisWeightArray views" begin
@@ -276,7 +350,9 @@ end # BasisWeight
         @test_throws MethodError KernelCorrection(cpdi)
         for dim in (1,2,3)
             mesh = CartesianMesh(0.1, ntuple(i->(0,1), Val(dim))...)
-            bw = BasisWeight(cpdi, mesh)
+            Prop = NamedTuple{(:w, :ψ), Tuple{Float64, Vec{dim,Float64}}}
+            bw = BasisWeight(Prop, cpdi, mesh)
+            bw.ψ .= Ref(ones(Vec{dim,Float64}))
             @test_throws ArgumentError BasisWeight(cpdi, mesh; derivative=Order(0))
             l = 0.5*spacing(mesh)
             F = one(Mat{dim,dim})
@@ -285,6 +361,7 @@ end # BasisWeight
             filter[begin] = false
             @test_throws ArgumentError update!(bw, (;x,l,F), mesh, filter)
             check_update!(bw, (;x,l,F), x, mesh; partition=true, reproduces_linear=true)
+            @test all(==(ones(Vec{dim,Float64})), bw.ψ)
 
             GridProp = NamedTuple{(:x, :m), Tuple{Vec{dim, Float64}, Float64}}
             spgrid = generate_grid(SpArray, GridProp, mesh)

@@ -2,6 +2,14 @@
 
 All notable changes to Tesserae.jl will be documented in this file.
 
+## v0.7.3
+
+### Added
+
+- Added property schemas for `BasisWeight` and `generate_basis_weights`, allowing
+  basis-value names, scalar types, and custom fields to be defined with a
+  `NamedTuple` type.
+
 ## v0.7.2
 
 ### Added

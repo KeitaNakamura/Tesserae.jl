@@ -16,9 +16,9 @@ initial_supportnodes(basis::IGABasis, mesh::IGAMesh) = zero(SVector{nsupportnode
 _generate_supportnodes(::IGABasis, mesh::IGAMesh, dims::Dims{2}) = _generate_cell_supportnodes(mesh, dims)
 _generate_supportnodes(::IGABasis, ::IGAMesh, ::Dims) = throw(DimensionMismatch("IGA basis weights must have dimensions (quadrature points, cells)"))
 
-function allocate_static_basis_values(::Type{Vec{dim, T}}, basis::IGABasis; kwargs...) where {dim, T}
+function allocate_static_basis_values(::Type{Prop}, basis::IGABasis, ::Val{dim}; kwargs...) where {Prop <: NamedTuple, dim}
     A = MArray{Tuple{nsupportnodes(basis)}}
-    _allocate_basis_values(A, Vec{dim, T}; kwargs...)
+    _allocate_basis_values(A, Prop, Val(dim); kwargs...)
 end
 
 generate_basis_weights(::Type{T}, mesh::IGAMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, basis(mesh), mesh, _todims(dims...); kwargs...)
