@@ -312,23 +312,19 @@ end
 
 # ---- matrix entries ----
 
-# Expand a scalar, vector, or matrix value into one node-pair DoF block.
-@propagate_inbounds matrix_entry_value(value::Number, a, b, row_ndofs, col_ndofs) = value
-@propagate_inbounds matrix_entry_value(value::AbstractVector, a, b, row_ndofs, col_ndofs) = col_ndofs == 1 ? value[a] : value[b]
-@propagate_inbounds matrix_entry_value(value::AbstractMatrix, a, b, row_ndofs, col_ndofs) = value[ifelse(size(value, 1) == 1, 1, a), ifelse(size(value, 2) == 1, 1, b)]
-
 orient_matrix_entry(::typeof(identity), value) = value
 orient_matrix_entry(::typeof(reverse), value) = value'
 
-@noinline check_matrix_entry_size(::Number, row_ndofs, col_ndofs) = nothing
+@noinline function check_matrix_entry_size(::Number, row_ndofs, col_ndofs)
+    (row_ndofs, col_ndofs) == (1, 1) || throw(DimensionMismatch("scalar value requires a scalar matrix entry"))
+end
 @noinline function check_matrix_entry_size(value::AbstractVector, row_ndofs, col_ndofs)
     expected_length = col_ndofs == 1 ? row_ndofs : col_ndofs
     (row_ndofs == 1 || col_ndofs == 1) && length(value) == expected_length ||
         throw(DimensionMismatch("vector value is incompatible with matrix entry dimensions"))
 end
 @noinline function check_matrix_entry_size(value::AbstractMatrix, row_ndofs, col_ndofs)
-    (size(value, 1) == 1 || size(value, 1) == row_ndofs) &&
-        (size(value, 2) == 1 || size(value, 2) == col_ndofs) ||
+    size(value) == (row_ndofs, col_ndofs) ||
         throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
 end
 
@@ -408,7 +404,7 @@ end
         col = col_dof_table[b, col_node]
         slot = first(nzrange(matrix, col)) + row_offset
         for a in 1:row_ndofs
-            values[slot] += matrix_entry_value(value, a, b, row_ndofs, col_ndofs)
+            values[slot] += value[(b - 1) * row_ndofs + a]
             slot += 1
         end
     end
@@ -449,7 +445,7 @@ end
     col_ndofs = size(col_dof_table, 1)
     @boundscheck check_matrix_entry_size(value, row_ndofs, col_ndofs)
     @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
-        matrix[row_dof_table[a,row_node], col_dof_table[b,col_node]] += matrix_entry_value(value, a, b, row_ndofs, col_ndofs)
+        matrix[row_dof_table[a,row_node], col_dof_table[b,col_node]] += value[(b - 1) * row_ndofs + a]
     end
     matrix
 end
@@ -600,10 +596,6 @@ function BlockMatrixBuffer(key::BlockMatrixBufferKey{T,N}) where {T,N}
     BlockMatrixBuffer(zeros(T, slot - 1), node_colptr, key)
 end
 
-function BlockMatrixBuffer(assembler::CartesianSparseMatrixAssembler, row_nodes::CartesianIndices, col_nodes::CartesianIndices)
-    BlockMatrixBuffer(BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
-end
-
 # ---- buffer pool ----
 
 function acquire!(pool::BlockMatrixBufferPool, key::BlockMatrixBufferKey{T,N}) where {T,N}
@@ -658,16 +650,9 @@ function add_entry!(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{
     local_col = LinearIndices(col_size)[local_col_node]
 
     slot = node_colptr[local_col] + (local_row - 1) * row_ndofs * col_ndofs
-    if value isa AbstractMatrix && size(value) == (row_ndofs, col_ndofs)
-        for index in eachindex(value)
-            values[slot] += value[index]
-            slot += 1
-        end
-    else
-        for b in 1:col_ndofs, a in 1:row_ndofs
-            values[slot] += matrix_entry_value(value, a, b, row_ndofs, col_ndofs)
-            slot += 1
-        end
+    for index in eachindex(value)
+        values[slot] += value[index]
+        slot += 1
     end
 
     buffer
@@ -1047,7 +1032,6 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         quote
             $Tarraydict = Dict{Tuple{Int,Int}, Matrix{eltype($gmat)}}
             $arraydict = $TaskLocalValue{$Tarraydict}(() -> $Tarraydict())
-            $arraydict[] # initialize
         end
     end
 

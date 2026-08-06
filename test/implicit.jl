@@ -244,7 +244,7 @@
             col_dofs = LinearIndices((3, dims...))
 
             assembler = Tesserae.matrix_assembler(direct, scatter_mesh, scatter_mesh, basis, basis)
-            buffer = Tesserae.BlockMatrixBuffer(assembler, nodes, nodes)
+            buffer = Tesserae.BlockMatrixBuffer(Tesserae.BlockMatrixBufferKey(assembler, nodes, nodes))
             @test buffer.key.row_size == size(nodes)
             @test buffer.key.col_size == size(nodes)
             @test iszero(buffer.key.col_offset)
