@@ -11,8 +11,8 @@
     @test_throws UndefKeywordError create_sparse_matrix(basis, mesh)
 
     @testset "square matrix" begin
-        A = create_sparse_matrix(basis, mesh; ndofs=2)
-        B = create_sparse_matrix(basis, mesh; ndofs=2)
+        A = create_sparse_matrix(basis, mesh; ndofs=1)
+        B = create_sparse_matrix(basis, mesh; ndofs=1)
         A_dense = zeros(size(A))
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             A[i,j] = @∑ w[ip] * sum(∇w[jp])
@@ -27,10 +27,10 @@
         @test A ≈ A_dense
     end
     @testset "multiple matrices" begin
-        A = create_sparse_matrix(basis, mesh; ndofs=2)
-        B = create_sparse_matrix(basis, mesh; ndofs=2)
-        Aref = create_sparse_matrix(basis, mesh; ndofs=2)
-        Bref = create_sparse_matrix(basis, mesh; ndofs=2)
+        A = create_sparse_matrix(basis, mesh; ndofs=1)
+        B = create_sparse_matrix(basis, mesh; ndofs=1)
+        Aref = create_sparse_matrix(basis, mesh; ndofs=1)
+        Bref = create_sparse_matrix(basis, mesh; ndofs=1)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             A[i,j] = @∑ w[ip] * w[jp]
@@ -194,6 +194,7 @@
         @test generic_assembler.matrix === dense
         @test generic_assembler.row_dof_table == table_i
         @test generic_assembler.col_dof_table == table_j
+        @test_throws DimensionMismatch Tesserae.check_matrix_entry_size(1.0, 2, 1)
         invalid = Tesserae.SparseArrays.dropzeros!(copy(A))
         @test_throws ArgumentError Tesserae.matrix_assembler(invalid, mesh, mesh, basis, basis)
 
@@ -270,12 +271,6 @@
             Tesserae.add!(merge, vec(row_dofs[:, nodes]), vec(col_dofs[:, nodes]), local_matrix)
             @test direct == merge
             @test block_matrix == merge
-
-            Tesserae.fillzero!(reused_buffer.values)
-            for col_node in nodes, row_node in nodes
-                Tesserae.add_entry!(reused_buffer, nodes, nodes, row_node, col_node, 1.0)
-            end
-            @test all(isone, reused_buffer.values)
         end
     end
 end
