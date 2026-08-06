@@ -603,12 +603,9 @@ end
 # ---- buffer pool ----
 
 function acquire!(pool::BlockMatrixBufferPool, key::BlockMatrixBufferKey{T,N}) where {T,N}
-    lock(pool.lock)
-    buffer = try
+    buffer = lock(pool.lock) do
         buffers = get!(Vector{Any}, pool.buffers, key)
         isempty(buffers) ? nothing : pop!(buffers)
-    finally
-        unlock(pool.lock)
     end
     buffer === nothing && return BlockMatrixBuffer(key)
     buffer = buffer::BlockMatrixBuffer{T,N}
@@ -617,11 +614,8 @@ function acquire!(pool::BlockMatrixBufferPool, key::BlockMatrixBufferKey{T,N}) w
 end
 
 function release!(pool::BlockMatrixBufferPool, buffer::BlockMatrixBuffer)
-    lock(pool.lock)
-    try
+    lock(pool.lock) do
         push!(get!(Vector{Any}, pool.buffers, buffer.key), buffer)
-    finally
-        unlock(pool.lock)
     end
     nothing
 end
