@@ -31,7 +31,7 @@ Base.size(x::CPDISupportNodes) = (x.len,)
     @inbounds x.indices[i]
 end
 
-@generated function allocate_basis_values(::Type{Vec{dim, T}}, ::CPDI; derivative::Order{k}=Order(1), name::Val{sym}=Val(:w)) where {dim, T, k, sym}
+@generated function allocate_basis_values(::Type{Vec{dim, T}}, ::CPDI; derivative::Order{k}, name::Val{sym}=Val(:w)) where {dim, T, k, sym}
     k == 1 || return :(throw(ArgumentError("CPDI supports derivative=Order(1) only")))
     w = sym
     ∇w = Symbol(:∇, sym)

@@ -215,7 +215,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
         vals = (w=reshape(collect(1.0:16.0), 1, 16),)
         indices = reshape(collect(1:16), 1, 16)
-        weights = Tesserae.BasisWeightArray(nothing, vals, indices)
+        weights = Tesserae.BasisWeightArray(nothing, vals, indices, Order(0))
         @test weights[1, meshcells[end]].w[] == 16
         @test supportnodes(weights[1, meshcells[end]]) == 16
     end

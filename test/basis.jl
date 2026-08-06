@@ -102,6 +102,20 @@ end
     end
 end
 
+@testset "Explicit derivative order" begin
+    mesh = CartesianMesh(1, (0,10), (0,10))
+    basis = BSpline(Linear())
+    original = BasisWeight(basis, mesh; derivative=Order(1))
+    ψ = fill(Vec(1.0, 2.0), size(original.w))
+    vals = merge(getfield(original, :vals), (; ψ))
+    bw = Tesserae.BasisWeight(basis, vals, getfield(original, :indices), Order(1))
+
+    @test Tesserae.derivative_order(bw) isa Order{1}
+    @test propertynames(bw) === (:w, :∇w, :ψ)
+    update!(bw, Vec(2.2, 3.4), mesh)
+    @test all(==(Vec(1.0, 2.0)), bw.ψ)
+end
+
 @testset "BasisWeightArray views" begin
     mesh = CartesianMesh(1, (0,10), (0,10))
     basis = BSpline(Linear())

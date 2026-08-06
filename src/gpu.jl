@@ -88,7 +88,7 @@ function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
     vals = map(a -> adapt(to, a), getfield(weights, :vals))
     indices = adapt(to, getfield(weights, :indices))
-    BasisWeightArray(b, vals, indices)
+    BasisWeightArray(b, vals, indices, derivative_order(weights))
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
     vals = getfield(weights, :vals)

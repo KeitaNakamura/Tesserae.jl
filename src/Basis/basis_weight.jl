@@ -50,7 +50,7 @@ Such methods must update `supportnodes(bw)` and
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 initial_supportnodes(shape::Shape, mesh::FEMesh) = zero(SVector{nlocalnodes(shape), Int})
 
-function allocate_basis_values(::Type{Vec{dim, T}}, basis; derivative::Order{k}=Order(1), name=nothing) where {dim, T, k}
+function allocate_basis_values(::Type{Vec{dim, T}}, basis; derivative::Order{k}, name=nothing) where {dim, T, k}
     map(Array, allocate_static_basis_values(Vec{dim, T}, basis; derivative, name))
 end
 function allocate_static_basis_values(::Type{Vec{dim, T}}, basis::Basis; kwargs...) where {dim, T}
@@ -61,7 +61,7 @@ function allocate_static_basis_values(::Type{Vec{dim, T}}, shape::Shape; kwargs.
     A = MArray{Tuple{nlocalnodes(shape)}}
     _allocate_basis_values(A, Vec{dim, T}; kwargs...)
 end
-@generated function _allocate_basis_values(::Type{A}, ::Type{Vec{dim, T}}; derivative::Order{k}=Order(1), name=nothing) where {A, dim, T, k}
+@generated function _allocate_basis_values(::Type{A}, ::Type{Vec{dim, T}}; derivative::Order{k}, name=nothing) where {A, dim, T, k}
     quote
         names = @ntuple $(k+1) i -> basis_value_name(Order(i-1), name)
         vals = @ntuple $(k+1) i -> fill(zero_basis_value(Vec{dim, T}, Order(i-1)), A)
@@ -138,17 +138,18 @@ julia> sum(eachindex(nodeindices)) do ip # linear field reproduction
 true
 ```
 """
-struct BasisWeight{B, Vals <: NamedTuple, Indices <: AbstractArray{<: Any}}
+struct BasisWeight{B, Vals <: NamedTuple, Indices <: AbstractArray{<: Any}, O <: Order}
     basis::B
     vals::Vals
     indices::Indices
+    order::O
 end
 
 # AbstractMesh
-function _basis_weight(::Type{T}, basis, mesh::AbstractMesh{dim}; kwargs...) where {T, dim}
-    vals = allocate_basis_values(Vec{dim, T}, basis; kwargs...)
+function _basis_weight(::Type{T}, basis, mesh::AbstractMesh{dim}; derivative::Order=Order(1), kwargs...) where {T, dim}
+    vals = allocate_basis_values(Vec{dim, T}, basis; derivative, kwargs...)
     indices = initial_supportnodes(basis, mesh)
-    BasisWeight(basis, vals, fill(indices))
+    BasisWeight(basis, vals, fill(indices), derivative)
 end
 
 # CartesianMesh
@@ -216,22 +217,7 @@ end
 end
 
 @inline supportnodes_storage(bw::BasisWeight) = getfield(bw, :indices)
-
-@inline function derivative_order(bw::BasisWeight)
-    @debug check_basis_value_names(bw)
-    k = length(propertynames(bw)) - 1
-    Order(k)
-end
-@inline function check_basis_value_names(bw::BasisWeight)
-    k = length(propertynames(bw)) - 1
-    check_basis_value_names(bw, Val(k))
-end
-@generated function check_basis_value_names(bw::BasisWeight, ::Val{k}) where {k}
-    quote
-        @_inline_meta
-        @assert @nall $(k+1) i -> basis_value_name(Order(i-1), Val(propertynames(bw)[1])) === propertynames(bw)[i]
-    end
-end
+@inline derivative_order(bw::BasisWeight) = getfield(bw, :order)
 
 @generated function set_values!(bw::BasisWeight, ip, vals::Tuple{Vararg{Any, N}}) where {N}
     quote
@@ -263,24 +249,25 @@ end
 Structure-of-arrays storage for multiple [`BasisWeight`](@ref)s.
 Use [`generate_basis_weights`](@ref) to construct a `BasisWeightArray`.
 """
-struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}, N} <: AbstractArray{ElType, N}
+struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}, N, O <: Order} <: AbstractArray{ElType, N}
     basis::B
     vals::Vals
     indices::Indices
+    order::O
 end
 
-function BasisWeightArray(basis::B, vals::Vals, indices::Indices) where {B, Vals <: NamedTuple, N, Indices <: AbstractArray{<: Any, N}}
-    ElType = Base._return_type(_getindex, Tuple{B, Vals, Indices, Vararg{Int, N}})
-    BasisWeightArray{B, Vals, Indices, ElType, N}(basis, vals, indices)
+function BasisWeightArray(basis::B, vals::Vals, indices::Indices, order::O) where {B, Vals <: NamedTuple, N, Indices <: AbstractArray{<: Any, N}, O <: Order}
+    ElType = Base._return_type(_getindex, Tuple{B, Vals, Indices, O, Vararg{Int, N}})
+    BasisWeightArray{B, Vals, Indices, ElType, N, O}(basis, vals, indices, order)
 end
 
 # AbstractMesh
-function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh{dim}, dims::Dims; kwargs...) where {T, dim}
-    vals = map(allocate_basis_values(Vec{dim, T}, basis; kwargs...)) do vals
+function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1), kwargs...) where {T, dim}
+    vals = map(allocate_basis_values(Vec{dim, T}, basis; derivative, kwargs...)) do vals
         fill(zero(eltype(vals)), size(vals)..., dims...)
     end
     indices = _generate_supportnodes(basis, mesh, dims)
-    BasisWeightArray(basis, vals, indices)
+    BasisWeightArray(basis, vals, indices, derivative)
 end
 
 # CartesianMesh
@@ -344,7 +331,7 @@ Base.size(x::BasisWeightArray) = size(getfield(x, :indices))
 @inline function Base.view(x::BasisWeightArray, I...)
     indices = view(getfield(x, :indices), I...)
     vals = map(vals -> viewcol(vals, Val(ndims(x)), I...), getfield(x, :vals))
-    BasisWeightArray(getfield(x, :basis), vals, indices)
+    BasisWeightArray(getfield(x, :basis), vals, indices, derivative_order(x))
 end
 
 Base.propertynames(x::BasisWeightArray) = propertynames(getfield(x, :vals))
@@ -353,17 +340,18 @@ Base.propertynames(x::BasisWeightArray) = propertynames(getfield(x, :vals))
 end
 
 @inline basis(x::BasisWeightArray) = getfield(x, :basis)
+@inline derivative_order(x::BasisWeightArray) = getfield(x, :order)
 
 @inline function Base.getindex(x::BasisWeightArray{<: Any, <: Any, <: Any, <: Any, N}, I::Vararg{Integer, N}) where {N}
     @boundscheck checkbounds(x, I...)
-    @inbounds _getindex(getfield(x, :basis), getfield(x, :vals), getfield(x, :indices), I...)
+    @inbounds _getindex(getfield(x, :basis), getfield(x, :vals), getfield(x, :indices), derivative_order(x), I...)
 end
-@generated function _getindex(basis, vals::NamedTuple{names}, indices::AbstractArray{<: Any, N}, I::Vararg{Integer, N}) where {names, N}
+@generated function _getindex(basis, vals::NamedTuple{names}, indices::AbstractArray{<: Any, N}, order::Order, I::Vararg{Integer, N}) where {names, N}
     exps = [:(viewcol(vals.$name, I...)) for name in names]
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        BasisWeight(basis, NamedTuple{names}(tuple($(exps...))), view(indices, map(:, I, I)...))
+        BasisWeight(basis, NamedTuple{names}(tuple($(exps...))), view(indices, map(:, I, I)...), order)
     end
 end
 
