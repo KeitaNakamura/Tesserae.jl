@@ -2,6 +2,13 @@
 
 All notable changes to Tesserae.jl will be documented in this file.
 
+## v0.7.4
+
+### Added
+
+- Added support for assembling into sparse matrix component views with
+  `@P2G_Matrix`.
+
 ## v0.7.3
 
 ### Added

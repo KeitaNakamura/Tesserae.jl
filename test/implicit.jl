@@ -85,6 +85,57 @@
         @test Kpp ≈ Kpp_ref
         @test Kup ≈ Kpu'
     end
+    @testset "sparse matrix views" begin
+        parent_dofs = LinearIndices((3, length(mesh)))
+        velocity_dofs = vec(parent_dofs[[3,1], :])
+        pressure_dofs = vec(parent_dofs[2:2, :])
+
+        zeroed_parent = create_sparse_matrix(basis, mesh; ndofs=3)
+        fill!(Tesserae.SparseArrays.nonzeros(zeroed_parent), 7)
+        expected_zeroed_parent = copy(zeroed_parent)
+        fill!(view(expected_zeroed_parent, velocity_dofs, pressure_dofs), 0)
+        Tesserae.fillzero!(view(zeroed_parent, velocity_dofs, pressure_dofs))
+        @test zeroed_parent == expected_zeroed_parent
+
+        parent_sequential = create_sparse_matrix(basis, mesh; ndofs=3)
+        parent_threaded = create_sparse_matrix(basis, mesh; ndofs=3)
+        parent_transposed = create_sparse_matrix(basis, mesh; ndofs=3)
+        sequential = view(parent_sequential, velocity_dofs, pressure_dofs)
+        threaded = view(parent_threaded, velocity_dofs, pressure_dofs)
+        transposed = view(parent_transposed, pressure_dofs, velocity_dofs)
+        reference = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+
+        assembler = @inferred Tesserae.matrix_assembler(sequential, mesh, mesh, basis, basis)
+        @test assembler isa Tesserae.CartesianSparseMatrixAssembler
+        @test assembler.matrix === sequential
+        @test Tesserae.matrix_storage(assembler.matrix) === parent_sequential
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            sequential[i,j] = @∑ ∇w[ip] * w[jp]
+            transposed[j,i] = @∑ ∇w[ip] * w[jp]
+            reference[i,j] = @∑ ∇w[ip] * w[jp]
+        end
+
+        partition = ThreadPartition(mesh)
+        update!(partition, particles.x)
+        @threaded :static @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
+            threaded[i,j] = @∑ ∇w[ip] * w[jp]
+        end
+
+        @test sequential ≈ reference
+        @test threaded ≈ reference
+        @test transposed ≈ reference'
+        @test all(iszero, parent_sequential[pressure_dofs, :])
+        @test all(iszero, parent_sequential[:, velocity_dofs])
+
+        inconsistent_dofs = copy(velocity_dofs)
+        inconsistent_dofs[3] = parent_dofs[2,2]
+        inconsistent = view(parent_sequential, inconsistent_dofs, pressure_dofs)
+        @test_throws ArgumentError Tesserae.matrix_assembler(inconsistent, mesh, mesh, basis, basis)
+
+        duplicate = view(parent_sequential, vec(parent_dofs[[3,3], :]), pressure_dofs)
+        @test_throws ArgumentError Tesserae.matrix_assembler(duplicate, mesh, mesh, basis, basis)
+    end
     @testset "mixed lhs order" begin
         A = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
         B = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
@@ -435,6 +486,20 @@ end
     end
     @test any(!iszero, Tesserae.SparseArrays.nonzeros(A))
     @test B ≈ A'
+
+    parent_matrix = create_sparse_matrix((quad9, quad4); ndofs=(3, 2))
+    parent_row_dofs = LinearIndices((3, length(quad9)))
+    parent_col_dofs = LinearIndices((2, length(quad4)))
+    row_indices = vec(parent_row_dofs[[3,1], :])
+    col_indices = vec(parent_col_dofs[2:2, :])
+    matrix_view = view(parent_matrix, row_indices, col_indices)
+    assembler = @inferred Tesserae.matrix_assembler(matrix_view, quad9, quad4, basis(velocity_weights), basis(pressure_weights))
+    @test assembler isa Tesserae.GenericMatrixAssembler
+
+    @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
+        matrix_view[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
+    end
+    @test matrix_view ≈ A
 
     shifted = FEMesh(Tesserae.Quad4(), CartesianMesh(1, (2,4), (0,1)))
     @test_throws ArgumentError create_sparse_matrix((quad9, shifted); ndofs=(2, 1))

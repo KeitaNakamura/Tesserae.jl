@@ -425,6 +425,21 @@ const nurbs_cubic = Tesserae.NURBS.cubic
             K_threaded[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
         end
         @test K_threaded ≈ K_sequential
+
+        parent_sequential = create_sparse_matrix(mesh; ndofs=2)
+        parent_threaded = create_sparse_matrix(mesh; ndofs=2)
+        parent_dofs = LinearIndices((2, length(mesh)))
+        component_dofs = vec(parent_dofs[2:2, :])
+        view_sequential = view(parent_sequential, component_dofs, component_dofs)
+        view_threaded = view(parent_threaded, component_dofs, component_dofs)
+        @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
+            view_sequential[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
+        end
+        @threaded @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) partition begin
+            view_threaded[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
+        end
+        @test view_sequential ≈ K_sequential
+        @test view_threaded ≈ K_sequential
     end
 
     @testset "Heat problem" begin
