@@ -109,7 +109,7 @@
         assembler = @inferred Tesserae.matrix_assembler(sequential, mesh, mesh, basis, basis)
         @test assembler isa Tesserae.CartesianSparseMatrixAssembler
         @test assembler.matrix === sequential
-        @test assembler.storage === parent_sequential
+        @test Tesserae.matrix_storage(assembler.matrix) === parent_sequential
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             sequential[i,j] = @∑ ∇w[ip] * w[jp]
