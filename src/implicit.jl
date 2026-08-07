@@ -70,6 +70,137 @@ function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
     @inbounds view(A′, dofmap.indices4scalar)
 end
 
+struct SparseMatrixBlockView{T,Ti,P <: SparseMatrixCSC{T,Ti}} <: AbstractMatrix{T}
+    matrix::P
+    rows::UnitRange{Int}
+    cols::UnitRange{Int}
+    column_slots::Vector{UnitRange{Ti}}
+end
+
+Base.size(block::SparseMatrixBlockView) = (length(block.rows), length(block.cols))
+Base.parent(block::SparseMatrixBlockView) = block.matrix
+Base.parentindices(block::SparseMatrixBlockView) = (block.rows, block.cols)
+
+function Base.getindex(block::SparseMatrixBlockView, i::Int, j::Int)
+    @_propagate_inbounds_meta
+    @boundscheck checkbounds(block, i, j)
+    @inbounds parent(block)[block.rows[i],block.cols[j]]
+end
+
+function Base.setindex!(block::SparseMatrixBlockView, value, i::Int, j::Int)
+    @_propagate_inbounds_meta
+    @boundscheck checkbounds(block, i, j)
+    @inbounds parent(block)[block.rows[i],block.cols[j]] = value
+    block
+end
+
+function fillzero!(block::SparseMatrixBlockView)
+    values = nonzeros(parent(block))
+    zero_value = zero_recursive(eltype(values))
+    for slots in block.column_slots, slot in slots
+        @inbounds values[slot] = zero_value
+    end
+    block
+end
+
+SparseArrays.nnz(block::SparseMatrixBlockView) = sum(length, block.column_slots)
+
+"""
+An array of sparse matrix block views that share the same parent CSC matrix.
+"""
+struct SparseMatrixBlocks{V <: SparseMatrixBlockView} <: AbstractMatrix{V}
+    views::Matrix{V}
+
+    function SparseMatrixBlocks(views::Matrix{V}) where {V <: SparseMatrixBlockView}
+        isempty(views) && throw(ArgumentError("sparse matrix blocks must not be empty"))
+        matrix = parent(first(views))
+        all(block -> parent(block) === matrix, views) || throw(ArgumentError("sparse matrix blocks must share the same parent matrix"))
+        new{V}(views)
+    end
+end
+
+
+Base.size(blocks::SparseMatrixBlocks) = size(blocks.views)
+Base.getindex(blocks::SparseMatrixBlocks, i::Int, j::Int) = blocks.views[i,j]
+Base.parent(blocks::SparseMatrixBlocks) = parent(first(blocks.views))
+
+function fillzero!(blocks::SparseMatrixBlocks)
+    fillzero!(parent(blocks))
+    blocks
+end
+
+"""
+    create_block_sparse_matrix(block_rows...)
+
+Combine sparse matrices into one CSC matrix and return its block views. Each
+argument describes one block row and must be a tuple of `SparseMatrixCSC`
+objects.
+"""
+function create_block_sparse_matrix(block_rows::Tuple...)
+    isempty(block_rows) && throw(ArgumentError("at least one block row is required"))
+    nblockcols = length(first(block_rows))
+    nblockcols > 0 || throw(ArgumentError("at least one block column is required"))
+    all(length(row) == nblockcols for row in block_rows) || throw(DimensionMismatch("block rows must have the same number of columns"))
+
+    first_block = first(first(block_rows))
+    first_block isa SparseMatrixCSC || throw(ArgumentError("matrix blocks must be SparseMatrixCSC"))
+    block_type = typeof(first_block)
+    nblockrows = length(block_rows)
+    matrices = Matrix{block_type}(undef, nblockrows, nblockcols)
+    for j in 1:nblockcols, i in 1:nblockrows
+        block = block_rows[i][j]
+        block isa block_type || throw(ArgumentError("matrix blocks must have the same element and index types"))
+        matrices[i,j] = block
+    end
+
+    row_sizes = [size(matrices[i,1], 1) for i in 1:nblockrows]
+    col_sizes = [size(matrices[1,j], 2) for j in 1:nblockcols]
+    for j in 1:nblockcols, i in 1:nblockrows
+        size(matrices[i,j]) == (row_sizes[i], col_sizes[j]) || throw(DimensionMismatch("matrix block sizes are inconsistent"))
+    end
+
+    matrix_rows = [hcat(matrices[i,:]...) for i in 1:nblockrows]
+    matrix = vcat(matrix_rows...)
+    row_offsets = cumsum([0; row_sizes])
+    col_offsets = cumsum([0; col_sizes])
+    Ti = eltype(matrix.colptr)
+    column_slots = Matrix{Vector{UnitRange{Ti}}}(undef, nblockrows, nblockcols)
+    for j in 1:nblockcols, i in 1:nblockrows
+        column_slots[i,j] = Vector{UnitRange{Ti}}(undef, col_sizes[j])
+    end
+    for j in 1:nblockcols, local_col in 1:col_sizes[j]
+        col = col_offsets[j] + local_col
+        slot = first(nzrange(matrix, col))
+        for i in 1:nblockrows
+            count = length(nzrange(matrices[i,j], local_col))
+            column_slots[i,j][local_col] = slot:(slot + count - 1)
+            slot += count
+        end
+        slot == last(nzrange(matrix, col)) + 1 || error("failed to construct sparse matrix block slots")
+    end
+
+    first_view = SparseMatrixBlockView(
+        matrix,
+        (row_offsets[1] + 1):row_offsets[2],
+        (col_offsets[1] + 1):col_offsets[2],
+        column_slots[1,1],
+    )
+    views = Matrix{typeof(first_view)}(undef, nblockrows, nblockcols)
+    for j in 1:nblockcols, i in 1:nblockrows
+        views[i,j] = SparseMatrixBlockView(
+            matrix,
+            (row_offsets[i] + 1):row_offsets[i + 1],
+            (col_offsets[j] + 1):col_offsets[j + 1],
+            column_slots[i,j],
+        )
+    end
+    SparseMatrixBlocks(views)
+end
+
+function create_block_sparse_matrix(block_rows::Tuple{Vararg{Tuple}})
+    create_block_sparse_matrix(block_rows...)
+end
+
 """
     create_sparse_matrix(mesh; ndofs)
     create_sparse_matrix((rowmesh, colmesh); ndofs=(row_ndofs, col_ndofs))
@@ -329,9 +460,11 @@ end
 
 matrix_storage(matrix) = matrix
 matrix_storage(matrix::SparseMatrixCSCView) = parent(matrix)
+matrix_storage(matrix::SparseMatrixBlockView) = parent(matrix)
 
 matrix_storage_indices(matrix) = axes(matrix)
 matrix_storage_indices(matrix::SparseMatrixCSCView) = parentindices(matrix)
+matrix_storage_indices(matrix::SparseMatrixBlockView) = parentindices(matrix)
 
 storage_index(::Base.OneTo, index) = index
 storage_index(indices, index) = (@_propagate_inbounds_meta; indices[index])
@@ -471,6 +604,67 @@ function CartesianSparseMatrixAssembler(matrix::SparseMatrixCSCView, row_mesh::C
     assembler
 end
 
+function CartesianSparseMatrixAssembler(matrix::SparseMatrixBlockView, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
+    size(row_mesh) == size(col_mesh) || throw(DimensionMismatch("row and column meshes must have the same size"))
+    row_sparsity_radius = support_width(row_basis) - 1
+    col_sparsity_radius = support_width(col_basis) - 1
+    row_sparsity_radius == col_sparsity_radius || throw(ArgumentError("row and column bases must have the same support width"))
+    row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
+    assembler = CartesianSparseMatrixAssembler(
+        matrix,
+        row_dof_table,
+        col_dof_table,
+        row_dof_table,
+        col_dof_table,
+        row_sparsity_radius,
+    )
+    has_cartesian_sparse_pattern(assembler) || throw(ArgumentError("Cartesian sparse matrix block must use the canonical sparsity pattern"))
+    assembler
+end
+
+function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixBlockView})
+    (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
+    mesh_size = Base.tail(size(row_dof_table))
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    row_offset = first(matrix.rows) - 1
+    rows = rowvals(parent(matrix))
+    for col_node in CartesianIndices(mesh_size), b in 1:col_ndofs
+        col = col_dof_table[b,col_node]
+        slots = matrix.column_slots[col]
+        k = first(slots)
+        stop = last(slots) + 1
+        for row_node in cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius), a in 1:row_ndofs
+            k < stop || return false
+            rows[k] == row_offset + row_dof_table[a,row_node] || return false
+            k += 1
+        end
+        k == stop || return false
+    end
+    true
+end
+
+@inline function add_entry!(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixBlockView}, row_node::CartesianIndex, col_node::CartesianIndex, value)
+    @boundscheck check_cartesian_matrix_entry(assembler, row_node, col_node, value)
+
+    (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
+    mesh_size = Base.tail(size(row_dof_table))
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    neighboring_nodes = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
+    neighboring_node = row_node - first(neighboring_nodes) + oneunit(row_node)
+    row_offset = (LinearIndices(neighboring_nodes)[neighboring_node] - 1) * row_ndofs
+    values = nonzeros(parent(matrix))
+
+    @inbounds for b in 1:col_ndofs
+        col = col_dof_table[b,col_node]
+        slot = first(matrix.column_slots[col]) + row_offset
+        add_entry_values!(values, slot, value, (b - 1) * row_ndofs + 1, Base.OneTo(row_ndofs), row_ndofs)
+    end
+
+    matrix
+end
+
 @noinline function check_cartesian_sparse_matrix_view(assembler::CartesianSparseMatrixAssembler)
     (; matrix, row_dof_table, col_dof_table, storage_row_dof_table, storage_col_dof_table) = assembler
     row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
@@ -559,6 +753,12 @@ function matrix_assembler(matrix::SparseMatrixCSC, row_mesh::CartesianMesh, col_
 end
 function matrix_assembler(matrix::SparseMatrixCSCView, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
+end
+function matrix_assembler(matrix::SparseMatrixBlockView, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
+    CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
+end
+function matrix_assembler(::SparseMatrixBlocks, row_mesh, col_mesh, row_basis, col_basis)
+    throw(ArgumentError("@P2G_Matrix requires an individual matrix block; pass blocks[row, col] instead of blocks"))
 end
 
 function matrix_dof_tables(gmat, row_grid, col_grid)
@@ -795,6 +995,38 @@ function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrix
     matrix
 end
 
+function scatter!(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixBlockView}, buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {T,N}
+    @_propagate_inbounds_meta
+    @boundscheck check_block_matrix_scatter(assembler, buffer, row_nodes, col_nodes)
+
+    (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
+    (; values, node_colstarts, key) = buffer
+    (; row_size, col_size, col_offset, row_ndofs, col_ndofs) = key
+
+    mesh_size = Base.tail(size(row_dof_table))
+    matrix_values = nonzeros(parent(matrix))
+    first_row_node = first(row_nodes)
+    first_col_node = first(col_nodes)
+    for (local_col, local_col_node) in enumerate(CartesianIndices(col_size))
+        col_node = local_col_node + first_col_node - oneunit(first_col_node)
+        neighboring_rows = cartesian_neighbor_nodes(local_col_node + col_offset, row_size, sparsity_radius)
+        matrix_neighboring_rows = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
+        for b in 1:col_ndofs
+            col = col_dof_table[b,col_node]
+            matrix_col_start = first(matrix.column_slots[col])
+            for (local_row, local_row_node) in enumerate(neighboring_rows)
+                local_slot = node_colstarts[local_col] + ((local_row - 1) * col_ndofs + b - 1) * row_ndofs
+                row_node = local_row_node + first_row_node - oneunit(first_row_node)
+                matrix_neighboring_row = row_node - first(matrix_neighboring_rows) + oneunit(row_node)
+                matrix_slot = matrix_col_start + (LinearIndices(matrix_neighboring_rows)[matrix_neighboring_row] - 1) * row_ndofs
+                add_entry_values!(matrix_values, matrix_slot, values, local_slot, Base.OneTo(row_ndofs), row_ndofs)
+            end
+        end
+    end
+
+    matrix
+end
+
 @noinline function check_block_matrix_scatter(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, row_nodes::CartesianIndices, col_nodes::CartesianIndices)
     (; row_dof_table, col_dof_table, sparsity_radius) = assembler
     (; key) = buffer
@@ -1003,12 +1235,13 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         ((gi == i && gj == j) || (gi == j && gj == i)) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
         gmat in gmats && error("@P2G_Matrix: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
 
-        buffer = gensym(Symbol(gmat, :buffer))
-        assembler = gensym(Symbol(gmat, :assembler))
-        I = gensym(Symbol(gmat, :I))
-        J = gensym(Symbol(gmat, :J))
+        matrix = gensym(:matrix)
+        buffer = gensym(:buffer)
+        assembler = gensym(:assembler)
+        I = gensym(:I)
+        J = gensym(:J)
 
-        fillzero = op == :(=) ? :(Tesserae.fillzero!($gmat)) : nothing
+        fillzero = op == :(=) ? :(Tesserae.fillzero!($matrix)) : nothing
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         push!(gmats, gmat)
@@ -1018,11 +1251,12 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         row_grid, col_grid = reorder_pair((grid_i, grid_j))
         row_weights, col_weights = reorder_pair((weights_i, weights_j))
         dof_table_i, dof_table_j = reorder_pair((:($(assembler).row_dof_table), :($(assembler).col_dof_table)))
-        matrix_cache = Symbol(gmat, :cache)
+        matrix_cache = gensym(:matrix_cache)
         push!(matrices_init, quote
+            $matrix = $gmat
+            $assembler = Tesserae.matrix_assembler($matrix, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
             $fillzero
-            $assembler = Tesserae.matrix_assembler($gmat, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
-            $matrix_cache = Tesserae.local_matrix_cache($gmat, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
+            $matrix_cache = Tesserae.local_matrix_cache($matrix, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
         end)
         push!(buffers_init, quote
             if $matrix_assembly isa Tesserae.ParticleAssembly
