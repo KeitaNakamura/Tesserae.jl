@@ -58,7 +58,9 @@ function fillzero!(x::StructArray)
     x
 end
 
-function fillzero!(matrix::SubArray{T, 2, P}) where {T, P <: SparseMatrixCSC}
+const SparseMatrixCSCView{T, P <: SparseMatrixCSC} = SubArray{T, 2, P}
+
+function fillzero!(matrix::SparseMatrixCSCView)
     selected_rows, selected_cols = parentindices(matrix)
     sorted_rows = issorted(selected_rows) ? selected_rows : sort(selected_rows)
     _fillzero_sparse_matrix_view!(parent(matrix), sorted_rows, selected_cols)
@@ -69,11 +71,11 @@ function _fillzero_sparse_matrix_view!(matrix::SparseMatrixCSC, selected_rows, s
     rows = rowvals(matrix)
     values = nonzeros(matrix)
     zero_value = zero_recursive(eltype(values))
+    selected_stop = lastindex(selected_rows)
     @inbounds for col in selected_cols
         slots = nzrange(matrix, col)
         isempty(slots) && continue
         selected_index = searchsortedfirst(selected_rows, rows[first(slots)])
-        selected_stop = lastindex(selected_rows)
         for slot in slots
             row = rows[slot]
             while selected_index ≤ selected_stop && selected_rows[selected_index] < row

@@ -327,6 +327,12 @@ end
     size(value) == (row_ndofs, col_ndofs) || throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
 end
 
+matrix_storage(matrix) = matrix
+matrix_storage(matrix::SparseMatrixCSCView) = parent(matrix)
+
+matrix_storage_indices(matrix) = axes(matrix)
+matrix_storage_indices(matrix::SparseMatrixCSCView) = parentindices(matrix)
+
 storage_index(::Base.OneTo, index) = index
 storage_index(indices, index) = (@_propagate_inbounds_meta; indices[index])
 
@@ -345,8 +351,8 @@ end
 
 # ---- CartesianSparseMatrixAssembler ----
 
-# `matrix` is the logical destination. A plain CSC stores values itself, while
-# a view obtains its storage and parent indices from the SubArray.
+# The unprefixed DoF tables index the logical destination, while the
+# `storage_` tables index the underlying CSC matrix.
 struct CartesianSparseMatrixAssembler{M <: AbstractMatrix, R <: LinearIndices, C <: LinearIndices, SR <: LinearIndices, SC <: LinearIndices}
     matrix::M
     row_dof_table::R
@@ -355,12 +361,6 @@ struct CartesianSparseMatrixAssembler{M <: AbstractMatrix, R <: LinearIndices, C
     storage_col_dof_table::SC
     sparsity_radius::Int
 end
-
-matrix_storage(matrix) = matrix
-matrix_storage(matrix::SubArray{<: Any, 2, <: SparseMatrixCSC}) = parent(matrix)
-
-matrix_storage_indices(matrix) = axes(matrix)
-matrix_storage_indices(matrix::SubArray{<: Any, 2, <: SparseMatrixCSC}) = parentindices(matrix)
 
 function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, mesh_size::Dims, sparsity_radius::Int)
     node_count = prod(mesh_size)
@@ -456,7 +456,7 @@ end
     nothing
 end
 
-function CartesianSparseMatrixAssembler(matrix::SubArray{<: Any, 2, <: SparseMatrixCSC}, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
+function CartesianSparseMatrixAssembler(matrix::SparseMatrixCSCView, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
     storage_assembler = CartesianSparseMatrixAssembler(parent(matrix), row_mesh, col_mesh, row_basis, col_basis)
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
     assembler = CartesianSparseMatrixAssembler(
@@ -508,10 +508,10 @@ function add!(assembler::GenericMatrixAssembler, row_nodes, col_nodes, local_mat
     row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
     row_dofs, col_dofs = support_dofs(row_dof_table, row_nodes, col_dof_table, col_nodes)
     if row_dofs === col_dofs && row_storage_indices === col_storage_indices
-        dofs = storage_dofs(row_storage_indices, row_dofs)
+        dofs = storage_index(row_storage_indices, row_dofs)
         add!(storage, dofs, dofs, local_matrix)
     else
-        add!(storage, storage_dofs(row_storage_indices, row_dofs), storage_dofs(col_storage_indices, col_dofs), local_matrix)
+        add!(storage, storage_index(row_storage_indices, row_dofs), storage_index(col_storage_indices, col_dofs), local_matrix)
     end
     matrix
 end
@@ -538,9 +538,6 @@ function add_matrix_entry!(storage, row_dof_table, col_dof_table, row_storage_in
     nothing
 end
 
-storage_dofs(::Base.OneTo, dofs) = dofs
-storage_dofs(storage_indices, dofs) = (@_propagate_inbounds_meta; storage_indices[dofs])
-
 function support_dofs(table_i, nodes_i, table_j, nodes_j)
     @_propagate_inbounds_meta
     if size(table_i, 1) == size(table_j, 1) && nodes_i === nodes_j
@@ -560,7 +557,7 @@ end
 function matrix_assembler(matrix::SparseMatrixCSC, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 end
-function matrix_assembler(matrix::SubArray{<: Any, 2, <: SparseMatrixCSC}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
+function matrix_assembler(matrix::SparseMatrixCSCView, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 end
 

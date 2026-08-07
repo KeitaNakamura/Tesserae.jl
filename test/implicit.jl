@@ -86,10 +86,9 @@
         @test Kup ≈ Kpu'
     end
     @testset "sparse matrix views" begin
-        n = length(mesh)
-        parent_dofs = LinearIndices((3, n))
-        velocity_dofs = vec(parent_dofs[1:2, :])
-        pressure_dofs = vec(parent_dofs[3:3, :])
+        parent_dofs = LinearIndices((3, length(mesh)))
+        velocity_dofs = vec(parent_dofs[[3,1], :])
+        pressure_dofs = vec(parent_dofs[2:2, :])
 
         zeroed_parent = create_sparse_matrix(basis, mesh; ndofs=3)
         fill!(Tesserae.SparseArrays.nonzeros(zeroed_parent), 7)
@@ -130,9 +129,12 @@
         @test all(iszero, parent_sequential[:, velocity_dofs])
 
         inconsistent_dofs = copy(velocity_dofs)
-        inconsistent_dofs[3] = parent_dofs[3,2]
+        inconsistent_dofs[3] = parent_dofs[2,2]
         inconsistent = view(parent_sequential, inconsistent_dofs, pressure_dofs)
         @test_throws ArgumentError Tesserae.matrix_assembler(inconsistent, mesh, mesh, basis, basis)
+
+        duplicate = view(parent_sequential, vec(parent_dofs[[3,3], :]), pressure_dofs)
+        @test_throws ArgumentError Tesserae.matrix_assembler(duplicate, mesh, mesh, basis, basis)
     end
     @testset "mixed lhs order" begin
         A = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
@@ -488,7 +490,7 @@ end
     parent_matrix = create_sparse_matrix((quad9, quad4); ndofs=(3, 2))
     parent_row_dofs = LinearIndices((3, length(quad9)))
     parent_col_dofs = LinearIndices((2, length(quad4)))
-    row_indices = vec(parent_row_dofs[1:2, :])
+    row_indices = vec(parent_row_dofs[[3,1], :])
     col_indices = vec(parent_col_dofs[2:2, :])
     matrix_view = view(parent_matrix, row_indices, col_indices)
     assembler = @inferred Tesserae.matrix_assembler(matrix_view, quad9, quad4, basis(velocity_weights), basis(pressure_weights))

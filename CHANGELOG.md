@@ -6,6 +6,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Added
 
+- Added support for assembling into sparse matrix component views with
+  `@P2G_Matrix`.
 - Added property schemas for `BasisWeight` and `generate_basis_weights`, allowing
   basis-value names, scalar types, and custom fields to be defined with a
   `NamedTuple` type. (#178)
