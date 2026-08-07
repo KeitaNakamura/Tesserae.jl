@@ -107,9 +107,9 @@
         reference = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
 
         assembler = @inferred Tesserae.matrix_assembler(sequential, mesh, mesh, basis, basis)
-        @test assembler isa Tesserae.CartesianSparseMatrixViewAssembler
+        @test assembler isa Tesserae.CartesianSparseMatrixAssembler
         @test assembler.matrix === sequential
-        @test assembler.parent_assembler.matrix === parent_sequential
+        @test assembler.storage === parent_sequential
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             sequential[i,j] = @∑ ∇w[ip] * w[jp]
@@ -492,7 +492,7 @@ end
     col_indices = vec(parent_col_dofs[2:2, :])
     matrix_view = view(parent_matrix, row_indices, col_indices)
     assembler = @inferred Tesserae.matrix_assembler(matrix_view, quad9, quad4, basis(velocity_weights), basis(pressure_weights))
-    @test assembler isa Tesserae.SparseMatrixViewAssembler
+    @test assembler isa Tesserae.GenericMatrixAssembler
 
     @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
         matrix_view[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
