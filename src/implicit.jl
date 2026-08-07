@@ -358,6 +358,27 @@ end
         throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
 end
 
+storage_index(::Base.OneTo, index) = index
+
+function storage_index(indices, index)
+    @_propagate_inbounds_meta
+    indices[index]
+end
+
+function add_entry_values!(destination, destination_slot, source, source_slot, storage_indices, count)
+    @_propagate_inbounds_meta
+    @inbounds for index in 1:count
+        destination[destination_slot + storage_index(storage_indices, index) - 1] += source[source_slot]
+        source_slot += 1
+    end
+    nothing
+end
+
+function add_entry_values!(destination, destination_slot, source)
+    @_propagate_inbounds_meta
+    add_entry_values!(destination, destination_slot, source, firstindex(source), Base.OneTo(length(source)), length(source))
+end
+
 # ---- CartesianSparseMatrixAssembler ----
 
 # `matrix` is the logical destination. A plain CSC stores values itself, while
@@ -454,9 +475,7 @@ end
     @inbounds for b in 1:col_ndofs
         col = storage_col_dof_table[col_storage_indices[b],col_node]
         slot = first(nzrange(storage, col)) + row_offset
-        for a in 1:row_ndofs
-            values[slot + row_storage_indices[a] - 1] += value[(b - 1) * row_ndofs + a]
-        end
+        add_entry_values!(values, slot, value, (b - 1) * row_ndofs + 1, row_storage_indices, row_ndofs)
     end
 
     matrix
@@ -545,17 +564,10 @@ end
     matrix
 end
 
-@inline function add_matrix_entry!(storage, row_dof_table, col_dof_table, ::Base.OneTo, ::Base.OneTo, row_node, col_node, value, row_ndofs, col_ndofs)
-    @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
-        storage[row_dof_table[a,row_node], col_dof_table[b,col_node]] += value[(b - 1) * row_ndofs + a]
-    end
-    nothing
-end
-
 @inline function add_matrix_entry!(storage, row_dof_table, col_dof_table, row_storage_indices, col_storage_indices, row_node, col_node, value, row_ndofs, col_ndofs)
     @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
-        row = row_storage_indices[row_dof_table[a,row_node]]
-        col = col_storage_indices[col_dof_table[b,col_node]]
+        row = storage_index(row_storage_indices, row_dof_table[a,row_node])
+        col = storage_index(col_storage_indices, col_dof_table[b,col_node])
         storage[row,col] += value[(b - 1) * row_ndofs + a]
     end
     nothing
@@ -769,10 +781,7 @@ function add_entry!(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{
     local_col = LinearIndices(col_size)[local_col_node]
 
     slot = node_colstarts[local_col] + (local_row - 1) * row_ndofs * col_ndofs
-    for index in eachindex(value)
-        values[slot] += value[index]
-        slot += 1
-    end
+    add_entry_values!(values, slot, value)
 
     buffer
 end
@@ -820,29 +829,12 @@ function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrix
                 row_node = local_row_node + first_row_node - oneunit(first_row_node)
                 matrix_neighboring_row = row_node - first(matrix_neighboring_rows) + oneunit(row_node)
                 matrix_slot = matrix_col_start + (LinearIndices(matrix_neighboring_rows)[matrix_neighboring_row] - 1) * storage_row_ndofs
-                scatter_matrix_values!(matrix_values, matrix_slot, values, local_slot, row_storage_indices, row_ndofs)
+                add_entry_values!(matrix_values, matrix_slot, values, local_slot, row_storage_indices, row_ndofs)
             end
         end
     end
 
     matrix
-end
-
-@inline function scatter_matrix_values!(matrix_values, matrix_slot, values, local_slot, ::Base.OneTo, row_ndofs)
-    @inbounds for _ in 1:row_ndofs
-        matrix_values[matrix_slot] += values[local_slot]
-        matrix_slot += 1
-        local_slot += 1
-    end
-    nothing
-end
-
-@inline function scatter_matrix_values!(matrix_values, matrix_slot, values, local_slot, row_storage_indices, row_ndofs)
-    @inbounds for a in 1:row_ndofs
-        matrix_values[matrix_slot + row_storage_indices[a] - 1] += values[local_slot]
-        local_slot += 1
-    end
-    nothing
 end
 
 @noinline function check_block_matrix_scatter(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, row_nodes::CartesianIndices, col_nodes::CartesianIndices)
