@@ -86,11 +86,40 @@
         @test Kup ≈ Kpu'
     end
     @testset "block sparse matrix" begin
+        sparse = Tesserae.SparseArrays.sparse
+        A11 = sparse(Int32[1,3], Int32[1,2], [1.0,0.0], 3, 2)
+        A12 = sparse(Int32[], Int32[], Float64[], 3, 1)
+        A21 = sparse(Int32[2], Int32[1], [3.0], 2, 2)
+        A22 = sparse(Int32[], Int32[], Float64[], 2, 1)
+        irregular = @inferred create_block_sparse_matrix((A11, A12), (A21, A22))
+
+        @test parent(irregular) == hvcat((2, 2), A11, A12, A21, A22)
+        @test Tesserae.SparseArrays.indtype(parent(irregular)) == Int32
+        @test @inferred(irregular[1,1]) isa AbstractMatrix{Float64}
+        @test Tesserae.SparseArrays.nnz(irregular[1,1]) == Tesserae.SparseArrays.nnz(A11)
+        @test Tesserae.SparseArrays.nnz(irregular[1,2]) == 0
+        irregular[1,1][3,2] = 2
+        @test irregular[1,1][3,2] == 2
+        irregular[1,2][1,1] = 0
+        @test_throws ArgumentError irregular[1,2][1,1] = 1
+        fillzero!(irregular[1,1])
+        @test all(iszero, irregular[1,1])
+        @test irregular[2,1] == A21
+
+        @test size(create_block_sparse_matrix((A11,))) == (1, 1)
+        @test size(create_block_sparse_matrix((A11, A12))) == (1, 2)
+        @test size(create_block_sparse_matrix((A11,), (A21,))) == (2, 1)
+        @test_throws ArgumentError create_block_sparse_matrix()
+        @test_throws ArgumentError create_block_sparse_matrix(())
+        @test_throws DimensionMismatch create_block_sparse_matrix((A11, A12), (A21,))
+        @test_throws ArgumentError create_block_sparse_matrix((A11, Float32.(A12)))
+        @test_throws DimensionMismatch create_block_sparse_matrix((A11, sparse(Int32[], Int32[], Float64[], 4, 1)))
+
         Kuu_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
         Kup_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
         Kpu_ref = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
         Kpp_ref = create_sparse_matrix(basis, mesh; ndofs=(1, 1))
-        blocks = create_block_sparse_matrix(
+        blocks = @inferred create_block_sparse_matrix(
             (copy(Kuu_ref), copy(Kup_ref)),
             (copy(Kpu_ref), copy(Kpp_ref)),
         )
@@ -103,6 +132,13 @@
         @test size(blocks[1,2]) == size(Kup_ref)
         @test size(blocks[2,1]) == size(Kpu_ref)
         @test size(blocks[2,2]) == size(Kpp_ref)
+
+        blocks[1,1][1,1] = 1
+        @test parent(blocks)[1,1] == 1
+        rowvals_before = copy(Tesserae.SparseArrays.rowvals(parent(blocks)))
+        @test_throws ArgumentError blocks[1,1][1,end] = 1
+        @test Tesserae.SparseArrays.rowvals(parent(blocks)) == rowvals_before
+        fill!(Tesserae.SparseArrays.nonzeros(parent(blocks)), 7)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             blocks[1,1][i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
@@ -170,6 +206,7 @@
         @test assembler isa Tesserae.CartesianSparseMatrixAssembler
         @test assembler.matrix === sequential
         @test Tesserae.matrix_storage(assembler.matrix) === parent_sequential
+        @test Tesserae.has_cartesian_sparse_pattern(assembler)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             sequential[i,j] = @∑ ∇w[ip] * w[jp]
