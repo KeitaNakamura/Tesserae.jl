@@ -299,6 +299,36 @@ function _add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int
     A
 end
 
+function fillzero!(matrix::SubArray{T,2,P}) where {T,P <: SparseMatrixCSC}
+    selected_rows, selected_cols = parentindices(matrix)
+    sorted_rows = issorted(selected_rows) ? selected_rows : sort(selected_rows)
+    fillzero_sparse_matrix_view!(parent(matrix), sorted_rows, selected_cols)
+    matrix
+end
+
+function fillzero_sparse_matrix_view!(matrix::SparseMatrixCSC, selected_rows, selected_cols)
+    rows = rowvals(matrix)
+    values = nonzeros(matrix)
+    zero_value = zero_recursive(eltype(values))
+    @inbounds for col in selected_cols
+        slots = nzrange(matrix, col)
+        isempty(slots) && continue
+        selected_index = searchsortedfirst(selected_rows, rows[first(slots)])
+        selected_stop = lastindex(selected_rows)
+        for slot in slots
+            row = rows[slot]
+            while selected_index ≤ selected_stop && selected_rows[selected_index] < row
+                selected_index += 1
+            end
+            selected_index > selected_stop && break
+            if selected_rows[selected_index] == row
+                values[slot] = zero_value
+            end
+        end
+    end
+    matrix
+end
+
 function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
     @boundscheck checkbounds(A, I, J)
     @assert issorted(I)
@@ -330,7 +360,9 @@ end
 
 # ---- CartesianSparseMatrixAssembler ----
 
-struct CartesianSparseMatrixAssembler{A <: SparseMatrixCSC, R <: LinearIndices, C <: LinearIndices}
+abstract type AbstractCartesianSparseMatrixAssembler end
+
+struct CartesianSparseMatrixAssembler{A <: SparseMatrixCSC, R <: LinearIndices, C <: LinearIndices} <: AbstractCartesianSparseMatrixAssembler
     matrix::A
     row_dof_table::R
     col_dof_table::C
@@ -412,7 +444,7 @@ end
     matrix
 end
 
-@noinline function check_cartesian_matrix_entry(assembler::CartesianSparseMatrixAssembler, row_node::CartesianIndex, col_node::CartesianIndex, value)
+@noinline function check_cartesian_matrix_entry(assembler::AbstractCartesianSparseMatrixAssembler, row_node::CartesianIndex, col_node::CartesianIndex, value)
     (; row_dof_table, col_dof_table, sparsity_radius) = assembler
     mesh_size = Base.tail(size(row_dof_table))
     mesh_nodes = CartesianIndices(mesh_size)
@@ -421,6 +453,129 @@ end
     row_node ∈ cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius) || throw(ArgumentError("matrix entry is outside the Cartesian sparsity pattern"))
     check_matrix_entry_size(value, size(row_dof_table, 1), size(col_dof_table, 1))
     nothing
+end
+
+# ---- CartesianSparseMatrixViewAssembler ----
+
+struct CartesianSparseMatrixViewAssembler{V <: SubArray, A <: CartesianSparseMatrixAssembler, R <: LinearIndices, C <: LinearIndices, RI, CI} <: AbstractCartesianSparseMatrixAssembler
+    matrix::V
+    parent_assembler::A
+    row_dof_table::R
+    col_dof_table::C
+    row_parent_indices::RI
+    col_parent_indices::CI
+    sparsity_radius::Int
+end
+
+function CartesianSparseMatrixViewAssembler(matrix::SubArray{T,2,P}, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {T,P <: SparseMatrixCSC,N}
+    parent_assembler = CartesianSparseMatrixAssembler(parent(matrix), row_mesh, col_mesh, row_basis, col_basis)
+    row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
+    row_parent_indices, col_parent_indices = parentindices(matrix)
+    assembler = CartesianSparseMatrixViewAssembler(
+        matrix,
+        parent_assembler,
+        row_dof_table,
+        col_dof_table,
+        row_parent_indices,
+        col_parent_indices,
+        parent_assembler.sparsity_radius,
+    )
+    check_cartesian_sparse_matrix_view(assembler)
+    assembler
+end
+
+@noinline function check_cartesian_sparse_matrix_view(assembler::CartesianSparseMatrixViewAssembler)
+    (; parent_assembler, row_dof_table, col_dof_table, row_parent_indices, col_parent_indices) = assembler
+    check_cartesian_sparse_matrix_view_indices(row_parent_indices, row_dof_table, parent_assembler.row_dof_table)
+    check_cartesian_sparse_matrix_view_indices(col_parent_indices, col_dof_table, parent_assembler.col_dof_table)
+    nothing
+end
+
+@noinline function check_cartesian_sparse_matrix_view_indices(parent_indices, dof_table, parent_dof_table)
+    ndofs = size(dof_table, 1)
+    parent_ndofs = size(parent_dof_table, 1)
+    mesh_nodes = CartesianIndices(Base.tail(size(dof_table)))
+    first_node = first(mesh_nodes)
+    for a in 1:ndofs
+        component = parent_indices[dof_table[a,first_node]]
+        component in 1:parent_ndofs || throw(ArgumentError("matrix view must select the same DoF components at every node"))
+        all(parent_indices[dof_table[b,first_node]] != component for b in 1:a-1) || throw(ArgumentError("matrix view must not select a DoF component more than once"))
+        all(parent_indices[dof_table[a,node]] == parent_dof_table[component,node] for node in mesh_nodes) || throw(ArgumentError("matrix view must select the same DoF components at every node"))
+    end
+    nothing
+end
+
+# The view selects fixed DoF components at every node, so parent CSC slots are
+# computed from those components without accessing the view indexing interface.
+@inline function add_entry!(assembler::CartesianSparseMatrixViewAssembler, row_node::CartesianIndex, col_node::CartesianIndex, value)
+    @boundscheck check_cartesian_matrix_entry(assembler, row_node, col_node, value)
+
+    (; parent_assembler, row_dof_table, col_dof_table, row_parent_indices, col_parent_indices, sparsity_radius) = assembler
+    matrix = parent_assembler.matrix
+    parent_row_dof_table = parent_assembler.row_dof_table
+    parent_col_dof_table = parent_assembler.col_dof_table
+    mesh_size = Base.tail(size(row_dof_table))
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    parent_row_ndofs = size(parent_row_dof_table, 1)
+    neighboring_nodes = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
+
+    neighboring_node = row_node - first(neighboring_nodes) + oneunit(row_node)
+    row_offset = (LinearIndices(neighboring_nodes)[neighboring_node] - 1) * parent_row_ndofs
+    values = nonzeros(matrix)
+
+    @inbounds for b in 1:col_ndofs
+        col = parent_col_dof_table[col_parent_indices[b],col_node]
+        slot = first(nzrange(matrix, col)) + row_offset
+        for a in 1:row_ndofs
+            values[slot + row_parent_indices[a] - 1] += value[(b - 1) * row_ndofs + a]
+        end
+    end
+
+    assembler.matrix
+end
+
+# ---- SparseMatrixViewAssembler ----
+
+struct SparseMatrixViewAssembler{V <: SubArray, A <: SparseMatrixCSC, R <: LinearIndices, C <: LinearIndices, RI, CI}
+    matrix::V
+    parent::A
+    row_dof_table::R
+    col_dof_table::C
+    row_parent_indices::RI
+    col_parent_indices::CI
+end
+
+function SparseMatrixViewAssembler(matrix::SubArray{T,2,P}, row_mesh, col_mesh) where {T,P <: SparseMatrixCSC}
+    row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
+    row_parent_indices, col_parent_indices = parentindices(matrix)
+    SparseMatrixViewAssembler(matrix, parent(matrix), row_dof_table, col_dof_table, row_parent_indices, col_parent_indices)
+end
+
+function add!(assembler::SparseMatrixViewAssembler, row_nodes, col_nodes, local_matrix)
+    @_propagate_inbounds_meta
+    (; matrix, parent, row_dof_table, col_dof_table, row_parent_indices, col_parent_indices) = assembler
+    row_dofs, col_dofs = support_dofs(row_dof_table, row_nodes, col_dof_table, col_nodes)
+    if row_dofs === col_dofs && row_parent_indices === col_parent_indices
+        parent_dofs = row_parent_indices[row_dofs]
+        add!(parent, parent_dofs, parent_dofs, local_matrix)
+    else
+        add!(parent, row_parent_indices[row_dofs], col_parent_indices[col_dofs], local_matrix)
+    end
+    matrix
+end
+
+@inline function add_entry!(assembler::SparseMatrixViewAssembler, row_node, col_node, value)
+    (; matrix, parent, row_dof_table, col_dof_table, row_parent_indices, col_parent_indices) = assembler
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    @boundscheck check_matrix_entry_size(value, row_ndofs, col_ndofs)
+    @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
+        row = row_parent_indices[row_dof_table[a,row_node]]
+        col = col_parent_indices[col_dof_table[b,col_node]]
+        parent[row,col] += value[(b - 1) * row_ndofs + a]
+    end
+    matrix
 end
 
 # ---- GenericMatrixAssembler ----
@@ -466,8 +621,14 @@ function matrix_assembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
     GenericMatrixAssembler(matrix, row_dof_table, col_dof_table)
 end
+function matrix_assembler(matrix::SubArray{T,2,P}, row_mesh, col_mesh, row_basis, col_basis) where {T,P <: SparseMatrixCSC}
+    SparseMatrixViewAssembler(matrix, row_mesh, col_mesh)
+end
 function matrix_assembler(matrix::SparseMatrixCSC, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
+end
+function matrix_assembler(matrix::SubArray{T,2,P}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis) where {T,P <: SparseMatrixCSC}
+    CartesianSparseMatrixViewAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 end
 
 function matrix_dof_tables(gmat, row_grid, col_grid)
@@ -576,7 +737,7 @@ struct BlockMatrixBuffer{T,N}
     key::BlockMatrixBufferKey{T,N}
 end
 
-function BlockMatrixBufferKey(assembler::CartesianSparseMatrixAssembler, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {N}
+function BlockMatrixBufferKey(assembler::AbstractCartesianSparseMatrixAssembler, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {N}
     (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
     BlockMatrixBufferKey{eltype(matrix),N}(
         size(row_nodes),
@@ -622,14 +783,15 @@ end
 
 # ---- block buffer selection ----
 
-# Canonical Cartesian CSC matrices use a block buffer. Matrices using
-# GenericMatrixAssembler are written directly within the thread-safe block schedule.
-function block_matrix_buffer(assembler::CartesianSparseMatrixAssembler, assembly::BlockAssembly, orientation)
+# Canonical Cartesian CSC matrices and their component views use a block buffer.
+# Other matrices are written directly within the thread-safe block schedule.
+function block_matrix_buffer(assembler::AbstractCartesianSparseMatrixAssembler, assembly::BlockAssembly, orientation)
     row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
     acquire!(assembly.matrix_buffer_pool, BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
 end
 
 block_matrix_buffer(::GenericMatrixAssembler, ::BlockAssembly, orientation) = nothing
+block_matrix_buffer(::SparseMatrixViewAssembler, ::BlockAssembly, orientation) = nothing
 
 # ---- assembly ----
 
@@ -708,7 +870,46 @@ function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrix
     matrix
 end
 
-@noinline function check_block_matrix_scatter(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, row_nodes::CartesianIndices, col_nodes::CartesianIndices)
+function scatter!(assembler::CartesianSparseMatrixViewAssembler, buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {T,N}
+    @_propagate_inbounds_meta
+    @boundscheck check_block_matrix_scatter(assembler, buffer, row_nodes, col_nodes)
+
+    (; matrix, parent_assembler, row_parent_indices, col_parent_indices, sparsity_radius) = assembler
+    parent_matrix = parent_assembler.matrix
+    parent_row_dof_table = parent_assembler.row_dof_table
+    parent_col_dof_table = parent_assembler.col_dof_table
+    (; values, node_colstarts, key) = buffer
+    (; row_size, col_size, col_offset, row_ndofs, col_ndofs) = key
+
+    mesh_size = Base.tail(size(parent_row_dof_table))
+    parent_row_ndofs = size(parent_row_dof_table, 1)
+    matrix_values = nonzeros(parent_matrix)
+    first_row_node = first(row_nodes)
+    first_col_node = first(col_nodes)
+    for (local_col, local_col_node) in enumerate(CartesianIndices(col_size))
+        col_node = local_col_node + first_col_node - oneunit(first_col_node)
+        neighboring_rows = cartesian_neighbor_nodes(local_col_node + col_offset, row_size, sparsity_radius)
+        matrix_neighboring_rows = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
+        for b in 1:col_ndofs
+            col = parent_col_dof_table[col_parent_indices[b],col_node]
+            matrix_col_start = first(nzrange(parent_matrix, col))
+            for (local_row, local_row_node) in enumerate(neighboring_rows)
+                local_slot = node_colstarts[local_col] + ((local_row - 1) * col_ndofs + b - 1) * row_ndofs
+                row_node = local_row_node + first_row_node - oneunit(first_row_node)
+                matrix_neighboring_row = row_node - first(matrix_neighboring_rows) + oneunit(row_node)
+                matrix_slot = matrix_col_start + (LinearIndices(matrix_neighboring_rows)[matrix_neighboring_row] - 1) * parent_row_ndofs
+                for a in 1:row_ndofs
+                    matrix_values[matrix_slot + row_parent_indices[a] - 1] += values[local_slot]
+                    local_slot += 1
+                end
+            end
+        end
+    end
+
+    matrix
+end
+
+@noinline function check_block_matrix_scatter(assembler::AbstractCartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, row_nodes::CartesianIndices, col_nodes::CartesianIndices)
     (; row_dof_table, col_dof_table, sparsity_radius) = assembler
     (; key) = buffer
     (; row_size, col_size, col_offset, row_ndofs, col_ndofs) = key
@@ -727,7 +928,7 @@ end
 end
 
 # Canonical Cartesian CSC entries are accumulated in the block buffer.
-function assemble_block_entry!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, assembly::BlockAssembly, orientation, row_node, col_node, value)
+function assemble_block_entry!(assembler::AbstractCartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, assembly::BlockAssembly, orientation, row_node, col_node, value)
     @_propagate_inbounds_meta
     row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
     row_node, col_node = orientation((row_node, col_node))
@@ -741,7 +942,13 @@ function assemble_block_entry!(assembler::GenericMatrixAssembler, ::Nothing, ass
     add_entry!(assembler, row_node, col_node, orient_matrix_entry(orientation, value))
 end
 
-function finish_block_assembly!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, assembly::BlockAssembly, orientation)
+function assemble_block_entry!(assembler::SparseMatrixViewAssembler, ::Nothing, assembly::BlockAssembly, orientation, row_node, col_node, value)
+    @_propagate_inbounds_meta
+    row_node, col_node = orientation((row_node, col_node))
+    add_entry!(assembler, row_node, col_node, orient_matrix_entry(orientation, value))
+end
+
+function finish_block_assembly!(assembler::AbstractCartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, assembly::BlockAssembly, orientation)
     @_propagate_inbounds_meta
     row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
     try
@@ -752,6 +959,10 @@ function finish_block_assembly!(assembler::CartesianSparseMatrixAssembler, buffe
 end
 
 function finish_block_assembly!(assembler::GenericMatrixAssembler, ::Nothing, assembly::BlockAssembly, orientation)
+    assembler.matrix
+end
+
+function finish_block_assembly!(assembler::SparseMatrixViewAssembler, ::Nothing, assembly::BlockAssembly, orientation)
     assembler.matrix
 end
 
