@@ -299,36 +299,6 @@ function _add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int
     A
 end
 
-function fillzero!(matrix::SubArray{T,2,P}) where {T,P <: SparseMatrixCSC}
-    selected_rows, selected_cols = parentindices(matrix)
-    sorted_rows = issorted(selected_rows) ? selected_rows : sort(selected_rows)
-    fillzero_sparse_matrix_view!(parent(matrix), sorted_rows, selected_cols)
-    matrix
-end
-
-function fillzero_sparse_matrix_view!(matrix::SparseMatrixCSC, selected_rows, selected_cols)
-    rows = rowvals(matrix)
-    values = nonzeros(matrix)
-    zero_value = zero_recursive(eltype(values))
-    @inbounds for col in selected_cols
-        slots = nzrange(matrix, col)
-        isempty(slots) && continue
-        selected_index = searchsortedfirst(selected_rows, rows[first(slots)])
-        selected_stop = lastindex(selected_rows)
-        for slot in slots
-            row = rows[slot]
-            while selected_index ≤ selected_stop && selected_rows[selected_index] < row
-                selected_index += 1
-            end
-            selected_index > selected_stop && break
-            if selected_rows[selected_index] == row
-                values[slot] = zero_value
-            end
-        end
-    end
-    matrix
-end
-
 function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
     @boundscheck checkbounds(A, I, J)
     @assert issorted(I)
@@ -354,26 +324,20 @@ end
         throw(DimensionMismatch("vector value is incompatible with matrix entry dimensions"))
 end
 @noinline function check_matrix_entry_size(value::AbstractMatrix, row_ndofs, col_ndofs)
-    size(value) == (row_ndofs, col_ndofs) ||
-        throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
+    size(value) == (row_ndofs, col_ndofs) || throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
 end
 
 storage_index(::Base.OneTo, index) = index
-
-function storage_index(indices, index)
-    @_propagate_inbounds_meta
-    indices[index]
-end
+storage_index(indices, index) = (@_propagate_inbounds_meta; indices[index])
 
 function add_entry_values!(destination, destination_slot, source, source_slot, storage_indices, count)
     @_propagate_inbounds_meta
-    @inbounds for index in 1:count
+    for index in 1:count
         destination[destination_slot + storage_index(storage_indices, index) - 1] += source[source_slot]
         source_slot += 1
     end
     nothing
 end
-
 function add_entry_values!(destination, destination_slot, source)
     @_propagate_inbounds_meta
     add_entry_values!(destination, destination_slot, source, firstindex(source), Base.OneTo(length(source)), length(source))
@@ -393,10 +357,10 @@ struct CartesianSparseMatrixAssembler{M <: AbstractMatrix, R <: LinearIndices, C
 end
 
 matrix_storage(matrix) = matrix
-matrix_storage(matrix::SubArray{T,2,P}) where {T,P <: SparseMatrixCSC} = parent(matrix)
+matrix_storage(matrix::SubArray{<: Any, 2, <: SparseMatrixCSC}) = parent(matrix)
 
 matrix_storage_indices(matrix) = axes(matrix)
-matrix_storage_indices(matrix::SubArray{T,2,P}) where {T,P <: SparseMatrixCSC} = parentindices(matrix)
+matrix_storage_indices(matrix::SubArray{<: Any, 2, <: SparseMatrixCSC}) = parentindices(matrix)
 
 function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, mesh_size::Dims, sparsity_radius::Int)
     node_count = prod(mesh_size)
@@ -492,7 +456,7 @@ end
     nothing
 end
 
-function CartesianSparseMatrixAssembler(matrix::SubArray{T,2,P}, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {T,P <: SparseMatrixCSC,N}
+function CartesianSparseMatrixAssembler(matrix::SubArray{<: Any, 2, <: SparseMatrixCSC}, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
     storage_assembler = CartesianSparseMatrixAssembler(parent(matrix), row_mesh, col_mesh, row_basis, col_basis)
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
     assembler = CartesianSparseMatrixAssembler(
@@ -564,8 +528,9 @@ end
     matrix
 end
 
-@inline function add_matrix_entry!(storage, row_dof_table, col_dof_table, row_storage_indices, col_storage_indices, row_node, col_node, value, row_ndofs, col_ndofs)
-    @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
+function add_matrix_entry!(storage, row_dof_table, col_dof_table, row_storage_indices, col_storage_indices, row_node, col_node, value, row_ndofs, col_ndofs)
+    @_propagate_inbounds_meta
+    for b in 1:col_ndofs, a in 1:row_ndofs
         row = storage_index(row_storage_indices, row_dof_table[a,row_node])
         col = storage_index(col_storage_indices, col_dof_table[b,col_node])
         storage[row,col] += value[(b - 1) * row_ndofs + a]
@@ -574,11 +539,7 @@ end
 end
 
 storage_dofs(::Base.OneTo, dofs) = dofs
-
-function storage_dofs(storage_indices, dofs)
-    @_propagate_inbounds_meta
-    storage_indices[dofs]
-end
+storage_dofs(storage_indices, dofs) = (@_propagate_inbounds_meta; storage_indices[dofs])
 
 function support_dofs(table_i, nodes_i, table_j, nodes_j)
     @_propagate_inbounds_meta
@@ -599,7 +560,7 @@ end
 function matrix_assembler(matrix::SparseMatrixCSC, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 end
-function matrix_assembler(matrix::SubArray{T,2,P}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis) where {T,P <: SparseMatrixCSC}
+function matrix_assembler(matrix::SubArray{<: Any, 2, <: SparseMatrixCSC}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 end
 
@@ -640,15 +601,15 @@ end
 
 # ---- DoF indexing ----
 
-function local_dofs(ndofs::Int, index::Integer)
-    @_propagate_inbounds_meta
-    vec(view(LinearIndices((ndofs, index)), :, index))
-end
-
 matrix_row_dofs(buffer::LocalMatrixBuffer, ip) = (@_propagate_inbounds_meta; local_dofs(buffer.row_ndofs, ip))
 matrix_col_dofs(buffer::LocalMatrixBuffer, jp) = (@_propagate_inbounds_meta; local_dofs(buffer.col_ndofs, jp))
 matrix_row_dofs(::Nothing, ip) = nothing
 matrix_col_dofs(::Nothing, jp) = nothing
+
+function local_dofs(ndofs::Int, index::Integer)
+    @_propagate_inbounds_meta
+    vec(view(LinearIndices((ndofs, index)), :, index))
+end
 
 # ---- assembly ----
 
