@@ -110,16 +110,36 @@ function Base.getindex(block::SparseMatrixBlockView, i::Int, j::Int)
     @inbounds parent(block)[block.rows[i],block.cols[j]]
 end
 
-function Base.setindex!(block::SparseMatrixBlockView, value, i::Int, j::Int)
+@inline function find_storageindex(block::SparseMatrixBlockView, i::Int, j::Int)
     @boundscheck checkbounds(block, i, j)
 
     matrix = parent(block)
     rows = rowvals(matrix)
     row = @inbounds block.rows[i]
     slots = @inbounds block.column_slots[j]
+    isempty(slots) && return nothing
     slot = searchsortedfirst(rows, row, first(slots), last(slots), Base.Order.Forward)
-    if slot ∈ slots && rows[slot] == row
-        @inbounds nonzeros(matrix)[slot] = value
+    slot ∈ slots && rows[slot] == row ? slot : nothing
+end
+
+"""
+    storageindex(block, i, j)
+
+Return the index in `nonzeros(parent(block))` corresponding to the stored entry
+`block[i,j]`. An `ArgumentError` is thrown when the entry is not part of the
+fixed sparse pattern. Structural changes to the parent matrix invalidate
+previously obtained storage indices.
+"""
+@inline function storageindex(block::SparseMatrixBlockView, i::Int, j::Int)
+    slot = find_storageindex(block, i, j)
+    isnothing(slot) && throw(ArgumentError("entry ($i, $j) is not stored in the sparse matrix block view"))
+    slot
+end
+
+function Base.setindex!(block::SparseMatrixBlockView, value, i::Int, j::Int)
+    slot = find_storageindex(block, i, j)
+    if !isnothing(slot)
+        @inbounds nonzeros(parent(block))[slot] = value
     elseif !iszero(value)
         throw(ArgumentError("cannot change the sparsity pattern of a sparse matrix block view"))
     end
