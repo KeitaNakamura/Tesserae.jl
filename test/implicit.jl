@@ -542,6 +542,42 @@ end
     @test extract(A, smap) == A[Tesserae.dofs(smap), Tesserae.dofs(smap)]
     @test extract(A, :, smap) == A[:, Tesserae.dofs(smap)]
     @test extract(view, A, smap, :) == view(A, Tesserae.dofs(smap), :)
+    @testset "block DoF map" begin
+        @test Tesserae.dofs(@inferred(dofmap(vmask))) == Tesserae.dofs(vmap)
+
+        blockmap = @inferred dofmap((vmask, smask))
+        expected_dofs = vcat(Tesserae.dofs(vmap), 2length(mesh) .+ Tesserae.dofs(smap))
+        @test length(blockmap) == 2
+        @test ndofs(blockmap) == ndofs(vmap) + ndofs(smap)
+        @test Tesserae.dofs(blockmap) == expected_dofs
+        @test Tesserae.dofs(blockmap[1]) == Tesserae.dofs(vmap)
+        @test Tesserae.dofs(blockmap[2]) == Tesserae.dofs(smap)
+
+        blocks = create_block_sparse_matrix(BSpline(Quadratic()), mesh; ndofs=(2, 1))
+        values = Tesserae.SparseArrays.nonzeros(parent(blocks))
+        values .= eachindex(values)
+        extracted = @inferred extract(blocks, blockmap)
+        @test Tesserae.SparseArrays.issparse(extracted)
+        @test extracted == parent(blocks)[expected_dofs, expected_dofs]
+        @test extract(view, blocks, blockmap) == view(parent(blocks), expected_dofs, expected_dofs)
+
+        up = blocks[1,2]
+        u_dofs = Tesserae.dofs(blockmap[1])
+        p_dofs = Tesserae.dofs(blockmap[2])
+        rows, cols = parentindices(up)
+        extracted_up = @inferred extract(up, blockmap[1], blockmap[2])
+        @test Tesserae.SparseArrays.issparse(extracted_up)
+        @test extracted_up == parent(blocks)[rows[u_dofs], cols[p_dofs]]
+        @test extract(view, up, blockmap[1], blockmap[2]) == view(parent(blocks), rows[u_dofs], cols[p_dofs])
+
+        wrong_blocks = dofmap((vmask,))
+        wrong_sizes = dofmap((smask, vmask))
+        @test_throws DimensionMismatch extract(blocks, wrong_blocks)
+        @test_throws DimensionMismatch extract(blocks, wrong_sizes)
+        @test_throws ArgumentError extract(blocks, vmap)
+        @test_throws ArgumentError BlockDofMap(())
+        @test_throws ArgumentError dofmap(())
+    end
 end
 
 @testset "FEM sparse matrix pattern" begin

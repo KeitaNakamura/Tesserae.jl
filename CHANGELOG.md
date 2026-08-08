@@ -9,6 +9,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 - Added `create_block_sparse_matrix` for constructing monolithic field matrices
   with fixed-sparsity block views of one shared parent CSC matrix.
 - Added direct `@P2G_Matrix` assembly into individual sparse matrix blocks.
+- Added `dofmap` and `BlockDofMap` for extracting active monolithic and block
+  systems.
 
 ### Performance
 
