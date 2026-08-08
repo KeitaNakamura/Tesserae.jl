@@ -90,8 +90,7 @@ Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()
 @inline blocklength(sp::SpIndices{dim, L}) where {dim, L} = 1 << (L*dim)
 
 # blocknumber + local linear index inside the block -> SpArray.data index.
-@inline storageindex(blocknumber::Integer, localindex::Integer, sp::SpIndices) =
-    (blocknumber - 1) * blocklength(sp) + localindex
+@inline storageindex(sp::SpIndices, blocknumber::Integer, localindex::Integer) = (blocknumber - 1) * blocklength(sp) + localindex
 
 # Logical node index -> block coordinate.
 @inline blockindex(I::Vararg{Integer, dim}; block_size_log2::Val{L}) where {dim, L} =
@@ -120,7 +119,7 @@ end
     @inbounds localcoord = localindices[l]
     I = blocklocal_to_global(block, localcoord; block_size_log2=Val(block_size_log2(spinds)))
     checkbounds(Bool, spinds, Tuple(I)...) || return false, SpIndex(I, 0)
-    true, SpIndex(I, storageindex(blocknumber, l, spinds))
+    true, SpIndex(I, storageindex(spinds, blocknumber, l))
 end
 
 @inline function _active_spindex(spinds::SpIndices, k::Integer)
@@ -140,7 +139,7 @@ end
     block_size = Val(block_size_log2(sp))
     block, localindex = global_to_blocklocal(I...; block_size_log2=block_size)
     @inbounds blocknumber = blocknumbering(sp)[block...]
-    index = storageindex(blocknumber, localindex, sp)
+    index = storageindex(sp, blocknumber, localindex)
     SpIndex(CartesianIndex(I), ifelse(iszero(blocknumber), zero(index), index))
 end
 
@@ -174,7 +173,7 @@ function Base.iterate(iter::ActiveSpIndices{dim}, state=(1, 1)) where {dim}
             while l ≤ nlocal
                 localcoord = localindices[l]
                 I = blocklocal_to_global(block, localcoord; block_size_log2=block_size)
-                i = storageindex(blocknumber, l, sp)
+                i = storageindex(sp, blocknumber, l)
                 l += 1
                 checkbounds(Bool, sp, Tuple(I)...) && return SpIndex(I, i), (b, l)
             end

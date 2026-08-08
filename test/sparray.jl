@@ -24,6 +24,7 @@ end
     blkspy = rand(Bool, Tesserae.nblocks(spinds))
     n = update_sparsity!(spinds, blkspy)
     @test n == count(blkspy) * Tesserae.blocklength(spinds)
+    @test @inferred(Tesserae.storageindex(spinds, 2, 3)) == Tesserae.blocklength(spinds) + 3
     inds = zeros(Int, size(spinds))
     for I in CartesianIndices(inds)
         block, localindex = Tesserae.global_to_blocklocal(Tuple(I)...; block_size_log2=Val(Tesserae.block_size_log2(spinds)))
