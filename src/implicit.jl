@@ -11,9 +11,9 @@ Create a degree of freedom (DoF) map from a `mask` of size `(ndofs, size(grid)..
 ```jldoctest
 julia> mesh = CartesianMesh(1, (0,2), (0,1));
 
-julia> grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, v::Vec{2,Float64}}, mesh);
+julia> grid = generate_grid(@NamedTuple{x::Vec{2, Float64}, v::Vec{2, Float64}}, mesh);
 
-julia> grid.v .= reshape(reinterpret(Vec{2,Float64}, 1.0:12.0), 3, 2)
+julia> grid.v .= reshape(reinterpret(Vec{2, Float64}, 1.0:12.0), 3, 2)
 3×2 Matrix{Vec{2, Float64}}:
  [1.0, 2.0]  [7.0, 8.0]
  [3.0, 4.0]  [9.0, 10.0]
@@ -25,7 +25,7 @@ julia> dofmask[1,1:2,:] .= true; # activate nodes
 
 julia> dofmask[:,3,2] .= true; # activate nodes
 
-julia> reinterpret(reshape, Vec{2,Bool}, dofmask)
+julia> reinterpret(reshape, Vec{2, Bool}, dofmask)
 3×2 reinterpret(reshape, Vec{2, Bool}, ::BitArray{3}) with eltype Vec{2, Bool}:
  [1, 0]  [1, 0]
  [1, 0]  [1, 0]
@@ -78,13 +78,27 @@ end
 #  Sparse matrix blocks
 # -----------------------------------------------------------------------------
 
+# ---- sparsity patterns ----
+
+abstract type SparseMatrixPattern end
+
+# This metadata proves the canonical Cartesian pattern without rescanning the
+# parent CSC.
+struct CartesianSparseMatrixPattern{N} <: SparseMatrixPattern
+    mesh_size::Dims{N}
+    sparsity_radius::Int
+end
+
+struct CellSparseMatrixPattern <: SparseMatrixPattern end
+
 # ---- SparseMatrixBlockView ----
 
-struct SparseMatrixBlockView{T,Ti} <: AbstractMatrix{T}
-    matrix::SparseMatrixCSC{T,Ti}
+struct SparseMatrixBlockView{T, Ti, P <: SparseMatrixPattern} <: AbstractMatrix{T}
+    matrix::SparseMatrixCSC{T, Ti}
     rows::UnitRange{Int}
     cols::UnitRange{Int}
     column_slots::Vector{UnitRange{Int}}
+    pattern::P
 end
 
 Base.size(block::SparseMatrixBlockView) = (length(block.rows), length(block.cols))
@@ -126,11 +140,11 @@ SparseArrays.nnz(block::SparseMatrixBlockView) = sum(length, block.column_slots)
 # ---- SparseMatrixBlocks ----
 
 # Owns the parent CSC and creates block views from shared offsets and slot tables.
-struct SparseMatrixBlocks{T,Ti} <: AbstractMatrix{SparseMatrixBlockView{T,Ti}}
-    matrix::SparseMatrixCSC{T,Ti}
-    row_offsets::Vector{Int}
-    col_offsets::Vector{Int}
+struct SparseMatrixBlocks{T, Ti, P <: SparseMatrixPattern} <: AbstractMatrix{SparseMatrixBlockView{T, Ti, P}}
+    matrix::SparseMatrixCSC{T, Ti}
+    field_offsets::Vector{Int}
     column_slots::Matrix{Vector{UnitRange{Int}}}
+    pattern::P
 end
 
 Base.size(blocks::SparseMatrixBlocks) = size(blocks.column_slots)
@@ -140,9 +154,10 @@ function Base.getindex(blocks::SparseMatrixBlocks, i::Int, j::Int)
     @boundscheck checkbounds(blocks, i, j)
     @inbounds SparseMatrixBlockView(
         blocks.matrix,
-        (blocks.row_offsets[i] + 1):blocks.row_offsets[i + 1],
-        (blocks.col_offsets[j] + 1):blocks.col_offsets[j + 1],
+        (blocks.field_offsets[i] + 1):blocks.field_offsets[i + 1],
+        (blocks.field_offsets[j] + 1):blocks.field_offsets[j + 1],
         blocks.column_slots[i,j],
+        blocks.pattern,
     )
 end
 
@@ -152,95 +167,6 @@ function fillzero!(blocks::SparseMatrixBlocks)
 end
 
 # ---- construction ----
-
-# -- existing matrices --
-
-function _combine_sparse_matrix_blocks(block_rows::Tuple...)
-    isempty(block_rows) && throw(ArgumentError("at least one block row is required"))
-    nblockcols = length(first(block_rows))
-    nblockcols > 0 || throw(ArgumentError("at least one block column is required"))
-    all(length(row) == nblockcols for row in block_rows) || throw(DimensionMismatch("block rows must have the same number of columns"))
-
-    first_block = first(first(block_rows))
-    first_block isa SparseMatrixCSC || throw(ArgumentError("matrix blocks must be SparseMatrixCSC"))
-    block_type = typeof(first_block)
-    nblockrows = length(block_rows)
-    matrices = Matrix{block_type}(undef, nblockrows, nblockcols)
-    for j in 1:nblockcols, i in 1:nblockrows
-        block = block_rows[i][j]
-        block isa block_type || throw(ArgumentError("matrix blocks must have the same element and index types"))
-        matrices[i,j] = block
-    end
-
-    row_sizes = [size(matrices[i,1], 1) for i in 1:nblockrows]
-    col_sizes = [size(matrices[1,j], 2) for j in 1:nblockcols]
-    for j in 1:nblockcols, i in 1:nblockrows
-        size(matrices[i,j]) == (row_sizes[i], col_sizes[j]) || throw(DimensionMismatch("matrix block sizes are inconsistent"))
-    end
-
-    row_offsets = cumsum([0; row_sizes])
-    col_offsets = cumsum([0; col_sizes])
-    column_slots = [Vector{UnitRange{Int}}(undef, col_sizes[j]) for i in 1:nblockrows, j in 1:nblockcols]
-
-    # Build the parent CSC and record each block's slots in the same column pass.
-    T = eltype(first_block)
-    Ti = SparseArrays.indtype(first_block)
-    matrix_colptr = Vector{Ti}(undef, sum(col_sizes) + 1)
-    matrix_rowvals = Vector{Ti}(undef, sum(nnz, matrices))
-    matrix_values = Vector{T}(undef, length(matrix_rowvals))
-    slot = 1
-    for j in 1:nblockcols, local_col in 1:col_sizes[j]
-        matrix_colptr[col_offsets[j] + local_col] = slot
-        for i in 1:nblockrows
-            block = matrices[i,j]
-            source_rows = rowvals(block)
-            source_values = nonzeros(block)
-            first_slot = slot
-            @inbounds for source_slot in nzrange(block, local_col)
-                matrix_rowvals[slot] = row_offsets[i] + source_rows[source_slot]
-                matrix_values[slot] = source_values[source_slot]
-                slot += 1
-            end
-            column_slots[i,j][local_col] = first_slot:(slot - 1)
-        end
-    end
-    matrix_colptr[end] = slot
-    matrix = SparseMatrixCSC(sum(row_sizes), sum(col_sizes), matrix_colptr, matrix_rowvals, matrix_values)
-
-    SparseMatrixBlocks(matrix, row_offsets, col_offsets, column_slots)
-end
-
-function _block_matrix_rows(expr)
-    if Meta.isexpr(expr, :hcat)
-        return (expr.args,)
-    elseif Meta.isexpr(expr, :vcat)
-        return map(row -> Meta.isexpr(row, :row) ? row.args : Any[row], expr.args)
-    elseif Meta.isexpr(expr, :vect, 1)
-        return (expr.args,)
-    else
-        throw(ArgumentError("@block_sparse_matrix requires a two-dimensional matrix literal"))
-    end
-end
-
-"""
-    @block_sparse_matrix [Kuu Kup; Kpu Kpp]
-
-Combine existing `SparseMatrixCSC` objects into one parent CSC matrix and
-return its block views.
-
-```julia
-blocks = @block_sparse_matrix [Kuu Kup; Kpu Kpp]
-K = parent(blocks)
-```
-
-All blocks must have the same element and index types and consistent row and
-column sizes. The returned views share the fixed sparsity structure of `K`.
-"""
-macro block_sparse_matrix(expr)
-    block_rows = _block_matrix_rows(expr)
-    escaped_rows = map(row -> Expr(:tuple, map(esc, row)...), block_rows)
-    :(_combine_sparse_matrix_blocks($(escaped_rows...)))
-end
 
 # -- field matrix API --
 
@@ -261,23 +187,24 @@ Kuu, Kup = blocks[1,1], blocks[1,2]
 Kpu, Kpp = blocks[2,1], blocks[2,2]
 ```
 
-The parent CSC is constructed directly in block order. Block views share its
-fixed sparsity structure and permit updates only at stored positions.
-Structural changes made through `parent(blocks)` invalidate all block views.
+The parent CSC uses the sparsity pattern generated from the supplied
+discretization. Block views share its fixed structure and permit updates only
+at stored positions. Structural changes made through `parent(blocks)`
+invalidate all block views.
 """
 function create_block_sparse_matrix end
 
 create_block_sparse_matrix(basis::Basis, mesh::CartesianMesh; ndofs::NTuple{N, Int}) where {N} = create_block_sparse_matrix(Float64, basis, mesh; ndofs)
-create_block_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh; ndofs::NTuple{N, Int}) where {T,N} = _create_block_sparse_matrix(T, basis, mesh, ndofs)
+create_block_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh; ndofs::NTuple{N, Int}) where {T, N} = _create_block_sparse_matrix(T, basis, mesh, ndofs)
 
 create_block_sparse_matrix(mesh::Union{FEMesh, IGAMesh}; ndofs::NTuple{N, Int}) where {N} = create_block_sparse_matrix(Float64, mesh; ndofs)
-function create_block_sparse_matrix(::Type{T}, mesh::Union{FEMesh, IGAMesh}; ndofs::NTuple{N, Int}) where {T,N}
+function create_block_sparse_matrix(::Type{T}, mesh::Union{FEMesh, IGAMesh}; ndofs::NTuple{N, Int}) where {T, N}
     meshes = ntuple(_ -> mesh, N)
     _create_block_sparse_matrix(T, meshes, ndofs)
 end
 
-create_block_sparse_matrix(meshes::Union{NTuple{N,FEMesh}, NTuple{N,IGAMesh}}; ndofs::NTuple{N, Int}) where {N} = create_block_sparse_matrix(Float64, meshes; ndofs)
-create_block_sparse_matrix(::Type{T}, meshes::Union{NTuple{N,FEMesh}, NTuple{N,IGAMesh}}; ndofs::NTuple{N, Int}) where {T,N} = _create_block_sparse_matrix(T, meshes, ndofs)
+create_block_sparse_matrix(meshes::Union{NTuple{N, FEMesh}, NTuple{N, IGAMesh}}; ndofs::NTuple{N, Int}) where {N} = create_block_sparse_matrix(Float64, meshes; ndofs)
+create_block_sparse_matrix(::Type{T}, meshes::Union{NTuple{N, FEMesh}, NTuple{N, IGAMesh}}; ndofs::NTuple{N, Int}) where {T, N} = _create_block_sparse_matrix(T, meshes, ndofs)
 
 # -- helpers --
 
@@ -287,7 +214,7 @@ function check_field_ndofs(ndofs)
     nothing
 end
 
-function _create_sparse_matrix_blocks(::Type{T}, I, J, field_offsets) where {T}
+function _create_sparse_matrix_blocks(::Type{T}, I, J, field_offsets, pattern::SparseMatrixPattern) where {T}
     matrix_size = last(field_offsets)
     matrix = sparse(I, J, zeros(T, length(I)), matrix_size, matrix_size)
     nfields = length(field_offsets) - 1
@@ -308,7 +235,7 @@ function _create_sparse_matrix_blocks(::Type{T}, I, J, field_offsets) where {T}
         end
     end
 
-    SparseMatrixBlocks(matrix, field_offsets, field_offsets, column_slots)
+    SparseMatrixBlocks(matrix, field_offsets, column_slots, pattern)
 end
 
 # -- MPM --
@@ -321,7 +248,8 @@ function _create_block_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMes
     for j in eachindex(ndofs), i in eachindex(ndofs)
         _append_sparse_pattern!(I, J, field_offsets[i], field_offsets[j], basis, mesh, ndofs[i], ndofs[j])
     end
-    _create_sparse_matrix_blocks(T, I, J, field_offsets)
+    pattern = CartesianSparseMatrixPattern(size(mesh), support_width(basis) - 1)
+    _create_sparse_matrix_blocks(T, I, J, field_offsets, pattern)
 end
 
 # -- FEM and IGA --
@@ -334,7 +262,7 @@ function _create_block_sparse_matrix(::Type{T}, meshes::Union{NTuple{N, FEMesh},
     for j in eachindex(meshes), i in eachindex(meshes)
         _append_sparse_pattern!(I, J, field_offsets[i], field_offsets[j], meshes[i], meshes[j], ndofs[i], ndofs[j])
     end
-    _create_sparse_matrix_blocks(T, I, J, field_offsets)
+    _create_sparse_matrix_blocks(T, I, J, field_offsets, CellSparseMatrixPattern())
 end
 
 # -----------------------------------------------------------------------------
@@ -416,13 +344,13 @@ function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Int) where {
     _create_cell_support_sparse_matrix(T, mesh, (ndofs, ndofs))
 end
 
-function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Tuple{Int,Int}) where {T}
+function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Tuple{Int, Int}) where {T}
     I, J = Int[], Int[]
     _append_sparse_pattern!(I, J, 0, 0, mesh, ndofs[1], ndofs[2])
     sparse(I, J, zeros(T, length(I)), ndofs[1] * length(mesh), ndofs[2] * length(mesh))
 end
 
-function _append_sparse_pattern!(I, J, row_offset, col_offset, mesh::Union{FEMesh,IGAMesh}, row_ndofs, col_ndofs)
+function _append_sparse_pattern!(I, J, row_offset, col_offset, mesh::Union{FEMesh, IGAMesh}, row_ndofs, col_ndofs)
     row_dofs = LinearIndices((row_ndofs, length(mesh)))
     col_dofs = LinearIndices((col_ndofs, length(mesh)))
     for cell in cells(mesh)
@@ -432,7 +360,7 @@ function _append_sparse_pattern!(I, J, row_offset, col_offset, mesh::Union{FEMes
     nothing
 end
 
-function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::Union{FEMesh,IGAMesh}, colmesh::Union{FEMesh,IGAMesh}, row_ndofs, col_ndofs)
+function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::Union{FEMesh, IGAMesh}, colmesh::Union{FEMesh, IGAMesh}, row_ndofs, col_ndofs)
     throw(ArgumentError("all field meshes must use compatible discretizations"))
 end
 
@@ -445,7 +373,7 @@ function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}
     _create_sparse_matrix(T, basis, mesh, (ndofs, ndofs))
 end
 
-function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}, ndofs::Tuple{Int,Int}) where {T, dim}
+function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}, ndofs::Tuple{Int, Int}) where {T, dim}
     row_ndofs, col_ndofs = ndofs
     I, J = Int[], Int[]
     _append_sparse_pattern!(I, J, 0, 0, basis, mesh, row_ndofs, col_ndofs)
@@ -473,13 +401,13 @@ end
 
 # -- FEM and IGA --
 
-function create_sparse_matrix(::Type{T}, (rowmesh,colmesh)::Tuple{Vararg{Union{FEMesh,IGAMesh},2}}; ndofs::Tuple{Int,Int}) where {T}
+function create_sparse_matrix(::Type{T}, (rowmesh,colmesh)::Tuple{Vararg{Union{FEMesh, IGAMesh}, 2}}; ndofs::Tuple{Int, Int}) where {T}
     I, J = Int[], Int[]
     _append_sparse_pattern!(I, J, 0, 0, rowmesh, colmesh, ndofs[1], ndofs[2])
     sparse(I, J, zeros(T, length(I)), ndofs[1] * length(rowmesh), ndofs[2] * length(colmesh))
 end
 
-function create_sparse_matrix(meshes::Tuple{Vararg{Union{FEMesh,IGAMesh},2}}; ndofs::Tuple{Int,Int})
+function create_sparse_matrix(meshes::Tuple{Vararg{Union{FEMesh, IGAMesh}, 2}}; ndofs::Tuple{Int, Int})
     create_sparse_matrix(Float64, meshes; ndofs)
 end
 
@@ -512,13 +440,13 @@ create_sparse_matrix(::IGABasis, mesh::IGAMesh{dim}; ndofs) where {dim} = _creat
 create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh{dim}; ndofs) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
 
 _create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Int) where {T} = _create_sparse_matrix(T, mesh, ndofs)
-_create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T} = _create_sparse_matrix(T, mesh, ndofs)
+_create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Tuple{Int, Int}) where {T} = _create_sparse_matrix(T, mesh, ndofs)
 _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Int) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
-_create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
+_create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Tuple{Int, Int}) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
 create_sparse_matrix(::Type{T}, mesh::IGAMesh{dim}; ndofs) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
 create_sparse_matrix(mesh::IGAMesh{dim}; ndofs) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
 
-function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::IGAMesh{dim,pdim}, colmesh::IGAMesh{dim,pdim}, row_ndofs, col_ndofs) where {dim,pdim}
+function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::IGAMesh{dim, pdim}, colmesh::IGAMesh{dim, pdim}, row_ndofs, col_ndofs) where {dim, pdim}
     rowmesh === colmesh && return _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh, row_ndofs, col_ndofs)
     check_matching_cell_partitions(rowmesh, colmesh)
 
@@ -619,10 +547,10 @@ end
 end
 
 matrix_storage(matrix) = matrix
-matrix_storage(matrix::Union{SparseMatrixCSCView,SparseMatrixBlockView}) = parent(matrix)
+matrix_storage(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView}) = parent(matrix)
 
 matrix_storage_indices(matrix) = axes(matrix)
-matrix_storage_indices(matrix::Union{SparseMatrixCSCView,SparseMatrixBlockView}) = parentindices(matrix)
+matrix_storage_indices(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView}) = parentindices(matrix)
 
 storage_index(::Base.OneTo, index) = index
 storage_index(indices, index) = (@_propagate_inbounds_meta; indices[index])
@@ -820,18 +748,22 @@ function CartesianSparseMatrixAssembler(matrix::SparseMatrixCSCView, row_mesh::C
     assembler
 end
 
-function CartesianSparseMatrixAssembler(matrix::SparseMatrixBlockView, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
+function CartesianSparseMatrixAssembler(matrix::SparseMatrixBlockView{T, Ti, P}, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {T, Ti, N, P <: CartesianSparseMatrixPattern}
     sparsity_radius = cartesian_sparsity_radius(row_mesh, col_mesh, row_basis, col_basis)
+    matrix.pattern.mesh_size == size(row_mesh) || throw(DimensionMismatch("matrix block and mesh sizes must match"))
+    matrix.pattern.sparsity_radius == sparsity_radius || throw(ArgumentError("matrix block and basis must use the same support width"))
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
-    assembler = CartesianSparseMatrixAssembler(
+    CartesianSparseMatrixAssembler(
         matrix,
         row_dof_table,
         col_dof_table,
         size(row_dof_table, 1),
         sparsity_radius,
     )
-    has_cartesian_sparse_pattern(assembler) || throw(ArgumentError("Cartesian sparse matrix block must use the canonical sparsity pattern"))
-    assembler
+end
+
+function CartesianSparseMatrixAssembler(::SparseMatrixBlockView, ::CartesianMesh, ::CartesianMesh, ::Basis, ::Basis)
+    throw(ArgumentError("Cartesian assembly requires blocks created from a Cartesian mesh"))
 end
 
 @noinline function check_cartesian_sparse_matrix_view(assembler::CartesianSparseMatrixAssembler)
@@ -860,10 +792,10 @@ end
 
 # ---- GenericMatrixAssembler ----
 
-struct GenericMatrixAssembler{M <: AbstractMatrix, R <: LinearIndices, C <: LinearIndices}
+struct GenericMatrixAssembler{M <: AbstractMatrix, D <: LinearIndices}
     matrix::M
-    row_dof_table::R
-    col_dof_table::C
+    row_dof_table::D
+    col_dof_table::D
 end
 
 function add!(assembler::GenericMatrixAssembler, row_nodes, col_nodes, local_matrix)
@@ -889,18 +821,12 @@ end
     row_ndofs = size(row_dof_table, 1)
     col_ndofs = size(col_dof_table, 1)
     @boundscheck check_matrix_entry_size(value, row_ndofs, col_ndofs)
-    @inbounds add_matrix_entry!(storage, row_dof_table, col_dof_table, row_storage_indices, col_storage_indices, row_node, col_node, value, row_ndofs, col_ndofs)
-    matrix
-end
-
-function add_matrix_entry!(storage, row_dof_table, col_dof_table, row_storage_indices, col_storage_indices, row_node, col_node, value, row_ndofs, col_ndofs)
-    @_propagate_inbounds_meta
-    for b in 1:col_ndofs, a in 1:row_ndofs
+    @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
         row = storage_index(row_storage_indices, row_dof_table[a,row_node])
         col = storage_index(col_storage_indices, col_dof_table[b,col_node])
         storage[row,col] += value[(b - 1) * row_ndofs + a]
     end
-    nothing
+    matrix
 end
 
 function support_dofs(table_i, nodes_i, table_j, nodes_j)
@@ -919,7 +845,7 @@ function matrix_assembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
     GenericMatrixAssembler(matrix, row_dof_table, col_dof_table)
 end
-function matrix_assembler(matrix::Union{SparseMatrixCSC,SparseMatrixCSCView,SparseMatrixBlockView}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
+function matrix_assembler(matrix::Union{SparseMatrixCSC, SparseMatrixCSCView, SparseMatrixBlockView}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 end
 function matrix_assembler(::SparseMatrixBlocks, row_mesh, col_mesh, row_basis, col_basis)
@@ -1001,10 +927,9 @@ function assemble_first!(assembler, ::Nothing, orientation, row_node, col_node, 
     add_entry!(assembler, row_node, col_node, orient_matrix_entry(orientation, value))
 end
 
-function assemble_add!(assembler, ::Nothing, orientation, row_node, col_node, I, J, value)
+function assemble_add!(assembler, buffer::Nothing, orientation, row_node, col_node, I, J, value)
     @_propagate_inbounds_meta
-    row_node, col_node = orientation((row_node, col_node))
-    add_entry!(assembler, row_node, col_node, orient_matrix_entry(orientation, value))
+    assemble_first!(assembler, buffer, orientation, row_node, col_node, I, J, value)
 end
 
 finish_assembly!(assembler, ::Nothing, orientation, row_nodes, col_nodes) = assembler.matrix
@@ -1021,7 +946,7 @@ struct BlockAssembly{I <: CartesianIndices}
     matrix_buffer_pool::BlockMatrixBufferPool
 end
 
-struct BlockMatrixBufferKey{T,N}
+struct BlockMatrixBufferKey{T, N}
     row_size::Dims{N}
     col_size::Dims{N}
     col_offset::CartesianIndex{N}
@@ -1030,15 +955,15 @@ struct BlockMatrixBufferKey{T,N}
     sparsity_radius::Int
 end
 
-struct BlockMatrixBuffer{T,N}
+struct BlockMatrixBuffer{T, N}
     values::Vector{T}
     node_colstarts::Vector{Int}
-    key::BlockMatrixBufferKey{T,N}
+    key::BlockMatrixBufferKey{T, N}
 end
 
 function BlockMatrixBufferKey(assembler::CartesianSparseMatrixAssembler, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {N}
     (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
-    BlockMatrixBufferKey{eltype(matrix),N}(
+    BlockMatrixBufferKey{eltype(matrix), N}(
         size(row_nodes),
         size(col_nodes),
         first(col_nodes) - first(row_nodes),
@@ -1048,7 +973,7 @@ function BlockMatrixBufferKey(assembler::CartesianSparseMatrixAssembler, row_nod
     )
 end
 
-function BlockMatrixBuffer(key::BlockMatrixBufferKey{T,N}) where {T,N}
+function BlockMatrixBuffer(key::BlockMatrixBufferKey{T, N}) where {T, N}
     (; row_size, col_size, col_offset, row_ndofs, col_ndofs, sparsity_radius) = key
     node_colstarts = Vector{Int}(undef, prod(col_size))
     slot = 1
@@ -1062,13 +987,13 @@ end
 
 # ---- buffer pool ----
 
-function acquire!(pool::BlockMatrixBufferPool, key::BlockMatrixBufferKey{T,N}) where {T,N}
+function acquire!(pool::BlockMatrixBufferPool, key::BlockMatrixBufferKey{T, N}) where {T, N}
     buffer = lock(pool.lock) do
         buffers = get!(Vector{Any}, pool.buffers, key)
         isempty(buffers) ? nothing : pop!(buffers)
     end
     buffer === nothing && return BlockMatrixBuffer(key)
-    buffer = buffer::BlockMatrixBuffer{T,N}
+    buffer = buffer::BlockMatrixBuffer{T, N}
     fillzero!(buffer.values)
     buffer
 end
@@ -1082,8 +1007,9 @@ end
 
 # ---- block buffer selection ----
 
-# Canonical Cartesian CSC matrices and their component views use a block buffer.
-# Other matrices are written directly within the thread-safe block schedule.
+# Canonical Cartesian CSC matrices, component views, and block views use a
+# block buffer. Other matrices are written directly within the thread-safe
+# block schedule.
 function block_matrix_buffer(assembler::CartesianSparseMatrixAssembler, assembly::BlockAssembly, orientation)
     row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
     acquire!(assembly.matrix_buffer_pool, BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
@@ -1095,7 +1021,7 @@ block_matrix_buffer(::GenericMatrixAssembler, ::BlockAssembly, orientation) = no
 
 # -- accumulation --
 
-function add_entry!(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}, row_node::CartesianIndex{N}, col_node::CartesianIndex{N}, value) where {T,N}
+function add_entry!(buffer::BlockMatrixBuffer{T, N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}, row_node::CartesianIndex{N}, col_node::CartesianIndex{N}, value) where {T, N}
     @_propagate_inbounds_meta
     @boundscheck check_block_matrix_entry(buffer, row_nodes, col_nodes, row_node, col_node, value)
 
@@ -1113,7 +1039,7 @@ function add_entry!(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{
     buffer
 end
 
-@noinline function check_block_matrix_entry(buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}, row_node::CartesianIndex{N}, col_node::CartesianIndex{N}, value) where {T,N}
+@noinline function check_block_matrix_entry(buffer::BlockMatrixBuffer{T, N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}, row_node::CartesianIndex{N}, col_node::CartesianIndex{N}, value) where {T, N}
     (; key) = buffer
     (; row_size, col_size, col_offset, row_ndofs, col_ndofs, sparsity_radius) = key
     size(row_nodes) == row_size || throw(DimensionMismatch("row support size does not match block matrix buffer"))
@@ -1131,7 +1057,7 @@ end
 
 # -- scatter --
 
-function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer{T,N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {T,N}
+function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer{T, N}, row_nodes::CartesianIndices{N}, col_nodes::CartesianIndices{N}) where {T, N}
     @_propagate_inbounds_meta
     @boundscheck check_block_matrix_scatter(assembler, buffer, row_nodes, col_nodes)
 
@@ -1183,7 +1109,7 @@ end
 
 # -- route dispatch --
 
-# Canonical Cartesian CSC entries are accumulated in the block buffer.
+# Canonical Cartesian entries are accumulated in the block buffer.
 function assemble_block_entry!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, assembly::BlockAssembly, orientation, row_node, col_node, value)
     @_propagate_inbounds_meta
     row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
