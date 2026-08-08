@@ -85,6 +85,94 @@
         @test Kpp ≈ Kpp_ref
         @test Kup ≈ Kpu'
     end
+    @testset "block sparse matrix" begin
+        Kuu_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
+        Kup_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        Kpu_ref = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
+        Kpp_ref = create_sparse_matrix(basis, mesh; ndofs=(1, 1))
+        blocks = @inferred create_block_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        blocks32 = @inferred create_block_sparse_matrix(Float32, basis, mesh; ndofs=(2, 1))
+        three_fields = @inferred create_block_sparse_matrix(basis, mesh; ndofs=(2, 1, 1))
+
+        @test size(blocks) == (2, 2)
+        @test isconcretetype(eltype(blocks))
+        @test size(parent(blocks)) == (3length(mesh), 3length(mesh))
+        @test eltype(parent(blocks32)) == Float32
+        @test size(three_fields) == (3, 3)
+        @test size(parent(three_fields)) == (4length(mesh), 4length(mesh))
+        @test all(parent(block) === parent(blocks) for block in blocks)
+        @test_throws BoundsError blocks[0,1]
+        @test_throws BoundsError blocks[1,1][0,1]
+        @test_throws BoundsError blocks[1,1][0,1] = 0
+        @test size(blocks[1,1]) == size(Kuu_ref)
+        @test size(blocks[1,2]) == size(Kup_ref)
+        @test size(blocks[2,1]) == size(Kpu_ref)
+        @test size(blocks[2,2]) == size(Kpp_ref)
+        @test blocks[1,1] == Kuu_ref
+        @test blocks[1,2] == Kup_ref
+        @test blocks[2,1] == Kpu_ref
+        @test blocks[2,2] == Kpp_ref
+        @test_throws ArgumentError create_block_sparse_matrix(basis, mesh; ndofs=())
+        @test_throws ArgumentError create_block_sparse_matrix(basis, mesh; ndofs=(2, 0))
+
+        assembler = @inferred Tesserae.matrix_assembler(blocks[1,1], mesh, mesh, basis, basis)
+        @test Tesserae.has_cartesian_sparse_pattern(assembler)
+        linear_basis = BSpline(Linear())
+        @test_throws ArgumentError Tesserae.matrix_assembler(blocks[1,1], mesh, mesh, linear_basis, linear_basis)
+        different_mesh = CartesianMesh(1, (0,3), (0,5))
+        @test_throws DimensionMismatch Tesserae.matrix_assembler(blocks[1,1], different_mesh, different_mesh, basis, basis)
+
+        blocks[1,1][1,1] = 1
+        @test parent(blocks)[1,1] == 1
+        rowvals_before = copy(Tesserae.SparseArrays.rowvals(parent(blocks)))
+        @test_throws ArgumentError blocks[1,1][1,end] = 1
+        @test Tesserae.SparseArrays.rowvals(parent(blocks)) == rowvals_before
+        fill!(Tesserae.SparseArrays.nonzeros(parent(blocks)), 7)
+        unchanged_block = copy(blocks[2,1])
+        fillzero!(blocks[1,1])
+        @test all(iszero, blocks[1,1])
+        @test blocks[2,1] == unchanged_block
+        fill!(Tesserae.SparseArrays.nonzeros(parent(blocks)), 7)
+
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            blocks[1,1][i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+            blocks[1,2][i,j] = @∑ ∇w[ip] * w[jp]
+            blocks[2,1][i,j] = @∑ w[ip] * ∇w[jp]'
+            blocks[2,2][i,j] = @∑ w[ip] * w[jp]
+        end
+        @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+            Kuu_ref[i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+            Kup_ref[i,j] = @∑ ∇w[ip] * w[jp]
+            Kpu_ref[i,j] = @∑ w[ip] * ∇w[jp]'
+            Kpp_ref[i,j] = @∑ w[ip] * w[jp]
+        end
+
+        @test blocks[1,1] ≈ Kuu_ref
+        @test blocks[1,2] ≈ Kup_ref
+        @test blocks[2,1] ≈ Kpu_ref
+        @test blocks[2,2] ≈ Kpp_ref
+
+        threaded = create_block_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        fillzero!(threaded)
+        partition = ThreadPartition(mesh)
+        update!(partition, particles.x)
+        @threaded :static @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
+            threaded[1,1][i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
+            threaded[1,2][i,j] = @∑ ∇w[ip] * w[jp]
+            threaded[2,1][i,j] = @∑ w[ip] * ∇w[jp]'
+            threaded[2,2][i,j] = @∑ w[ip] * w[jp]
+        end
+        @test parent(threaded) ≈ parent(blocks)
+
+        fill!(Tesserae.SparseArrays.nonzeros(parent(blocks)), 7)
+        before = copy(parent(blocks))
+        @test_throws ArgumentError begin
+            @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+                blocks[i,j] = @∑ w[ip] * w[jp]
+            end
+        end
+        @test parent(blocks) == before
+    end
     @testset "sparse matrix views" begin
         parent_dofs = LinearIndices((3, length(mesh)))
         velocity_dofs = vec(parent_dofs[[3,1], :])
@@ -109,6 +197,7 @@
         @test assembler isa Tesserae.CartesianSparseMatrixAssembler
         @test assembler.matrix === sequential
         @test Tesserae.matrix_storage(assembler.matrix) === parent_sequential
+        @test Tesserae.has_cartesian_sparse_pattern(assembler)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
             sequential[i,j] = @∑ ∇w[ip] * w[jp]
@@ -500,6 +589,19 @@ end
         matrix_view[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
     end
     @test matrix_view ≈ A
+
+    block_matrix = @inferred create_block_sparse_matrix((quad9, quad4); ndofs=(2, 1))
+    @test block_matrix[1,1] == create_sparse_matrix(quad9; ndofs=2)
+    @test block_matrix[1,2] == create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
+    @test block_matrix[2,1] == create_sparse_matrix((quad4, quad9); ndofs=(1, 2))
+    @test block_matrix[2,2] == create_sparse_matrix(quad4; ndofs=1)
+    @test_throws TypeError create_block_sparse_matrix((quad9, quad4); ndofs=(2, 1, 1))
+    @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
+        block_matrix[1,2][i,j] = @∑ ∇N[ip] * N[jp] * V[p]
+        block_matrix[2,1][j,i] = @∑ ∇N[ip] * N[jp] * V[p]
+    end
+    @test block_matrix[1,2] ≈ A
+    @test block_matrix[2,1] ≈ B
 
     shifted = FEMesh(Tesserae.Quad4(), CartesianMesh(1, (2,4), (0,1)))
     @test_throws ArgumentError create_sparse_matrix((quad9, shifted); ndofs=(2, 1))
