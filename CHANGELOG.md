@@ -2,15 +2,22 @@
 
 All notable changes to Tesserae.jl will be documented in this file.
 
+## v0.7.5
+
+### Added
+
+- Added `create_block_sparse_matrix` for constructing monolithic field matrices
+  from meshes and per-field DoF counts, and `@block_sparse_matrix` for combining
+  existing CSC blocks. Both provide fixed-sparsity block views of one shared
+  parent CSC matrix.
+- Added direct `@P2G_Matrix` assembly into individual sparse matrix blocks.
+
 ## v0.7.4
 
 ### Added
 
 - Added support for assembling into sparse matrix component views with
   `@P2G_Matrix`.
-- Added block sparse matrices created directly from field meshes and DoF
-  counts, with a shared monolithic CSC parent and direct `@P2G_Matrix`
-  assembly into individual blocks.
 
 ## v0.7.3
 

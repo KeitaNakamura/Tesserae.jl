@@ -91,7 +91,8 @@
         A12 = sparse(Int32[], Int32[], Float64[], 3, 1)
         A21 = sparse(Int32[2], Int32[1], [3.0], 2, 2)
         A22 = sparse(Int32[], Int32[], Float64[], 2, 1)
-        irregular = @block_sparse_matrix [A11 A12; A21 A22]
+        combine_blocks = (A11, A12, A21, A22) -> (@block_sparse_matrix [A11 A12; A21 A22])
+        irregular = @inferred combine_blocks(A11, A12, A21, A22)
 
         @test parent(irregular) == hvcat((2, 2), A11, A12, A21, A22)
         @test Tesserae.SparseArrays.indtype(parent(irregular)) == Int32
@@ -610,7 +611,7 @@ end
     @test block_matrix[1,2] == create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
     @test block_matrix[2,1] == create_sparse_matrix((quad4, quad9); ndofs=(1, 2))
     @test block_matrix[2,2] == create_sparse_matrix(quad4; ndofs=1)
-    @test_throws DimensionMismatch create_block_sparse_matrix((quad9, quad4); ndofs=(2, 1, 1))
+    @test_throws TypeError create_block_sparse_matrix((quad9, quad4); ndofs=(2, 1, 1))
     @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
         block_matrix[1,2][i,j] = @∑ ∇N[ip] * N[jp] * V[p]
         block_matrix[2,1][j,i] = @∑ ∇N[ip] * N[jp] * V[p]
