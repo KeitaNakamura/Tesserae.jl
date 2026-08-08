@@ -203,7 +203,7 @@ function create_block_sparse_matrix(block_rows::Tuple...)
             source_rows = rowvals(block)
             source_values = nonzeros(block)
             first_slot = slot
-            for source_slot in nzrange(block, local_col)
+            @inbounds for source_slot in nzrange(block, local_col)
                 matrix_rowvals[slot] = row_offsets[i] + source_rows[source_slot]
                 matrix_values[slot] = source_values[source_slot]
                 slot += 1
