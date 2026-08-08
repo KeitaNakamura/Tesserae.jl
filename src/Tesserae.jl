@@ -106,6 +106,8 @@ export
     ExplainedCode,
 # implicit
     DofMap,
+    BlockDofMap,
+    dofmap,
     ndofs,
     dofs,
     create_sparse_matrix,

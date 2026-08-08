@@ -2,11 +2,15 @@
 #  DofMap
 # -----------------------------------------------------------------------------
 
+abstract type AbstractDofMap end
+
+# ---- DofMap ----
+
 """
     DofMap(mask::AbstractArray{Bool})
 
 Create a degree of freedom (DoF) map from a `mask` of size `(ndofs, size(grid)...)`.
-`ndofs` represents the number of DoFs for a field.
+`ndofs` represents the number of DoFs stored at each grid location.
 
 ```jldoctest
 julia> mesh = CartesianMesh(1, (0,2), (0,1));
@@ -31,9 +35,9 @@ julia> reinterpret(reshape, Vec{2, Bool}, dofmask)
  [1, 0]  [1, 0]
  [0, 0]  [1, 1]
 
-julia> dofmap = DofMap(dofmask);
+julia> free = DofMap(dofmask);
 
-julia> dofmap(grid.v)
+julia> free(grid.v)
 6-element view(reinterpret(reshape, Float64, ::Matrix{Vec{2, Float64}}), CartesianIndex{3}[CartesianIndex(1, 1, 1), CartesianIndex(1, 2, 1), CartesianIndex(1, 1, 2), CartesianIndex(1, 2, 2), CartesianIndex(1, 3, 2), CartesianIndex(2, 3, 2)]) with eltype Float64:
   1.0
   3.0
@@ -43,11 +47,33 @@ julia> dofmap(grid.v)
  12.0
 ```
 """
-struct DofMap{N, I <: AbstractVector{<: CartesianIndex}, J <: AbstractVector{<: CartesianIndex}}
+struct DofMap{N, I <: AbstractVector{<: CartesianIndex}, J <: AbstractVector{<: CartesianIndex}} <: AbstractDofMap
     masksize::Dims{N}
     indices::I # (dof, x, y, z)
     indices4scalar::J # (dof, x, y, z)
 end
+
+# ---- BlockDofMap ----
+
+"""
+    BlockDofMap(masks::Tuple)
+
+Create a block-major DoF map from one Boolean mask per block. The block order
+must match the order passed to `create_block_sparse_matrix`. Indexing the map
+returns the `DofMap` for one block.
+
+```julia
+free = BlockDofMap((velocity_mask, pressure_mask))
+A = extract(blocks, free)
+Aup = extract(blocks[1,2], free[1], free[2])
+```
+"""
+struct BlockDofMap{M <: Tuple{Vararg{DofMap}}} <: AbstractDofMap
+    maps::M
+    indices::Vector{Int}
+end
+
+# ---- construction ----
 
 function DofMap(mask::AbstractArray{Bool})
     masksize = size(mask)
@@ -55,7 +81,38 @@ function DofMap(mask::AbstractArray{Bool})
     J = map(i -> CartesianIndex(1, Base.tail(Tuple(i))...), I)
     DofMap(masksize, I, J)
 end
-ndofs(dofmap::DofMap) = length(dofmap.indices)
+
+function BlockDofMap(masks::Tuple{Vararg{AbstractArray{Bool}}})
+    isempty(masks) && throw(ArgumentError("at least one block mask is required"))
+    maps = map(DofMap, masks)
+    indices = Int[]
+    sizehint!(indices, sum(ndofs, maps))
+    offset = 0
+    for dofmap in maps
+        linear_indices = LinearIndices(dofmap.masksize)
+        for index in dofmap.indices
+            push!(indices, offset + linear_indices[index])
+        end
+        offset += length(linear_indices)
+    end
+    BlockDofMap(maps, indices)
+end
+
+"""
+    dofmap(mask::AbstractArray{Bool})
+
+Create a `DofMap` from one Boolean mask.
+"""
+dofmap(mask::AbstractArray{Bool}) = DofMap(mask)
+
+"""
+    dofmap(masks::Tuple)
+
+Create a `BlockDofMap` from a tuple containing one Boolean mask per block.
+"""
+dofmap(masks::Tuple{Vararg{AbstractArray{Bool}}}) = BlockDofMap(masks)
+
+# ---- indexing ----
 
 function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Vec{1}}
     A′ = reshape(reinterpret(eltype(T), A), 1, size(A)...)
@@ -73,6 +130,18 @@ function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
     @boundscheck checkbounds(A′, dofmap.indices4scalar)
     @inbounds view(A′, dofmap.indices4scalar)
 end
+
+Base.length(dofmap::BlockDofMap) = length(dofmap.maps)
+Base.getindex(dofmap::BlockDofMap, i::Int) = dofmap.maps[i]
+
+ndofs(dofmap::DofMap) = length(dofmap.indices)
+ndofs(dofmap::BlockDofMap) = length(dofmap.indices)
+dofs(dofmap::DofMap) = LinearIndices(dofmap.masksize)[dofmap.indices]
+dofs(dofmap::BlockDofMap) = dofmap.indices
+
+full_ndofs(dofmap::DofMap) = prod(dofmap.masksize)
+full_ndofs(dofmap::BlockDofMap) = sum(full_ndofs, dofmap.maps)
+dofs(colon::Colon) = colon
 
 # -----------------------------------------------------------------------------
 #  Sparse matrix blocks
@@ -313,9 +382,9 @@ julia> dofmask = falses(1, size(mesh)...);
 
 julia> dofmask[:,1:3,1:3] .= true;
 
-julia> dofmap = DofMap(dofmask);
+julia> free = DofMap(dofmask);
 
-julia> extract(A, dofmap)
+julia> extract(A, free)
 9×9 SparseArrays.SparseMatrixCSC{Float64, Int64} with 49 stored entries:
  0.0  0.0   ⋅   0.0  0.0   ⋅    ⋅    ⋅    ⋅
  0.0  0.0  0.0  0.0  0.0  0.0   ⋅    ⋅    ⋅
@@ -460,30 +529,66 @@ function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::IGAMesh{
     nothing
 end
 
+# ---- storage ----
+
+matrix_storage(matrix) = matrix
+matrix_storage(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView, SparseMatrixBlocks}) = parent(matrix)
+
+matrix_storage_indices(matrix) = axes(matrix)
+matrix_storage_indices(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView}) = parentindices(matrix)
+matrix_storage_indices(matrix::SparseMatrixBlocks) = axes(parent(matrix))
+
+storage_index(::Base.OneTo, index) = index
+storage_index(indices, index) = (@_propagate_inbounds_meta; indices[index])
+
 # ---- extraction ----
 
 """
-    extract(matrix::AbstractMatrix, dofmap_row::DofMap, dofmap_col::DofMap = dofmap_row)
+    extract(matrix, dofmap_row, dofmap_col = dofmap_row)
 
 Extract the active degrees of freedom of a matrix.
 """
-function extract(S::AbstractMatrix, dofmap_i, dofmap_j = dofmap_i)
-    I, J = _indices_for_extract(S, dofmap_i, dofmap_j)
-    S[I, J]
+function extract(matrix::AbstractMatrix, dofmap_i, dofmap_j = dofmap_i)
+    I, J = _indices_for_extract(matrix, dofmap_i, dofmap_j)
+    row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
+    matrix_storage(matrix)[storage_index(row_storage_indices, I), storage_index(col_storage_indices, J)]
 end
-function extract(::typeof(view), S::AbstractMatrix, dofmap_i, dofmap_j = dofmap_i)
-    I, J = _indices_for_extract(S, dofmap_i, dofmap_j)
-    view(S, I, J)
+function extract(::typeof(view), matrix::AbstractMatrix, dofmap_i, dofmap_j = dofmap_i)
+    I, J = _indices_for_extract(matrix, dofmap_i, dofmap_j)
+    row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
+    view(matrix_storage(matrix), storage_index(row_storage_indices, I), storage_index(col_storage_indices, J))
 end
-function _indices_for_extract(S::AbstractMatrix, dofmap_i::Union{DofMap, Colon}, dofmap_j::Union{DofMap, Colon})
-    dofmap_i isa DofMap && @assert size(S, 1) == prod(dofmap_i.masksize)
-    dofmap_j isa DofMap && @assert size(S, 2) == prod(dofmap_j.masksize)
-    I = dofs(dofmap_i)
-    J = dofs(dofmap_j)
-    I, J
+
+function _indices_for_extract(matrix::AbstractMatrix, dofmap_i::Union{AbstractDofMap, Colon}, dofmap_j::Union{AbstractDofMap, Colon})
+    check_dofmap_size(size(matrix, 1), dofmap_i)
+    check_dofmap_size(size(matrix, 2), dofmap_j)
+    dofs(dofmap_i), dofs(dofmap_j)
 end
-dofs(dofmap::DofMap) = LinearIndices(dofmap.masksize)[dofmap.indices]
-dofs(colon::Colon) = colon
+
+function _indices_for_extract(blocks::SparseMatrixBlocks, dofmap_i::Union{AbstractDofMap, Colon}, dofmap_j::Union{AbstractDofMap, Colon})
+    check_block_dofmap(blocks, dofmap_i)
+    check_block_dofmap(blocks, dofmap_j)
+    dofs(dofmap_i), dofs(dofmap_j)
+end
+
+function check_dofmap_size(matrix_size::Integer, dofmap::AbstractDofMap)
+    matrix_size == full_ndofs(dofmap) || throw(DimensionMismatch("matrix and DoF map sizes must match"))
+    nothing
+end
+check_dofmap_size(::Integer, ::Colon) = nothing
+
+function check_block_dofmap(blocks::SparseMatrixBlocks, dofmap::BlockDofMap)
+    length(dofmap) == size(blocks, 1) || throw(DimensionMismatch("matrix and DoF map must have the same number of blocks"))
+    for i in eachindex(dofmap.maps)
+        block_size = blocks.field_offsets[i + 1] - blocks.field_offsets[i]
+        full_ndofs(dofmap[i]) == block_size || throw(DimensionMismatch("matrix and DoF map block sizes must match"))
+    end
+    nothing
+end
+function check_block_dofmap(::SparseMatrixBlocks, ::DofMap)
+    throw(ArgumentError("extracting a block matrix requires one DoF map per block"))
+end
+check_block_dofmap(::SparseMatrixBlocks, ::Colon) = nothing
 
 # ---- sparse addition ----
 
@@ -545,15 +650,6 @@ end
 @noinline function check_matrix_entry_size(value::AbstractMatrix, row_ndofs, col_ndofs)
     size(value) == (row_ndofs, col_ndofs) || throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
 end
-
-matrix_storage(matrix) = matrix
-matrix_storage(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView}) = parent(matrix)
-
-matrix_storage_indices(matrix) = axes(matrix)
-matrix_storage_indices(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView}) = parentindices(matrix)
-
-storage_index(::Base.OneTo, index) = index
-storage_index(indices, index) = (@_propagate_inbounds_meta; indices[index])
 
 function add_entry_values!(destination, destination_slot, source, source_slot, storage_indices, count)
     @_propagate_inbounds_meta

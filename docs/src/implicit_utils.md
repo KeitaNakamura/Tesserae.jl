@@ -7,6 +7,8 @@ Tesserae provides small utilities for those parts of an implicit formulation.
 
 ```@docs
 DofMap
+BlockDofMap
+dofmap
 ```
 
 ## Sparse matrix
@@ -14,7 +16,7 @@ DofMap
 ```@docs
 create_sparse_matrix
 create_block_sparse_matrix
-extract(::AbstractMatrix, ::DofMap)
+extract(::AbstractMatrix, ::Any)
 ```
 
 ## Assembly of global matrix
