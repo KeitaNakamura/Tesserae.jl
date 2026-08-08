@@ -110,6 +110,7 @@ export
     dofs,
     create_sparse_matrix,
     create_block_sparse_matrix,
+    @block_sparse_matrix,
     @P2G_Matrix,
 # VTK
     openvtk,

@@ -1,3 +1,7 @@
+# -----------------------------------------------------------------------------
+#  DofMap
+# -----------------------------------------------------------------------------
+
 """
     DofMap(mask::AbstractArray{Bool})
 
@@ -70,6 +74,12 @@ function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
     @inbounds view(A′, dofmap.indices4scalar)
 end
 
+# -----------------------------------------------------------------------------
+#  Sparse matrix blocks
+# -----------------------------------------------------------------------------
+
+# ---- SparseMatrixBlockView ----
+
 struct SparseMatrixBlockView{T,Ti} <: AbstractMatrix{T}
     matrix::SparseMatrixCSC{T,Ti}
     rows::UnitRange{Int}
@@ -82,13 +92,11 @@ Base.parent(block::SparseMatrixBlockView) = block.matrix
 Base.parentindices(block::SparseMatrixBlockView) = (block.rows, block.cols)
 
 function Base.getindex(block::SparseMatrixBlockView, i::Int, j::Int)
-    @_propagate_inbounds_meta
     @boundscheck checkbounds(block, i, j)
     @inbounds parent(block)[block.rows[i],block.cols[j]]
 end
 
 function Base.setindex!(block::SparseMatrixBlockView, value, i::Int, j::Int)
-    @_propagate_inbounds_meta
     @boundscheck checkbounds(block, i, j)
 
     matrix = parent(block)
@@ -115,6 +123,8 @@ end
 
 SparseArrays.nnz(block::SparseMatrixBlockView) = sum(length, block.column_slots)
 
+# ---- SparseMatrixBlocks ----
+
 """
 An array of sparse matrix block views that share the same parent CSC matrix.
 """
@@ -129,7 +139,6 @@ Base.size(blocks::SparseMatrixBlocks) = size(blocks.column_slots)
 Base.parent(blocks::SparseMatrixBlocks) = blocks.matrix
 
 function Base.getindex(blocks::SparseMatrixBlocks, i::Int, j::Int)
-    @_propagate_inbounds_meta
     @boundscheck checkbounds(blocks, i, j)
     @inbounds SparseMatrixBlockView(
         blocks.matrix,
@@ -144,24 +153,9 @@ function fillzero!(blocks::SparseMatrixBlocks)
     blocks
 end
 
-"""
-    create_block_sparse_matrix(block_rows...)
+# ---- construction ----
 
-Combine sparse matrices into one CSC matrix and return its block views. Each
-argument describes one block row and must be a tuple of `SparseMatrixCSC`
-objects. The views are assembly targets; use the combined CSC returned by
-`parent(blocks)` for sparse linear algebra.
-
-```julia
-blocks = create_block_sparse_matrix((Kuu, Kup), (Kpu, Kpp))
-K = parent(blocks)
-```
-
-The block views share a fixed sparsity structure and permit updates only at
-stored positions. Structural changes made through `parent(blocks)` invalidate
-all block views.
-"""
-function create_block_sparse_matrix(block_rows::Tuple...)
+function _combine_sparse_matrix_blocks(block_rows::Tuple...)
     isempty(block_rows) && throw(ArgumentError("at least one block row is required"))
     nblockcols = length(first(block_rows))
     nblockcols > 0 || throw(ArgumentError("at least one block column is required"))
@@ -194,10 +188,9 @@ function create_block_sparse_matrix(block_rows::Tuple...)
     matrix_colptr = Vector{Ti}(undef, sum(col_sizes) + 1)
     matrix_rowvals = Vector{Ti}(undef, sum(nnz, matrices))
     matrix_values = Vector{T}(undef, length(matrix_rowvals))
-    col = 1
     slot = 1
     for j in 1:nblockcols, local_col in 1:col_sizes[j]
-        matrix_colptr[col] = slot
+        matrix_colptr[col_offsets[j] + local_col] = slot
         for i in 1:nblockrows
             block = matrices[i,j]
             source_rows = rowvals(block)
@@ -210,13 +203,148 @@ function create_block_sparse_matrix(block_rows::Tuple...)
             end
             column_slots[i,j][local_col] = first_slot:(slot - 1)
         end
-        col += 1
     end
     matrix_colptr[end] = slot
     matrix = SparseMatrixCSC(sum(row_sizes), sum(col_sizes), matrix_colptr, matrix_rowvals, matrix_values)
 
     SparseMatrixBlocks(matrix, row_offsets, col_offsets, column_slots)
 end
+
+function _block_matrix_rows(expr)
+    if Meta.isexpr(expr, :hcat)
+        return (expr.args,)
+    elseif Meta.isexpr(expr, :vcat)
+        return map(row -> Meta.isexpr(row, :row) ? row.args : Any[row], expr.args)
+    elseif Meta.isexpr(expr, :vect, 1)
+        return (expr.args,)
+    else
+        throw(ArgumentError("@block_sparse_matrix requires a two-dimensional matrix literal"))
+    end
+end
+
+"""
+    @block_sparse_matrix [Kuu Kup; Kpu Kpp]
+
+Combine existing `SparseMatrixCSC` objects into one parent CSC matrix and
+return its block views.
+"""
+macro block_sparse_matrix(expr)
+    block_rows = _block_matrix_rows(expr)
+    escaped_rows = map(row -> Expr(:tuple, map(esc, row)...), block_rows)
+    :(_combine_sparse_matrix_blocks($(escaped_rows...)))
+end
+
+"""
+    create_block_sparse_matrix(mesh; ndofs)
+    create_block_sparse_matrix(meshes; ndofs)
+    create_block_sparse_matrix(basis, mesh; ndofs)
+
+Create a monolithic sparse matrix for multiple fields and return its block
+views. `ndofs` is a tuple containing the number of DoFs per node for each
+field. A tuple of meshes assigns one mesh to each field. For Cartesian meshes,
+pass the basis explicitly.
+
+```julia
+blocks = create_block_sparse_matrix((velocity_mesh, pressure_mesh); ndofs=(2, 1))
+K = parent(blocks)
+Kuu, Kup = blocks[1,1], blocks[1,2]
+Kpu, Kpp = blocks[2,1], blocks[2,2]
+```
+
+The parent CSC is constructed directly in block order. Block views share its
+fixed sparsity structure and permit updates only at stored positions.
+Structural changes made through `parent(blocks)` invalidate all block views.
+"""
+function create_block_sparse_matrix end
+
+function create_block_sparse_matrix(basis::Basis, mesh::AbstractMesh; ndofs::Tuple{Vararg{Int}})
+    _create_block_sparse_matrix(Float64, basis, mesh, ndofs)
+end
+
+function create_block_sparse_matrix(::Type{T}, basis::Basis, mesh::AbstractMesh; ndofs::Tuple{Vararg{Int}}) where {T}
+    _create_block_sparse_matrix(T, basis, mesh, ndofs)
+end
+
+function create_block_sparse_matrix(mesh::Union{FEMesh,IGAMesh}; ndofs::Tuple{Vararg{Int}})
+    create_block_sparse_matrix(Float64, mesh; ndofs)
+end
+
+function create_block_sparse_matrix(::Type{T}, mesh::Union{FEMesh,IGAMesh}; ndofs::Tuple{Vararg{Int}}) where {T}
+    meshes = ntuple(_ -> mesh, length(ndofs))
+    _create_block_sparse_matrix(T, meshes, ndofs)
+end
+
+function create_block_sparse_matrix(meshes::Tuple{Vararg{Union{FEMesh,IGAMesh}}}; ndofs::Tuple{Vararg{Int}})
+    create_block_sparse_matrix(Float64, meshes; ndofs)
+end
+
+function create_block_sparse_matrix(::Type{T}, meshes::Tuple{Vararg{Union{FEMesh,IGAMesh}}}; ndofs::Tuple{Vararg{Int}}) where {T}
+    _create_block_sparse_matrix(T, meshes, ndofs)
+end
+
+function _create_block_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh, ndofs::Tuple{Vararg{Int}}) where {T}
+    check_field_ndofs(ndofs)
+    field_sizes = [ndof * length(mesh) for ndof in ndofs]
+    field_offsets = cumsum([0; field_sizes])
+    I, J = Int[], Int[]
+    for j in eachindex(ndofs), i in eachindex(ndofs)
+        _append_sparse_pattern!(I, J, field_offsets[i], field_offsets[j], basis, mesh, ndofs[i], ndofs[j])
+    end
+    _create_sparse_matrix_blocks(T, I, J, field_offsets)
+end
+
+function _create_block_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Tuple{Vararg{Int}}) where {T}
+    meshes = ntuple(_ -> mesh, length(ndofs))
+    _create_block_sparse_matrix(T, meshes, ndofs)
+end
+
+function _create_block_sparse_matrix(::Type{T}, meshes::Tuple, ndofs::Tuple{Vararg{Int}}) where {T}
+    length(ndofs) == length(meshes) || throw(DimensionMismatch("each field must have one DoF count"))
+    check_field_ndofs(ndofs)
+    field_sizes = [ndofs[i] * length(meshes[i]) for i in eachindex(meshes)]
+    field_offsets = cumsum([0; field_sizes])
+    I, J = Int[], Int[]
+    for j in eachindex(meshes), i in eachindex(meshes)
+        _append_sparse_pattern!(I, J, field_offsets[i], field_offsets[j], meshes[i], meshes[j], ndofs[i], ndofs[j])
+    end
+    _create_sparse_matrix_blocks(T, I, J, field_offsets)
+end
+
+function check_field_ndofs(ndofs)
+    isempty(ndofs) && throw(ArgumentError("at least one field is required"))
+    all(>(0), ndofs) || throw(ArgumentError("field DoF counts must be positive"))
+    nothing
+end
+
+function _create_sparse_matrix_blocks(::Type{T}, I, J, field_offsets) where {T}
+    matrix_size = last(field_offsets)
+    matrix = sparse(I, J, zeros(T, length(I)), matrix_size, matrix_size)
+    nfields = length(field_offsets) - 1
+    column_slots = [Vector{UnitRange{Int}}(undef, field_offsets[j + 1] - field_offsets[j]) for i in 1:nfields, j in 1:nfields]
+    rows = rowvals(matrix)
+
+    # Rows are sorted within each CSC column, so each field occupies one contiguous slot range.
+    for j in 1:nfields, local_col in 1:(field_offsets[j + 1] - field_offsets[j])
+        slots = nzrange(matrix, field_offsets[j] + local_col)
+        slot = first(slots)
+        stop = last(slots) + 1
+        for i in 1:nfields
+            first_slot = slot
+            @inbounds while slot < stop && rows[slot] ≤ field_offsets[i + 1]
+                slot += 1
+            end
+            column_slots[i,j][local_col] = first_slot:(slot - 1)
+        end
+    end
+
+    SparseMatrixBlocks(matrix, field_offsets, field_offsets, column_slots)
+end
+
+# -----------------------------------------------------------------------------
+#  Sparse matrices
+# -----------------------------------------------------------------------------
+
+# ---- construction ----
 
 """
     create_sparse_matrix(mesh; ndofs)
@@ -289,40 +417,36 @@ end
 
 function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}, ndofs::Tuple{Int,Int}) where {T, dim}
     row_ndofs, col_ndofs = ndofs
-
-    dims = size(mesh)
-    nrows = row_ndofs * prod(dims)
-    ncols = col_ndofs * prod(dims)
-
     I, J = Int[], Int[]
-    LI, CI = LinearIndices(dims), CartesianIndices(dims)
-
-    function gendofs(node_id, ndofs)
-        first = ndofs * (node_id - 1) + 1
-        last  = ndofs * node_id
-        first:last
-    end
-
-    for i in CI
-        unit = (support_width(basis) - 1) * oneunit(i)
-        indices = intersect((i-unit):(i+unit), CI)
-        idofs = gendofs(LI[i], row_ndofs)
-        for j in indices
-            jdofs = gendofs(LI[j], col_ndofs)
-            append_dofs!(I, J, idofs, jdofs)
-        end
-    end
-
-    sparse(I, J, zeros(T, length(I)), nrows, ncols)
+    _append_sparse_pattern!(I, J, 0, 0, basis, mesh, row_ndofs, col_ndofs)
+    sparse(I, J, zeros(T, length(I)), row_ndofs * length(mesh), col_ndofs * length(mesh))
 end
 
-function append_dofs!(I, J, idofs, jdofs)
-    for jdof in jdofs
-        append!(I, idofs)
-        for _ in idofs
-            push!(J, jdof)
+function _append_sparse_pattern!(I, J, row_offset, col_offset, basis::Basis, mesh::CartesianMesh{N}, row_ndofs, col_ndofs) where {N}
+    mesh_size = size(mesh)
+    node_ids = LinearIndices(mesh_size)
+    mesh_nodes = CartesianIndices(mesh_size)
+    radius = (support_width(basis) - 1) * oneunit(CartesianIndex{N})
+    for row_node in mesh_nodes
+        row_dofs = node_dofs(node_ids[row_node], row_ndofs)
+        for col_node in intersect((row_node - radius):(row_node + radius), mesh_nodes)
+            col_dofs = node_dofs(node_ids[col_node], col_ndofs)
+            append_dofs!(I, J, row_dofs, col_dofs, row_offset, col_offset)
         end
     end
+    nothing
+end
+
+function node_dofs(node, ndofs)
+    (ndofs * (node - 1) + 1):(ndofs * node)
+end
+
+function append_dofs!(I, J, row_dofs, col_dofs, row_offset, col_offset)
+    for col_dof in col_dofs, row_dof in row_dofs
+        push!(I, row_offset + row_dof)
+        push!(J, col_offset + col_dof)
+    end
+    nothing
 end
 
 function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Int) where {T}
@@ -330,16 +454,19 @@ function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Int) where {
 end
 
 function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Tuple{Int,Int}) where {T}
-    gdofs1 = LinearIndices((ndofs[1], length(mesh)))
-    gdofs2 = LinearIndices((ndofs[2], length(mesh)))
-
     I, J = Int[], Int[]
-    for cell in cells(mesh)
-        cellnodes = supportnodes(mesh, cell)
-        append_dofs!(I, J, gdofs1[:, cellnodes], gdofs2[:, cellnodes])
-    end
+    _append_sparse_pattern!(I, J, 0, 0, mesh, ndofs[1], ndofs[2])
+    sparse(I, J, zeros(T, length(I)), ndofs[1] * length(mesh), ndofs[2] * length(mesh))
+end
 
-    sparse(I, J, zeros(T, length(I)), length(gdofs1), length(gdofs2))
+function _append_sparse_pattern!(I, J, row_offset, col_offset, mesh::Union{FEMesh,IGAMesh}, row_ndofs, col_ndofs)
+    row_dofs = LinearIndices((row_ndofs, length(mesh)))
+    col_dofs = LinearIndices((col_ndofs, length(mesh)))
+    for cell in cells(mesh)
+        cell_nodes = supportnodes(mesh, cell)
+        append_dofs!(I, J, row_dofs[:, cell_nodes], col_dofs[:, cell_nodes], row_offset, col_offset)
+    end
+    nothing
 end
 
 function create_sparse_matrix(::IGABasis, mesh::IGAMesh{dim}; ndofs) where {dim}
@@ -355,43 +482,56 @@ _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Tuple{Int,Int}) where {T}
 create_sparse_matrix(::Type{T}, mesh::IGAMesh{dim}; ndofs) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
 create_sparse_matrix(mesh::IGAMesh{dim}; ndofs) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
 
-function create_sparse_matrix(::Type{T}, (rowmesh,colmesh)::Tuple{IGAMesh{dim,pdim}, IGAMesh{dim,pdim}}; ndofs::Tuple{Int, Int}) where {T, dim, pdim}
-    rowmesh === colmesh && return _create_cell_support_sparse_matrix(T, rowmesh, ndofs)
+function create_sparse_matrix(::Type{T}, (rowmesh,colmesh)::Tuple{Vararg{Union{FEMesh,IGAMesh},2}}; ndofs::Tuple{Int,Int}) where {T}
+    I, J = Int[], Int[]
+    _append_sparse_pattern!(I, J, 0, 0, rowmesh, colmesh, ndofs[1], ndofs[2])
+    sparse(I, J, zeros(T, length(I)), ndofs[1] * length(rowmesh), ndofs[2] * length(colmesh))
+end
+
+function create_sparse_matrix(meshes::Tuple{Vararg{Union{FEMesh,IGAMesh},2}}; ndofs::Tuple{Int,Int})
+    create_sparse_matrix(Float64, meshes; ndofs)
+end
+
+function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::IGAMesh{dim,pdim}, colmesh::IGAMesh{dim,pdim}, row_ndofs, col_ndofs) where {dim,pdim}
+    rowmesh === colmesh && return _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh, row_ndofs, col_ndofs)
     check_matching_cell_partitions(rowmesh, colmesh)
 
-    row_dofs = LinearIndices((ndofs[1], length(rowmesh)))
-    col_dofs = LinearIndices((ndofs[2], length(colmesh)))
-    I, J = Int[], Int[]
-    for (rowcell, colcell) in zip(cells(rowmesh), cells(colmesh))
-        append_dofs!(I, J, row_dofs[:, supportnodes(rowmesh, rowcell)], col_dofs[:, supportnodes(colmesh, colcell)])
+    row_dofs = LinearIndices((row_ndofs, length(rowmesh)))
+    col_dofs = LinearIndices((col_ndofs, length(colmesh)))
+    for (row_cell, col_cell) in zip(cells(rowmesh), cells(colmesh))
+        row_nodes = supportnodes(rowmesh, row_cell)
+        col_nodes = supportnodes(colmesh, col_cell)
+        append_dofs!(I, J, row_dofs[:, row_nodes], col_dofs[:, col_nodes], row_offset, col_offset)
     end
-    sparse(I, J, zeros(T, length(I)), length(row_dofs), length(col_dofs))
+    nothing
 end
-create_sparse_matrix(meshes::Tuple{IGAMesh{dim,pdim}, IGAMesh{dim,pdim}}; ndofs::Tuple{Int, Int}) where {dim, pdim} = create_sparse_matrix(Float64, meshes; ndofs)
 
-function create_sparse_matrix(::Type{T}, (mesh1,mesh2)::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) where {T}
-    mesh1 === mesh2 && return _create_cell_support_sparse_matrix(T, mesh1, ndofs)
-    _reference_cell_family(cellshape(mesh1)) === _reference_cell_family(cellshape(mesh2)) || throw(ArgumentError("FEM meshes must use the same reference-cell family"))
-    ncells(mesh1) == ncells(mesh2) || throw(DimensionMismatch("FEM meshes must have the same number of cells"))
-
-    gdofs1 = LinearIndices((ndofs[1], length(mesh1)))
-    gdofs2 = LinearIndices((ndofs[2], length(mesh2)))
-    primarynodes1 = primarynodes_indices(cellshape(mesh1))
-    primarynodes2 = primarynodes_indices(cellshape(mesh2))
-
-    I, J = Int[], Int[]
-    for (cell1, cell2) in zip(cells(mesh1), cells(mesh2))
-        cellnodes1 = supportnodes(mesh1, cell1)
-        cellnodes2 = supportnodes(mesh2, cell2)
-        mesh1[cellnodes1[primarynodes1]] ≈ mesh2[cellnodes2[primarynodes2]] || throw(ArgumentError("FEM meshes must describe the same cells in the same order and orientation; cell $cell1 does not match"))
-        append_dofs!(I, J, gdofs1[:, cellnodes1], gdofs2[:, cellnodes2])
-    end
-
-    sparse(I, J, zeros(T, length(I)), length(gdofs1), length(gdofs2))
-end
-create_sparse_matrix(meshes::Tuple{FEMesh, FEMesh}; ndofs::Tuple{Int, Int}) = create_sparse_matrix(Float64, meshes; ndofs)
 create_sparse_matrix(::Type{T}, mesh::FEMesh{<: Any, dim}; ndofs::Int) where {T, dim} = create_sparse_matrix(T, (mesh,mesh); ndofs=(ndofs,ndofs))
 create_sparse_matrix(mesh::FEMesh{<: Any, dim}; ndofs::Int) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
+
+function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::FEMesh, colmesh::FEMesh, row_ndofs, col_ndofs)
+    rowmesh === colmesh && return _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh, row_ndofs, col_ndofs)
+    _reference_cell_family(cellshape(rowmesh)) === _reference_cell_family(cellshape(colmesh)) || throw(ArgumentError("FEM meshes must use the same reference-cell family"))
+    ncells(rowmesh) == ncells(colmesh) || throw(DimensionMismatch("FEM meshes must have the same number of cells"))
+
+    row_dofs = LinearIndices((row_ndofs, length(rowmesh)))
+    col_dofs = LinearIndices((col_ndofs, length(colmesh)))
+    row_primary_nodes = primarynodes_indices(cellshape(rowmesh))
+    col_primary_nodes = primarynodes_indices(cellshape(colmesh))
+    for (row_cell, col_cell) in zip(cells(rowmesh), cells(colmesh))
+        row_nodes = supportnodes(rowmesh, row_cell)
+        col_nodes = supportnodes(colmesh, col_cell)
+        rowmesh[row_nodes[row_primary_nodes]] ≈ colmesh[col_nodes[col_primary_nodes]] || throw(ArgumentError("FEM meshes must describe the same cells in the same order and orientation; cell $row_cell does not match"))
+        append_dofs!(I, J, row_dofs[:, row_nodes], col_dofs[:, col_nodes], row_offset, col_offset)
+    end
+    nothing
+end
+
+function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::Union{FEMesh,IGAMesh}, colmesh::Union{FEMesh,IGAMesh}, row_ndofs, col_ndofs)
+    throw(ArgumentError("all field meshes must use compatible discretizations"))
+end
+
+# ---- extraction ----
 
 """
     extract(matrix::AbstractMatrix, dofmap_row::DofMap, dofmap_col::DofMap = dofmap_row)
@@ -415,6 +555,8 @@ function _indices_for_extract(S::AbstractMatrix, dofmap_i::Union{DofMap, Colon},
 end
 dofs(dofmap::DofMap) = LinearIndices(dofmap.masksize)[dofmap.indices]
 dofs(colon::Colon) = colon
+
+# ---- sparse addition ----
 
 function add!(A::SparseMatrixCSC, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
     if issorted(I)

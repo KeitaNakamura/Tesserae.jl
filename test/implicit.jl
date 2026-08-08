@@ -91,13 +91,16 @@
         A12 = sparse(Int32[], Int32[], Float64[], 3, 1)
         A21 = sparse(Int32[2], Int32[1], [3.0], 2, 2)
         A22 = sparse(Int32[], Int32[], Float64[], 2, 1)
-        irregular = @inferred create_block_sparse_matrix((A11, A12), (A21, A22))
+        irregular = @block_sparse_matrix [A11 A12; A21 A22]
 
         @test parent(irregular) == hvcat((2, 2), A11, A12, A21, A22)
         @test Tesserae.SparseArrays.indtype(parent(irregular)) == Int32
         @test @inferred(irregular[1,1]) isa AbstractMatrix{Float64}
         @test Tesserae.SparseArrays.nnz(irregular[1,1]) == Tesserae.SparseArrays.nnz(A11)
         @test Tesserae.SparseArrays.nnz(irregular[1,2]) == 0
+        @test_throws BoundsError irregular[0,1]
+        @test_throws BoundsError irregular[1,1][0,1]
+        @test_throws BoundsError irregular[1,1][0,1] = 0
         irregular[1,1][3,2] = 2
         @test irregular[1,1][3,2] == 2
         irregular[1,2][1,1] = 0
@@ -106,32 +109,38 @@
         @test all(iszero, irregular[1,1])
         @test irregular[2,1] == A21
 
-        @test size(create_block_sparse_matrix((A11,))) == (1, 1)
-        @test size(create_block_sparse_matrix((A11, A12))) == (1, 2)
-        @test size(create_block_sparse_matrix((A11,), (A21,))) == (2, 1)
-        @test_throws ArgumentError create_block_sparse_matrix()
-        @test_throws ArgumentError create_block_sparse_matrix(())
-        @test_throws DimensionMismatch create_block_sparse_matrix((A11, A12), (A21,))
-        @test_throws ArgumentError create_block_sparse_matrix((A11, Float32.(A12)))
-        @test_throws DimensionMismatch create_block_sparse_matrix((A11, sparse(Int32[], Int32[], Float64[], 4, 1)))
+        @test size(@block_sparse_matrix [A11]) == (1, 1)
+        @test size(@block_sparse_matrix [A11 A12]) == (1, 2)
+        @test size(@block_sparse_matrix [A11; A21]) == (2, 1)
+        @test_throws DimensionMismatch @block_sparse_matrix [A11 A12; A21]
+        @test_throws ArgumentError @block_sparse_matrix [A11 Float32.(A12)]
+        @test_throws DimensionMismatch @block_sparse_matrix [A11 sparse(Int32[], Int32[], Float64[], 4, 1)]
 
         Kuu_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
         Kup_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
         Kpu_ref = create_sparse_matrix(basis, mesh; ndofs=(1, 2))
         Kpp_ref = create_sparse_matrix(basis, mesh; ndofs=(1, 1))
-        blocks = @inferred create_block_sparse_matrix(
-            (copy(Kuu_ref), copy(Kup_ref)),
-            (copy(Kpu_ref), copy(Kpp_ref)),
-        )
+        blocks = @inferred create_block_sparse_matrix(basis, mesh; ndofs=(2, 1))
+        blocks32 = @inferred create_block_sparse_matrix(Float32, basis, mesh; ndofs=(2, 1))
+        three_fields = @inferred create_block_sparse_matrix(basis, mesh; ndofs=(2, 1, 1))
 
         @test size(blocks) == (2, 2)
         @test isconcretetype(eltype(blocks))
         @test size(parent(blocks)) == (3length(mesh), 3length(mesh))
+        @test eltype(parent(blocks32)) == Float32
+        @test size(three_fields) == (3, 3)
+        @test size(parent(three_fields)) == (4length(mesh), 4length(mesh))
         @test all(parent(block) === parent(blocks) for block in blocks)
         @test size(blocks[1,1]) == size(Kuu_ref)
         @test size(blocks[1,2]) == size(Kup_ref)
         @test size(blocks[2,1]) == size(Kpu_ref)
         @test size(blocks[2,2]) == size(Kpp_ref)
+        @test blocks[1,1] == Kuu_ref
+        @test blocks[1,2] == Kup_ref
+        @test blocks[2,1] == Kpu_ref
+        @test blocks[2,2] == Kpp_ref
+        @test_throws ArgumentError create_block_sparse_matrix(basis, mesh; ndofs=())
+        @test_throws ArgumentError create_block_sparse_matrix(basis, mesh; ndofs=(2, 0))
 
         blocks[1,1][1,1] = 1
         @test parent(blocks)[1,1] == 1
@@ -158,10 +167,7 @@
         @test blocks[2,1] ≈ Kpu_ref
         @test blocks[2,2] ≈ Kpp_ref
 
-        threaded = create_block_sparse_matrix(
-            (copy(Kuu_ref), copy(Kup_ref)),
-            (copy(Kpu_ref), copy(Kpp_ref)),
-        )
+        threaded = create_block_sparse_matrix(basis, mesh; ndofs=(2, 1))
         fillzero!(threaded)
         partition = ThreadPartition(mesh)
         update!(partition, particles.x)
@@ -599,16 +605,12 @@ end
     end
     @test matrix_view ≈ A
 
-    block_matrix = create_block_sparse_matrix(
-        (
-            create_sparse_matrix(quad9; ndofs=2),
-            create_sparse_matrix((quad9, quad4); ndofs=(2, 1)),
-        ),
-        (
-            create_sparse_matrix((quad4, quad9); ndofs=(1, 2)),
-            create_sparse_matrix(quad4; ndofs=1),
-        ),
-    )
+    block_matrix = @inferred create_block_sparse_matrix((quad9, quad4); ndofs=(2, 1))
+    @test block_matrix[1,1] == create_sparse_matrix(quad9; ndofs=2)
+    @test block_matrix[1,2] == create_sparse_matrix((quad9, quad4); ndofs=(2, 1))
+    @test block_matrix[2,1] == create_sparse_matrix((quad4, quad9); ndofs=(1, 2))
+    @test block_matrix[2,2] == create_sparse_matrix(quad4; ndofs=1)
+    @test_throws DimensionMismatch create_block_sparse_matrix((quad9, quad4); ndofs=(2, 1, 1))
     @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
         block_matrix[1,2][i,j] = @∑ ∇N[ip] * N[jp] * V[p]
         block_matrix[2,1][j,i] = @∑ ∇N[ip] * N[jp] * V[p]

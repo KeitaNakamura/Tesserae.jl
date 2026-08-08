@@ -399,6 +399,15 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test stored_pattern(D) == rectangular_pattern
         @test stored_pattern(D32) == rectangular_pattern
 
+        blocks = @inferred create_block_sparse_matrix((mesh, column_mesh); ndofs=(2, 1))
+        blocks32 = @inferred create_block_sparse_matrix(Float32, mesh_basis, mesh; ndofs=(2, 1))
+        @test blocks[1,1] == create_sparse_matrix(mesh; ndofs=2)
+        @test blocks[1,2] == D
+        @test blocks[2,1] == create_sparse_matrix((column_mesh, mesh); ndofs=(1, 2))
+        @test blocks[2,2] == create_sparse_matrix(column_mesh; ndofs=1)
+        @test eltype(parent(blocks32)) === Float32
+        @test blocks32[1,2] == C
+
         # Equal cell counts are insufficient when the span endpoints differ.
         mismatched_knots = map(copy, iga_test_knot_vectors(patch))
         mismatched_knots[1][4] = 0.2

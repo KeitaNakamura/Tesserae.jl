@@ -14,6 +14,7 @@ DofMap
 ```@docs
 create_sparse_matrix
 create_block_sparse_matrix
+@block_sparse_matrix
 extract(::AbstractMatrix, ::DofMap)
 ```
 
