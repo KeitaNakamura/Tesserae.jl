@@ -124,6 +124,13 @@
 
         blocks[1,1][1,1] = 1
         @test parent(blocks)[1,1] == 1
+        diagonal_slot = @inferred Tesserae.storageindex(blocks[1,1], 1, 1)
+        @test Tesserae.SparseArrays.nonzeros(parent(blocks))[diagonal_slot] == 1
+        cross_slot = @inferred Tesserae.storageindex(blocks[1,2], 1, 1)
+        blocks[1,2][1,1] = 2
+        @test Tesserae.SparseArrays.nonzeros(parent(blocks))[cross_slot] == 2
+        @test_throws BoundsError Tesserae.storageindex(blocks[1,1], 0, 1)
+        @test_throws ArgumentError Tesserae.storageindex(blocks[1,1], 1, lastindex(blocks[1,1], 2))
         rowvals_before = copy(Tesserae.SparseArrays.rowvals(parent(blocks)))
         @test_throws ArgumentError blocks[1,1][1,end] = 1
         @test Tesserae.SparseArrays.rowvals(parent(blocks)) == rowvals_before
