@@ -301,6 +301,7 @@
         end))
         @test count(_ -> true, eachmatch(r"\bsupportnodes\(", expanded)) == 1
         @test count(_ -> true, eachmatch(r"weights\[p\]", expanded)) == 1
+        @test occursin("Tesserae.G2P2G", expanded)
     end
 
     @testset "interpolation" begin
