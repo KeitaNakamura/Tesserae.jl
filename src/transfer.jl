@@ -346,6 +346,22 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
     kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
 end
 
+G2P2G(f, device::CPUDevice, schedule, grid, particles, weights, partition) =
+    P2G(f, device, schedule, grid, particles, weights, partition)
+
+# Unlike P2G, G2P2G writes interpolated and updated particle properties.
+@kernel function gpukernel_G2P2G(f, grid, particles, @Const(weights))
+    p = @index(Global)
+    f(grid, particles, weights, p)
+end
+function G2P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
+    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    particles = particles isa QuadraturePoints ? parent(particles) : particles
+    backend = get_backend(device)
+    kernel = gpukernel_G2P2G(backend)
+    kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
+end
+
 function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     scope = TransferScope([grid=>i])
     nosum_equations = map(eq -> resolve_equation(eq, scope), nosum_equations)
@@ -750,7 +766,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     end
     code = quote
         $code
-        Tesserae.P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $weights, $partition)
+        Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $weights, $partition)
     end
 
     if !isempty(stages.p2g_nosum)
