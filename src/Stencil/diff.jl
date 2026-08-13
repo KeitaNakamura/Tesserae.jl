@@ -151,6 +151,11 @@ function stencil(op::Gradient, src::StencilArray{Cell, T, dim}; pad::Int, spacin
 end
 
 # Gradient: Face → Cell
+# NOTE: this method is still unreachable and untested. `fillzero!` below is not
+# bound in this module -- `tesserae.jl` only adds a method to `Tesserae.fillzero!`,
+# which does not bring the bare name into scope -- so it throws `UndefVarError`
+# before doing any work. Import `fillzero!`, or zero the destination the way the
+# `Divergence` method below does, before relying on this.
 function stencil!(::Gradient{r}, dest::StencilArray{Cell, <: Any, dim}, srcs::NTuple{dim, <: StencilArray{Face, <: Any, dim}}; pad::Int, spacing::Real) where {r, dim}
     fillzero!(inner(dest; pad))
     for i in 1:dim
@@ -158,7 +163,7 @@ function stencil!(::Gradient{r}, dest::StencilArray{Cell, <: Any, dim}, srcs::NT
         eᵢ = Vec{dim}(==(i))
         for j in 1:dim
             eⱼ = Vec{dim}(==(j))
-            eiej = eᵢ ⊗ eⱼ
+            eᵢeⱼ = eᵢ ⊗ eⱼ
             stencil!((old,new)->old+new⊗eᵢeⱼ, Diff{1,r}(j), dest, src; pad, spacing)
         end
     end

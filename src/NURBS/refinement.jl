@@ -64,14 +64,14 @@ function refine_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new::
     n_old = nbasis(axis_old)
     n_new = nbasis(axis_new)
 
+    isempty(knots) && return values
+
     perm = ntuple(Val(N)) do i
         i == 1 && return direction
         ifelse(i ≤ direction, i - 1, i)
     end
     columns_old = reshape(PermutedDimsArray(values, perm), size(values, direction), :)
     columns_new = similar(columns_old, S, n_new, size(columns_old, 2))
-
-    isempty(knots) && return values
 
     # Standard knot-refinement pass. The inserted knots are handled in one
     # backward sweep, so each tensor-product fiber is copied only once.

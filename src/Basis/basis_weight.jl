@@ -44,8 +44,19 @@ storage layout.
 Specialized bases may instead define `update_basis_weight!` for their own
 `BasisWeight`; CPDI uses this route because its support storage is variable.
 Such methods must update `supportnodes(bw)` and
-`nodal_basis_values(bw, order)` with matching local indices.
+`nodal_basis_values(bw, order)` with matching local indices. Note that such a
+basis forfeits every feature that needs a fixed Cartesian support width, namely
+`ThreadPartition` block sizing in `@P2G` and the sparsity radius used by
+`create_sparse_matrix`/`create_block_sparse_matrix`.
 =#
+
+# `support_width` sizes the default `BasisWeight` storage (see
+# `allocate_static_basis_values` below), and is also read outside `Basis/` by the
+# transfer.jl block-size check and the implicit.jl sparsity radius. Report a
+# missing definition here rather than as a bare `MethodError`.
+function support_width(basis::Basis)
+    error("$(nameof(typeof(basis))) does not define `Tesserae.support_width`. It sizes the default `BasisWeight` storage, and is also needed by `ThreadPartition` in `@P2G` and by `create_sparse_matrix`/`create_block_sparse_matrix`. Define `Tesserae.support_width` for it, or, if its support is not a fixed Cartesian block, override `Tesserae.allocate_basis_values` as `CPDI` does.")
+end
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 initial_supportnodes(shape::Shape, mesh::FEMesh) = zero(SVector{nlocalnodes(shape), Int})

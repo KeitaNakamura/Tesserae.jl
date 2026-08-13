@@ -47,7 +47,7 @@ end
 
 function _generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}) where {ParticleProp}
     if !(isbitstype(ParticleProp))
-        error("generate_particles: the property type of grid must be `isbitstype` type")
+        error("generate_particles: the property type of particles must be `isbitstype` type")
     end
     particles = StructArray{ParticleProp}(undef, size(points))
     fillzero!(particles)

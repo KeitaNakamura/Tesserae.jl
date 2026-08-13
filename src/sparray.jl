@@ -624,6 +624,10 @@ function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bc = Broadcast.instantiate(bc)
     bcf = Broadcast.flatten(bc)
+    # Flattening changes the nesting, not the set of operands, so `bcf.args` is
+    # the one place every leaf array is reachable in a single tuple -- that is
+    # what the shared-sparsity test needs. The copy itself stays on the
+    # unflattened `bc`, whose nesting `_get_data` rebuilds over the data arrays.
     if identical_spinds(dest, bcf.args...)
         Base.copyto!(_get_data(dest), _get_data(bc))
     else

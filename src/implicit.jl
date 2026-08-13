@@ -550,6 +550,15 @@ function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::IGAMesh{
 end
 
 # ---- storage ----
+#
+# How a matrix target reaches its values. Any `AbstractArray` already works
+# through the generic fallbacks below: storage is the array itself and the
+# indices are its own axes, so `storage_index` is the identity. A wrapper that
+# keeps its values somewhere else -- a view, or a block of a shared parent --
+# overrides `matrix_storage`/`matrix_storage_indices` so that `extract` and the
+# assemblers below reach the parent storage and remap indices into it.
+# `fillzero!` follows the same split: it must zero only the entries the target
+# owns, not the whole parent.
 
 matrix_storage(matrix) = matrix
 matrix_storage(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView, SparseMatrixBlocks}) = parent(matrix)
