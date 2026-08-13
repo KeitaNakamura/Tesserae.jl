@@ -449,6 +449,27 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         end
         @test view_sequential ≈ K_sequential
         @test view_threaded ≈ K_sequential
+
+        # Cellwise assembly with a transposed target and with `-=`. The forward
+        # `=` cases above never reach `finish_assembly!` with `Base.reverse`,
+        # nor with a matrix that must be accumulated into rather than overwritten.
+        dir = Vec(1.0, 2.0)
+        K_forward = create_sparse_matrix(mesh; ndofs=1)
+        K_reversed = create_sparse_matrix(mesh; ndofs=1)
+        @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
+            K_forward[i,j] = @∑ N[ip] * (∇N[jp] ⋅ dir) * V[p]
+        end
+        @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
+            K_reversed[j,i] = @∑ N[ip] * (∇N[jp] ⋅ dir) * V[p]
+        end
+        @test K_forward ≉ transpose(K_forward) # the equation is asymmetric, so the transpose is observable
+        @test K_reversed ≈ transpose(K_forward)
+
+        K_minus = create_sparse_matrix(mesh; ndofs=1)
+        @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
+            K_minus[i,j] -= @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
+        end
+        @test K_minus ≈ -K_sequential
     end
 
     @testset "Heat problem" begin
