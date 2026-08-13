@@ -191,7 +191,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         gmat in gmats && error("@P2G_Matrix: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
         push!(gmats, gmat)
 
-        @gensym matrix buffer assembler matrix_cache I J
+        @gensym matrix buffer assembler matrix_cache
 
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
@@ -200,7 +200,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         row_grid, col_grid = reorder_pair((grid_i, grid_j))
         row_weights, col_weights = reorder_pair((weights_i, weights_j))
         dof_table_i, dof_table_j = reorder_pair((:($(assembler).row_dof_table), :($(assembler).col_dof_table)))
-        assemble(f) = :(Tesserae.$f($assembler, $buffer, $orientation, $i, $j, $I, $J, $rhs))
+        assemble(f) = :(Tesserae.$f($assembler, $buffer, $matrix_assembly, $orientation, $i, $j, $ip, $jp, $rhs))
         (; matrix,
            zeroed = op == :(=),
            init = quote
@@ -218,17 +218,10 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
                end
            end,
            block_buffer_init = :($buffer = Tesserae.block_matrix_buffer($assembler, $matrix_assembly, $orientation)),
-           jdof = :($J = Tesserae.matrix_col_dofs($buffer, $jp)),
-           idof = :($I = Tesserae.matrix_row_dofs($buffer, $ip)),
            assemble_first = assemble(:assemble_first!),
            assemble_add = assemble(:assemble_add!),
-           assemble_block_entry = :(Tesserae.assemble_block_entry!($assembler, $buffer, $matrix_assembly, $orientation, $i, $j, $rhs)),
-           finish = :(Tesserae.finish_assembly!($assembler, $buffer, $orientation, $gridindices_i, $gridindices_j)),
-           finish_block = :(Tesserae.finish_block_assembly!($assembler, $buffer, $matrix_assembly, $orientation)))
+           finish = :(Tesserae.finish_assembly!($assembler, $buffer, $matrix_assembly, $orientation)))
     end
-
-    local_jdofs = map(t -> t.jdof, targets)
-    local_idofs = map(t -> t.idof, targets)
 
     # Must stay a tuple literal: that is what lets `fillzero_matrix_targets!`
     # recognize a complete set of blocks and zero the parent CSC in one pass.
@@ -251,25 +244,23 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         $bw_i, $bw_j = $weights_i′[$p], $weights_j′[$p]
     end
 
-    # The block path passes no dof lists: its `buffer` is a `BlockMatrixBuffer`,
-    # for which `matrix_row_dofs`/`matrix_col_dofs` have no method on purpose --
-    # block entries address the buffer by node, not by local dof range.
-    function assemble_particle(assembly, jdofs=local_jdofs, idofs=local_idofs)
+    function assemble_particle(assembly)
         quote
             for $jp in eachindex($gridindices_j)
                 $j = $gridindices_j[$jp]
                 $(j_replacements...)
-                $(jdofs...)
                 for $ip in eachindex($gridindices_i)
                     $i = $gridindices_i[$ip]
                     $(i_replacements...)
-                    $(idofs...)
                     $(assembly...)
                 end
             end
         end
     end
 
+    # The cell path peels the first particle so its `assemble_first!` overwrites
+    # the reused local matrix; the block path needs no peel because `acquire!`
+    # returns a zeroed buffer.
     particle_or_cell_body = quote
         $p, $remaining_particles = Base.Iterators.peel($particle_indices)
         $particle_init
@@ -288,9 +279,9 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         for $p in $particle_indices
             $particle_init
             $supportnodes_expr
-            $(assemble_particle(map(t -> t.assemble_block_entry, targets), (), ()).args...)
+            $(assemble_particle(map(t -> t.assemble_add, targets)).args...)
         end
-        $(map(t -> t.finish_block, targets)...)
+        $(map(t -> t.finish, targets)...)
     end
 
     body = quote
