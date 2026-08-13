@@ -30,6 +30,31 @@ reference coordinate system.
     reverse(∂{k}(y -> value(f, y, args...), x, :all))
 end
 
+"""
+    axis_jet_args(kernel, pt, mesh, i)
+
+Extra arguments for the 1-D `jet` evaluation, as one tuple per Cartesian axis.
+Kernels whose 1-D value depends on the local coordinate alone need none.
+"""
+@inline axis_jet_args(::Kernel, pt, mesh::CartesianMesh{dim}, i) where {dim} = nfill((), Val(dim))
+
+# Shared body of the tensor-product kernel jets: evaluate the 1-D kernel per
+# axis, take the tensor product, then undo the reference-coordinate scaling.
+# `@generated` is required because `Order(a-1)` must see `a` as a literal to
+# become a type parameter, which `ntuple(f, Val(N))` cannot supply.
+@generated function separable_nodal_basis_jet(order::Order{k}, kernel, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+    quote
+        @_inline_meta
+        x = getx(pt)
+        h⁻¹ = spacing_inv(mesh)
+        ξ = (x - mesh[i]) * h⁻¹
+        args = axis_jet_args(kernel, pt, mesh, i) # must precede the final `@ntuple`, whose loop variable shadows `i`
+        vals1d = @ntuple $dim d -> jet(order, kernel, ξ[d], args[d]...)
+        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
+        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
+    end
+end
+
 #=
 Standard Cartesian basis extension:
 * Tesserae.support_width(basis)
