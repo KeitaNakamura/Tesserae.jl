@@ -19,10 +19,10 @@ end
     size(value) == (row_ndofs, col_ndofs) || throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
 end
 
-function add_entry_values!(destination, destination_slot, source, source_slot, storage_indices, count)
+function add_entry_values!(destination, destination_slot, source, source_slot, row_components, count)
     @_propagate_inbounds_meta
     for index in 1:count
-        destination[destination_slot + storage_index(storage_indices, index) - 1] += source[source_slot]
+        destination[destination_slot + mapped_index(row_components, index) - 1] += source[source_slot]
         source_slot += 1
     end
     nothing
@@ -34,25 +34,28 @@ end
 
 # ---- CartesianSparseMatrixAssembler ----
 
-# -- storage layout --
+# -- destination layout --
 
-# The DoF tables index the logical destination. `storage_row_ndofs` describes
-# the per-node row layout of its segment in the underlying CSC matrix.
+# The DoF tables index the logical destination. `row_slots_per_node` is the
+# stride between nodes in the destination's nonzeros run. It is the parent's row
+# DoFs per node for a plain matrix and for a CSC view, but the block's own for a
+# `SparseMatrixBlockView`, whose `column_slots` already restrict each column to
+# the block -- so it is deliberately not named after the parent.
 struct CartesianSparseMatrixAssembler{M <: AbstractMatrix, D <: LinearIndices}
     matrix::M
     row_dof_table::D
     col_dof_table::D
-    storage_row_ndofs::Int
+    row_slots_per_node::Int
     sparsity_radius::Int
 end
 
 function cartesian_matrix_column_slots(assembler::CartesianSparseMatrixAssembler, b, col_node)
     @_propagate_inbounds_meta
     (; matrix, col_dof_table) = assembler
-    storage = matrix_storage(matrix)
-    col_storage_indices = last(matrix_storage_indices(matrix))
-    col = storage_index(col_storage_indices, col_dof_table[b,col_node])
-    nzrange(storage, col)
+    parent_matrix = matrix_parent(matrix)
+    col_parent_indices = last(matrix_parent_indices(matrix))
+    col = mapped_index(col_parent_indices, col_dof_table[b,col_node])
+    nzrange(parent_matrix, col)
 end
 
 function cartesian_matrix_column_slots(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixBlockView}, b, col_node)
@@ -61,18 +64,23 @@ function cartesian_matrix_column_slots(assembler::CartesianSparseMatrixAssembler
     matrix.column_slots[col_dof_table[b,col_node]]
 end
 
-@inline function cartesian_matrix_row_storage_indices(assembler::CartesianSparseMatrixAssembler)
-    first(matrix_storage_indices(assembler.matrix))
+# Maps a within-node row DoF (`1:row_ndofs`) to the parent's row DoF component.
+# Not the parent's index list: only the first `row_ndofs` entries are ever read,
+# and they are the components at every node because
+# `check_cartesian_sparse_matrix_view_indices` requires the view to select the
+# same ones node by node. Consumed only by `add_entry_values!`.
+@inline function cartesian_matrix_row_components(assembler::CartesianSparseMatrixAssembler)
+    first(matrix_parent_indices(assembler.matrix))
 end
 
-@inline function cartesian_matrix_row_storage_indices(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixBlockView})
+@inline function cartesian_matrix_row_components(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixBlockView})
     Base.OneTo(size(assembler.row_dof_table, 1))
 end
 
-function cartesian_matrix_storage_row(assembler::CartesianSparseMatrixAssembler, a, row_node)
+function cartesian_matrix_parent_row(assembler::CartesianSparseMatrixAssembler, a, row_node)
     @_propagate_inbounds_meta
     (; matrix, row_dof_table) = assembler
-    storage_index(first(matrix_storage_indices(matrix)), row_dof_table[a,row_node])
+    mapped_index(first(matrix_parent_indices(matrix)), row_dof_table[a,row_node])
 end
 
 # -- construction --
@@ -125,18 +133,18 @@ end
 
 function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler)
     (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
-    storage = matrix_storage(matrix)
+    parent_matrix = matrix_parent(matrix)
     mesh_size = Base.tail(size(row_dof_table))
     row_ndofs = size(row_dof_table, 1)
     col_ndofs = size(col_dof_table, 1)
-    rows = rowvals(storage)
+    rows = rowvals(parent_matrix)
     for col_node in CartesianIndices(mesh_size), b in 1:col_ndofs
         slots = cartesian_matrix_column_slots(assembler, b, col_node)
         k = first(slots)
         stop = last(slots) + 1
         for row_node in cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius), a in 1:row_ndofs
             k < stop || return false
-            rows[k] == cartesian_matrix_storage_row(assembler, a, row_node) || return false
+            rows[k] == cartesian_matrix_parent_row(assembler, a, row_node) || return false
             k += 1
         end
         k == stop || return false
@@ -145,19 +153,19 @@ function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler)
 end
 
 function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixCSCView})
-    (; matrix, row_dof_table, storage_row_ndofs, sparsity_radius) = assembler
+    (; matrix, row_dof_table, row_slots_per_node, sparsity_radius) = assembler
     mesh_size = Base.tail(size(row_dof_table))
-    storage_col_ndofs = size(parent(matrix), 2) ÷ prod(mesh_size)
-    storage_row_dof_table = LinearIndices((storage_row_ndofs, mesh_size...))
-    storage_col_dof_table = LinearIndices((storage_col_ndofs, mesh_size...))
-    storage_assembler = CartesianSparseMatrixAssembler(
+    parent_col_ndofs = size(parent(matrix), 2) ÷ prod(mesh_size)
+    parent_row_dof_table = LinearIndices((row_slots_per_node, mesh_size...))
+    parent_col_dof_table = LinearIndices((parent_col_ndofs, mesh_size...))
+    parent_assembler = CartesianSparseMatrixAssembler(
         parent(matrix),
-        storage_row_dof_table,
-        storage_col_dof_table,
-        storage_row_ndofs,
+        parent_row_dof_table,
+        parent_col_dof_table,
+        row_slots_per_node,
         sparsity_radius,
     )
-    has_cartesian_sparse_pattern(storage_assembler)
+    has_cartesian_sparse_pattern(parent_assembler)
 end
 
 # -- assembly --
@@ -166,20 +174,20 @@ end
 @inline function add_entry!(assembler::CartesianSparseMatrixAssembler, row_node::CartesianIndex, col_node::CartesianIndex, value)
     @boundscheck check_cartesian_matrix_entry(assembler, row_node, col_node, value)
 
-    (; matrix, row_dof_table, col_dof_table, storage_row_ndofs, sparsity_radius) = assembler
-    storage = matrix_storage(matrix)
-    row_storage_indices = cartesian_matrix_row_storage_indices(assembler)
+    (; matrix, row_dof_table, col_dof_table, row_slots_per_node, sparsity_radius) = assembler
+    parent_matrix = matrix_parent(matrix)
+    row_components = cartesian_matrix_row_components(assembler)
     mesh_size = Base.tail(size(row_dof_table))
     row_ndofs = size(row_dof_table, 1)
     col_ndofs = size(col_dof_table, 1)
     neighboring_nodes = cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius)
 
-    row_offset = cartesian_slot_offset(row_node, neighboring_nodes, storage_row_ndofs)
-    values = nonzeros(storage)
+    row_offset = cartesian_slot_offset(row_node, neighboring_nodes, row_slots_per_node)
+    values = nonzeros(parent_matrix)
 
     @inbounds for b in 1:col_ndofs
         slot = first(cartesian_matrix_column_slots(assembler, b, col_node)) + row_offset
-        add_entry_values!(values, slot, value, (b - 1) * row_ndofs + 1, row_storage_indices, row_ndofs)
+        add_entry_values!(values, slot, value, (b - 1) * row_ndofs + 1, row_components, row_ndofs)
     end
 
     matrix
@@ -199,14 +207,14 @@ end
 # -- matrix views --
 
 function CartesianSparseMatrixAssembler(matrix::SparseMatrixCSCView, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
-    storage_assembler = CartesianSparseMatrixAssembler(parent(matrix), row_mesh, col_mesh, row_basis, col_basis)
+    parent_assembler = CartesianSparseMatrixAssembler(parent(matrix), row_mesh, col_mesh, row_basis, col_basis)
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
     assembler = CartesianSparseMatrixAssembler(
         matrix,
         row_dof_table,
         col_dof_table,
-        storage_assembler.storage_row_ndofs,
-        storage_assembler.sparsity_radius,
+        parent_assembler.row_slots_per_node,
+        parent_assembler.sparsity_radius,
     )
     check_cartesian_sparse_matrix_view(assembler)
     assembler
@@ -231,12 +239,12 @@ function CartesianSparseMatrixAssembler(::SparseMatrixBlockView, ::CartesianMesh
 end
 
 @noinline function check_cartesian_sparse_matrix_view(assembler::CartesianSparseMatrixAssembler)
-    (; matrix, row_dof_table, col_dof_table, storage_row_ndofs) = assembler
+    (; matrix, row_dof_table, col_dof_table, row_slots_per_node) = assembler
     node_count = prod(Base.tail(size(row_dof_table)))
-    storage_col_ndofs = size(parent(matrix), 2) ÷ node_count
-    row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
-    check_cartesian_sparse_matrix_view_indices(row_storage_indices, row_dof_table, storage_row_ndofs)
-    check_cartesian_sparse_matrix_view_indices(col_storage_indices, col_dof_table, storage_col_ndofs)
+    parent_col_ndofs = size(parent(matrix), 2) ÷ node_count
+    row_parent_indices, col_parent_indices = matrix_parent_indices(matrix)
+    check_cartesian_sparse_matrix_view_indices(row_parent_indices, row_dof_table, row_slots_per_node)
+    check_cartesian_sparse_matrix_view_indices(col_parent_indices, col_dof_table, parent_col_ndofs)
     nothing
 end
 
@@ -265,30 +273,30 @@ end
 function add!(assembler::GenericMatrixAssembler, row_nodes, col_nodes, local_matrix)
     @_propagate_inbounds_meta
     (; matrix, row_dof_table, col_dof_table) = assembler
-    storage = matrix_storage(matrix)
-    row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
+    parent_matrix = matrix_parent(matrix)
+    row_parent_indices, col_parent_indices = matrix_parent_indices(matrix)
     row_dofs, col_dofs = support_dofs(row_dof_table, row_nodes, col_dof_table, col_nodes)
-    if row_dofs === col_dofs && row_storage_indices === col_storage_indices
-        dofs = storage_index(row_storage_indices, row_dofs)
-        add!(storage, dofs, dofs, local_matrix)
+    if row_dofs === col_dofs && row_parent_indices === col_parent_indices
+        dofs = mapped_index(row_parent_indices, row_dofs)
+        add!(parent_matrix, dofs, dofs, local_matrix)
     else
-        add!(storage, storage_index(row_storage_indices, row_dofs), storage_index(col_storage_indices, col_dofs), local_matrix)
+        add!(parent_matrix, mapped_index(row_parent_indices, row_dofs), mapped_index(col_parent_indices, col_dofs), local_matrix)
     end
     matrix
 end
 
-# GenericMatrixAssembler writes entries through the storage indexing interface.
+# GenericMatrixAssembler writes entries through ordinary `setindex!` on the parent.
 @inline function add_entry!(assembler::GenericMatrixAssembler, row_node, col_node, value)
     (; matrix, row_dof_table, col_dof_table) = assembler
-    storage = matrix_storage(matrix)
-    row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
+    parent_matrix = matrix_parent(matrix)
+    row_parent_indices, col_parent_indices = matrix_parent_indices(matrix)
     row_ndofs = size(row_dof_table, 1)
     col_ndofs = size(col_dof_table, 1)
     @boundscheck check_matrix_entry_size(value, row_ndofs, col_ndofs)
     @inbounds for b in 1:col_ndofs, a in 1:row_ndofs
-        row = storage_index(row_storage_indices, row_dof_table[a,row_node])
-        col = storage_index(col_storage_indices, col_dof_table[b,col_node])
-        storage[row,col] += value[(b - 1) * row_ndofs + a]
+        row = mapped_index(row_parent_indices, row_dof_table[a,row_node])
+        col = mapped_index(col_parent_indices, col_dof_table[b,col_node])
+        parent_matrix[row,col] += value[(b - 1) * row_ndofs + a]
     end
     matrix
 end

@@ -204,14 +204,14 @@ function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrix
     @_propagate_inbounds_meta
     @boundscheck check_block_matrix_scatter(assembler, buffer, row_nodes, col_nodes)
 
-    (; matrix, row_dof_table, storage_row_ndofs, sparsity_radius) = assembler
-    storage = matrix_storage(matrix)
-    row_storage_indices = cartesian_matrix_row_storage_indices(assembler)
+    (; matrix, row_dof_table, row_slots_per_node, sparsity_radius) = assembler
+    parent_matrix = matrix_parent(matrix)
+    row_components = cartesian_matrix_row_components(assembler)
     (; values, node_colstarts, key) = buffer
     (; row_size, col_size, col_offset, row_ndofs, col_ndofs) = key
 
     mesh_size = Base.tail(size(row_dof_table))
-    matrix_values = nonzeros(storage)
+    matrix_values = nonzeros(parent_matrix)
     first_row_node = first(row_nodes)
     first_col_node = first(col_nodes)
     for (local_col, local_col_node) in enumerate(CartesianIndices(col_size))
@@ -223,8 +223,8 @@ function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrix
             for (local_row, local_row_node) in enumerate(neighboring_rows)
                 local_slot = node_colstarts[local_col] + ((local_row - 1) * col_ndofs + b - 1) * row_ndofs
                 row_node = local_row_node + first_row_node - oneunit(first_row_node)
-                matrix_slot = matrix_col_start + cartesian_slot_offset(row_node, matrix_neighboring_rows, storage_row_ndofs)
-                add_entry_values!(matrix_values, matrix_slot, values, local_slot, row_storage_indices, row_ndofs)
+                matrix_slot = matrix_col_start + cartesian_slot_offset(row_node, matrix_neighboring_rows, row_slots_per_node)
+                add_entry_values!(matrix_values, matrix_slot, values, local_slot, row_components, row_ndofs)
             end
         end
     end

@@ -203,7 +203,7 @@
         assembler = @inferred Tesserae.matrix_assembler(sequential, mesh, mesh, basis, basis)
         @test assembler isa Tesserae.CartesianSparseMatrixAssembler
         @test assembler.matrix === sequential
-        @test Tesserae.matrix_storage(assembler.matrix) === parent_sequential
+        @test Tesserae.matrix_parent(assembler.matrix) === parent_sequential
         @test Tesserae.has_cartesian_sparse_pattern(assembler)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin

@@ -193,26 +193,42 @@ function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::IGAMesh{
     nothing
 end
 
-# ---- storage ----
+# ---- parent matrix ----
 #
-# How a matrix target reaches its values. Any `AbstractArray` already works
-# through the generic fallbacks below: storage is the array itself and the
-# indices are its own axes, so `storage_index` is the identity. A wrapper that
-# keeps its values somewhere else -- a view, or a block of a shared parent --
-# overrides `matrix_storage`/`matrix_storage_indices` so that `extract` and the
-# assemblers below reach the parent storage and remap indices into it.
-# `fillzero!` follows the same split: it must zero only the entries the target
-# owns, not the whole parent.
+# How a matrix target reaches the array that owns its values. An `AbstractArray`
+# is its own parent, and its indices are its own axes, so `mapped_index` is
+# the identity. A wrapper that keeps its values elsewhere -- a view, or a block
+# of a shared matrix -- overrides `matrix_parent`/`matrix_parent_indices` so
+# that `extract` and the assemblers below reach the parent and remap indices
+# into it. `fillzero!` follows the same split: it must zero only the entries the
+# target owns, not the whole parent.
+#
+# `mapped_index` is only the lookup; what the result means is the caller's. At
+# every site but one it takes a global logical DoF number and returns the
+# parent's row or column number -- fed to `nzrange`, compared against `rowvals`,
+# or used to index the parent directly.
+#
+# The exception is `add_entry_values!`, which passes a within-node DoF number
+# (`1:ndofs`) and adds the result to a slot into `nonzeros`. There the result is
+# the parent's DoF *component*, and using it as an offset is valid only because
+# a view must select the same components at every node --
+# `check_cartesian_sparse_matrix_view_indices` enforces exactly that, per node.
+#
+# So it is neither "an index into the parent" nor "an index into the stored
+# values"; either name is wrong at some call site. `storageindex` is the one
+# that really is a position in the stored values: for a `SparseMatrixBlockView`
+# an index into `nonzeros(parent(block))`, for an `SpArray` an index into its
+# data array.
 
-matrix_storage(matrix) = matrix
-matrix_storage(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView, SparseMatrixBlocks}) = parent(matrix)
+matrix_parent(matrix) = matrix
+matrix_parent(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView, SparseMatrixBlocks}) = parent(matrix)
 
-matrix_storage_indices(matrix) = axes(matrix)
-matrix_storage_indices(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView}) = parentindices(matrix)
-matrix_storage_indices(matrix::SparseMatrixBlocks) = axes(parent(matrix))
+matrix_parent_indices(matrix) = axes(matrix)
+matrix_parent_indices(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView}) = parentindices(matrix)
+matrix_parent_indices(matrix::SparseMatrixBlocks) = axes(parent(matrix))
 
-storage_index(::Base.OneTo, index) = index
-storage_index(indices, index) = (@_propagate_inbounds_meta; indices[index])
+mapped_index(::Base.OneTo, index) = index
+mapped_index(indices, index) = (@_propagate_inbounds_meta; indices[index])
 
 # ---- extraction ----
 
@@ -223,13 +239,13 @@ Extract the active degrees of freedom of a matrix.
 """
 function extract(matrix::AbstractMatrix, dofmap_i, dofmap_j = dofmap_i)
     I, J = _indices_for_extract(matrix, dofmap_i, dofmap_j)
-    row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
-    matrix_storage(matrix)[storage_index(row_storage_indices, I), storage_index(col_storage_indices, J)]
+    row_parent_indices, col_parent_indices = matrix_parent_indices(matrix)
+    matrix_parent(matrix)[mapped_index(row_parent_indices, I), mapped_index(col_parent_indices, J)]
 end
 function extract(::typeof(view), matrix::AbstractMatrix, dofmap_i, dofmap_j = dofmap_i)
     I, J = _indices_for_extract(matrix, dofmap_i, dofmap_j)
-    row_storage_indices, col_storage_indices = matrix_storage_indices(matrix)
-    view(matrix_storage(matrix), storage_index(row_storage_indices, I), storage_index(col_storage_indices, J))
+    row_parent_indices, col_parent_indices = matrix_parent_indices(matrix)
+    view(matrix_parent(matrix), mapped_index(row_parent_indices, I), mapped_index(col_parent_indices, J))
 end
 
 function _indices_for_extract(matrix::AbstractMatrix, dofmap_i::Union{AbstractDofMap, Colon}, dofmap_j::Union{AbstractDofMap, Colon})
