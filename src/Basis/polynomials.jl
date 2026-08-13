@@ -6,6 +6,20 @@ struct Polynomial{D <: Union{Degree, MultiLinear, MultiQuadratic}}
 end
 Base.show(io::IO, poly::Polynomial) = print(io, Polynomial, "(", poly.degree, ")")
 
+# Polynomial bases admissible for a least-squares correction (`WLS`,
+# `KernelCorrection`). Higher degrees are deliberately excluded: a kernel support
+# does not carry enough independent nodes to condition the moment matrix, so
+# `inv(M)` silently returns garbage. With `Polynomial(Quadratic())` on a
+# quadratic B-spline support, 94% of interior points give negative weights and
+# `sum(w)` reaches 1e16 instead of 1.
+const CorrectionPolynomial = Polynomial{<: Union{Linear, MultiLinear}}
+
+function unsupported_correction_polynomial(name, poly)
+    "$name supports Polynomial(Linear()) and Polynomial(MultiLinear()), got $poly. \
+     A higher-degree basis leaves the weighted least-squares moment matrix singular \
+     on a kernel support, producing negative and unbounded weights."
+end
+
 @inline value(p::Polynomial, x::Vec) = _value(Order(0), p, x)
 @generated function jet(::Order{k}, p::Polynomial{<: Union{Linear, MultiLinear}}, x::Vec) where {k}
     quote

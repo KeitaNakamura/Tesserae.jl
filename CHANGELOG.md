@@ -18,6 +18,16 @@ All notable changes to Tesserae.jl will be documented in this file.
   `create_block_sparse_matrix` instead of validating every block on each
   `@P2G_Matrix` call.
 
+### Fixed
+
+- `WLS` and `KernelCorrection` now reject polynomial bases above
+  `Polynomial(Linear())` / `Polynomial(MultiLinear())` with an `ArgumentError`
+  instead of accepting them. A kernel support does not carry enough independent
+  nodes to condition the least-squares moment matrix for a higher degree, so
+  those combinations silently produced negative and unbounded weights.
+  `Polynomial(Quadratic())` and `Polynomial(MultiQuadratic())` remain valid on
+  their own.
+
 ## v0.7.4
 
 ### Added

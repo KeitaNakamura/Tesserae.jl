@@ -10,12 +10,13 @@ See also [`SteffenBSpline`](@ref).
 
 [^KC]: [Nakamura, K., Matsumura, S., & Mizutani, T. (2023). Taylor particle-in-cell transfer and kernel correction for material point method. *Computer Methods in Applied Mechanics and Engineering*, 403, 115720.](https://doi.org/10.1016/j.cma.2022.115720)
 """
-struct KernelCorrection{K <: Kernel, P <: Polynomial} <: Basis
+struct KernelCorrection{K <: Kernel, P <: CorrectionPolynomial} <: Basis
     kernel::K
     poly::P
 end
 
 KernelCorrection(k::Kernel) = KernelCorrection(k, Polynomial(MultiLinear()))
+KernelCorrection(::Kernel, poly::Polynomial) = throw(ArgumentError(unsupported_correction_polynomial("KernelCorrection", poly)))
 
 support_width(kc::KernelCorrection) = support_width(kc.kernel)
 @inline supportnodes(kc::KernelCorrection, pt, mesh::CartesianMesh) = supportnodes(kc.kernel, pt, mesh)
