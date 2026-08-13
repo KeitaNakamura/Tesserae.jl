@@ -95,10 +95,11 @@ function FEMesh(shape::Shape{dim}, mesh::CartesianMesh{dim}) where {dim}
 
     FEMesh(shape, mesh′[findall(>(0), nodeindices)], vec(connecitivies))
 end
-_cellnodes_ranges(::Order{1}, cellsize::Dims) = maparray(I -> I:(I+oneunit(I)), CartesianIndices(cellsize))
-_cellnodes_ranges(::Order{2}, cellsize::Dims) = maparray(I -> (2I-oneunit(I)):(2I+oneunit(I)), CartesianIndices(cellsize))
+# An order-`n` cell spans `n` intervals, so its nodes are `n(I-1)+1` to `nI+1`.
+_cellnodes_ranges(::Order{n}, cellsize::Dims) where {n} = maparray(I -> (n*I-(n-1)*oneunit(I)):(n*I+oneunit(I)), CartesianIndices(cellsize))
 @inline _cellnodes_connectivities(::Line2, CI::CartesianIndices{1}) = @inbounds (SVector(CI[1], CI[2]),)
 @inline _cellnodes_connectivities(::Line3, CI::CartesianIndices{1}) = @inbounds (SVector(CI[1], CI[3], CI[2]),)
+@inline _cellnodes_connectivities(::Line4, CI::CartesianIndices{1}) = @inbounds (SVector(CI[1], CI[4], CI[2], CI[3]),)
 @inline _cellnodes_connectivities(::Quad4, CI::CartesianIndices{2}) = @inbounds (SVector(CI[1,1], CI[2,1], CI[2,2], CI[1,2]),)
 @inline _cellnodes_connectivities(::Quad8, CI::CartesianIndices{2}) = @inbounds (SVector(CI[1,1], CI[3,1], CI[3,3], CI[1,3], CI[2,1], CI[3,2], CI[2,3], CI[1,2]),)
 @inline _cellnodes_connectivities(::Quad9, CI::CartesianIndices{2}) = @inbounds (SVector(CI[1,1], CI[3,1], CI[3,3], CI[1,3], CI[2,1], CI[3,2], CI[2,3], CI[1,2], CI[2,2]),)
@@ -110,13 +111,13 @@ _cellnodes_ranges(::Order{2}, cellsize::Dims) = maparray(I -> (2I-oneunit(I)):(2
 @inline _cellnodes_connectivities(::Tet4,  CI::CartesianIndices{3}) = @inbounds (SVector(CI[1,1,1], CI[2,1,1], CI[2,2,1], CI[2,2,2]), SVector(CI[1,1,1], CI[2,1,2], CI[2,1,1], CI[2,2,2]), SVector(CI[1,1,1], CI[2,2,1], CI[1,2,1], CI[2,2,2]), SVector(CI[1,1,1], CI[1,2,1], CI[1,2,2], CI[2,2,2]), SVector(CI[1,1,1], CI[1,2,2], CI[1,1,2], CI[2,2,2]), SVector(CI[1,1,1], CI[1,1,2], CI[2,1,2], CI[2,2,2]))
 @inline _cellnodes_connectivities(::Tet10, CI::CartesianIndices{3}) = @inbounds (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[3,3,3], CI[2,1,1], CI[2,2,1], CI[2,2,2], CI[3,2,1], CI[3,3,2], CI[3,2,2]), SVector(CI[1,1,1], CI[3,1,3], CI[3,1,1], CI[3,3,3], CI[2,1,2], CI[2,1,1], CI[2,2,2], CI[3,1,2], CI[3,2,2], CI[3,2,3]), SVector(CI[1,1,1], CI[3,3,1], CI[1,3,1], CI[3,3,3], CI[2,2,1], CI[1,2,1], CI[2,2,2], CI[2,3,1], CI[2,3,2], CI[3,3,2]), SVector(CI[1,1,1], CI[1,3,1], CI[1,3,3], CI[3,3,3], CI[1,2,1], CI[1,2,2], CI[2,2,2], CI[1,3,2], CI[2,3,3], CI[2,3,2]), SVector(CI[1,1,1], CI[1,3,3], CI[1,1,3], CI[3,3,3], CI[1,2,2], CI[1,1,2], CI[2,2,2], CI[1,2,3], CI[2,2,3], CI[2,3,3]), SVector(CI[1,1,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,1,2], CI[2,1,2], CI[2,2,2], CI[2,1,3], CI[3,2,3], CI[2,2,3]))
 
-adapt_mesh(::Order{1}, mesh::CartesianMesh) = mesh
-function adapt_mesh(::Order{2}, mesh::CartesianMesh{dim}) where {dim}
+adapt_mesh(::Order{1}, mesh::CartesianMesh) = mesh # no subdivision, so keep the mesh itself
+function adapt_mesh(::Order{n}, mesh::CartesianMesh{dim}) where {n, dim}
     CartesianMesh(ntuple(Val(dim)) do d
         xmin = get_xmin(mesh)[d]
         xmax = get_xmax(mesh)[d]
         h = spacing(mesh)
-        xmin:(h/2):xmax
+        xmin:(h/n):xmax
     end...; block_size_log2=Val(block_size_log2(mesh)))
 end
 

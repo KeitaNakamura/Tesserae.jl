@@ -190,7 +190,15 @@ end
     end
     cmesh = CartesianMesh(1, (0,2))
     @test compute_volume(FEMesh(Tesserae.Line2(), cmesh)) ≈
-          compute_volume(FEMesh(Tesserae.Line3(), cmesh)) ≈ 2
+          compute_volume(FEMesh(Tesserae.Line3(), cmesh)) ≈
+          compute_volume(FEMesh(Tesserae.Line4(), cmesh)) ≈ 2
+
+    # Cell nodes must follow `localnodes`: both endpoints first, then the
+    # interior nodes left to right. A permuted connectivity still integrates to
+    # the right volume, so pin the positions themselves.
+    line4_mesh = FEMesh(Tesserae.Line4(), CartesianMesh(1, (0,1)))
+    @test length(line4_mesh.nodes) == 4
+    @test [x[1] for x in line4_mesh.nodes[supportnodes(line4_mesh, only(cells(line4_mesh)))]] ≈ [0, 1, 1/3, 2/3]
 
     cmesh = CartesianMesh(1, (0,2), (-1,3))
     @test compute_volume(FEMesh(Tesserae.Quad4(), cmesh)) ≈
