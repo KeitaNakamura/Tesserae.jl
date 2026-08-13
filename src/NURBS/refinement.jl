@@ -66,13 +66,6 @@ function refine_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new::
 
     isempty(knots) && return values
 
-    perm = ntuple(Val(N)) do i
-        i == 1 && return direction
-        ifelse(i ≤ direction, i - 1, i)
-    end
-    columns_old = reshape(PermutedDimsArray(values, perm), size(values, direction), :)
-    columns_new = similar(columns_old, S, n_new, size(columns_old, 2))
-
     # Standard knot-refinement pass. The inserted knots are handled in one
     # backward sweep, so each tensor-product fiber is copied only once.
     r = length(knots) - 1
@@ -82,50 +75,48 @@ function refine_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new::
     a = searchsortedlast(knot_vector_old, first(knots)) - 1
     b = searchsortedlast(knot_vector_old, last(knots))
 
-    for fiber in axes(columns_old, 2)
-        # Controls outside the refined knot interval are unchanged.
-        for j in 0:(a-p)
-            columns_new[j+1, fiber] = columns_old[j+1, fiber]
-        end
-        for j in (b-1):(n_old-1)
-            columns_new[j+length(knots)+1, fiber] = columns_old[j+1, fiber]
-        end
-
-        # `i` walks the old controls from right to left; `k` walks the new
-        # controls, leaving room for the inserted knots as they are processed.
-        i = b + p - 1
-        k = b + p + r
-        for j in (r+1):-1:1
-            ξ = knots[j]
-
-            # Move old controls that lie to the right of the current inserted
-            # knot into their final positions.
-            while i > a && ξ ≤ knot_vector_old[i+1]
-                columns_new[k-p, fiber] = columns_old[i-p, fiber]
-                k -= 1
-                i -= 1
+    map_fibers(values, direction, n_new) do columns_new, columns_old
+        for fiber in axes(columns_old, 2)
+            # Controls outside the refined knot interval are unchanged.
+            for j in 0:(a-p)
+                columns_new[j+1, fiber] = columns_old[j+1, fiber]
+            end
+            for j in (b-1):(n_old-1)
+                columns_new[j+length(knots)+1, fiber] = columns_old[j+1, fiber]
             end
 
-            # Update the p affected controls by the usual knot-insertion
-            # convex combinations.
-            columns_new[k-p, fiber] = columns_new[k-p+1, fiber]
-            for l in 1:p
-                row = k - p + l
-                numerator = knot_vector_new[k+l+1] - ξ
-                if iszero(numerator)
-                    columns_new[row, fiber] = columns_new[row+1, fiber]
-                else
-                    α = numerator / (knot_vector_new[k+l+1] - knot_vector_old[i-p+l+1])
-                    columns_new[row, fiber] = α * columns_new[row, fiber] + (1 - α) * columns_new[row+1, fiber]
+            # `i` walks the old controls from right to left; `k` walks the new
+            # controls, leaving room for the inserted knots as they are processed.
+            i = b + p - 1
+            k = b + p + r
+            for j in (r+1):-1:1
+                ξ = knots[j]
+
+                # Move old controls that lie to the right of the current inserted
+                # knot into their final positions.
+                while i > a && ξ ≤ knot_vector_old[i+1]
+                    columns_new[k-p, fiber] = columns_old[i-p, fiber]
+                    k -= 1
+                    i -= 1
                 end
+
+                # Update the p affected controls by the usual knot-insertion
+                # convex combinations.
+                columns_new[k-p, fiber] = columns_new[k-p+1, fiber]
+                for l in 1:p
+                    row = k - p + l
+                    numerator = knot_vector_new[k+l+1] - ξ
+                    if iszero(numerator)
+                        columns_new[row, fiber] = columns_new[row+1, fiber]
+                    else
+                        α = numerator / (knot_vector_new[k+l+1] - knot_vector_old[i-p+l+1])
+                        columns_new[row, fiber] = α * columns_new[row, fiber] + (1 - α) * columns_new[row+1, fiber]
+                    end
+                end
+                k -= 1
             end
-            k -= 1
         end
     end
-
-    dims_new = ntuple(i -> i == 1 ? n_new : size(values, perm[i]), Val(N))
-    values_new = reshape(columns_new, dims_new)
-    permutedims(values_new, invperm(perm))
 end
 
 function insert_knot_values(values::Array{S, N}, axis::BSplineAxis{T}, ξ::T, direction::Int) where {S, N, T}
@@ -134,29 +125,20 @@ function insert_knot_values(values::Array{S, N}, axis::BSplineAxis{T}, ξ::T, di
     multiplicity = count(==(ξ), knot_vector)
     span = searchsortedlast(knot_vector, ξ)
 
-    perm = ntuple(Val(N)) do i
-        i == 1 && return direction
-        ifelse(i ≤ direction, i - 1, i)
-    end
-    columns_old = reshape(PermutedDimsArray(values, perm), size(values, direction), :)
-    columns_new = similar(columns_old, S, size(columns_old, 1) + 1, size(columns_old, 2))
-
-    for col in axes(columns_old, 2)
-        for row in 1:(span-p)
-            columns_new[row, col] = columns_old[row, col]
-        end
-        for row in (span-multiplicity+1):size(columns_new, 1)
-            columns_new[row, col] = columns_old[row-1, col]
-        end
-        for row in (span-p+1):(span-multiplicity)
-            α = (ξ - knot_vector[row]) / (knot_vector[row+p] - knot_vector[row])
-            columns_new[row, col] = α * columns_old[row, col] + (1 - α) * columns_old[row-1, col]
+    map_fibers(values, direction, size(values, direction) + 1) do columns_new, columns_old
+        for col in axes(columns_old, 2)
+            for row in 1:(span-p)
+                columns_new[row, col] = columns_old[row, col]
+            end
+            for row in (span-multiplicity+1):size(columns_new, 1)
+                columns_new[row, col] = columns_old[row-1, col]
+            end
+            for row in (span-p+1):(span-multiplicity)
+                α = (ξ - knot_vector[row]) / (knot_vector[row+p] - knot_vector[row])
+                columns_new[row, col] = α * columns_old[row, col] + (1 - α) * columns_old[row-1, col]
+            end
         end
     end
-
-    dims_new = ntuple(i -> i == 1 ? size(columns_new, 1) : size(values, perm[i]), Val(N))
-    values_new = reshape(columns_new, dims_new)
-    permutedims(values_new, invperm(perm))
 end
 
 """

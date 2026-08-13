@@ -85,34 +85,6 @@ function elevate_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new:
     multiplicities = knot_multiplicities(knots_old)
     nspans = length(multiplicities) - 1
 
-    perm = ntuple(Val(N)) do i
-        i == 1 && return direction
-        ifelse(i ≤ direction, i - 1, i)
-    end
-    columns_old = reshape(PermutedDimsArray(values, perm), size(values, direction), :)
-    columns_new = similar(columns_old, S, n_new, size(columns_old, 2))
-
-    # P[:, d, :] stores the (d-1)-th scaled divided differences of the old
-    # control points. Q is the same table for the elevated curve.
-    P = Array{S}(undef, n_old, order, size(columns_old, 2))
-    Q = Array{S}(undef, n_new, order, size(columns_old, 2))
-    fill!(P, zero(S))
-    fill!(Q, zero(S))
-
-    for fiber in axes(columns_old, 2)
-        for i in 1:n_old
-            P[i, 1, fiber] = columns_old[i, fiber]
-        end
-        for d in 2:order
-            l = d - 1
-            for i in 1:(n_old-l)
-                denominator = knots_old[i+order] - knots_old[i+l]
-                denominator > zero(T) || continue
-                P[i, d, fiber] = (P[i+1, d-1, fiber] - P[i, d-1, fiber]) / denominator
-            end
-        end
-    end
-
     # β[span] is the old control index at the left end of each nonzero span,
     # written as a zero-based offset to match the degree-elevation formulas.
     β = Vector{Int}(undef, nspans)
@@ -128,43 +100,62 @@ function elevate_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new:
         α[d] = α[d-1] * T(order - d + 1) / T(order + dp - d + 1)
     end
 
-    for fiber in axes(columns_old, 2)
-        # Boundary divided differences at each span start.
-        for span in 1:nspans
-            i_old = β[span] + 1
-            i_new = β[span] + (span - 1) * dp + 1
-            multiplicity = multiplicities[span][2]
-            for d in (order-multiplicity+1):order
-                Q[i_new, d, fiber] = α[d] * P[i_old, d, fiber]
+    map_fibers(values, direction, n_new) do columns_new, columns_old
+        # P[:, d, :] stores the (d-1)-th scaled divided differences of the old
+        # control points. Q is the same table for the elevated curve.
+        P = Array{S}(undef, n_old, order, size(columns_old, 2))
+        Q = Array{S}(undef, n_new, order, size(columns_old, 2))
+        fill!(P, zero(S))
+        fill!(Q, zero(S))
+
+        for fiber in axes(columns_old, 2)
+            for i in 1:n_old
+                P[i, 1, fiber] = columns_old[i, fiber]
+            end
+            for d in 2:order
+                l = d - 1
+                for i in 1:(n_old-l)
+                    denominator = knots_old[i+order] - knots_old[i+l]
+                    denominator > zero(T) || continue
+                    P[i, d, fiber] = (P[i+1, d-1, fiber] - P[i, d-1, fiber]) / denominator
+                end
             end
         end
 
-        # Each elevated span receives `dp` repeated highest-order boundary
-        # values before the remaining divided differences are reconstructed.
-        for span in 1:nspans
-            i_new = β[span] + (span - 1) * dp + 1
-            for offset in 1:dp
-                Q[i_new+offset, order, fiber] = Q[i_new, order, fiber]
+        for fiber in axes(columns_old, 2)
+            # Boundary divided differences at each span start.
+            for span in 1:nspans
+                i_old = β[span] + 1
+                i_new = β[span] + (span - 1) * dp + 1
+                multiplicity = multiplicities[span][2]
+                for d in (order-multiplicity+1):order
+                    Q[i_new, d, fiber] = α[d] * P[i_old, d, fiber]
+                end
             end
-        end
 
-        # Reconstruct lower-order divided differences from right to left. The
-        # first layer of Q is the elevated control points.
-        for d in order:-1:2
-            for i in 1:(n_new-1)
-                left = knots_new[i+d-1]
-                right = knots_new[i+p_new+1]
-                right > left || continue
-                Q[i+1, d-1, fiber] = Q[i, d-1, fiber] + (right - left) * Q[i, d, fiber]
+            # Each elevated span receives `dp` repeated highest-order boundary
+            # values before the remaining divided differences are reconstructed.
+            for span in 1:nspans
+                i_new = β[span] + (span - 1) * dp + 1
+                for offset in 1:dp
+                    Q[i_new+offset, order, fiber] = Q[i_new, order, fiber]
+                end
             end
-        end
 
-        for i in 1:n_new
-            columns_new[i, fiber] = Q[i, 1, fiber]
+            # Reconstruct lower-order divided differences from right to left. The
+            # first layer of Q is the elevated control points.
+            for d in order:-1:2
+                for i in 1:(n_new-1)
+                    left = knots_new[i+d-1]
+                    right = knots_new[i+p_new+1]
+                    right > left || continue
+                    Q[i+1, d-1, fiber] = Q[i, d-1, fiber] + (right - left) * Q[i, d, fiber]
+                end
+            end
+
+            for i in 1:n_new
+                columns_new[i, fiber] = Q[i, 1, fiber]
+            end
         end
     end
-
-    dims_new = ntuple(i -> i == 1 ? n_new : size(values, perm[i]), Val(N))
-    values_new = reshape(columns_new, dims_new)
-    permutedims(values_new, invperm(perm))
 end
