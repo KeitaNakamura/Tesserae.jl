@@ -101,35 +101,38 @@ function elevate_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new:
     end
 
     map_fibers(values, direction, n_new) do columns_new, columns_old
-        # P[:, d, :] stores the (d-1)-th scaled divided differences of the old
-        # control points. Q is the same table for the elevated curve.
-        P = Array{S}(undef, n_old, order, size(columns_old, 2))
-        Q = Array{S}(undef, n_new, order, size(columns_old, 2))
-        fill!(P, zero(S))
-        fill!(Q, zero(S))
+        # P[:, d] holds the (d-1)-th scaled divided differences of one fiber's
+        # old control points; Q is the same table for the elevated fiber.
+        # Nothing is ever read across fibers, so both are scratch reused for
+        # each one -- and both must therefore be re-zeroed per fiber: the
+        # `continue` guards below leave skipped entries untouched, and the
+        # boundary loops write only part of Q.
+        P = Array{S}(undef, n_old, order)
+        Q = Array{S}(undef, n_new, order)
 
         for fiber in axes(columns_old, 2)
+            fill!(P, zero(S))
+            fill!(Q, zero(S))
+
             for i in 1:n_old
-                P[i, 1, fiber] = columns_old[i, fiber]
+                P[i, 1] = columns_old[i, fiber]
             end
             for d in 2:order
                 l = d - 1
                 for i in 1:(n_old-l)
                     denominator = knots_old[i+order] - knots_old[i+l]
                     denominator > zero(T) || continue
-                    P[i, d, fiber] = (P[i+1, d-1, fiber] - P[i, d-1, fiber]) / denominator
+                    P[i, d] = (P[i+1, d-1] - P[i, d-1]) / denominator
                 end
             end
-        end
 
-        for fiber in axes(columns_old, 2)
             # Boundary divided differences at each span start.
             for span in 1:nspans
                 i_old = β[span] + 1
                 i_new = β[span] + (span - 1) * dp + 1
                 multiplicity = multiplicities[span][2]
                 for d in (order-multiplicity+1):order
-                    Q[i_new, d, fiber] = α[d] * P[i_old, d, fiber]
+                    Q[i_new, d] = α[d] * P[i_old, d]
                 end
             end
 
@@ -138,7 +141,7 @@ function elevate_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new:
             for span in 1:nspans
                 i_new = β[span] + (span - 1) * dp + 1
                 for offset in 1:dp
-                    Q[i_new+offset, order, fiber] = Q[i_new, order, fiber]
+                    Q[i_new+offset, order] = Q[i_new, order]
                 end
             end
 
@@ -149,12 +152,12 @@ function elevate_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new:
                     left = knots_new[i+d-1]
                     right = knots_new[i+p_new+1]
                     right > left || continue
-                    Q[i+1, d-1, fiber] = Q[i, d-1, fiber] + (right - left) * Q[i, d, fiber]
+                    Q[i+1, d-1] = Q[i, d-1] + (right - left) * Q[i, d]
                 end
             end
 
             for i in 1:n_new
-                columns_new[i, fiber] = Q[i, 1, fiber]
+                columns_new[i, fiber] = Q[i, 1]
             end
         end
     end
