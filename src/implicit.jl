@@ -1443,65 +1443,65 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     j_replacements = cached_replacements(scope, j, jp)
     inner_symbols = p2g_cached_symbols(cached_replacements(scope, i, j, ip, jp))
 
+    # One record per matrix target. `gmats` and `hoist_exprs` stay shared across
+    # equations: the first is the duplicate-target guard, read while the records
+    # are still being built, and the second collects a flat cross-equation list
+    # that is emitted once, before the loops.
     gmats = Any[]
-    matrices_init = Expr[]
-    matrix_targets_to_zero = Symbol[]
     hoist_exprs = Expr[]
-    buffers_init = Expr[]
-    block_buffers_init = Expr[]
-    local_jdofs = Expr[]
-    local_idofs = Expr[]
-    assemble_first = Expr[]
-    assemble_add = Expr[]
-    assemble_block_entries = Expr[]
-    finish_assemblies = Expr[]
-    finish_block_assemblies = Expr[]
-    for equation in equations
+    targets = map(equations) do equation
         (; lhs, rhs, op) = equation
         @capture(lhs, gmat_[gi_,gj_]) || error("@P2G_Matrix: Invalid global matrix expression, got `$lhs`")
         ((gi == i && gj == j) || (gi == j && gj == i)) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
         gmat in gmats && error("@P2G_Matrix: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
+        push!(gmats, gmat)
 
         @gensym matrix buffer assembler matrix_cache I J
 
-        op == :(=) && push!(matrix_targets_to_zero, matrix)
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
-        push!(gmats, gmat)
-        forward = gi == i && gj == j
-        reorder_pair = forward ? identity : reverse
-        orientation = forward ? :(Base.identity) : :(Base.reverse)
+        reorder_pair = (gi == i && gj == j) ? identity : reverse
+        orientation = reorder_pair === identity ? :(Base.identity) : :(Base.reverse)
         row_grid, col_grid = reorder_pair((grid_i, grid_j))
         row_weights, col_weights = reorder_pair((weights_i, weights_j))
         dof_table_i, dof_table_j = reorder_pair((:($(assembler).row_dof_table), :($(assembler).col_dof_table)))
-        push!(matrices_init, quote
-            $matrix = $gmat
-            $assembler = Tesserae.matrix_assembler($matrix, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
-            $matrix_cache = Tesserae.local_matrix_cache($matrix, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
-        end)
-        push!(buffers_init, quote
-            if $matrix_assembly isa Tesserae.ParticleAssembly
-                $buffer = nothing
-            elseif $matrix_assembly isa Tesserae.CellAssembly
-                $buffer = Tesserae.local_matrix_buffer($matrix_cache, $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
-            else
-                error("BlockAssembly must use block assembly")
-            end
-        end)
-        push!(block_buffers_init, :($buffer = Tesserae.block_matrix_buffer($assembler, $matrix_assembly, $orientation)))
-        push!(local_jdofs, :($J = Tesserae.matrix_col_dofs($buffer, $jp)))
-        push!(local_idofs, :($I = Tesserae.matrix_row_dofs($buffer, $ip)))
-        push!(assemble_first, :(Tesserae.assemble_first!($assembler, $buffer, $orientation, $i, $j, $I, $J, $rhs)))
-        push!(assemble_add, :(Tesserae.assemble_add!($assembler, $buffer, $orientation, $i, $j, $I, $J, $rhs)))
-        push!(assemble_block_entries, :(Tesserae.assemble_block_entry!($assembler, $buffer, $matrix_assembly, $orientation, $i, $j, $rhs)))
-        push!(finish_assemblies, :(Tesserae.finish_assembly!($assembler, $buffer, $orientation, $gridindices_i, $gridindices_j)))
-        push!(finish_block_assemblies, :(Tesserae.finish_block_assembly!($assembler, $buffer, $matrix_assembly, $orientation)))
+        assemble(f) = :(Tesserae.$f($assembler, $buffer, $orientation, $i, $j, $I, $J, $rhs))
+        (; matrix,
+           zeroed = op == :(=),
+           init = quote
+               $matrix = $gmat
+               $assembler = Tesserae.matrix_assembler($matrix, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
+               $matrix_cache = Tesserae.local_matrix_cache($matrix, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
+           end,
+           buffer_init = quote
+               if $matrix_assembly isa Tesserae.ParticleAssembly
+                   $buffer = nothing
+               elseif $matrix_assembly isa Tesserae.CellAssembly
+                   $buffer = Tesserae.local_matrix_buffer($matrix_cache, $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
+               else
+                   error("BlockAssembly must use block assembly")
+               end
+           end,
+           block_buffer_init = :($buffer = Tesserae.block_matrix_buffer($assembler, $matrix_assembly, $orientation)),
+           jdof = :($J = Tesserae.matrix_col_dofs($buffer, $jp)),
+           idof = :($I = Tesserae.matrix_row_dofs($buffer, $ip)),
+           assemble_first = assemble(:assemble_first!),
+           assemble_add = assemble(:assemble_add!),
+           assemble_block_entry = :(Tesserae.assemble_block_entry!($assembler, $buffer, $matrix_assembly, $orientation, $i, $j, $rhs)),
+           finish = :(Tesserae.finish_assembly!($assembler, $buffer, $orientation, $gridindices_i, $gridindices_j)),
+           finish_block = :(Tesserae.finish_block_assembly!($assembler, $buffer, $matrix_assembly, $orientation)))
     end
 
-    fillzero_matrix_targets = if isempty(matrix_targets_to_zero)
+    local_jdofs = map(t -> t.jdof, targets)
+    local_idofs = map(t -> t.idof, targets)
+
+    # Must stay a tuple literal: that is what lets `fillzero_matrix_targets!`
+    # recognize a complete set of blocks and zero the parent CSC in one pass.
+    zeroed_targets = [t.matrix for t in targets if t.zeroed]
+    fillzero_matrix_targets = if isempty(zeroed_targets)
         nothing
     else
-        :(Tesserae.fillzero_matrix_targets!(($(matrix_targets_to_zero...),)))
+        :(Tesserae.fillzero_matrix_targets!(($(zeroed_targets...),)))
     end
 
     supportnodes_expr = if grid_i == grid_j && weights_i == weights_j
@@ -1516,16 +1516,19 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         $bw_i, $bw_j = $weights_i′[$p], $weights_j′[$p]
     end
 
-    function assemble_particle(assembly)
+    # The block path passes no dof lists: its `buffer` is a `BlockMatrixBuffer`,
+    # for which `matrix_row_dofs`/`matrix_col_dofs` have no method on purpose --
+    # block entries address the buffer by node, not by local dof range.
+    function assemble_particle(assembly, jdofs=local_jdofs, idofs=local_idofs)
         quote
             for $jp in eachindex($gridindices_j)
                 $j = $gridindices_j[$jp]
                 $(j_replacements...)
-                $(local_jdofs...)
+                $(jdofs...)
                 for $ip in eachindex($gridindices_i)
                     $i = $gridindices_i[$ip]
                     $(i_replacements...)
-                    $(local_idofs...)
+                    $(idofs...)
                     $(assembly...)
                 end
             end
@@ -1536,31 +1539,23 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         $p, $remaining_particles = Base.Iterators.peel($particle_indices)
         $particle_init
         $supportnodes_expr
-        $(buffers_init...)
-        $(assemble_particle(assemble_first))
+        $(map(t -> t.buffer_init, targets)...)
+        $(assemble_particle(map(t -> t.assemble_first, targets)))
         for $p in $remaining_particles
             $particle_init
-            $(assemble_particle(assemble_add))
+            $(assemble_particle(map(t -> t.assemble_add, targets)))
         end
-        $(finish_assemblies...)
+        $(map(t -> t.finish, targets)...)
     end
 
     block_body = quote
-        $(block_buffers_init...)
+        $(map(t -> t.block_buffer_init, targets)...)
         for $p in $particle_indices
             $particle_init
             $supportnodes_expr
-            for $jp in eachindex($gridindices_j)
-                $j = $gridindices_j[$jp]
-                $(j_replacements...)
-                for $ip in eachindex($gridindices_i)
-                    $i = $gridindices_i[$ip]
-                    $(i_replacements...)
-                    $(assemble_block_entries...)
-                end
-            end
+            $(assemble_particle(map(t -> t.assemble_block_entry, targets), (), ()).args...)
         end
-        $(finish_block_assemblies...)
+        $(map(t -> t.finish_block, targets)...)
     end
 
     body = quote
@@ -1579,7 +1574,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         let
             $check_arguments_for_P2G_Matrix($grid_i, $particles, $weights_i, $partition)
             $check_arguments_for_P2G_Matrix($grid_j, $particles, $weights_j, $partition)
-            $(matrices_init...)
+            $(map(t -> t.init, targets)...)
             $fillzero_matrix_targets
             Tesserae.P2G_Matrix((($grid_i′,$grid_j′), $particles, ($weights_i′,$weights_j′), $particle_indices, $matrix_assembly) -> $body,
                                 $get_device($grid_i), Val($schedule), ($grid_i,$grid_j), $particles, ($weights_i,$weights_j), $partition)
@@ -1589,14 +1584,12 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     esc(interpolate_transfer_values(body, program))
 end
 
+# Like `unpair`, but the LHS is always a pair: a single parent is shared by both
+# indices. Only the two-index RHS forms are valid here.
 function unpair2(ex::Expr)
-    if @capture(ex, lhs_Symbol => (rhs1_Symbol, rhs2_Symbol))
-        return (lhs, lhs), (rhs1, rhs2)
-    elseif @capture(ex, (lhs1_Symbol, lhs2_Symbol) => (rhs1_Symbol, rhs2_Symbol))
-        return (lhs1, lhs2), (rhs1, rhs2)
-    else
-        error("invalid expression, $ex")
-    end
+    lhs, rhs = unpair(ex)
+    rhs isa Tuple || error("invalid expression, $ex")
+    lhs isa Tuple ? (lhs, rhs) : ((lhs, lhs), rhs)
 end
 
 """
