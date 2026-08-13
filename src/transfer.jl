@@ -69,6 +69,23 @@ function push_unique!(xs::Vector, x)
     xs
 end
 
+# `@G2P2G` fuses a G2P and a P2G loop into a single pass over the particles, so
+# the basis weight and its support nodes must be bound once and shared by both
+# halves. The two symbols travel together with a `load` flag: whichever half
+# holds `load=true` emits the binding statements, the other just uses them.
+struct BasisWeightBinding
+    bw::Symbol
+    gridindices::Symbol
+    load::Bool
+end
+BasisWeightBinding() = BasisWeightBinding(gensym(:bw), gensym(:gridindices), true)
+BasisWeightBinding(binding::BasisWeightBinding; load::Bool) = BasisWeightBinding(binding.bw, binding.gridindices, load)
+
+function basis_weight_exprs(binding::BasisWeightBinding, grid, weights, p)
+    binding.load || return ()
+    (:($(binding.bw) = $weights[$p]), :($(binding.gridindices) = supportnodes($(binding.bw), $grid)))
+end
+
 """
     @P2G grid=>i particles=>p weights=>ip [partition] begin
         equations...
@@ -181,8 +198,9 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     esc(prettify(code; lines=true, alias=false))
 end
 
-function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
-    @gensym bw gridindices gridwriteindex
+function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::BasisWeightBinding=BasisWeightBinding())
+    @gensym gridwriteindex
+    (; bw, gridindices) = binding
 
     scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
@@ -204,8 +222,7 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     body = quote
         $(particle_replacements...)
         $(hoist_exprs...)
-        $bw = $weights[$p]
-        $gridindices = supportnodes($bw, $grid)
+        $(basis_weight_exprs(binding, grid, weights, p)...)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $gridwriteindex = Tesserae.p2g_write_index($grid, $i)
@@ -570,8 +587,8 @@ function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) w
     kernel(f, grid, particles, weights; ndrange=length(particles))
 end
 
-function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector)
-    @gensym bw gridindices
+function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector, binding::BasisWeightBinding=BasisWeightBinding())
+    (; bw, gridindices) = binding
 
     code = Expr(:block)
     scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
@@ -595,8 +612,7 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         code = quote
             $(particle_replacements...)
             $(inits...)
-            $bw = $weights[$p]
-            $gridindices = supportnodes($bw, $grid)
+            $(basis_weight_exprs(binding, grid, weights, p)...)
             for $ip in eachindex($gridindices)
                 $i = $gridindices[$ip]
                 $(inner_replacements...)
@@ -616,32 +632,6 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     end
 
     code
-end
-
-function basis_weight_symbols(expr, weights, p, grid)
-    bw = gridindices = nothing
-    MacroTools.postwalk(expr) do ex
-        if Meta.isexpr(ex, :(=), 2)
-            ex.args[2] == :($weights[$p]) && (bw = ex.args[1])
-            bw !== nothing && ex.args[2] == :(supportnodes($bw, $grid)) && (gridindices = ex.args[1])
-        end
-        ex
-    end
-    gridindices === nothing ? nothing : (bw, gridindices)
-end
-
-function reuse_basis_weight(expr::Expr, shared_basis_weight, weights, p, grid)
-    basis_weight = basis_weight_symbols(expr, weights, p, grid)
-    basis_weight === nothing && return expr
-
-    bw, gridindices = basis_weight
-    shared_bw, shared_gridindices = shared_basis_weight
-    MacroTools.prewalk(expr) do ex
-        Meta.isexpr(ex, :(=), 2) && ex.args[1] in (bw, gridindices) && return Expr(:block)
-        ex == bw && return shared_bw
-        ex == gridindices && return shared_gridindices
-        ex
-    end
 end
 
 """
@@ -735,11 +725,10 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
     end
     body = Expr(:block)
-    shared_basis_weight = nothing
+    binding = BasisWeightBinding()
 
     if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
-        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum)
-        shared_basis_weight = basis_weight_symbols(expr, weights, p, grid)
+        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, binding)
         body = quote
             $body
             $expr
@@ -747,10 +736,10 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     end
 
     if !isempty(stages.p2g_sum)
-        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum)
-        if shared_basis_weight !== nothing
-            expr = reuse_basis_weight(expr, shared_basis_weight, weights, p, grid)
-        end
+        # `G2P_sum_expr` binds the basis weight only when it has `@∑` equations,
+        # so this half must load it itself otherwise.
+        p2g_binding = isempty(stages.g2p_sum) ? binding : BasisWeightBinding(binding; load=false)
+        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding)
         code = quote
             $code
             $pre

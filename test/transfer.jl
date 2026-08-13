@@ -302,6 +302,17 @@
         @test count(_ -> true, eachmatch(r"\bsupportnodes\(", expanded)) == 1
         @test count(_ -> true, eachmatch(r"weights\[p\]", expanded)) == 1
         @test occursin("Tesserae.G2P2G", expanded)
+
+        # Without particle `@∑` equations the G2P half binds no basis weight,
+        # so the P2G half must bind it itself.
+        expanded = sprint(show, MIME("text/plain"), macroexpand(@__MODULE__, quote
+            @G2P2G grid=>i particles=>p weights=>ip begin
+                v[p] += a[p] * Δt
+                m[i] = @∑ w[ip] * m[p]
+            end
+        end))
+        @test count(_ -> true, eachmatch(r"\bsupportnodes\(", expanded)) == 1
+        @test count(_ -> true, eachmatch(r"weights\[p\]", expanded)) == 1
     end
 
     @testset "interpolation" begin
