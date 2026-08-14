@@ -168,7 +168,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     sum_equations, nosum_equations = split_sum_equations(program, "@P2G")
 
     code = quote
-        Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
+        Tesserae.check_transfer_arguments("@P2G", $grid, $particles, $weights, $partition)
     end
 
     if !isempty(sum_equations)
@@ -430,41 +430,44 @@ function P2G_nosum(f, device::GPUDevice, grid)
     end
 end
 
-function check_arguments_for_P2G(grid, particles, weights, partition)
-    get_mesh(grid) isa AbstractMesh || error("@P2G: grid must have a mesh")
-    eltype(weights) <: BasisWeight || error("@P2G: invalid `BasisWeight`s, got type $(typeof(weights))")
+# `macroname` is threaded through so every transfer macro reports its own name.
+# `@G2P` takes no partition and passes `nothing`, which skips the partition
+# checks exactly as before.
+function check_transfer_arguments(macroname, grid, particles, weights, partition)
+    get_mesh(grid) isa AbstractMesh || error("$macroname: grid must have a mesh")
+    eltype(weights) <: BasisWeight || error("$macroname: invalid `BasisWeight`s, got type $(typeof(weights))")
     if grid isa SpGrid
-        eltype(weights) <: BasisWeight{CPDI} && cpdi_spgrid_error("@P2G")
+        eltype(weights) <: BasisWeight{CPDI} && cpdi_spgrid_error(macroname)
         if length(propertynames(grid)) > 1
-            isempty(get_data(getproperty(grid, 2))) && error("@P2G: SpGrid indices not activated")
+            isempty(get_data(getproperty(grid, 2))) && error("$macroname: SpGrid indices not activated")
         end
     end
     @assert length(particles) ≤ length(weights)
     # check device
     device = get_device(grid)
     @assert get_device(particles) == get_device(weights) == device
-    check_partition_for_P2G(device, grid, weights, partition)
+    check_partition_for_transfer(macroname, device, grid, weights, partition)
 end
 
 # ThreadPartition is a CPU scheduling aid. GPU P2G uses particle-parallel kernels
 # and SpGrid sparsity is updated separately from particle positions.
-check_partition_for_P2G(::CPUDevice, grid, weights, ::Nothing) = nothing
-check_partition_for_P2G(::GPUDevice, grid, weights, ::Nothing) = nothing
-function check_partition_for_P2G(::GPUDevice, grid, weights, partition)
-    error("@P2G: ThreadPartition is only used on CPU. Use partitionless @P2G on GPU.")
+check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::Nothing) = nothing
+check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, ::Nothing) = nothing
+function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition)
+    error("$macroname: ThreadPartition is only used on CPU. Use partitionless $macroname on GPU.")
 end
-function check_partition_for_P2G(::CPUDevice, grid, weights, partition::ThreadPartition)
-    check_partition_for_P2G(grid, weights, strategy(partition))
+function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, partition::ThreadPartition)
+    check_partition_for_transfer(macroname, grid, weights, strategy(partition))
 end
-check_partition_for_P2G(grid, weights, strat) = nothing
-function check_partition_for_P2G(grid, weights, strat::BlockStrategy)
+check_partition_for_transfer(macroname, grid, weights, strat) = nothing
+function check_partition_for_transfer(macroname, grid, weights, strat::BlockStrategy)
     @assert nblocks(get_mesh(grid)) == nblocks(strat)
     if nassigned(strat) == 0
-        error("@P2G: No particles assigned to any block in ThreadPartition")
+        error("$macroname: No particles assigned to any block in ThreadPartition")
     end
     b = basis(first(weights))
     if support_width(b) > blockwidth(strat)
-        error("@P2G: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
+        error("$macroname: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
     end
 end
 
@@ -549,7 +552,7 @@ function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pr
     sum_equations, nosum_equations = split_sum_equations(program, "@G2P")
 
     code = quote
-        Tesserae.check_arguments_for_G2P($grid, $particles, $weights)
+        Tesserae.check_transfer_arguments("@G2P", $grid, $particles, $weights, nothing)
     end
 
     if !isempty(program.equations)
@@ -721,8 +724,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     stages = split_g2p2g_stages(program, i, p)
 
     code = quote
-        Tesserae.check_arguments_for_G2P($grid, $particles, $weights)
-        Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
+        Tesserae.check_transfer_arguments("@G2P2G", $grid, $particles, $weights, $partition)
     end
     body = Expr(:block)
     binding = BasisWeightBinding()
@@ -868,17 +870,3 @@ function remove_indexing(expr)
     end
 end
 
-function check_arguments_for_G2P(grid, particles, weights)
-    get_mesh(grid) isa AbstractMesh || error("@G2P: grid must have a mesh")
-    eltype(weights) <: BasisWeight || error("@G2P: invalid `BasisWeight`s, got type $(typeof(weights))")
-    if grid isa SpGrid
-        eltype(weights) <: BasisWeight{CPDI} && cpdi_spgrid_error("@G2P")
-        if length(propertynames(grid)) > 1
-            isempty(get_data(getproperty(grid, 2))) && error("@G2P: SpGrid indices not activated")
-        end
-    end
-    @assert length(particles) ≤ length(weights)
-    # check device
-    device = get_device(grid)
-    @assert get_device(particles) == get_device(weights) == device
-end

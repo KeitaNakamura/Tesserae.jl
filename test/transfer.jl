@@ -465,6 +465,22 @@
             end
         end
         @test occursin("@P2G: No particles assigned to any block in ThreadPartition", err)
+
+        # Each macro must report its own name; @G2P2G and @P2G_Matrix used to
+        # borrow @G2P's and @P2G's because they delegated to those checks.
+        bogus = collect(1:length(particles))
+        for (name, thunk) in ("@P2G"   => () -> (@P2G grid=>i particles=>p bogus=>ip begin
+                                                     m[i] = @∑ w[ip]
+                                                 end),
+                              "@G2P"   => () -> (@G2P grid=>i particles=>p bogus=>ip begin
+                                                     v[p] = @∑ w[ip] * v[i]
+                                                 end),
+                              "@G2P2G" => () -> (@G2P2G grid=>i particles=>p bogus=>ip begin
+                                                     ∇v[p] = @∑ v[i] ⊗ v[i]
+                                                     m[i]  = @∑ w[ip] * m[p]
+                                                 end))
+            @test occursin("$name: invalid `BasisWeight`s", error_message(thunk))
+        end
     end
 
     @testset "ordering errors" begin

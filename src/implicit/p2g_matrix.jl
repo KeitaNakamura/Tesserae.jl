@@ -89,7 +89,7 @@ function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::Quadratu
 end
 
 function check_arguments_for_P2G_Matrix(grid, particles, weights, partition)
-    check_arguments_for_P2G(grid, particles, weights, partition)
+    check_transfer_arguments("@P2G_Matrix", grid, particles, weights, partition)
     @assert get_device(grid) isa CPUDevice
 end
 
