@@ -324,6 +324,24 @@ end
 Structure-of-arrays storage for multiple [`BasisWeight`](@ref)s.
 Use [`generate_basis_weights`](@ref) to construct a `BasisWeightArray`.
 """
+# Stand-in for a basis-value array that is never stored, so a lazy
+# `BasisWeightArray` keeps the shape and naming of a stored one -- the property
+# order still gives the derivative order, and element types still infer --
+# while owning no memory. Reading one is a bug: the transfer lowering resolves
+# lazy properties by evaluating the basis instead.
+struct LazyBasisValues{T, N} <: AbstractArray{T, N}
+    dims::Dims{N}
+end
+LazyBasisValues{T}(dims::Dims{N}) where {T, N} = LazyBasisValues{T, N}(dims)
+Base.size(A::LazyBasisValues) = A.dims
+Base.IndexStyle(::Type{<: LazyBasisValues}) = IndexLinear()
+Base.getindex(::LazyBasisValues, ::Integer) =
+    error("this basis value is not stored: the weights were built with `lazy=true`, so it is evaluated inside the transfer instead")
+Base.similar(A::LazyBasisValues{T}, ::Type{S}, dims::Dims) where {T, S} = LazyBasisValues{S}(dims)
+
+is_lazy_values(::LazyBasisValues) = true
+is_lazy_values(::AbstractArray) = false
+
 struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}, N, O <: Order} <: AbstractArray{ElType, N}
     basis::B
     vals::Vals
@@ -337,16 +355,43 @@ function BasisWeightArray(basis::B, vals::Vals, indices::Indices, order::O) wher
 end
 
 # AbstractMesh
-function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1)) where {Prop <: NamedTuple, dim}
-    vals = map(allocate_basis_values(Prop, basis, Val(dim); derivative)) do vals
-        fill(zero(eltype(vals)), size(vals)..., dims...)
-    end
+# `lazy` travels as a `Val` so the value arrays keep concrete types: with a
+# plain `Bool` the storage type widens to a union of stored and lazy arrays and
+# every downstream inference on the weights degrades.
+function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1), lazy=Val(false)) where {Prop <: NamedTuple, dim}
+    _generate_basis_weights(Prop, basis, mesh, dims, derivative, aslazyval(lazy))
+end
+function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims, derivative::Order, lazy::Val{L}) where {Prop <: NamedTuple, dim, L}
+    L && check_lazy_basis(basis)
+    template = allocate_basis_values(Prop, basis, Val(dim); derivative)
+    njets = derivative_count(derivative)
+    # The first `njets` properties are the basis value and its derivatives, which
+    # a lazy array re-evaluates; anything after them is caller-owned storage and
+    # is always allocated.
+    vals = NamedTuple{keys(template)}(ntuple(Val(length(template))) do k
+        v = template[k]
+        sz = (size(v)..., dims...)
+        L && k <= njets ? LazyBasisValues{eltype(v)}(sz) : fill(zero(eltype(v)), sz)
+    end)
     indices = _generate_supportnodes(basis, mesh, dims)
     BasisWeightArray(basis, vals, indices, derivative)
 end
-function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh, dims::Dims; derivative::Order=Order(1), name=Val(:w)) where {T}
-    _generate_basis_weights(basis_property_type(T, name), basis, mesh, dims; derivative)
+function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh, dims::Dims; derivative::Order=Order(1), name=Val(:w), lazy=Val(false)) where {T}
+    _generate_basis_weights(basis_property_type(T, name), basis, mesh, dims, derivative, aslazyval(lazy))
 end
+
+@inline aslazyval(::Val{L}) where {L} = Val(L::Bool)
+@inline aslazyval(lazy::Bool) = Val(lazy)
+
+@inline derivative_count(::Order{k}) where {k} = k + 1
+
+# Lazy weights re-evaluate a basis value from the particle position and the
+# mesh alone. FEM and IGA bases do not qualify: their update also derives the
+# cell Jacobian, the quadrature measure, and boundary normals, and writes the
+# measure and normals into caller-owned arrays that the equations then read.
+check_lazy_basis(::Kernel) = nothing
+check_lazy_basis(basis) =
+    error("lazy basis weights are supported for kernels on a `CartesianMesh`, not for $(nameof(typeof(basis))): its update also produces the cell Jacobian, quadrature measure, and normals, which cannot be recovered from a particle position alone")
 
 # CartesianMesh
 _generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
@@ -536,6 +581,15 @@ end
 
 # accelerations
 
+"""
+    Tesserae.is_lazy(weights)
+
+Whether `weights` re-evaluates its basis values inside each transfer instead of
+storing them. True for arrays built with `generate_basis_weights(...; lazy=true)`.
+"""
+is_lazy(weights::BasisWeightArray) = any(is_lazy_values, values(getfield(weights, :vals)))
+is_lazy(::AbstractArray{<: BasisWeight}) = false
+
 # See the note on `@Const` and nested containers in src/transfer.jl.
 @kernel function gpukernel_update_weight(weights, particles, mesh, filter)
     p = @index(Global)
@@ -558,7 +612,17 @@ end
 
 where [`LazyRow`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
 """
-function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh, filter::AbstractArray{Bool}=Trues(size(mesh)))
+function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh,
+                 filter::AbstractArray{Bool}=Trues(size(mesh)); lazy::Bool=is_lazy(weights))
+    # Lazy weights have nothing to fill: their basis values are evaluated inside
+    # the transfer. Calling `update!` on them is allowed and does nothing, so a
+    # simulation loop written for stored weights runs unchanged. Asking for the
+    # opposite is an error, because there is no storage to materialize into.
+    if is_lazy(weights)
+        lazy || error("update!: these weights were built with `lazy=true` and have no storage for basis values, so they cannot be materialized. Build them without `lazy=true` to store the values.")
+        return weights
+    end
+    lazy && error("update!: `lazy=true` on stored weights is not supported yet; build them with `generate_basis_weights(...; lazy=true)` instead")
     n = length(particles)
     @assert length(weights) ≥ n
     @assert size(mesh) == size(filter)
