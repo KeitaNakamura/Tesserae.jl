@@ -408,31 +408,19 @@ function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     Expr(:block, nosum_exprs...)
 end
 
-grid_node_indices(grid) = eachindex(grid)
-grid_node_indices(grid::SpGrid) = activeindices(get_spinds(grid))
-
+# The grid-only part of `@P2G`. It walks the same indices as `@foreach` and
+# launches the same GPU kernels, both defined in foreach.jl, but keeps its own
+# CPU loops: routing them through `tforeach` costs 5-9% on a dense grid, and
+# `@inbounds @simd` here is worth that much.
 function P2G_nosum(f, ::CPUDevice, grid)
-    @inbounds @simd for i in grid_node_indices(grid)
+    @inbounds @simd for i in foreach_indices(grid)
         @inline f(grid, i)
     end
 end
 
 function P2G_nosum(f, ::CPUDevice, grid::SpGrid)
-    @inbounds for i in grid_node_indices(grid)
+    @inbounds for i in foreach_indices(grid)
         @inline f(grid, i)
-    end
-end
-
-@kernel function gpukernel_P2G_nosum(f, grid)
-    i = @index(Global, Cartesian)
-    f(grid, i)
-end
-
-@kernel function gpukernel_P2G_nosum_spgrid(f, grid, @Const(spinds))
-    k = @index(Global)
-    active, i = _active_spindex(spinds, k)
-    if active
-        @inbounds f(grid, i)
     end
 end
 
@@ -440,10 +428,10 @@ function P2G_nosum(f, device::GPUDevice, grid)
     backend = get_backend(device)
     if grid isa SpGrid
         spinds = get_spinds(grid)
-        kernel = gpukernel_P2G_nosum_spgrid(backend)
+        kernel = gpukernel_foreach_spgrid(backend)
         kernel(f, grid, spinds; ndrange=_spindex_ndrange(spinds))
     else
-        kernel = gpukernel_P2G_nosum(backend)
+        kernel = gpukernel_foreach(backend)
         kernel(f, grid; ndrange=size(grid))
     end
 end
