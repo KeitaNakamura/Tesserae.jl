@@ -95,6 +95,21 @@ end
 
 # ---- macro implementation ----
 
+# Shared with `@explain`, so the two cannot drift on what a valid `@P2G_Matrix`
+# block is. `macroname` is threaded through only to prefix the messages.
+function check_matrix_program(macroname, equations)
+    isempty(equations) && error("$macroname: at least one equation is required")
+    all(is_sum, equations) || error("$macroname: all equations must use `@∑`")
+    nothing
+end
+
+function check_matrix_equation(macroname, lhs, i, j, seen)
+    @capture(lhs, gmat_[gi_,gj_]) || error("$macroname: Invalid global matrix expression, got `$lhs`")
+    ((gi == i && gj == j) || (gi == j && gj == i)) || error("$macroname: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
+    gmat in seen && error("$macroname: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
+    gmat, gi, gj
+end
+
 # -- matrix zeroing --
 
 function sparse_matrix_blocks_cover_parent(blocks, matrix)
@@ -166,8 +181,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     @gensym grid_i′ grid_j′ weights_i′ weights_j′ bw_i bw_j gridindices_i gridindices_j particle_indices matrix_assembly remaining_particles
 
     equations = program.equations
-    isempty(equations) && error("@P2G_Matrix: at least one equation is required")
-    all(is_sum, equations) || error("@P2G_Matrix: all equations must use `@∑`")
+    check_matrix_program("@P2G_Matrix", equations)
 
     scope = TransferScope([grid_i′=>i, grid_j′=>j, particles=>p, bw_i=>ip, bw_j=>jp]; cache=true)
     equations = map(equations) do eq
@@ -186,9 +200,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     hoist_exprs = Expr[]
     targets = map(equations) do equation
         (; lhs, rhs, op) = equation
-        @capture(lhs, gmat_[gi_,gj_]) || error("@P2G_Matrix: Invalid global matrix expression, got `$lhs`")
-        ((gi == i && gj == j) || (gi == j && gj == i)) || error("@P2G_Matrix: Expected expression of the form `$gmat[$i, $j]` or `$gmat[$j, $i]`, got `$lhs`")
-        gmat in gmats && error("@P2G_Matrix: each global matrix may appear only once in a block; combine terms for `$gmat` into one `@∑` expression")
+        gmat, gi, gj = check_matrix_equation("@P2G_Matrix", lhs, i, j, gmats)
         push!(gmats, gmat)
 
         @gensym matrix buffer assembler matrix_cache

@@ -260,8 +260,7 @@ end
 
 function explain_P2G_Matrix(((grid_i,grid_j),(i,j)), (particles,p), ((weights_i,weights_j),(ip,jp)), partition, program::TransferProgram, threading)
     equations = program.equations
-    isempty(equations) && error("@explain @P2G_Matrix: at least one equation is required")
-    all(is_sum, equations) || error("@explain @P2G_Matrix: all equations must use `@∑`")
+    check_matrix_program("@explain @P2G_Matrix", equations)
 
     bw_i, bw_j = :bw_i, :bw_j
     nodes_i, nodes_j = :nodes_i, :nodes_j
@@ -280,9 +279,7 @@ matrix_symbols(gmat) = NamedTuple{MATRIX_INFO_NAMES}(Symbol.(gmat, MATRIX_INFO_S
 function matrix_infos(equations, scope, i, j)
     seen = Set{Any}()
     map(equations) do eq
-        @capture(eq.lhs, gmat_[gi_,gj_]) || error("@explain @P2G_Matrix: invalid matrix LHS: $(eq.lhs)")
-        ((gi == i && gj == j) || (gi == j && gj == i)) || error("@explain @P2G_Matrix: invalid matrix LHS index: $(eq.lhs)")
-        gmat in seen && error("@explain @P2G_Matrix: each global matrix may appear only once in a block")
+        gmat, gi, gj = check_matrix_equation("@explain @P2G_Matrix", eq.lhs, i, j, seen)
         push!(seen, gmat)
 
         rhs = resolve_refs(eq.rhs, scope)
