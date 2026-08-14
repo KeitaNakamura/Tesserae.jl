@@ -223,8 +223,8 @@ end
 Extract boundary IGA meshes from a parent IGA mesh. The boundary patch keeps the
 parent control-point ids, so boundary assembly targets the same global DOFs.
 """
-# Lower and upper end of each parametric direction, in that order.
 function boundaries(mesh::IGAMesh{dim, pdim}, patch_id::Integer) where {dim, pdim}
+    # Lower and upper end of each parametric direction, in that order.
     ntuple(i -> boundaries(mesh, patch_id, cld(i, 2), isodd(i) ? -1 : +1), Val(2pdim))
 end
 

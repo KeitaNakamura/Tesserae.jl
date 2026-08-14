@@ -107,8 +107,8 @@ end
 
 Extract all boundary control nets.
 """
-# Lower and upper end of each parametric direction, in that order.
 function boundaries(net::ControlNet{dim, pdim}) where {dim, pdim}
+    # Lower and upper end of each parametric direction, in that order.
     ntuple(i -> boundaries(net, cld(i, 2), isodd(i) ? -1 : +1), Val(2pdim))
 end
 
