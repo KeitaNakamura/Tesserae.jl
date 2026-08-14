@@ -38,8 +38,17 @@ end
         update_wls_values!(bw, wls, pt, mesh, filter)
     end
 end
-@inline full_support_moment_matrix_inv(::BSpline{Quadratic}, mesh::CartesianMesh{dim}) where {dim} = diagm([1; ones(Vec{dim,Int}) * 4/spacing(mesh)^2])
-@inline full_support_moment_matrix_inv(::BSpline{Cubic}, mesh::CartesianMesh{dim}) where {dim} = diagm([1; ones(Vec{dim,Int}) * 3/spacing(mesh)^2])
+# Over its full support a degree-`n` cardinal B-spline has unit mass, zero first
+# moment, and second moment `(n+1)h²/12`, independent of where the particle sits
+# in the cell, so the linear-basis moment matrix is diagonal and known in closed
+# form. That holds from `n = 2` only: for `n = 1` the second moment varies with
+# the position as ξ(1-ξ), so `Linear` is excluded rather than given a wrong
+# matrix. `12/(n+1)` is evaluated before dividing by `h²` so the quotient is the
+# exact 4 or 3 the two hand-written entries used.
+@inline function full_support_moment_matrix_inv(::AbstractBSpline{Degree{n}}, mesh::CartesianMesh{dim}) where {n, dim}
+    n ≥ 2 || throw(ArgumentError("the full-support moment matrix is position-dependent below degree 2"))
+    diagm([1; ones(Vec{dim,Int}) * (12/(n+1)) / spacing(mesh)^2])
+end
 
 @inline function update_wls_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
     indices = supportnodes(bw)
