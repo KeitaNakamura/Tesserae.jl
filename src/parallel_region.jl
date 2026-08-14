@@ -138,9 +138,8 @@ end
 # task that outlives the transfer.
 #
 # A worker that throws aborts the barrier on its way out, so a transfer that
-# fails partway -- an inactive `SpGrid` node, say -- releases the workers
-# waiting on it instead of leaving them there. `@sync` then reports the failure
-# with its backtrace intact.
+# fails partway releases the workers waiting on it instead of leaving them
+# parked forever. `@sync` then reports the failure with its backtrace intact.
 function spawn_region_workers(body, nworkers::Int, nphases::Int)
     barrier = PhaseBarrier(nworkers, nphases)
     @sync for w in 1:nworkers

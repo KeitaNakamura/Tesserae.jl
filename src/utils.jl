@@ -53,6 +53,31 @@ function fillzero!(x::AbstractArray)
     x
 end
 
+# `fill!` stores a composite element such as `Vec{2,Float64}` one field at a
+# time, which measures about half the speed of a memset over the same bytes --
+# and grid fields are mostly composite. Zeroing a dense array can go through
+# memset instead whenever a zero of the element type is all-zero bytes.
+#
+# That is decided from the type's structure rather than by inspecting a zero
+# value, so a type whose zero is something else keeps the `fill!` path. Padding
+# bytes are not a concern: memset zeroes them and nothing reads them.
+Base.@assume_effects :foldable function zeroed_by_memset(::Type{T}) where {T}
+    isbitstype(T) && sizeof(T) > 0 || return false
+    T <: Union{Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64,
+               Int128, UInt128, Float16, Float32, Float64} && return true
+    isprimitivetype(T) && return false # unknown primitive: no zero to assume
+    fieldcount(T) > 0 && all(zeroed_by_memset, fieldtypes(T))
+end
+
+function fillzero!(x::Array{T}) where {T}
+    if zeroed_by_memset(T)
+        GC.@preserve x Libc.memset(Ptr{UInt8}(pointer(x)), 0, sizeof(T) * length(x))
+    else
+        fill!(x, zero_recursive(T))
+    end
+    x
+end
+
 function fillzero!(x::StructArray)
     StructArrays.foreachfield(fillzero!, x)
     x
