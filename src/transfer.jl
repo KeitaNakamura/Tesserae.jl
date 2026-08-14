@@ -86,6 +86,33 @@ function basis_weight_exprs(binding::BasisWeightBinding, grid, weights, p)
     (:($(binding.bw) = $weights[$p]), :($(binding.gridindices) = supportnodes($(binding.bw), $grid)))
 end
 
+# All four transfer macros take the same shape: an optional `:schedule`
+# QuoteNode, three `parent => index` pairs, an optional partition, and the
+# equation block. Parsing it once keeps them from drifting, and lets a wrong
+# call say what the right one looks like instead of listing `::Any` candidates.
+function parse_transfer_macro_args(macroname, args, allow_partition::Bool)
+    args = collect(args)
+    schedule = QuoteNode(:nothing)
+    if !isempty(args) && first(args) isa QuoteNode
+        schedule = popfirst!(args)
+    end
+    partition = nothing
+    if length(args) == 5
+        allow_partition || throw(ArgumentError(transfer_macro_usage(macroname, allow_partition)))
+        partition = args[4]
+    elseif length(args) != 4
+        throw(ArgumentError(transfer_macro_usage(macroname, allow_partition)))
+    end
+    schedule, args[1], args[2], args[3], partition, last(args)
+end
+
+function transfer_macro_usage(macroname, allow_partition)
+    indices = macroname == "@P2G_Matrix" ? "grid=>(i,j) particles=>p weights=>(ip,jp)" :
+                                           "grid=>i particles=>p weights=>ip"
+    part = allow_partition ? " [partition]" : ""
+    "$macroname: expected `$macroname [:schedule] $indices$part begin ... end`"
+end
+
 """
     @P2G grid=>i particles=>p weights=>ip [partition] begin
         equations...
@@ -147,17 +174,8 @@ For example, `\$Δt` captures the current value of `Δt`.
     In `@P2G`, `Calculation on grid` part must be placed after
     `Particle-to-grid transfer` part.
 """
-macro P2G(grid_i, particles_p, weights_ip, equations)
-    P2G_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, nothing, equations)
-end
-macro P2G(grid_i, particles_p, weights_ip, partition, equations)
-    P2G_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, partition, equations)
-end
-macro P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, equations)
-    P2G_expr(schedule, grid_i, particles_p, weights_ip, nothing, equations)
-end
-macro P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, partition, equations)
-    P2G_expr(schedule, grid_i, particles_p, weights_ip, partition, equations)
+macro P2G(args...)
+    P2G_expr(parse_transfer_macro_args("@P2G", args, true)...)
 end
 
 function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_ip::Expr, partition, equations::Expr)
@@ -537,10 +555,8 @@ For example, `\$Δt` captures the current value of `Δt`.
     In `@G2P`, `Calculation on particles` part must be placed after
     `Grid-to-particle transfer` part.
 """
-macro G2P(grid_i, particles_p, weights_ip, equations)
-    G2P_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, equations)
-end
-macro G2P(schedule::QuoteNode, grid_i, particles_p, weights_ip, equations)
+macro G2P(args...)
+    schedule, grid_i, particles_p, weights_ip, _, equations = parse_transfer_macro_args("@G2P", args, false)
     G2P_expr(schedule, grid_i, particles_p, weights_ip, equations)
 end
 
@@ -662,17 +678,8 @@ to be performed in a single loop over particles, avoiding repeated traversals.
 end
 ```
 """
-macro G2P2G(grid_i, particles_p, weights_ip, equations)
-    G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, nothing, equations)
-end
-macro G2P2G(grid_i, particles_p, weights_ip, partition, equations)
-    G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, partition, equations)
-end
-macro G2P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, equations)
-    G2P2G_expr(schedule, grid_i, particles_p, weights_ip, nothing, equations)
-end
-macro G2P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, partition, equations)
-    G2P2G_expr(schedule, grid_i, particles_p, weights_ip, partition, equations)
+macro G2P2G(args...)
+    G2P2G_expr(parse_transfer_macro_args("@G2P2G", args, true)...)
 end
 
 function G2P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_ip::Expr, partition, equations::Expr)

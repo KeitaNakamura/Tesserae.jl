@@ -158,17 +158,8 @@ It is recommended to create global stiffness `K` using [`create_sparse_matrix`](
 Individual views returned by [`create_block_sparse_matrix`](@ref) may also be
 used as targets, for example `blocks[1,2][i,j]`.
 """
-macro P2G_Matrix(grid_ij, particles_p, weights_ipjp, equations)
-    P2G_Matrix_expr(QuoteNode(:nothing), grid_ij, particles_p, weights_ipjp, nothing, equations)
-end
-macro P2G_Matrix(grid_ij, particles_p, weights_ipjp, partition, equations)
-    P2G_Matrix_expr(QuoteNode(:nothing), grid_ij, particles_p, weights_ipjp, partition, equations)
-end
-macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, weights_ipjp, equations)
-    P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, nothing, equations)
-end
-macro P2G_Matrix(schedule::QuoteNode, grid_ij, particles_p, weights_ipjp, partition, equations)
-    P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, partition, equations)
+macro P2G_Matrix(args...)
+    P2G_Matrix_expr(parse_transfer_macro_args("@P2G_Matrix", args, true)...)
 end
 
 # -- expansion --
