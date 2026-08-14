@@ -371,7 +371,7 @@ end
 # GPU
 @kernel function gpukernel_P2G(f, grid, @Const(particles), @Const(weights))
     p = @index(Global)
-    f(grid, particles, weights, p)
+    @inline f(grid, particles, weights, p)
 end
 function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
@@ -387,7 +387,7 @@ G2P2G(f, device::CPUDevice, schedule, grid, particles, weights, partition) =
 # Unlike P2G, G2P2G writes interpolated and updated particle properties.
 @kernel function gpukernel_G2P2G(f, grid, particles, @Const(weights))
     p = @index(Global)
-    f(grid, particles, weights, p)
+    @inline f(grid, particles, weights, p)
 end
 function G2P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
@@ -584,7 +584,7 @@ end
 # GPU
 @kernel function gpukernel_G2P(f, @Const(grid), particles, @Const(weights))
     p = @index(Global)
-    f(grid, particles, weights, p)
+    @inline f(grid, particles, weights, p)
 end
 function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
