@@ -29,6 +29,10 @@ end
     A
 end
 
+# Disambiguate from `getindex(::AbstractArray, ::SpIndex)`; the parent decides
+# how to resolve the sparse index.
+Base.@propagate_inbounds Base.getindex(A::HybridArray, i::SpIndex) = parent(A)[i]
+
 @inline add!(A::AbstractArray{T}, i, v::T) where {T} = (@_propagate_inbounds_meta; A[i] += v)
 @inline add!(A::HybridArray{T}, i, v::T) where {T} = (@_propagate_inbounds_meta; _add!(get_device(A), A, i, v))
 @inline _add!(::CPUDevice, A::HybridArray, i, v) = (@_propagate_inbounds_meta; add!(parent(A), i, v))

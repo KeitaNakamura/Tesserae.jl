@@ -379,6 +379,11 @@ end
     @test sp_grid.v ≈ dense_grid.v
     @test all(!iszero, map(Tesserae.storageindex, Tesserae.activeindices(sp_grid.m)))
 
+    # `SpIndex` reads through a hybridized grid (the GPU @G2P2G read path)
+    @test all(i -> hybrid_grid.m[i] === sp_grid.m[i], Tesserae.activeindices(sp_grid.m))
+    @test all(i -> hybrid_grid.mv[i] === sp_grid.mv[i], Tesserae.activeindices(sp_grid.mv))
+    @test hybrid_grid.m[Tesserae.SpIndex(CartesianIndex(1,1), 0)] === 0.0
+
     bad_mesh = CartesianMesh(1.0, (0,31), (0,31); block_size_log2=Val(2))
     bad_grid = generate_grid(SpArray, GridProp, bad_mesh)
     bad_particles = generate_particles(ParticleProp, bad_mesh; alg=GridSampling())
