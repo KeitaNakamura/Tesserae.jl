@@ -43,11 +43,13 @@ end
 # in the cell, so the linear-basis moment matrix is diagonal and known in closed
 # form. That holds from `n = 2` only: for `n = 1` the second moment varies with
 # the position as ξ(1-ξ), so `Linear` is excluded rather than given a wrong
-# matrix. `12/(n+1)` is evaluated before dividing by `h²` so the quotient is the
-# exact 4 or 3 the two hand-written entries used.
+# matrix. `12//(n+1)` is evaluated as a rational before dividing by `h²`, so
+# the quotient is the exact 4 or 3 the two hand-written entries used and the
+# result stays in the mesh scalar type — a `12/(n+1)` float quotient would
+# promote the matrix to Float64, which Metal kernels cannot compile.
 @inline function full_support_moment_matrix_inv(::AbstractBSpline{Degree{n}}, mesh::CartesianMesh{dim}) where {n, dim}
     n ≥ 2 || throw(ArgumentError("the full-support moment matrix is position-dependent below degree 2"))
-    diagm([1; ones(Vec{dim,Int}) * (12/(n+1)) / spacing(mesh)^2])
+    diagm([1; ones(Vec{dim,Int}) * (12//(n+1)) / spacing(mesh)^2])
 end
 
 @inline function update_wls_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})

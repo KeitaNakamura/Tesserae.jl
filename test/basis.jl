@@ -434,6 +434,16 @@ end # BasisWeight
             bw = BasisWeight(WLS(uGIMP()), mesh)
             check_update!(bw, (;x,l), x, mesh; partition=true, reproduces_linear=true, truncated=true)
         end
+
+        # The closed-form moment matrix must stay in the mesh scalar type: an
+        # integer-division quotient once promoted it to Float64, which Metal
+        # kernels cannot compile.
+        for T in (Float32, Float64), degree in (Quadratic(), Cubic())
+            mesh = CartesianMesh(T, 0.1, (0, 1), (0, 1))
+            M⁻¹ = Tesserae.full_support_moment_matrix_inv(BSpline(degree), mesh)
+            @test eltype(M⁻¹) === T
+            @test M⁻¹[2, 2] * spacing(mesh)^2 ≈ 12 / (degree isa Quadratic ? 3 : 4)
+        end
     end
 
     @testset "KernelCorrection branches" begin
