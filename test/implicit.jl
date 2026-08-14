@@ -600,6 +600,13 @@ end
     @test size(A) == (30, 6)
     @test Tesserae.SparseArrays.nnz(A) == 132
 
+    # A single mesh may carry different row and column DoF counts, as for
+    # CartesianMesh and IGAMesh. A mesh pair still requires an explicit pair.
+    @test create_sparse_matrix(quad9; ndofs=(2, 1)) == create_sparse_matrix((quad9, quad9); ndofs=(2, 1))
+    @test create_sparse_matrix(quad9; ndofs=2) == create_sparse_matrix((quad9, quad9); ndofs=(2, 2))
+    @test eltype(create_sparse_matrix(Float32, quad9; ndofs=(2, 1))) === Float32
+    @test_throws TypeError create_sparse_matrix((quad9, quad4); ndofs=2)
+
     GridPropU = @NamedTuple{x::Vec{2,Float64}, u::Vec{2,Float64}}
     GridPropP = @NamedTuple{x::Vec{2,Float64}, p::Float64}
     PointProp = @NamedTuple{x::Vec{2,Float64}, V::Float64}

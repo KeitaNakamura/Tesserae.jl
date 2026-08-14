@@ -146,8 +146,8 @@ end
 
 # -- FEM --
 
-create_sparse_matrix(::Type{T}, mesh::FEMesh{<: Any, dim}; ndofs::Int) where {T, dim} = create_sparse_matrix(T, (mesh,mesh); ndofs=(ndofs,ndofs))
-create_sparse_matrix(mesh::FEMesh{<: Any, dim}; ndofs::Int) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
+create_sparse_matrix(::Type{T}, mesh::FEMesh; ndofs) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
+create_sparse_matrix(mesh::FEMesh; ndofs) = create_sparse_matrix(Float64, mesh; ndofs)
 
 function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::FEMesh, colmesh::FEMesh, row_ndofs, col_ndofs)
     rowmesh === colmesh && return _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh, row_ndofs, col_ndofs)

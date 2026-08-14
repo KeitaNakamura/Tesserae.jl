@@ -18,6 +18,12 @@ All notable changes to Tesserae.jl will be documented in this file.
   `create_block_sparse_matrix` instead of validating every block on each
   `@P2G_Matrix` call.
 
+### Changed
+
+- `create_sparse_matrix(femesh; ndofs)` now accepts a `(row_ndofs, col_ndofs)`
+  pair, matching `CartesianMesh` and `IGAMesh`. A mesh pair still requires an
+  explicit pair, so a rectangular matrix is never inferred from a single number.
+
 ### Fixed
 
 - `WLS` and `KernelCorrection` now reject polynomial bases above
