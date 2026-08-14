@@ -91,10 +91,11 @@ function Adapt.adapt_structure(to, weights::BasisWeightArray)
     BasisWeightArray(b, vals, indices, derivative_order(weights))
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
-    vals = getfield(weights, :vals)
-    backend = get_backend(first(values(vals)))
-    @assert all(==(backend), map(get_backend, vals))
-    @assert get_backend(getfield(weights, :indices)) == backend
+    # Deferred value arrays report `nothing`; the stored arrays and the support
+    # indices decide, and any that do report must agree.
+    backends = filter(!isnothing, map(get_backend, values(getfield(weights, :vals))))
+    backend = get_backend(getfield(weights, :indices))
+    @assert all(==(backend), backends)
     backend
 end
 

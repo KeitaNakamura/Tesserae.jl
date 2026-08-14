@@ -30,8 +30,18 @@ end
 # across the loop to spill GPU registers into local memory, and that spill
 # traffic -- not the interpolation -- dominated the transfer kernels.
 struct TrailingIndexed
-    parent::Any
-    trailing::Any
+    parent::Any     # the weights array
+    trailing::Any   # the particle index
+    particles::Any  # particle container, for the position a deferred value needs
+    grid::Any       # grid, for its mesh
+    window::Any     # support window symbol, mapping a support index to a node
+    names::Any      # every weight property the equations reference
+    cols::Any       # symbol bound once per particle
+    vals::Any       # symbol bound once per support node
+end
+TrailingIndexed(parent, trailing) = TrailingIndexed(parent, trailing, nothing, nothing, nothing, nothing, nothing, nothing)
+function TrailingIndexed(parent, trailing, particles, grid, window, names)
+    TrailingIndexed(parent, trailing, particles, grid, window, Tuple(names), gensym(:wcols), gensym(:wvals))
 end
 
 struct TransferScope
@@ -91,22 +101,32 @@ end
 SupportWindowBinding() = SupportWindowBinding(gensym(:window), true)
 SupportWindowBinding(binding::SupportWindowBinding; load::Bool) = SupportWindowBinding(binding.window, load)
 
-function support_window_exprs(binding::SupportWindowBinding, weights, p)
+function support_window_exprs(binding::SupportWindowBinding, weights, particles, p, grid)
     binding.load || return ()
-    (:($(binding.window) = Tesserae.transfer_support_window($weights, $p)),)
+    (:($(binding.window) = Tesserae.transfer_support_window($weights, $particles, $p, Tesserae.get_mesh($grid))),)
 end
 
 # The per-particle support window, straight from the weights storage. A plain
 # array of `BasisWeight`s -- the macros accept any container whose `weights[p]`
 # is a `BasisWeight` -- goes through the element instead. `BasisWeightArray` is
 # itself such an array, so its methods must be the more specific ones.
-@inline function transfer_support_window(weights::BasisWeightArray, p)
+@inline function transfer_support_window(weights::BasisWeightArray, particles, p, mesh)
+    @_propagate_inbounds_meta
+    _transfer_support_window(Val(is_lazy(weights)), weights, particles, p, mesh)
+end
+@inline function transfer_support_window(weights::AbstractArray{<: BasisWeight}, particles, p, mesh)
+    @_propagate_inbounds_meta
+    supportnodes(weights[p])
+end
+@inline function _transfer_support_window(::Val{false}, weights, particles, p, mesh)
     @_propagate_inbounds_meta
     supportnodes_storage(weights)[p]
 end
-@inline function transfer_support_window(weights::AbstractArray{<: BasisWeight}, p)
+# Deferred weights store nothing, not even which nodes they cover, so the window
+# is derived from the particle position the same way `update!` would have.
+@inline function _transfer_support_window(::Val{true}, weights, particles, p, mesh)
     @_propagate_inbounds_meta
-    supportnodes(weights[p])
+    supportnodes(basis(weights), LazyRow(particles, p), mesh)
 end
 
 # One weight property's column for particle `p`: the whole leading (support)
@@ -125,6 +145,78 @@ end
 end
 @inline particle_cartesian(storage, p::Integer) = (@_propagate_inbounds_meta; CartesianIndices(storage)[p])
 @inline particle_cartesian(storage, p::CartesianIndex) = p
+
+# Weight references resolve in three steps so one basis evaluation serves every
+# referenced property. `weight_columns` is bound once per particle,
+# `weight_node_values` once per support node, and each reference reads a field
+# out of the result. A stored property gives a view and an index; the deferred
+# ones share a single jet, evaluated to the highest order the equations
+# reference -- not the order the weights were declared with, which is what makes
+# a transfer that only uses `w[ip]` cheap even on `Order(2)` weights.
+struct DeferredWeights{K, B, P, M, W}
+    basis::B
+    pt::P      # the particle row: a basis may need more than the position
+    mesh::M
+    window::W
+end
+DeferredWeights{K}(basis::B, pt::P, mesh::M, window::W) where {K, B, P, M, W} =
+    DeferredWeights{K, B, P, M, W}(basis, pt, mesh, window)
+
+@inline function deferred_jet(d::DeferredWeights{K}, ip) where {K}
+    @_propagate_inbounds_meta
+    nodal_basis_jet(Order(K), d.basis, d.pt, d.mesh, d.window[ip])
+end
+
+# Derivative order of a deferred property, `nothing` when it is stored, and
+# `missing` when the weights have no such property. A plain function on types so
+# the generators below can call it -- a generated function may not call another.
+function deferred_order(W::Type, name::Symbol)
+    W <: BasisWeightArray || return nothing
+    Vals = W.parameters[2]
+    njets = W.parameters[6].parameters[1] + 1
+    pos = findfirst(==(name), fieldnames(Vals))
+    pos === nothing && return missing
+    pos <= njets && fieldtype(Vals, pos) <: LazyBasisValues ? pos - 1 : nothing
+end
+
+function split_weight_properties(W::Type, names)
+    stored = Symbol[]; deferred = Symbol[]; orders = Int[]
+    for n in names
+        k = deferred_order(W, n)
+        k === missing && return nothing
+        k === nothing ? push!(stored, n) : (push!(deferred, n); push!(orders, k))
+    end
+    Tuple(stored), Tuple(deferred), orders
+end
+
+@generated function weight_columns(weights, ::Val{names}, particles, p, mesh, window) where {names}
+    plan = split_weight_properties(weights, names)
+    plan === nothing && return :(error("no such weight property among ", $(QuoteNode(names))))
+    stored, _, orders = plan
+    views = [:(weight_prop_view(weights, Val($(QuoteNode(n))), p)) for n in stored]
+    deferred = isempty(orders) ? :nothing :
+        :(DeferredWeights{$(maximum(orders))}(basis(weights), LazyRow(particles, p), mesh, window))
+    quote
+        @_propagate_inbounds_meta
+        (stored = NamedTuple{$stored}(($(views...),)), deferred = $deferred)
+    end
+end
+
+@generated function weight_node_values(weights, cols, ::Val{names}, ip) where {names}
+    plan = split_weight_properties(weights, names)
+    plan === nothing && return :(error("no such weight property among ", $(QuoteNode(names))))
+    _, _, orders = plan
+    exprs = map(names) do n
+        k = deferred_order(weights, n)
+        k === nothing ? :(cols.stored.$n[ip]) : :(jet[$(k + 1)])
+    end
+    jetexpr = isempty(orders) ? :() : :(jet = deferred_jet(cols.deferred, ip))
+    quote
+        @_propagate_inbounds_meta
+        $jetexpr
+        NamedTuple{$names}(($(exprs...),))
+    end
+end
 
 # One support node of the window, resolved against the grid: an `SpIndex`
 # carrying the storage slot for an `SpGrid`, the plain index otherwise.
@@ -419,7 +511,8 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     @gensym gridwriteindex
     (; window) = binding
 
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p)=>ip]; cache=true)
+    weight_names = collect_transfer_refs(sum_equations, ip)
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, weight_names)=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
     particle_replacements = cached_replacements(scope, p)
     inner_replacements = cached_replacements(scope, i, ip)
@@ -437,9 +530,9 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     end
 
     body = quote
+        $(support_window_exprs(binding, weights, particles, p, grid)...)
         $(particle_replacements...)
         $(hoist_exprs...)
-        $(support_window_exprs(binding, weights, p)...)
         for $ip in eachindex($window)
             $i = Tesserae.transfer_nodeindex($grid, $window, $ip)
             $gridwriteindex = Tesserae.p2g_write_index($grid, $i)
@@ -460,7 +553,8 @@ function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations:
     binding = SupportWindowBinding()
     (; window) = binding
 
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p)=>ip]; cache=true)
+    weight_names = collect_transfer_refs(sum_equations, ip)
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, weight_names)=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
     particle_replacements = cached_replacements(scope, p)
     inner_replacements = cached_replacements(scope, i, ip)
@@ -494,9 +588,9 @@ function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations:
     node_exprs = uses_i ? (:($i = Tesserae.transfer_nodeindex($grid, $window, $ip)),) : ()
     body = quote
         $(offset_exprs...)
+        $(support_window_exprs(binding, weights, particles, p, grid)...)
         $(particle_replacements...)
         $(hoist_exprs...)
-        $(support_window_exprs(binding, weights, p)...)
         for $ip in eachindex($window)
             $(node_exprs...)
             $tileslot = Tesserae.tile_slot($window[$ip], $origin, $sideval)
@@ -984,7 +1078,8 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     (; window) = binding
 
     code = Expr(:block)
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p)=>ip]; cache=true)
+    weight_names = collect_transfer_refs(vcat(sum_equations, nosum_equations), ip)
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, weight_names)=>ip]; cache=true)
 
     if !isempty(sum_equations)
         sum_equations = resolve_sum_equations(sum_equations, scope, "@G2P", p)
@@ -1003,9 +1098,9 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         end
 
         code = quote
+            $(support_window_exprs(binding, weights, particles, p, grid)...)
             $(particle_replacements...)
             $(inits...)
-            $(support_window_exprs(binding, weights, p)...)
             for $ip in eachindex($window)
                 $i = Tesserae.transfer_nodeindex($grid, $window, $ip)
                 $(inner_replacements...)
@@ -1239,11 +1334,14 @@ function resolve_refs(expr, scope::TransferScope)
                 if scope.replacements === nothing
                     return :($(parent.parent).$x[$i, $(parent.trailing)])
                 end
-                viewsym = Symbol(:(view($(parent.parent).$x, $(parent.trailing))))
+                # One binding per particle and one per node, both identical across
+                # every weight reference, so `push_unique!` emits each once and
+                # the properties share a single basis evaluation.
                 push_unique!(scope.replacements[parent.trailing],
-                             :($viewsym = Tesserae.weight_prop_view($(parent.parent), Val($(QuoteNode(x))), $(parent.trailing))))
-                resolved = :($viewsym[$i])
-                sym = Symbol(:($(parent.parent).$x[$i]))
+                             :($(parent.cols) = Tesserae.weight_columns($(parent.parent), Val($(parent.names)), $(parent.particles), $(parent.trailing), Tesserae.get_mesh($(parent.grid)), $(parent.window))))
+                push_unique!(scope.replacements[i],
+                             :($(parent.vals) = Tesserae.weight_node_values($(parent.parent), $(parent.cols), Val($(parent.names)), $i)))
+                return :($(parent.vals).$x)
             else
                 resolved = :($parent.$x[$i])
                 sym = Symbol(resolved)

@@ -342,6 +342,11 @@ Base.similar(A::LazyBasisValues{T}, ::Type{S}, dims::Dims) where {T, S} = LazyBa
 is_lazy_values(::LazyBasisValues) = true
 is_lazy_values(::AbstractArray) = false
 
+# Owning no memory, a placeholder lives wherever the rest of the weights do, so
+# it reports no backend of its own and the surrounding arrays decide.
+KernelAbstractions.get_backend(::LazyBasisValues) = nothing
+Adapt.adapt_structure(to, A::LazyBasisValues) = A
+
 struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}, N, O <: Order} <: AbstractArray{ElType, N}
     basis::B
     vals::Vals
@@ -385,13 +390,16 @@ end
 
 @inline derivative_count(::Order{k}) where {k} = k + 1
 
-# Lazy weights re-evaluate a basis value from the particle position and the
-# mesh alone. FEM and IGA bases do not qualify: their update also derives the
-# cell Jacobian, the quadrature measure, and boundary normals, and writes the
-# measure and normals into caller-owned arrays that the equations then read.
+# A basis can defer its values only if one node's value follows from the
+# particle and the mesh alone. `Kernel`s qualify. The others do not, for two
+# different reasons: FEM and IGA shapes also derive the cell Jacobian, the
+# quadrature measure, and boundary normals, writing the last two into
+# caller-owned arrays the equations then read; `WLS` and `KernelCorrection`
+# build a moment matrix over the whole support and use the value storage as
+# scratch while doing it, so no single node stands on its own.
 check_lazy_basis(::Kernel) = nothing
 check_lazy_basis(basis) =
-    error("lazy basis weights are supported for kernels on a `CartesianMesh`, not for $(nameof(typeof(basis))): its update also produces the cell Jacobian, quadrature measure, and normals, which cannot be recovered from a particle position alone")
+    error("lazy basis weights need a basis whose value at one node follows from the particle and the mesh alone, which $(nameof(typeof(basis))) is not: it derives its values from the whole support or from cell geometry. Build these weights without `lazy=true`.")
 
 # CartesianMesh
 _generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
