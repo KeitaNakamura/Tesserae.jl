@@ -7,7 +7,7 @@ function shift_radius(offsets::AbstractArray{CartesianIndex{dim}}) where {dim}
     ntuple(d -> maximum(abs(off[d]) for off in offsets), Val(dim))
 end
 
-@generated function dot_unrolled(dest, src, offsets::SVector{N}, weights::SVector{N}, baseshift, I) where {N}
+@generated function dot_unrolled(src, offsets::SVector{N}, weights::SVector{N}, baseshift, I) where {N}
     ex = :(weights[1] * src[I + baseshift + offsets[1]])
     for i in 2:N
         ex = :(muladd(weights[$i], src[I + baseshift + offsets[$i]], $ex))
@@ -21,7 +21,7 @@ end
 # CPU
 function _stencil!(::CPUDevice, combine, dest, src, offsets, weights, baseshift, indices)
     @inbounds @simd for I in indices
-        tmp = dot_unrolled(dest, src, offsets, weights, baseshift, I)
+        tmp = dot_unrolled(src, offsets, weights, baseshift, I)
         dest[I] = combine(dest[I], tmp)
     end
 end
@@ -29,9 +29,8 @@ end
 # GPU
 @kernel function kernel_stencil(combine, dest, @Const(src), @Const(offsets), @Const(weights), @Const(baseshift), @Const(I0))
     I = I0 - oneunit(I0) + @index(Global, Cartesian)
-    tmp = zero(promote_type(eltype(src), eltype(weights)))
     @inbounds begin
-        tmp = dot_unrolled(dest, src, offsets, weights, baseshift, I)
+        tmp = dot_unrolled(src, offsets, weights, baseshift, I)
         dest[I] = combine(dest[I], tmp)
     end
 end

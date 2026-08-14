@@ -112,9 +112,6 @@ end
 
 _bspline_var(r, d) = Symbol(:v, r, :_, d)
 
-_bspline_value_type(::Val{1}, dim) = Vec{dim}
-_bspline_value_type(::Val{k}, dim) where {k} = Tensor{Tuple{@Symmetry{fill(dim, k)...}}}
-
 # Build the scalar product for one tensor-product component.
 function _bspline_product_expr(terms)
     @assert !isempty(terms)
@@ -132,7 +129,7 @@ end
 # Store only independent components for symmetric derivative tensors.
 _bspline_component_indices(::Val{1}, dim) = map(CartesianIndex, 1:dim)
 function _bspline_component_indices(::Val{k}, dim) where {k}
-    TT = _bspline_value_type(Val(k), dim)
+    TT = jet_value_type(Order(k), dim)
     Array(CartesianIndices(size(TT))[Tensorial.independent_to_component_map(TT)])
 end
 
@@ -141,7 +138,7 @@ function _bspline_value_expr(::Val{0}, dim)
     _bspline_product_expr(map(d -> _bspline_var(0, d), 1:dim))
 end
 function _bspline_value_expr(::Val{k}, dim) where {k}
-    TT = _bspline_value_type(Val(k), dim)
+    TT = jet_value_type(Order(k), dim)
     hpow = Symbol(:hpow_, k)
     entries = map(J -> :($(_bspline_derivative_expr(J, dim)) * $hpow),
                   _bspline_component_indices(Val(k), dim))

@@ -208,13 +208,17 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
                $assembler = Tesserae.matrix_assembler($matrix, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
                $matrix_cache = Tesserae.local_matrix_cache($matrix, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
            end,
+           # Spliced only into the non-block branch, so the `else` is
+           # unreachable -- but it must stay and it must throw: without it
+           # `buffer` is a possibly-undefined local afterwards, which widens its
+           # type and puts an undef check in the assembly loop.
            buffer_init = quote
                if $matrix_assembly isa Tesserae.ParticleAssembly
                    $buffer = nothing
                elseif $matrix_assembly isa Tesserae.CellAssembly
                    $buffer = Tesserae.local_matrix_buffer($matrix_cache, $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
                else
-                   error("BlockAssembly must use block assembly")
+                   error("unknown assembly mode: $($matrix_assembly)")
                end
            end,
            block_buffer_init = :($buffer = Tesserae.block_matrix_buffer($assembler, $matrix_assembly, $orientation)),

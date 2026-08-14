@@ -1,3 +1,13 @@
+# How a device converts array element types on transfer. `gpu_device` only ever
+# builds the two concrete policies, but the backend extensions return
+# `CUDADevice{EltypePolicy}()` -- the abstract type substituted as the concrete
+# parameter -- to mean "this array is already on that device, policy unknown".
+# `GPUDevice{P}`'s subtypes leave `P` unconstrained so that type-checks.
+#
+# The consequence to keep in mind: `adapt_storage` is defined only for the two
+# concrete policies, and type parameters are invariant, so such a device matches
+# none of them. It is a tag for identifying the device, never a converter --
+# adapting through one silently falls back to the generic `adapt`.
 abstract type EltypePolicy end
 struct CastFloat32    <: EltypePolicy end
 struct PreserveEltype <: EltypePolicy end

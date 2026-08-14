@@ -123,6 +123,13 @@ end
     end
 end
 
+# The tensor holding the order-`k` spatial derivatives in `dim` dimensions: a
+# `Vec` for the gradient, a symmetric tensor above that. For code generators
+# only, where `dim` and `k` are literals -- `zero_basis_value` below spells the
+# type out instead, because routing it through a call loses inference.
+jet_value_type(::Order{1}, dim) = Vec{dim}
+jet_value_type(::Order{k}, dim) where {k} = Tensor{Tuple{@Symmetry{fill(dim, k)...}}}
+
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{1}) where {dim, T} = zero(Vec{dim, T})
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{k}) where {dim, T, k} = zero(Tensor{Tuple{@Symmetry{ntuple(i->dim, k)...}}, T})
@@ -137,11 +144,7 @@ end
     tuple_otimes(ntuple(d -> vals[d][1], Val(dim)))
 end
 @generated function prod_each_dimension(::Order{k}, vals::Vararg{Tuple, dim}) where {k, dim}
-    if k == 1
-        TT = Vec{dim}
-    else
-        TT = Tensor{Tuple{@Symmetry{fill(dim,k)...}}}
-    end
+    TT = jet_value_type(Order(k), dim)
     v = Array{Expr}(undef, size(TT))
     for I in CartesianIndices(v)
         ex = Expr(:tuple)
