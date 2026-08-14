@@ -178,7 +178,10 @@ get_scheduler(::Val{:dynamic}) = DynamicScheduler()
 get_scheduler(::Val{:greedy})  = GreedyScheduler()
 get_scheduler(::Val{:nothing}) = SequentialScheduler()
 
-function tforeach(f, iter, scheduler=DynamicScheduler(); kwargs...)
+# `f` is only handed on to `_tforeach`, which is the one case where Julia skips
+# specializing on a function argument, so it takes the type parameter here. The
+# `_tforeach` methods below call `f` and specialize without one.
+function tforeach(f::F, iter, scheduler=DynamicScheduler(); kwargs...) where {F}
     if Threads.nthreads() > 1
         _tforeach(f, iter, get_scheduler(scheduler); kwargs...)
     else

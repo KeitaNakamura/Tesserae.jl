@@ -454,6 +454,68 @@
         @test threaded_particles.F ≈ sequential_particles.F
     end
 
+    @testset "every scheduler matches the sequential partitioned transfer" begin
+        Δt = 0.01
+        grid, particles, weights = transfer_fixture()
+        partition = ThreadPartition(grid.x)
+        update!(partition, particles.x)
+
+        transfers = (
+            :nothing => out -> (@threaded :nothing @P2G out=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
+            end),
+            :static => out -> (@threaded :static @P2G out=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
+            end),
+            :dynamic => out -> (@threaded :dynamic @P2G out=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
+            end),
+            :greedy => out -> (@threaded :greedy @P2G out=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
+            end),
+        )
+
+        # Regions of one color never share a support node, so how the regions
+        # are handed out cannot change any node's accumulation order: results
+        # must match bit for bit, not just approximately.
+        reference = deepcopy(grid)
+        last(transfers[1])(reference)
+        for (name, transfer!) in transfers[2:end]
+            out = deepcopy(grid)
+            transfer!(out)
+            @test out.m == reference.m
+            @test out.mv == reference.mv
+            @test out.f == reference.f
+        end
+    end
+
+    @testset "a failing threaded transfer throws instead of hanging" begin
+        grid, particles, weights = transfer_fixture()
+        partition = ThreadPartition(grid.x)
+        update!(partition, particles.x)
+
+        # A throw from one worker has to release the workers waiting on the
+        # phase barrier, otherwise the transfer deadlocks instead of failing.
+        # The error must also arrive unwrapped whichever worker raised it.
+        @test_throws "boom" (@threaded :static @P2G grid=>i particles=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p] * error("boom")
+        end)
+        @test_throws "boom" (@threaded :dynamic @P2G grid=>i particles=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p] * error("boom")
+        end)
+        @test_throws "boom" (@threaded :greedy @P2G grid=>i particles=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p] * error("boom")
+        end)
+    end
+
     @testset "threaded P2G requires updated Cartesian partition" begin
         grid, particles, weights = transfer_fixture()
         partition = ThreadPartition(grid.x)

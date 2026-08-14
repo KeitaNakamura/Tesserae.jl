@@ -448,11 +448,9 @@ end
 
 # CPU: multi-threading
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition) where {scheduler}
-    for group in threadsafe_groups(partition)
-        tforeach(group, scheduler) do region
-            for p in particle_indices(partition, particles, region)
-                @inline f(grid, particles, weights, p)
-            end
+    partitioned_foreach(strategy(partition), Val(scheduler)) do region
+        for p in particle_indices(partition, particles, region)
+            @inline f(grid, particles, weights, p)
         end
     end
 end
@@ -470,7 +468,8 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
     kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
 end
 
-G2P2G(f, device::CPUDevice, schedule, grid, particles, weights, partition) =
+# `f` is only handed on, so it takes a type parameter to be specialized on.
+G2P2G(f::F, device::CPUDevice, schedule, grid, particles, weights, partition) where {F} =
     P2G(f, device, schedule, grid, particles, weights, partition)
 
 # Unlike P2G, G2P2G writes interpolated and updated particle properties.
