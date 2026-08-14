@@ -203,7 +203,7 @@
         assembler = @inferred Tesserae.matrix_assembler(sequential, mesh, mesh, basis, basis)
         @test assembler isa Tesserae.CartesianSparseMatrixAssembler
         @test assembler.matrix === sequential
-        @test Tesserae.matrix_storage(assembler.matrix) === parent_sequential
+        @test Tesserae.matrix_parent(assembler.matrix) === parent_sequential
         @test Tesserae.has_cartesian_sparse_pattern(assembler)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
@@ -599,6 +599,13 @@ end
     B = create_sparse_matrix((quad4, quad9); ndofs=(1, 2))
     @test size(A) == (30, 6)
     @test Tesserae.SparseArrays.nnz(A) == 132
+
+    # A single mesh may carry different row and column DoF counts, as for
+    # CartesianMesh and IGAMesh. A mesh pair still requires an explicit pair.
+    @test create_sparse_matrix(quad9; ndofs=(2, 1)) == create_sparse_matrix((quad9, quad9); ndofs=(2, 1))
+    @test create_sparse_matrix(quad9; ndofs=2) == create_sparse_matrix((quad9, quad9); ndofs=(2, 2))
+    @test eltype(create_sparse_matrix(Float32, quad9; ndofs=(2, 1))) === Float32
+    @test_throws TypeError create_sparse_matrix((quad9, quad4); ndofs=2)
 
     GridPropU = @NamedTuple{x::Vec{2,Float64}, u::Vec{2,Float64}}
     GridPropP = @NamedTuple{x::Vec{2,Float64}, p::Float64}

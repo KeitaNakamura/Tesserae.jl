@@ -30,6 +30,31 @@ reference coordinate system.
     reverse(∂{k}(y -> value(f, y, args...), x, :all))
 end
 
+"""
+    axis_jet_args(kernel, pt, mesh, i)
+
+Extra arguments for the 1-D `jet` evaluation, as one tuple per Cartesian axis.
+Kernels whose 1-D value depends on the local coordinate alone need none.
+"""
+@inline axis_jet_args(::Kernel, pt, mesh::CartesianMesh{dim}, i) where {dim} = nfill((), Val(dim))
+
+# Shared body of the tensor-product kernel jets: evaluate the 1-D kernel per
+# axis, take the tensor product, then undo the reference-coordinate scaling.
+# `@generated` is required because `Order(a-1)` must see `a` as a literal to
+# become a type parameter, which `ntuple(f, Val(N))` cannot supply.
+@generated function separable_nodal_basis_jet(order::Order{k}, kernel, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
+    quote
+        @_inline_meta
+        x = getx(pt)
+        h⁻¹ = spacing_inv(mesh)
+        ξ = (x - mesh[i]) * h⁻¹
+        args = axis_jet_args(kernel, pt, mesh, i) # must precede the final `@ntuple`, whose loop variable shadows `i`
+        vals1d = @ntuple $dim d -> jet(order, kernel, ξ[d], args[d]...)
+        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
+        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
+    end
+end
+
 #=
 Standard Cartesian basis extension:
 * Tesserae.support_width(basis)
@@ -44,8 +69,19 @@ storage layout.
 Specialized bases may instead define `update_basis_weight!` for their own
 `BasisWeight`; CPDI uses this route because its support storage is variable.
 Such methods must update `supportnodes(bw)` and
-`nodal_basis_values(bw, order)` with matching local indices.
+`nodal_basis_values(bw, order)` with matching local indices. Note that such a
+basis forfeits every feature that needs a fixed Cartesian support width, namely
+`ThreadPartition` block sizing in `@P2G` and the sparsity radius used by
+`create_sparse_matrix`/`create_block_sparse_matrix`.
 =#
+
+# `support_width` sizes the default `BasisWeight` storage (see
+# `allocate_static_basis_values` below), and is also read outside `Basis/` by the
+# transfer.jl block-size check and the implicit.jl sparsity radius. Report a
+# missing definition here rather than as a bare `MethodError`.
+function support_width(basis::Basis)
+    error("$(nameof(typeof(basis))) does not define `Tesserae.support_width`. It sizes the default `BasisWeight` storage, and is also needed by `ThreadPartition` in `@P2G` and by `create_sparse_matrix`/`create_block_sparse_matrix`. Define `Tesserae.support_width` for it, or, if its support is not a fixed Cartesian block, override `Tesserae.allocate_basis_values` as `CPDI` does.")
+end
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
 initial_supportnodes(shape::Shape, mesh::FEMesh) = zero(SVector{nlocalnodes(shape), Int})
@@ -87,6 +123,13 @@ end
     end
 end
 
+# The tensor holding the order-`k` spatial derivatives in `dim` dimensions: a
+# `Vec` for the gradient, a symmetric tensor above that. For code generators
+# only, where `dim` and `k` are literals -- `zero_basis_value` below spells the
+# type out instead, because routing it through a call loses inference.
+jet_value_type(::Order{1}, dim) = Vec{dim}
+jet_value_type(::Order{k}, dim) where {k} = Tensor{Tuple{@Symmetry{fill(dim, k)...}}}
+
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{1}) where {dim, T} = zero(Vec{dim, T})
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{k}) where {dim, T, k} = zero(Tensor{Tuple{@Symmetry{ntuple(i->dim, k)...}}, T})
@@ -101,11 +144,7 @@ end
     tuple_otimes(ntuple(d -> vals[d][1], Val(dim)))
 end
 @generated function prod_each_dimension(::Order{k}, vals::Vararg{Tuple, dim}) where {k, dim}
-    if k == 1
-        TT = Vec{dim}
-    else
-        TT = Tensor{Tuple{@Symmetry{fill(dim,k)...}}}
-    end
+    TT = jet_value_type(Order(k), dim)
     v = Array{Expr}(undef, size(TT))
     for I in CartesianIndices(v)
         ex = Expr(:tuple)

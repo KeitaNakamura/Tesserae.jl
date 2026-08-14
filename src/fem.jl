@@ -79,16 +79,8 @@ function update!(
         geometry_patch = patches(geometry, geometry_cell.patch)
         x = geometry[geometry_indices]
         for q in eachindex(rule.points, rule.weights)
-            field_ξ = span_point(field_patch, field_cell.span, rule.points[q])
-            N, dNdξ = iga_basis_values_and_gradients(field_patch, field_cell.span, field_ξ)
-            if fieldmesh.weights !== nothing
-                N, dNdξ = rational_basis_values_and_gradients(N, dNdξ, fieldmesh.weights[field_indices])
-            end
-            geometry_ξ = span_point(geometry_patch, geometry_cell.span, rule.points[q])
-            geometry_N, geometry_dNdξ = iga_basis_values_and_gradients(geometry_patch, geometry_cell.span, geometry_ξ)
-            if geometry.weights !== nothing
-                _, geometry_dNdξ = rational_basis_values_and_gradients(geometry_N, geometry_dNdξ, geometry.weights[geometry_indices])
-            end
+            N, dNdξ = iga_span_basis(field_patch, field_cell.span, rule.points[q], fieldmesh.weights, field_indices)
+            _, geometry_dNdξ = iga_span_basis(geometry_patch, geometry_cell.span, rule.points[q], geometry.weights, geometry_indices)
             J = sum(x .⊗ geometry_dNdξ)
             weight = span_weight(geometry_patch, geometry_cell.span, rule.weights[q])
             _set_quadrature_data!(mode, weights[q,field_cell], measure, normal, q, geometry_cell, N, dNdξ, J, weight)
@@ -105,11 +97,7 @@ function _update_iga!(mode, weights, rule, mesh, measure, normal)
         x = mesh[indices]
         patch = patches(mesh, cell.patch)
         for q in eachindex(rule.points, rule.weights)
-            ξ = span_point(patch, cell.span, rule.points[q])
-            N, dNdξ = iga_basis_values_and_gradients(patch, cell.span, ξ)
-            if mesh.weights !== nothing
-                N, dNdξ = rational_basis_values_and_gradients(N, dNdξ, mesh.weights[indices])
-            end
+            N, dNdξ = iga_span_basis(patch, cell.span, rule.points[q], mesh.weights, indices)
             J = sum(x .⊗ dNdξ)
             weight = span_weight(patch, cell.span, rule.weights[q])
             _set_quadrature_data!(mode, weights[q,cell], measure, normal, q, cell, N, dNdξ, J, weight)

@@ -69,6 +69,50 @@ function push_unique!(xs::Vector, x)
     xs
 end
 
+# `@G2P2G` fuses a G2P and a P2G loop into a single pass over the particles, so
+# the basis weight and its support nodes must be bound once and shared by both
+# halves. The two symbols travel together with a `load` flag: whichever half
+# holds `load=true` emits the binding statements, the other just uses them.
+struct BasisWeightBinding
+    bw::Symbol
+    gridindices::Symbol
+    load::Bool
+end
+BasisWeightBinding() = BasisWeightBinding(gensym(:bw), gensym(:gridindices), true)
+BasisWeightBinding(binding::BasisWeightBinding; load::Bool) = BasisWeightBinding(binding.bw, binding.gridindices, load)
+
+function basis_weight_exprs(binding::BasisWeightBinding, grid, weights, p)
+    binding.load || return ()
+    (:($(binding.bw) = $weights[$p]), :($(binding.gridindices) = supportnodes($(binding.bw), $grid)))
+end
+
+# All four transfer macros take the same shape: an optional `:schedule`
+# QuoteNode, three `parent => index` pairs, an optional partition, and the
+# equation block. Parsing it once keeps them from drifting, and lets a wrong
+# call say what the right one looks like instead of listing `::Any` candidates.
+function parse_transfer_macro_args(macroname, args, allow_partition::Bool)
+    args = collect(args)
+    schedule = QuoteNode(:nothing)
+    if !isempty(args) && first(args) isa QuoteNode
+        schedule = popfirst!(args)
+    end
+    partition = nothing
+    if length(args) == 5
+        allow_partition || throw(ArgumentError(transfer_macro_usage(macroname, allow_partition)))
+        partition = args[4]
+    elseif length(args) != 4
+        throw(ArgumentError(transfer_macro_usage(macroname, allow_partition)))
+    end
+    schedule, args[1], args[2], args[3], partition, last(args)
+end
+
+function transfer_macro_usage(macroname, allow_partition)
+    indices = macroname == "@P2G_Matrix" ? "grid=>(i,j) particles=>p weights=>(ip,jp)" :
+                                           "grid=>i particles=>p weights=>ip"
+    part = allow_partition ? " [partition]" : ""
+    "$macroname: expected `$macroname [:schedule] $indices$part begin ... end`"
+end
+
 """
     @P2G grid=>i particles=>p weights=>ip [partition] begin
         equations...
@@ -130,17 +174,8 @@ For example, `\$Δt` captures the current value of `Δt`.
     In `@P2G`, `Calculation on grid` part must be placed after
     `Particle-to-grid transfer` part.
 """
-macro P2G(grid_i, particles_p, weights_ip, equations)
-    P2G_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, nothing, equations)
-end
-macro P2G(grid_i, particles_p, weights_ip, partition, equations)
-    P2G_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, partition, equations)
-end
-macro P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, equations)
-    P2G_expr(schedule, grid_i, particles_p, weights_ip, nothing, equations)
-end
-macro P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, partition, equations)
-    P2G_expr(schedule, grid_i, particles_p, weights_ip, partition, equations)
+macro P2G(args...)
+    P2G_expr(parse_transfer_macro_args("@P2G", args, true)...)
 end
 
 function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_ip::Expr, partition, equations::Expr)
@@ -151,7 +186,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     sum_equations, nosum_equations = split_sum_equations(program, "@P2G")
 
     code = quote
-        Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
+        Tesserae.check_transfer_arguments("@P2G", $grid, $particles, $weights, $partition)
     end
 
     if !isempty(sum_equations)
@@ -181,8 +216,9 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     esc(prettify(code; lines=true, alias=false))
 end
 
-function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
-    @gensym bw gridindices gridwriteindex
+function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::BasisWeightBinding=BasisWeightBinding())
+    @gensym gridwriteindex
+    (; bw, gridindices) = binding
 
     scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
@@ -204,8 +240,7 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     body = quote
         $(particle_replacements...)
         $(hoist_exprs...)
-        $bw = $weights[$p]
-        $gridindices = supportnodes($bw, $grid)
+        $(basis_weight_exprs(binding, grid, weights, p)...)
         for $ip in eachindex($gridindices)
             $i = $gridindices[$ip]
             $gridwriteindex = Tesserae.p2g_write_index($grid, $i)
@@ -336,7 +371,7 @@ end
 # GPU
 @kernel function gpukernel_P2G(f, grid, @Const(particles), @Const(weights))
     p = @index(Global)
-    f(grid, particles, weights, p)
+    @inline f(grid, particles, weights, p)
 end
 function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
@@ -352,7 +387,7 @@ G2P2G(f, device::CPUDevice, schedule, grid, particles, weights, partition) =
 # Unlike P2G, G2P2G writes interpolated and updated particle properties.
 @kernel function gpukernel_G2P2G(f, grid, particles, @Const(weights))
     p = @index(Global)
-    f(grid, particles, weights, p)
+    @inline f(grid, particles, weights, p)
 end
 function G2P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
@@ -373,31 +408,19 @@ function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     Expr(:block, nosum_exprs...)
 end
 
-grid_node_indices(grid) = eachindex(grid)
-grid_node_indices(grid::SpGrid) = activeindices(get_spinds(grid))
-
+# The grid-only part of `@P2G`. It walks the same indices as `@foreach` and
+# launches the same GPU kernels, both defined in foreach.jl, but keeps its own
+# CPU loops: routing them through `tforeach` costs 5-9% on a dense grid, and
+# `@inbounds @simd` here is worth that much.
 function P2G_nosum(f, ::CPUDevice, grid)
-    @inbounds @simd for i in grid_node_indices(grid)
+    @inbounds @simd for i in foreach_indices(grid)
         @inline f(grid, i)
     end
 end
 
 function P2G_nosum(f, ::CPUDevice, grid::SpGrid)
-    @inbounds for i in grid_node_indices(grid)
+    @inbounds for i in foreach_indices(grid)
         @inline f(grid, i)
-    end
-end
-
-@kernel function gpukernel_P2G_nosum(f, grid)
-    i = @index(Global, Cartesian)
-    f(grid, i)
-end
-
-@kernel function gpukernel_P2G_nosum_spgrid(f, grid, @Const(spinds))
-    k = @index(Global)
-    active, i = _active_spindex(spinds, k)
-    if active
-        @inbounds f(grid, i)
     end
 end
 
@@ -405,49 +428,52 @@ function P2G_nosum(f, device::GPUDevice, grid)
     backend = get_backend(device)
     if grid isa SpGrid
         spinds = get_spinds(grid)
-        kernel = gpukernel_P2G_nosum_spgrid(backend)
+        kernel = gpukernel_foreach_spgrid(backend)
         kernel(f, grid, spinds; ndrange=_spindex_ndrange(spinds))
     else
-        kernel = gpukernel_P2G_nosum(backend)
+        kernel = gpukernel_foreach(backend)
         kernel(f, grid; ndrange=size(grid))
     end
 end
 
-function check_arguments_for_P2G(grid, particles, weights, partition)
-    get_mesh(grid) isa AbstractMesh || error("@P2G: grid must have a mesh")
-    eltype(weights) <: BasisWeight || error("@P2G: invalid `BasisWeight`s, got type $(typeof(weights))")
+# `macroname` is threaded through so every transfer macro reports its own name.
+# `@G2P` takes no partition and passes `nothing`, which skips the partition
+# checks exactly as before.
+function check_transfer_arguments(macroname, grid, particles, weights, partition)
+    get_mesh(grid) isa AbstractMesh || error("$macroname: grid must have a mesh")
+    eltype(weights) <: BasisWeight || error("$macroname: invalid `BasisWeight`s, got type $(typeof(weights))")
     if grid isa SpGrid
-        eltype(weights) <: BasisWeight{CPDI} && cpdi_spgrid_error("@P2G")
+        eltype(weights) <: BasisWeight{CPDI} && cpdi_spgrid_error(macroname)
         if length(propertynames(grid)) > 1
-            isempty(get_data(getproperty(grid, 2))) && error("@P2G: SpGrid indices not activated")
+            isempty(get_data(getproperty(grid, 2))) && error("$macroname: SpGrid indices not activated")
         end
     end
     @assert length(particles) ≤ length(weights)
     # check device
     device = get_device(grid)
     @assert get_device(particles) == get_device(weights) == device
-    check_partition_for_P2G(device, grid, weights, partition)
+    check_partition_for_transfer(macroname, device, grid, weights, partition)
 end
 
 # ThreadPartition is a CPU scheduling aid. GPU P2G uses particle-parallel kernels
 # and SpGrid sparsity is updated separately from particle positions.
-check_partition_for_P2G(::CPUDevice, grid, weights, ::Nothing) = nothing
-check_partition_for_P2G(::GPUDevice, grid, weights, ::Nothing) = nothing
-function check_partition_for_P2G(::GPUDevice, grid, weights, partition)
-    error("@P2G: ThreadPartition is only used on CPU. Use partitionless @P2G on GPU.")
+check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::Nothing) = nothing
+check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, ::Nothing) = nothing
+function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition)
+    error("$macroname: ThreadPartition is only used on CPU. Use partitionless $macroname on GPU.")
 end
-function check_partition_for_P2G(::CPUDevice, grid, weights, partition::ThreadPartition)
-    check_partition_for_P2G(grid, weights, strategy(partition))
+function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, partition::ThreadPartition)
+    check_partition_for_transfer(macroname, grid, weights, strategy(partition))
 end
-check_partition_for_P2G(grid, weights, strat) = nothing
-function check_partition_for_P2G(grid, weights, strat::BlockStrategy)
+check_partition_for_transfer(macroname, grid, weights, strat) = nothing
+function check_partition_for_transfer(macroname, grid, weights, strat::BlockStrategy)
     @assert nblocks(get_mesh(grid)) == nblocks(strat)
     if nassigned(strat) == 0
-        error("@P2G: No particles assigned to any block in ThreadPartition")
+        error("$macroname: No particles assigned to any block in ThreadPartition")
     end
     b = basis(first(weights))
     if support_width(b) > blockwidth(strat)
-        error("@P2G: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
+        error("$macroname: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
     end
 end
 
@@ -517,10 +543,8 @@ For example, `\$Δt` captures the current value of `Δt`.
     In `@G2P`, `Calculation on particles` part must be placed after
     `Grid-to-particle transfer` part.
 """
-macro G2P(grid_i, particles_p, weights_ip, equations)
-    G2P_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, equations)
-end
-macro G2P(schedule::QuoteNode, grid_i, particles_p, weights_ip, equations)
+macro G2P(args...)
+    schedule, grid_i, particles_p, weights_ip, _, equations = parse_transfer_macro_args("@G2P", args, false)
     G2P_expr(schedule, grid_i, particles_p, weights_ip, equations)
 end
 
@@ -532,7 +556,7 @@ function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pr
     sum_equations, nosum_equations = split_sum_equations(program, "@G2P")
 
     code = quote
-        Tesserae.check_arguments_for_G2P($grid, $particles, $weights)
+        Tesserae.check_transfer_arguments("@G2P", $grid, $particles, $weights, nothing)
     end
 
     if !isempty(program.equations)
@@ -560,7 +584,7 @@ end
 # GPU
 @kernel function gpukernel_G2P(f, @Const(grid), particles, @Const(weights))
     p = @index(Global)
-    f(grid, particles, weights, p)
+    @inline f(grid, particles, weights, p)
 end
 function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
@@ -570,8 +594,8 @@ function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) w
     kernel(f, grid, particles, weights; ndrange=length(particles))
 end
 
-function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector)
-    @gensym bw gridindices
+function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector, binding::BasisWeightBinding=BasisWeightBinding())
+    (; bw, gridindices) = binding
 
     code = Expr(:block)
     scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
@@ -595,8 +619,7 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         code = quote
             $(particle_replacements...)
             $(inits...)
-            $bw = $weights[$p]
-            $gridindices = supportnodes($bw, $grid)
+            $(basis_weight_exprs(binding, grid, weights, p)...)
             for $ip in eachindex($gridindices)
                 $i = $gridindices[$ip]
                 $(inner_replacements...)
@@ -616,32 +639,6 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     end
 
     code
-end
-
-function basis_weight_symbols(expr, weights, p, grid)
-    bw = gridindices = nothing
-    MacroTools.postwalk(expr) do ex
-        if Meta.isexpr(ex, :(=), 2)
-            ex.args[2] == :($weights[$p]) && (bw = ex.args[1])
-            bw !== nothing && ex.args[2] == :(supportnodes($bw, $grid)) && (gridindices = ex.args[1])
-        end
-        ex
-    end
-    gridindices === nothing ? nothing : (bw, gridindices)
-end
-
-function reuse_basis_weight(expr::Expr, shared_basis_weight, weights, p, grid)
-    basis_weight = basis_weight_symbols(expr, weights, p, grid)
-    basis_weight === nothing && return expr
-
-    bw, gridindices = basis_weight
-    shared_bw, shared_gridindices = shared_basis_weight
-    MacroTools.prewalk(expr) do ex
-        Meta.isexpr(ex, :(=), 2) && ex.args[1] in (bw, gridindices) && return Expr(:block)
-        ex == bw && return shared_bw
-        ex == gridindices && return shared_gridindices
-        ex
-    end
 end
 
 """
@@ -669,17 +666,8 @@ to be performed in a single loop over particles, avoiding repeated traversals.
 end
 ```
 """
-macro G2P2G(grid_i, particles_p, weights_ip, equations)
-    G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, nothing, equations)
-end
-macro G2P2G(grid_i, particles_p, weights_ip, partition, equations)
-    G2P2G_expr(QuoteNode(:nothing), grid_i, particles_p, weights_ip, partition, equations)
-end
-macro G2P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, equations)
-    G2P2G_expr(schedule, grid_i, particles_p, weights_ip, nothing, equations)
-end
-macro G2P2G(schedule::QuoteNode, grid_i, particles_p, weights_ip, partition, equations)
-    G2P2G_expr(schedule, grid_i, particles_p, weights_ip, partition, equations)
+macro G2P2G(args...)
+    G2P2G_expr(parse_transfer_macro_args("@G2P2G", args, true)...)
 end
 
 function G2P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_ip::Expr, partition, equations::Expr)
@@ -731,15 +719,13 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     stages = split_g2p2g_stages(program, i, p)
 
     code = quote
-        Tesserae.check_arguments_for_G2P($grid, $particles, $weights)
-        Tesserae.check_arguments_for_P2G($grid, $particles, $weights, $partition)
+        Tesserae.check_transfer_arguments("@G2P2G", $grid, $particles, $weights, $partition)
     end
     body = Expr(:block)
-    shared_basis_weight = nothing
+    binding = BasisWeightBinding()
 
     if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
-        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum)
-        shared_basis_weight = basis_weight_symbols(expr, weights, p, grid)
+        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, binding)
         body = quote
             $body
             $expr
@@ -747,10 +733,10 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     end
 
     if !isempty(stages.p2g_sum)
-        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum)
-        if shared_basis_weight !== nothing
-            expr = reuse_basis_weight(expr, shared_basis_weight, weights, p, grid)
-        end
+        # `G2P_sum_expr` binds the basis weight only when it has `@∑` equations,
+        # so this half must load it itself otherwise.
+        p2g_binding = isempty(stages.g2p_sum) ? binding : BasisWeightBinding(binding; load=false)
+        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding)
         code = quote
             $code
             $pre
@@ -879,17 +865,3 @@ function remove_indexing(expr)
     end
 end
 
-function check_arguments_for_G2P(grid, particles, weights)
-    get_mesh(grid) isa AbstractMesh || error("@G2P: grid must have a mesh")
-    eltype(weights) <: BasisWeight || error("@G2P: invalid `BasisWeight`s, got type $(typeof(weights))")
-    if grid isa SpGrid
-        eltype(weights) <: BasisWeight{CPDI} && cpdi_spgrid_error("@G2P")
-        if length(propertynames(grid)) > 1
-            isempty(get_data(getproperty(grid, 2))) && error("@G2P: SpGrid indices not activated")
-        end
-    end
-    @assert length(particles) ≤ length(weights)
-    # check device
-    device = get_device(grid)
-    @assert get_device(particles) == get_device(weights) == device
-end

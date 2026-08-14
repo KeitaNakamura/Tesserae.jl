@@ -454,6 +454,21 @@ end # BasisWeight
         end
     end
 
+    @testset "Correction polynomial degree" begin
+        kern = BSpline(Quadratic())
+        for poly in (Polynomial(Linear()), Polynomial(MultiLinear()))
+            @test WLS(kern, poly) isa WLS
+            @test KernelCorrection(kern, poly) isa KernelCorrection
+        end
+        # A kernel support carries too few independent nodes to condition the
+        # moment matrix for these, so the weights come out negative and unbounded.
+        for poly in (Polynomial(Constant()), Polynomial(Quadratic()), Polynomial(Cubic()), Polynomial(Tesserae.MultiQuadratic()))
+            @test_throws ArgumentError WLS(kern, poly)
+            @test_throws ArgumentError KernelCorrection(kern, poly)
+        end
+        @test Polynomial(Quadratic()) isa Polynomial # still valid on its own
+    end
+
     @testset "Filtered corrections" begin
         mesh = CartesianMesh(0.1, (0,1), (0,1))
         x = interior_point(Val(2))

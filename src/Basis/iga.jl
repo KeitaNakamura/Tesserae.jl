@@ -90,6 +90,22 @@ gradients using control point weights.
 end
 
 """
+    iga_span_basis(patch, span, qpt, weights, indices)
+
+Basis values and parametric gradients at one quadrature point of a knot span,
+made rational when the mesh carries control-point `weights`.
+"""
+@inline function iga_span_basis(patch::IGAPatch, span::CartesianIndex, qpt::Vec, weights, indices)
+    ξ = span_point(patch, span, qpt)
+    N, dNdξ = iga_basis_values_and_gradients(patch, span, ξ)
+    rational_basis_values_and_gradients(N, dNdξ, weights, indices)
+end
+
+@inline rational_basis_values_and_gradients(N, dN, ::Nothing, indices) = (N, dN)
+@inline rational_basis_values_and_gradients(N, dN, weights::AbstractVector, indices) =
+    rational_basis_values_and_gradients(N, dN, weights[indices])
+
+"""
     cox_de_boor_values(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real)
 
 Evaluate the active 1D B-spline basis functions on a knot span with the

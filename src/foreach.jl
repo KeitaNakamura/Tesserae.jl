@@ -165,33 +165,33 @@ end
 
 @kernel function gpukernel_foreach(f, collection)
     i = @index(Global, Cartesian)
-    f(collection, i)
+    @inline f(collection, i)
 end
 
 @kernel function gpukernel_foreach_linear(f, collection)
     i = @index(Global)
-    f(collection, i)
+    @inline f(collection, i)
 end
 
 @kernel function gpukernel_foreach_spgrid(f, collection, @Const(spinds))
     k = @index(Global)
     active, i = _active_spindex(spinds, k)
     if active
-        @inbounds f(collection, i)
+        @inbounds @inline f(collection, i)
     end
 end
 
 @kernel function gpukernel_foreach_slice(f, collection, slice)
     j = @index(Global, Cartesian)
     i = foreach_slice_index(slice, j)
-    f(collection, i)
+    @inline f(collection, i)
 end
 
 @kernel function gpukernel_foreach_slice_spgrid(f, collection, slice, @Const(spinds))
     j = @index(Global, Cartesian)
     i = foreach_slice_spindex(spinds, slice, j)
     if isactive(i)
-        @inbounds f(collection, i)
+        @inbounds @inline f(collection, i)
     end
 end
 

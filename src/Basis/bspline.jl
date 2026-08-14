@@ -112,9 +112,6 @@ end
 
 _bspline_var(r, d) = Symbol(:v, r, :_, d)
 
-_bspline_value_type(::Val{1}, dim) = Vec{dim}
-_bspline_value_type(::Val{k}, dim) where {k} = Tensor{Tuple{@Symmetry{fill(dim, k)...}}}
-
 # Build the scalar product for one tensor-product component.
 function _bspline_product_expr(terms)
     @assert !isempty(terms)
@@ -132,7 +129,7 @@ end
 # Store only independent components for symmetric derivative tensors.
 _bspline_component_indices(::Val{1}, dim) = map(CartesianIndex, 1:dim)
 function _bspline_component_indices(::Val{k}, dim) where {k}
-    TT = _bspline_value_type(Val(k), dim)
+    TT = jet_value_type(Order(k), dim)
     Array(CartesianIndices(size(TT))[Tensorial.independent_to_component_map(TT)])
 end
 
@@ -141,7 +138,7 @@ function _bspline_value_expr(::Val{0}, dim)
     _bspline_product_expr(map(d -> _bspline_var(0, d), 1:dim))
 end
 function _bspline_value_expr(::Val{k}, dim) where {k}
-    TT = _bspline_value_type(Val(k), dim)
+    TT = jet_value_type(Order(k), dim)
     hpow = Symbol(:hpow_, k)
     entries = map(J -> :($(_bspline_derivative_expr(J, dim)) * $hpow),
                   _bspline_component_indices(Val(k), dim))
@@ -209,17 +206,9 @@ end
     ξ < 3 ? ((3-ξ)^5) / 120                          : zero(ξ)
 end
 
-@generated function nodal_basis_jet(order::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
-    quote
-        @_inline_meta
-        x = getx(pt)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - mesh[i]) * h⁻¹
-        vals1d = @ntuple $dim d -> jet(order, spline, ξ[d])
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
-end
+# Covers `SteffenBSpline` too; the two differ only in `axis_jet_args`.
+@inline nodal_basis_jet(order::Order, spline::AbstractBSpline, pt, mesh::CartesianMesh, i) =
+    separable_nodal_basis_jet(order, spline, pt, mesh, i)
 
 """
     SteffenBSpline(degree)
@@ -300,18 +289,9 @@ function value(::SteffenBSpline{Cubic}, ξ::Real, pos::Int)
     end
 end
 
-@generated function nodal_basis_jet(order::Order{k}, spline::SteffenBSpline, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
-    quote
-        @_inline_meta
-        x = getx(pt)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - mesh[i]) * h⁻¹
-        pos = steffen_node_position(mesh, i)
-        vals1d = @ntuple $dim d -> jet(order, spline, ξ[d], pos[d])
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
-end
+# Steffen's correction needs each axis to know how far its node sits from the boundary.
+@inline axis_jet_args(::SteffenBSpline, pt, mesh::CartesianMesh, i) =
+    map(tuple, Tuple(steffen_node_position(mesh, i)))
 
 @inline function steffen_node_position(ax::AbstractVector, i::Int)
     left = i - firstindex(ax)

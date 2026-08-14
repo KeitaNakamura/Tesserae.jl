@@ -161,7 +161,6 @@ function Base.iterate(iter::ActiveSpIndices{dim}, state=(1, 1)) where {dim}
     numbering = blocknumbering(sp)
     blocks = CartesianIndices(numbering)
     localindices = CartesianIndices(blocksize(sp))
-    block_size = Val(block_size_log2(sp))
     nblock = length(numbering)
     nlocal = length(localindices)
     b, l = state
@@ -171,11 +170,9 @@ function Base.iterate(iter::ActiveSpIndices{dim}, state=(1, 1)) where {dim}
         if !iszero(blocknumber)
             block = blocks[b]
             while l ≤ nlocal
-                localcoord = localindices[l]
-                I = blocklocal_to_global(block, localcoord; block_size_log2=block_size)
-                i = storageindex(sp, blocknumber, l)
+                active, spindex = _active_spindex(sp, blocknumber, block, l, localindices)
                 l += 1
-                checkbounds(Bool, sp, Tuple(I)...) && return SpIndex(I, i), (b, l)
+                active && return spindex, (b, l)
             end
         end
         b += 1
@@ -624,6 +621,10 @@ function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bc = Broadcast.instantiate(bc)
     bcf = Broadcast.flatten(bc)
+    # Flattening changes the nesting, not the set of operands, so `bcf.args` is
+    # the one place every leaf array is reachable in a single tuple -- that is
+    # what the shared-sparsity test needs. The copy itself stays on the
+    # unflattened `bc`, whose nesting `_get_data` rebuilds over the data arrays.
     if identical_spinds(dest, bcf.args...)
         Base.copyto!(_get_data(dest), _get_data(bc))
     else

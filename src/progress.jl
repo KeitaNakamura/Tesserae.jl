@@ -91,54 +91,50 @@ end
 
 # Meter stores both simulation progress and terminal rendering state so resize-safe
 # refreshes can overwrite the previous multi-line display.
-mutable struct Meter
+Base.@kwdef mutable struct Meter
     # Simulation progress
     t_start::Float64
     t_stop::Float64
-    t_last_print::Float64
-    t_prev::Float64
-    timestep::Float64
-    has_timestep::Bool
-    progress::Float64
-    count::Int
+    t_last_print::Float64 = t_start
+    t_prev::Float64 = t_start
+    timestep::Float64 = 0.0
+    has_timestep::Bool = false
+    progress::Float64 = 0.0
+    count::Int = 0
     # Wall-clock timing and ETA
-    wall_init::Float64
-    wall_prev::Float64
-    wall_last_print::Float64
-    rate_ema::Float64
-    has_rate::Bool
-    eta::Float64
-    has_eta::Bool
-    alpha::Float64
+    wall_init::Float64 = time()
+    wall_prev::Float64 = wall_init
+    wall_last_print::Float64 = wall_init
+    rate_ema::Float64 = 0.0
+    has_rate::Bool = false
+    eta::Float64 = 0.0
+    has_eta::Bool = false
+    alpha::Float64 = 0.1
     # Terminal rendering
-    printed::Bool
-    done::Bool
-    numprintedvalues::Int
-    desc::String
-    dt::Float64
-    output::IO
-    color::Symbol
-    valuecolor::Symbol
-    summary::Bool
+    printed::Bool = false
+    done::Bool = false
+    numprintedvalues::Int = 0
+    desc::String = "Progress: "
+    dt::Float64 = 0.1
+    output::IO = stderr
+    color::Symbol = :green
+    valuecolor::Symbol = :blue
+    summary::Bool = true
     # Step statistics
-    step_count::Int
-    step_min::Float64
-    step_max::Float64
-    step_mean::Float64
-    step_m2::Float64
-    timestep_median::P2Median
-    step_median::P2Median
+    step_count::Int = 0
+    step_min::Float64 = Inf
+    step_max::Float64 = -Inf
+    step_mean::Float64 = 0.0
+    step_m2::Float64 = 0.0
+    timestep_median::P2Median = P2Median()
+    step_median::P2Median = P2Median()
 end
 
 function Meter(t_start, t_stop; desc = "Progress: ", dt = 0.1, output = stderr,
                color = :green, valuecolor = :blue, alpha = 0.1, summary = true)
-    now = time()
-    t_start_float = Float64(t_start)
-    t_stop_float = Float64(t_stop)
-    Meter(t_start_float, t_stop_float, t_start_float, t_start_float, 0.0, false,
-          0.0, 0, now, now, now, 0.0, false, 0.0, false, Float64(alpha), false,
-          false, 0, String(desc), Float64(dt), output, color, valuecolor,
-          Bool(summary), 0, Inf, -Inf, 0.0, 0.0, P2Median(), P2Median())
+    Meter(; t_start = Float64(t_start), t_stop = Float64(t_stop),
+            alpha = Float64(alpha), desc = String(desc), dt = Float64(dt),
+            output, color, valuecolor, summary = Bool(summary))
 end
 
 function durationstring(seconds)

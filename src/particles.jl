@@ -47,7 +47,7 @@ end
 
 function _generate_particles(::Type{ParticleProp}, points::AbstractArray{<: Vec}) where {ParticleProp}
     if !(isbitstype(ParticleProp))
-        error("generate_particles: the property type of grid must be `isbitstype` type")
+        error("generate_particles: the property type of particles must be `isbitstype` type")
     end
     particles = StructArray{ParticleProp}(undef, size(points))
     fillzero!(particles)
@@ -193,7 +193,7 @@ function _check_quadrature_rule(::QuadratureRule{F, qdim}, ::IGAMesh{dim, pdim})
     qdim == pdim || throw(DimensionMismatch("quadrature-rule and IGA parametric dimensions must match"))
 end
 
-function generate_points(rule::QuadratureRule, mesh::Union{FEMesh, IGAMesh})
+function generate_points(rule::QuadratureRule, mesh::AbstractCellMesh)
     _check_quadrature_rule(rule, mesh)
     qpts = rule.points
     points = Matrix{eltype(mesh)}(undef, length(qpts), ncells(mesh))

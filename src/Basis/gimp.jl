@@ -37,15 +37,9 @@ end
     ξ < 1+l/2 ? (1+l/2-ξ)^2 / 2l  : zero(ξ)
 end
 
-@generated function nodal_basis_jet(order::Order{k}, spline::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
-    quote
-        @_inline_meta
-        x = getx(pt)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - mesh[i]) * h⁻¹
-        l = _normalized_particle_length(pt, mesh)
-        vals′ = @ntuple $dim d -> jet(order, spline, ξ[d], l)
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals′...))
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
-end
+# Every axis sees the same normalized particle length.
+@inline axis_jet_args(::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim} =
+    nfill((_normalized_particle_length(pt, mesh),), Val(dim))
+
+@inline nodal_basis_jet(order::Order, spline::uGIMP, pt, mesh::CartesianMesh, i) =
+    separable_nodal_basis_jet(order, spline, pt, mesh, i)

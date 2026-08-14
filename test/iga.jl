@@ -167,6 +167,28 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         N3, dN3 = @inferred Tesserae.cox_de_boor_values_and_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
         @test N3 ≈ Tesserae.cox_de_boor_values(Cubic(), cubic_knot_vector, 5, 0.375)
         @test dN3 ≈ Tesserae.cox_de_boor_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
+
+        # `cox_de_boor_values` evaluates the half-open span `knots[span] ≤ ξ <
+        # knots[span+1]`, so it vanishes at the closed upper end of the domain.
+        # `NURBS.active_basis` clamps the span instead and keeps the partition of
+        # unity there. Both are intended; they agree everywhere inside.
+        let
+            for deg in 1:3
+                degree = (Linear(), Quadratic(), Cubic())[deg]
+                kv = vcat(fill(0.0, deg+1), collect(range(0, 1; length=5))[2:end-1], fill(1.0, deg+1))
+                axis = Tesserae.NURBS.BSplineAxis(deg, kv)
+                for u in (0.125, 0.5, 0.875)
+                    sp = Tesserae.NURBS.knot_span(axis, u)
+                    _, active = Tesserae.NURBS.active_basis(axis, u)
+                    @test active ≈ collect(Tesserae.cox_de_boor_values(degree, kv, sp, u))
+                    @test sum(active) ≈ 1
+                end
+                sp_end = Tesserae.NURBS.knot_span(axis, 1.0)
+                _, active_end = Tesserae.NURBS.active_basis(axis, 1.0)
+                @test sum(active_end) ≈ 1
+                @test all(iszero, Tesserae.cox_de_boor_values(degree, kv, sp_end, 1.0))
+            end
+        end
     end
 
     @testset "Tensor product basis" begin
@@ -449,6 +471,27 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         end
         @test view_sequential ≈ K_sequential
         @test view_threaded ≈ K_sequential
+
+        # Cellwise assembly with a transposed target and with `-=`. The forward
+        # `=` cases above never reach `finish_assembly!` with `Base.reverse`,
+        # nor with a matrix that must be accumulated into rather than overwritten.
+        dir = Vec(1.0, 2.0)
+        K_forward = create_sparse_matrix(mesh; ndofs=1)
+        K_reversed = create_sparse_matrix(mesh; ndofs=1)
+        @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
+            K_forward[i,j] = @∑ N[ip] * (∇N[jp] ⋅ dir) * V[p]
+        end
+        @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
+            K_reversed[j,i] = @∑ N[ip] * (∇N[jp] ⋅ dir) * V[p]
+        end
+        @test K_forward ≉ transpose(K_forward) # the equation is asymmetric, so the transpose is observable
+        @test K_reversed ≈ transpose(K_forward)
+
+        K_minus = create_sparse_matrix(mesh; ndofs=1)
+        @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
+            K_minus[i,j] -= @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
+        end
+        @test K_minus ≈ -K_sequential
     end
 
     @testset "Heat problem" begin
