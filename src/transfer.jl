@@ -140,6 +140,25 @@ end
     window[ip]
 end
 
+# How far a block's shared-memory tile reaches past the block, in nodes. A
+# particle sits in the block its cell belongs to, and its support window starts
+# at most one node before that cell and spans `support_width` nodes, so the
+# window can reach one node past the block even for a width-1 basis --
+# `BSpline(Constant())` picks the nearest node, which for a particle in the
+# block's last cell is the first node of the next block. `p2g_tile_contains`
+# states the invariant the block-scheduled kernel relies on; test/transfer.jl
+# checks it for every basis.
+@inline p2g_tile_halo(support_width::Integer) = max(support_width - 1, 1)
+
+function p2g_tile_contains(basis, mesh::CartesianMesh{dim}, window::CartesianIndices{dim}, block::CartesianIndex{dim}) where {dim}
+    bw = blockwidth(mesh)
+    halo = p2g_tile_halo(support_width(basis))
+    all(ntuple(Val(dim)) do d
+        lo = (block[d] - 1) * bw - halo + 1
+        lo <= first(window.indices[d]) && last(window.indices[d]) <= lo + bw + 2*halo - 1
+    end)
+end
+
 # The two lowerings of one @P2G scatter: `particle` writes straight to the
 # grid (particle-parallel paths), `tile` accumulates into a shared-memory tile
 # whose per-field layout the block-scheduled GPU kernel owns. `names` are the
@@ -468,9 +487,11 @@ function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations:
         push!(sum_exprs, :(Tesserae.tile_add!($tile, $tilelenval, $sym, $tileslot, $rhs)))
     end
 
-    # The node index is only needed when an equation reads grid values; the
-    # tile writes address the shared tile through the local slot alone.
-    node_exprs = isempty(scope.replacements[i]) ? () : (:($i = Tesserae.transfer_nodeindex($grid, $window, $ip)),)
+    # The node index is only needed when an equation mentions `i` -- as a grid
+    # reference or bare; the tile writes address the shared tile through the
+    # local slot alone.
+    uses_i = !isempty(scope.replacements[i]) || any(ex -> expr_contains_symbol(ex, i), sum_exprs)
+    node_exprs = uses_i ? (:($i = Tesserae.transfer_nodeindex($grid, $window, $ip)),) : ()
     body = quote
         $(offset_exprs...)
         $(particle_replacements...)
@@ -486,6 +507,15 @@ function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations:
 
     args = (tile, origin, sideval, tilelenval)
     fieldnames, args, body
+end
+
+function expr_contains_symbol(ex, sym::Symbol)
+    found = false
+    MacroTools.postwalk(ex) do x
+        x === sym && (found = true)
+        x
+    end
+    found
 end
 
 function tile_field_name(lhs)
@@ -690,7 +720,7 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
     sw = support_width(basis(weights))
     BW = blockwidth(bs)
     dim = length(nblocks(bs))
-    halo = sw - 1
+    halo = p2g_tile_halo(sw)
     side = BW + 2*halo
     tilelen = side^dim
     total = tilelen * tile_total_comps(grid, names)

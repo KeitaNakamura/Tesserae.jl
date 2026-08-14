@@ -604,6 +604,9 @@ function update!(bs::GPUBlockStrategy, xₚ::AbstractVector{<: Vec})
     backend = get_backend(bs.mesh)
     get_backend(xₚ) == backend || throw(ArgumentError("particle positions must live on the partition's backend"))
     nₚ = length(xₚ)
+    # Int32 particle ids, and both packed scan halves must stay below 2^31.
+    nₚ <= typemax(Int32) || throw(ArgumentError("ThreadPartition: particle count exceeds the GPU partition's Int32 capacity"))
+    length(bs.counts) <= typemax(Int32) || throw(ArgumentError("ThreadPartition: block count exceeds the GPU partition's Int32 capacity"))
     ngroups = length(bs.partials)
     length(bs.blockids) == nₚ || resize_fillzero!(bs.blockids, nₚ)
     length(bs.particleindices) == nₚ || resize_fillzero!(bs.particleindices, nₚ)
@@ -673,8 +676,14 @@ end
 `ThreadPartition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
 to avoid write conflicts during threaded particle-to-grid transfers.
 
+On GPU the same type schedules workgroups instead of threads: `gpu(partition)`
+rebuilds it for the device, and passing it to [`@P2G`](@ref) selects a
+block-scheduled kernel that accumulates each grid block in shared memory. There
+`@threaded` plays no part, and [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) do not
+take a device partition yet.
+
 !!! note
-    The [`@threaded`](@ref) macro must be placed before [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) to enable parallel transfer.
+    The [`@threaded`](@ref) macro must be placed before [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) to enable parallel transfer on CPU.
 
 # Examples
 ```julia
@@ -711,3 +720,7 @@ reorder_particles!(particles::StructVector, partition::ThreadPartition{<: BlockS
     reorder_particles!(particles, strategy(partition); kwargs...)
 block_ordered_particle_contiguity(partition::ThreadPartition{<: BlockStrategy}) =
     block_ordered_particle_contiguity(strategy(partition))
+reorder_particles!(particles, ::ThreadPartition{<: GPUBlockStrategy}; kwargs...) =
+    error("reorder_particles! does not support GPU partitions yet")
+block_ordered_particle_contiguity(::ThreadPartition{<: GPUBlockStrategy}) =
+    error("block_ordered_particle_contiguity does not support GPU partitions yet")

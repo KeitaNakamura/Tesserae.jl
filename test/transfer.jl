@@ -498,4 +498,26 @@
         end
         @test_throws ErrorException macroexpand(@__MODULE__, ex)
     end
+
+    # The block-scheduled GPU @P2G accumulates a whole grid block in one
+    # shared-memory tile, so every particle assigned to a block must have its
+    # entire support window inside that block's tile. The kernel writes those
+    # slots unchecked, so a basis violating this would corrupt shared memory.
+    @testset "block tile contains every support window" begin
+        for basis in (BSpline(Constant()), BSpline(Linear()), BSpline(Quadratic()),
+                      BSpline(Cubic()), uGIMP(),
+                      WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())))
+            mesh = CartesianMesh(0.02, (0,1), (0,1))
+            ParticleProp = @NamedTuple{x::Vec{2,Float64}, l::Float64}
+            particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            particles.l .= 0.01
+            weights = generate_basis_weights(basis, mesh, length(particles))
+            update!(weights, particles, mesh)
+            @test all(eachindex(particles)) do p
+                block = Tesserae.findblock(particles.x[p], mesh)
+                block === nothing && return true
+                Tesserae.p2g_tile_contains(basis, mesh, Tesserae.supportnodes(weights[p]), block)
+            end
+        end
+    end
 end
