@@ -416,23 +416,6 @@ nblocks(gridsize::Tuple{Vararg{Int}}; block_size_log2::Val{L}) where {L} =
     (_check_block_size_log2(block_size_log2); map(n -> ((n - 1) >> L) + 1, gridsize))
 nblocks(mesh::CartesianMesh) = nblocks(size(mesh); block_size_log2=Val(block_size_log2(mesh)))
 
-@inline function _nodeindices_in_block(blk::CartesianIndex{dim}, ::Val{L}) where {dim, L}
-    ranges = ntuple(d -> begin
-        i0 = ((blk[d] - 1) << L) + 1
-        i1 = ( blk[d]      << L) + 1
-        i0:i1
-    end, Val(dim))
-    CartesianIndices(ranges)
-end
-@inline function nodeindices_in_block(blk::CartesianIndex{dim}, gridsize::Dims{dim}; block_size_log2::Val{L}) where {dim, L}
-    _check_block_size_log2(block_size_log2)
-    nodes = _nodeindices_in_block(blk, block_size_log2) ∩ CartesianIndices(gridsize)
-    isempty(nodes) && throw(BoundsError(CartesianIndices(nblocks(gridsize; block_size_log2)), Tuple(blk)))
-    nodes
-end
-@inline nodeindices_in_block(blk::CartesianIndex{dim}, mesh::CartesianMesh{dim}) where {dim} =
-    nodeindices_in_block(blk, size(mesh); block_size_log2=Val(block_size_log2(mesh)))
-
 """
     Tesserae.findblock(x::Vec, mesh::CartesianMesh)
 

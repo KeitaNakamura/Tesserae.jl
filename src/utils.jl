@@ -107,12 +107,6 @@ getx(x) = getproperty(x, first(propertynames(x)))
 getx(x::Vec) = x
 getx(x::Vector{<: Vec}) = x
 
-# flatten_tuple
-@generated function flatten_tuple(x::Tuple{Vararg{Tuple, N}}) where {N}
-    exps = [Expr(:..., :(x[$i])) for i in 1:N]
-    :(tuple($(exps...)))
-end
-
 # dropat
 @generated function dropat(entries::Tuple{Vararg{Any, N}}, index::Int) where {N}
     branches = map(1:N) do i

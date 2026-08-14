@@ -143,13 +143,7 @@
               [CartesianIndex(p, first(first(iga_groups))) for p in 1:3]
     end
     @testset "Utilities" begin
-        @test Tesserae.nodeindices_in_block(CartesianIndex(1,1), (20,20); block_size_log2=Val(2)) === CartesianIndices((1:5,1:5))
-        @test Tesserae.nodeindices_in_block(CartesianIndex(2,3), (20,20); block_size_log2=Val(2)) === CartesianIndices((5:9,9:13))
-        @test Tesserae.nodeindices_in_block(CartesianIndex(2,3), (10,10); block_size_log2=Val(2)) === CartesianIndices((5:9,9:10))
-        @test_throws BoundsError Tesserae.nodeindices_in_block(CartesianIndex(2,3), (5,5); block_size_log2=Val(2))
-
         mesh = CartesianMesh(1, (0, 20), (0, 20); block_size_log2=Val(3))
         @test Tesserae.nblocks(mesh) === (3, 3)
-        @test Tesserae.nodeindices_in_block(CartesianIndex(2,2), mesh) === CartesianIndices((9:17,9:17))
     end
 end
