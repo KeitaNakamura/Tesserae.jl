@@ -141,8 +141,8 @@ function create_block_sparse_matrix end
 create_block_sparse_matrix(basis::Basis, mesh::CartesianMesh; ndofs::NTuple{N, Int}) where {N} = create_block_sparse_matrix(Float64, basis, mesh; ndofs)
 create_block_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh; ndofs::NTuple{N, Int}) where {T, N} = _create_block_sparse_matrix(T, basis, mesh, ndofs)
 
-create_block_sparse_matrix(mesh::Union{FEMesh, IGAMesh}; ndofs::NTuple{N, Int}) where {N} = create_block_sparse_matrix(Float64, mesh; ndofs)
-function create_block_sparse_matrix(::Type{T}, mesh::Union{FEMesh, IGAMesh}; ndofs::NTuple{N, Int}) where {T, N}
+create_block_sparse_matrix(mesh::AbstractCellMesh; ndofs::NTuple{N, Int}) where {N} = create_block_sparse_matrix(Float64, mesh; ndofs)
+function create_block_sparse_matrix(::Type{T}, mesh::AbstractCellMesh; ndofs::NTuple{N, Int}) where {T, N}
     meshes = ntuple(_ -> mesh, N)
     _create_block_sparse_matrix(T, meshes, ndofs)
 end

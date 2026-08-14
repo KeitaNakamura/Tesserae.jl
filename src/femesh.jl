@@ -21,7 +21,7 @@ from the Cartesian grid.
 [`generate_basis_weights`](@ref) to create element-local basis storage, and
 `update!` to fill the element-local basis data.
 """
-struct FEMesh{S <: Shape, dim, T, L, V <: AbstractVector{Vec{dim, T}}} <: AbstractMesh{dim, T, 1}
+struct FEMesh{S <: Shape, dim, T, L, V <: AbstractVector{Vec{dim, T}}} <: AbstractCellMesh{dim, T, 1}
     shape::S
     nodes::V
     cellsupports::Vector{SVector{L, Int}}

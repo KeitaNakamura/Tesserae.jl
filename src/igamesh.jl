@@ -56,7 +56,7 @@ _span_indices(patch::IGAPatch) = Iterators.filter(span -> _has_positive_span(pat
 
 Define an IGA mesh from patches and control points.
 """
-struct IGAMesh{dim, pdim, T, Degrees <: NTuple{pdim, Degree}} <: AbstractMesh{dim, T, 1}
+struct IGAMesh{dim, pdim, T, Degrees <: NTuple{pdim, Degree}} <: AbstractCellMesh{dim, T, 1}
     patches::Vector{IGAPatch{pdim, T, Degrees}}
     controlpoints::Vector{Vec{dim, T}}
     weights::Union{Nothing, Vector{T}}

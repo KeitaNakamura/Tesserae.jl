@@ -1,5 +1,13 @@
 abstract type AbstractMesh{dim, T, N} <: AbstractArray{Vec{dim, T}, N} end
 
+# Meshes made of explicit cells with node connectivity, as opposed to
+# `CartesianMesh`, whose cells are implied by the grid. `FEMesh` and `IGAMesh`
+# share the quadrature, sparsity-pattern and cell-scheduling code written
+# against this; a new one must also supply the interpolation and export methods
+# those paths call, so this is a shorthand for the two, not a declared
+# extension point.
+abstract type AbstractCellMesh{dim, T, N} <: AbstractMesh{dim, T, N} end
+
 fillzero!(x::AbstractMesh) = x
 
 const BLOCK_SIZE_LOG2 = Int(Preferences.@load_preference("block_size_log2", 2)) # default 2^n cells per block

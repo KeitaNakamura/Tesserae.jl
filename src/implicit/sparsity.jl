@@ -83,7 +83,7 @@ function _create_cell_support_sparse_matrix(::Type{T}, mesh, ndofs::Tuple{Int, I
     sparse(I, J, zeros(T, length(I)), ndofs[1] * length(mesh), ndofs[2] * length(mesh))
 end
 
-function _append_sparse_pattern!(I, J, row_offset, col_offset, mesh::Union{FEMesh, IGAMesh}, row_ndofs, col_ndofs)
+function _append_sparse_pattern!(I, J, row_offset, col_offset, mesh::AbstractCellMesh, row_ndofs, col_ndofs)
     row_dofs = LinearIndices((row_ndofs, length(mesh)))
     col_dofs = LinearIndices((col_ndofs, length(mesh)))
     for cell in cells(mesh)
@@ -93,7 +93,7 @@ function _append_sparse_pattern!(I, J, row_offset, col_offset, mesh::Union{FEMes
     nothing
 end
 
-function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::Union{FEMesh, IGAMesh}, colmesh::Union{FEMesh, IGAMesh}, row_ndofs, col_ndofs)
+function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::AbstractCellMesh, colmesh::AbstractCellMesh, row_ndofs, col_ndofs)
     throw(ArgumentError("all field meshes must use compatible discretizations"))
 end
 
@@ -134,13 +134,13 @@ end
 
 # -- FEM and IGA --
 
-function create_sparse_matrix(::Type{T}, (rowmesh,colmesh)::Tuple{Vararg{Union{FEMesh, IGAMesh}, 2}}; ndofs::Tuple{Int, Int}) where {T}
+function create_sparse_matrix(::Type{T}, (rowmesh,colmesh)::Tuple{Vararg{AbstractCellMesh, 2}}; ndofs::Tuple{Int, Int}) where {T}
     I, J = Int[], Int[]
     _append_sparse_pattern!(I, J, 0, 0, rowmesh, colmesh, ndofs[1], ndofs[2])
     sparse(I, J, zeros(T, length(I)), ndofs[1] * length(rowmesh), ndofs[2] * length(colmesh))
 end
 
-function create_sparse_matrix(meshes::Tuple{Vararg{Union{FEMesh, IGAMesh}, 2}}; ndofs::Tuple{Int, Int})
+function create_sparse_matrix(meshes::Tuple{Vararg{AbstractCellMesh, 2}}; ndofs::Tuple{Int, Int})
     create_sparse_matrix(Float64, meshes; ndofs)
 end
 

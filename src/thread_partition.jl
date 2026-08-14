@@ -465,7 +465,7 @@ end
 
 threadsafe_groups(cs::CellStrategy) = cs.threadsafe_groups
 
-function CellStrategy(mesh::Union{FEMesh, IGAMesh})
+function CellStrategy(mesh::AbstractCellMesh)
     g = _cell_conflict_graph(mesh)
 
     coloring = Graphs.degree_greedy_color(g)
@@ -478,7 +478,7 @@ function CellStrategy(mesh::Union{FEMesh, IGAMesh})
     CellStrategy(groups)
 end
 
-function _cell_conflict_graph(mesh::Union{FEMesh, IGAMesh})
+function _cell_conflict_graph(mesh::AbstractCellMesh)
     nc = ncells(mesh)
     nn = length(mesh)
     graph = SimpleGraph(nc)
@@ -542,7 +542,7 @@ particle_indices(partition::ThreadPartition{<: CellStrategy}, particles, cell) =
     (CartesianIndex(p, cell) for p in 1:size(particles, 1))
 
 ThreadPartition(mesh::CartesianMesh) = ThreadPartition(BlockStrategy(mesh))
-ThreadPartition(mesh::Union{FEMesh, IGAMesh}) = ThreadPartition(CellStrategy(mesh))
+ThreadPartition(mesh::AbstractCellMesh) = ThreadPartition(CellStrategy(mesh))
 update!(partition::ThreadPartition, args...) = update!(strategy(partition), args...)
 
 reorder_particles!(particles::StructVector, partition::ThreadPartition{<: BlockStrategy}; kwargs...) =
