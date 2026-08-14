@@ -140,6 +140,91 @@ end
     window[ip]
 end
 
+# The two lowerings of one @P2G scatter: `particle` writes straight to the
+# grid (particle-parallel paths), `tile` accumulates into a shared-memory tile
+# whose per-field layout the block-scheduled GPU kernel owns. `names` are the
+# scattered grid properties, in equation order.
+struct P2GBodies{names, F, FT}
+    particle::F
+    tile::FT
+end
+P2GBodies(particle::F, tile::FT, ::Val{names}) where {names, F, FT} = P2GBodies{names, F, FT}(particle, tile)
+scattered_names(::P2GBodies{names}) where {names} = names
+
+# Scalar components of one grid value, matching the layout `HybridArray`'s
+# flatten/add! use.
+@inline tile_components(v::Number) = (v,)
+@inline tile_components(v::Union{Tensor, StaticArray}) = Tuple(v)
+# Structural, so the generators below can call it: a generator must not call
+# other generated functions, which rules out anything touching `zero(T)` for
+# Tensorial types.
+@inline tile_ncomps(::Type{T}) where {T <: Number} = 1
+@inline tile_ncomps(::Type{Tensor{S, T, N, L}}) where {S, T, N, L} = L
+@inline tile_ncomps(::Type{SV}) where {SV <: StaticArray} = prod(size(SV))
+
+# A tile stores `SIDE^dim` nodes per scalar component, component-major by
+# field. `origin` sits one node before the tile's first node in every axis.
+@inline function tile_slot(node::CartesianIndex{dim}, origin::CartesianIndex{dim}, ::Val{SIDE}) where {dim, SIDE}
+    slot = node[dim] - origin[dim]
+    for d in dim-1:-1:1
+        slot = (slot - 1) * SIDE + (node[d] - origin[d])
+    end
+    slot
+end
+@inline function tile_node(k::Integer, origin::CartesianIndex{dim}, ::Val{SIDE}) where {dim, SIDE}
+    local_index = CartesianIndices(nfill(SIDE, Val(dim)))[k]
+    CartesianIndex(ntuple(d -> origin[d] + local_index[d], Val(dim)))
+end
+
+@inline function tile_add!(tile, ::Val{TILELEN}, fieldoffset::Int, slot::Integer, v) where {TILELEN}
+    data = tile_components(v)
+    for j in eachindex(data)
+        @inbounds Atomix.@atomic tile[(fieldoffset + j - 1) * TILELEN + slot] += data[j]
+    end
+end
+
+# The tuple is spelled out because a generated body may not contain closures,
+# which rules out `ntuple` with a lambda.
+@generated function tile_load(tile, ::Val{TILELEN}, fieldoffset::Int, slot::Integer, ::Type{T}) where {TILELEN, T}
+    elems = [:(tile[(fieldoffset + $(j - 1)) * TILELEN + slot]) for j in 1:tile_ncomps(T)]
+    :(@inbounds ($(elems...),))
+end
+@inline tile_rebuild(::Type{T}, comps) where {T <: Number} = comps[1]
+@inline tile_rebuild(::Type{T}, comps) where {T <: Union{Tensor, StaticArray}} = T(comps...)
+
+# Merge one tile node into the grid, fully unrolled over the scattered fields
+# at compile time: the GPU compiler must see every field eltype as a constant,
+# and recursion over the name tuple is too fragile for that.
+@generated function merge_tile_node!(grid, tile, ::Val{names}, ::Val{TILELEN}, slot, node) where {names, TILELEN}
+    exprs = Any[]
+    offset = 0
+    for name in names
+        T = fieldtype(eltype(grid), name)
+        push!(exprs, quote
+            comps = tile_load(tile, Val(TILELEN), $offset, slot, $T)
+            if !all(iszero, comps)
+                @inbounds add!(grid.$name, p2g_write_index(grid, node), tile_rebuild($T, comps))
+            end
+        end)
+        offset += tile_ncomps(T)
+    end
+    quote
+        @_inline_meta
+        $(exprs...)
+        nothing
+    end
+end
+
+# Total scalar components scattered per node, and the tile's scalar type. One
+# tile holds every scattered field, so their scalar types must agree.
+@generated tile_total_comps(grid, ::Val{names}) where {names} =
+    sum(name -> tile_ncomps(fieldtype(eltype(grid), name)), names)
+@generated function tile_scalartype(grid, ::Val{names}) where {names}
+    types = map(name -> eltype(fieldtype(eltype(grid), name)), names)
+    allequal(types) || return :(error("@P2G: block-scheduled transfer requires one scalar type across the scattered fields, got ", $(join(unique(types), ", "))))
+    first(types)
+end
+
 # Grid properties referenced with the node index, straight from the equation
 # syntax. The kernels are handed a grid narrowed to these, because every extra
 # `SpArray` field in the argument -- referenced or not -- measurably slows a
@@ -280,13 +365,19 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
 
     if !isempty(sum_equations)
         pre, body = P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
+        tile_names, tile_args, tile_body = P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
         if !DEBUG
             body = :(@inbounds $body)
+            tile_body = :(@inbounds $tile_body)
         end
+        names_val = :(Val($(Expr(:tuple, map(QuoteNode, tile_names)...))))
         code = quote
             $code
             $pre
-            Tesserae.P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, $weights, $partition)
+            Tesserae.P2G(Tesserae.P2GBodies(($grid, $particles, $weights, $p) -> $body,
+                                            ($(tile_args...), $grid, $particles, $weights, $p) -> $tile_body,
+                                            $names_val),
+                         Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, $weights, $partition)
         end
     end
 
@@ -339,6 +430,68 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     end
 
     Expr(:block, fillzeros...), body
+end
+
+# The tile lowering of the same scatter equations: writes go through
+# `tile_add!` into the workgroup's shared tile at the node's local slot, while
+# every read (particles, weights, grid values on the RHS) stays as in the
+# particle-parallel body.
+function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
+    @gensym tile origin sideval tilelenval tileslot
+    binding = SupportWindowBinding()
+    (; window) = binding
+
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p)=>ip]; cache=true)
+    sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
+    particle_replacements = cached_replacements(scope, p)
+    inner_replacements = cached_replacements(scope, i, ip)
+    inner_symbols = p2g_cached_symbols(inner_replacements)
+
+    fieldnames = Symbol[]
+    offset_syms = Symbol[]
+    offset_exprs = Any[]
+    hoist_exprs = Any[]
+    sum_exprs = Any[]
+    for eq in sum_equations
+        (; lhs, rhs, op) = eq
+        name = tile_field_name(lhs)
+        if !(name in fieldnames)
+            push!(fieldnames, name)
+            sym = Symbol(:tileoffset_, name)
+            push!(offset_syms, sym)
+            prev = length(offset_exprs) == 0 ? 0 : :($(offset_syms[end-1]) + Tesserae.tile_ncomps(eltype($grid.$(fieldnames[end-1]))))
+            push!(offset_exprs, :($sym = $prev))
+        end
+        op == :(-=) && (rhs = :(-$rhs))
+        rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
+        sym = offset_syms[findfirst(==(name), fieldnames)]
+        push!(sum_exprs, :(Tesserae.tile_add!($tile, $tilelenval, $sym, $tileslot, $rhs)))
+    end
+
+    # The node index is only needed when an equation reads grid values; the
+    # tile writes address the shared tile through the local slot alone.
+    node_exprs = isempty(scope.replacements[i]) ? () : (:($i = Tesserae.transfer_nodeindex($grid, $window, $ip)),)
+    body = quote
+        $(offset_exprs...)
+        $(particle_replacements...)
+        $(hoist_exprs...)
+        $(support_window_exprs(binding, weights, p)...)
+        for $ip in eachindex($window)
+            $(node_exprs...)
+            $tileslot = Tesserae.tile_slot($window[$ip], $origin, $sideval)
+            $(inner_replacements...)
+            $(sum_exprs...)
+        end
+    end
+
+    args = (tile, origin, sideval, tilelenval)
+    fieldnames, args, body
+end
+
+function tile_field_name(lhs)
+    @capture(lhs, x_.name_[i_]) && return name
+    @capture(lhs, x_[i_]) && return x isa Symbol ? x : error("@P2G: cannot derive the scattered field from `$(lhs)`")
+    error("@P2G: cannot derive the scattered field from `$(lhs)`")
 end
 
 function p2g_cached_symbols(replacements)
@@ -470,6 +623,88 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
     kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
 end
 
+# Bodies fall back to the particle-parallel lowering everywhere except the
+# block-scheduled GPU path below. One method per particle-parallel signature,
+# so each is strictly more specific than its `f`-taking sibling.
+P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, ::Nothing) =
+    P2G(bodies.particle, device, schedule, grid, particles, weights, nothing)
+P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, partition::ThreadPartition) =
+    P2G(bodies.particle, device, schedule, grid, particles, weights, partition)
+P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particles, weights, ::Nothing) =
+    P2G(bodies.particle, device, schedule, grid, particles, weights, nothing)
+
+# GPU with a device partition: one workgroup per nonempty grid block. The
+# workgroup zeroes a shared tile, its threads accumulate their block's
+# particles into it, and the merged tile is added to the grid with a handful of
+# global atomics per node instead of one per particle-node pair. Within one
+# block the accumulation order follows the partition's particle order, so the
+# result is not bitwise reproducible between runs, exactly like the atomic
+# particle-parallel path.
+const P2G_BLOCK_GROUPSIZE = 128
+
+@kernel function gpukernel_P2G_blocks(tilebody, grid, @Const(particles), @Const(weights),
+                                      @Const(particleindices), @Const(offsets), @Const(blocklist),
+                                      ::Type{Tt}, ::Val{names}, ::Val{SIDE}, ::Val{TILELEN}, ::Val{TOTAL},
+                                      ::Val{BW}, ::Val{HALO}, blkdims::Dims{dim}) where {Tt, names, SIDE, TILELEN, TOTAL, BW, HALO, dim}
+    grp = @index(Group, Linear)
+    l = Int(@index(Local, Linear))
+    tile = @localmem Tt (TOTAL,)
+    k = l
+    while k <= TOTAL
+        @inbounds tile[k] = zero(Tt)
+        k += P2G_BLOCK_GROUPSIZE
+    end
+    @synchronize
+    @inbounds b = Int(blocklist[grp])
+    blockcoord = CartesianIndices(blkdims)[b]
+    origin = CartesianIndex(ntuple(d -> (blockcoord[d] - 1) * BW - HALO, Val(dim)))
+    @inbounds pstart = Int(offsets[b])
+    @inbounds pstop = Int(offsets[b+1])
+    k = l
+    while k <= pstop - pstart
+        @inbounds p = Int(particleindices[pstart + k])
+        @inline tilebody(tile, origin, Val(SIDE), Val(TILELEN), grid, particles, weights, p)
+        k += P2G_BLOCK_GROUPSIZE
+    end
+    @synchronize
+    gridsize = size(grid)
+    k = l
+    while k <= TILELEN
+        node = tile_node(k, origin, Val(SIDE))
+        if all(ntuple(d -> 1 <= node[d] <= gridsize[d], Val(dim)))
+            @inline merge_tile_node!(grid, tile, Val(names), Val(TILELEN), k, node)
+        end
+        k += P2G_BLOCK_GROUPSIZE
+    end
+end
+
+function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition{<: GPUBlockStrategy}) where {scheduler}
+    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    particles = particles isa QuadraturePoints ? parent(particles) : particles
+    bs = strategy(partition)
+    names = Val(scattered_names(bodies))
+    length(bs.particleindices) == length(particles) ||
+        error("@P2G: `update!(partition, particles.x)` must run with these particles before the transfer")
+    backend = get_backend(device)
+    Tt = tile_scalartype(grid, names)
+    sw = support_width(basis(weights))
+    BW = blockwidth(bs)
+    dim = length(nblocks(bs))
+    halo = sw - 1
+    side = BW + 2*halo
+    tilelen = side^dim
+    total = tilelen * tile_total_comps(grid, names)
+    if total * sizeof(Tt) > 32768
+        @warn "@P2G: shared-memory tile ($(total * sizeof(Tt)) B) exceeds the block-scheduled budget; falling back to the particle-parallel path" maxlog=1
+        return P2G(bodies.particle, device, Val(scheduler), grid, particles, weights, nothing)
+    end
+    kernel = gpukernel_P2G_blocks(backend, (P2G_BLOCK_GROUPSIZE,))
+    kernel(bodies.tile, hybrid(grid), particles, weights,
+           bs.particleindices, bs.offsets, bs.blocklist,
+           Tt, names, Val(side), Val(tilelen), Val(total), Val(BW), Val(halo), nblocks(bs);
+           ndrange=P2G_BLOCK_GROUPSIZE * nactive(bs))
+end
+
 G2P2G(f, device::CPUDevice, schedule, grid, particles, weights, partition) =
     P2G(f, device, schedule, grid, particles, weights, partition)
 
@@ -544,12 +779,20 @@ function check_transfer_arguments(macroname, grid, particles, weights, partition
     check_partition_for_transfer(macroname, device, grid, weights, partition)
 end
 
-# ThreadPartition is a CPU scheduling aid. GPU P2G uses particle-parallel kernels
-# and SpGrid sparsity is updated separately from particle positions.
+# A partition must live where the transfer runs: `BlockStrategy` schedules CPU
+# threads, `GPUBlockStrategy` schedules GPU workgroups.
 check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::Nothing) = nothing
 check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, ::Nothing) = nothing
+function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition::ThreadPartition{<: GPUBlockStrategy})
+    macroname == "@P2G" || error("$macroname: the block-scheduled GPU transfer only supports @P2G so far. Use partitionless $macroname on GPU.")
+    weights isa BasisWeightArray || error("$macroname: the block-scheduled GPU transfer requires weights from `generate_basis_weights`")
+    check_partition_for_transfer(macroname, grid, weights, strategy(partition))
+end
 function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition)
-    error("$macroname: ThreadPartition is only used on CPU. Use partitionless $macroname on GPU.")
+    error("$macroname: this ThreadPartition lives on the CPU. Transfer it with `gpu(partition)` and `update!` it on the device.")
+end
+function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::ThreadPartition{<: GPUBlockStrategy})
+    error("$macroname: this ThreadPartition lives on the GPU. Construct a CPU one with `ThreadPartition(mesh)`.")
 end
 function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, partition::ThreadPartition)
     check_partition_for_transfer(macroname, grid, weights, strategy(partition))
@@ -560,7 +803,16 @@ function check_partition_for_transfer(macroname, grid, weights, strat::BlockStra
     if nassigned(strat) == 0
         error("$macroname: No particles assigned to any block in ThreadPartition")
     end
-    b = basis(first(weights))
+    check_partition_support(macroname, basis(first(weights)), strat)
+end
+function check_partition_for_transfer(macroname, grid, weights, strat::GPUBlockStrategy)
+    @assert nblocks(get_mesh(grid)) == nblocks(strat)
+    if nactive(strat) == 0
+        error("$macroname: No particles assigned to any block in ThreadPartition")
+    end
+    check_partition_support(macroname, basis(weights), strat)
+end
+function check_partition_support(macroname, b, strat)
     if support_width(b) > blockwidth(strat)
         error("$macroname: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
     end
