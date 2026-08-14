@@ -23,13 +23,24 @@ function split_sum_equations(program::TransferProgram, macroname::String)
     equations[issum], equations[.!issum]
 end
 
+# A weight reference like `w[ip]` resolves against the parent weights array:
+# through a per-particle column view bound once outside the support loop when
+# the scope caches replacements, as `weights.w[ip, p]` inline otherwise. The
+# per-particle `BasisWeight` this used to build kept enough live SubArray state
+# across the loop to spill GPU registers into local memory, and that spill
+# traffic -- not the interpolation -- dominated the transfer kernels.
+struct TrailingIndexed
+    parent::Any
+    trailing::Any
+end
+
 struct TransferScope
-    bindings::Dict{Any,Symbol}
+    bindings::Dict{Any,Any}
     replacements::Union{Nothing,Dict{Any,Vector{Expr}}}
 end
 
 function TransferScope(maps::Vector{<: Pair}; cache::Bool=false)
-    bindings = Dict{Any,Symbol}()
+    bindings = Dict{Any,Any}()
     for map in maps
         parent, index = map
         haskey(bindings, index) && error("transfer index `$index` is bound more than once")
@@ -70,20 +81,98 @@ function push_unique!(xs::Vector, x)
 end
 
 # `@G2P2G` fuses a G2P and a P2G loop into a single pass over the particles, so
-# the basis weight and its support nodes must be bound once and shared by both
-# halves. The two symbols travel together with a `load` flag: whichever half
-# holds `load=true` emits the binding statements, the other just uses them.
-struct BasisWeightBinding
-    bw::Symbol
-    gridindices::Symbol
+# the support window must be bound once and shared by both halves. The symbol
+# travels with a `load` flag: whichever half holds `load=true` emits the
+# binding statement, the other just uses it.
+struct SupportWindowBinding
+    window::Symbol
     load::Bool
 end
-BasisWeightBinding() = BasisWeightBinding(gensym(:bw), gensym(:gridindices), true)
-BasisWeightBinding(binding::BasisWeightBinding; load::Bool) = BasisWeightBinding(binding.bw, binding.gridindices, load)
+SupportWindowBinding() = SupportWindowBinding(gensym(:window), true)
+SupportWindowBinding(binding::SupportWindowBinding; load::Bool) = SupportWindowBinding(binding.window, load)
 
-function basis_weight_exprs(binding::BasisWeightBinding, grid, weights, p)
+function support_window_exprs(binding::SupportWindowBinding, weights, p)
     binding.load || return ()
-    (:($(binding.bw) = $weights[$p]), :($(binding.gridindices) = supportnodes($(binding.bw), $grid)))
+    (:($(binding.window) = Tesserae.transfer_support_window($weights, $p)),)
+end
+
+# The per-particle support window, straight from the weights storage. A plain
+# array of `BasisWeight`s -- the macros accept any container whose `weights[p]`
+# is a `BasisWeight` -- goes through the element instead. `BasisWeightArray` is
+# itself such an array, so its methods must be the more specific ones.
+@inline function transfer_support_window(weights::BasisWeightArray, p)
+    @_propagate_inbounds_meta
+    supportnodes_storage(weights)[p]
+end
+@inline function transfer_support_window(weights::AbstractArray{<: BasisWeight}, p)
+    @_propagate_inbounds_meta
+    supportnodes(weights[p])
+end
+
+# One weight property's column for particle `p`: the whole leading (support)
+# block, with the particle indices fixed. `p` may be a linear index into a
+# multi-dimensional particle space (FEM weights are quadrature point x cell),
+# so the support-window storage supplies the particle dimensionality.
+@inline function weight_prop_view(weights::BasisWeightArray, ::Val{name}, p) where {name}
+    @_propagate_inbounds_meta
+    storage = supportnodes_storage(weights)
+    A = getproperty(weights, name)
+    view(A, nfill(:, Val(ndims(A) - ndims(storage)))..., particle_cartesian(storage, p))
+end
+@inline function weight_prop_view(weights::AbstractArray{<: BasisWeight}, ::Val{name}, p) where {name}
+    @_propagate_inbounds_meta
+    getproperty(weights[p], name)
+end
+@inline particle_cartesian(storage, p::Integer) = (@_propagate_inbounds_meta; CartesianIndices(storage)[p])
+@inline particle_cartesian(storage, p::CartesianIndex) = p
+
+# One support node of the window, resolved against the grid: an `SpIndex`
+# carrying the storage slot for an `SpGrid`, the plain index otherwise.
+@inline function transfer_nodeindex(grid::SpGrid, window, ip)
+    @_propagate_inbounds_meta
+    spinds = get_spinds(grid)
+    i = window[ip]
+    @boundscheck checkbounds(spinds, i)
+    @inbounds spinds[i]
+end
+@inline function transfer_nodeindex(grid, window, ip)
+    @_propagate_inbounds_meta
+    window[ip]
+end
+
+# Grid properties referenced with the node index, straight from the equation
+# syntax. The kernels are handed a grid narrowed to these, because every extra
+# `SpArray` field in the argument -- referenced or not -- measurably slows a
+# GPU transfer kernel down.
+function collect_transfer_refs(equations, index)
+    names = Symbol[]
+    for eq in equations
+        for expr in (eq.lhs, eq.rhs)
+            MacroTools.postwalk(expr) do ex
+                @capture(ex, x_Symbol[i_]) && i == index && push_unique!(names, x)
+                ex
+            end
+        end
+    end
+    names
+end
+
+narrowed_grid_expr(grid, equations, index) =
+    :(Tesserae.narrow_transfer_grid($grid, Val($(Expr(:tuple, map(QuoteNode, collect_transfer_refs(equations, index))...)))))
+
+# Keep the mesh (always the first property) so the result stays a grid, and at
+# least one array component so an `SpGrid` stays an `SpGrid` for dispatch and
+# `get_spinds`. Non-StructArray grids pass through untouched.
+narrow_transfer_grid(grid, ::Val) = grid
+@generated function narrow_transfer_grid(grid::StructArray{<: Any, <: Any, <: NamedTuple{names}}, ::Val{refs}) where {names, refs}
+    keep = Symbol[first(names)]
+    for name in Base.tail(names)
+        name in refs && push!(keep, name)
+    end
+    length(keep) == 1 && length(names) > 1 && push!(keep, names[2])
+    Tuple(keep) == names && return :grid
+    fields = [:(getproperty(grid, $(QuoteNode(name)))) for name in keep]
+    :(StructArray(NamedTuple{$(Tuple(keep))}(($(fields...),))))
 end
 
 # All four transfer macros take the same shape: an optional `:schedule`
@@ -197,7 +286,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         code = quote
             $code
             $pre
-            Tesserae.P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $weights, $partition)
+            Tesserae.P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, $weights, $partition)
         end
     end
 
@@ -208,7 +297,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         end
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $grid)
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $(narrowed_grid_expr(grid, nosum_equations, i)))
         end
     end
 
@@ -216,11 +305,11 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     esc(prettify(code; lines=true, alias=false))
 end
 
-function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::BasisWeightBinding=BasisWeightBinding())
+function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding())
     @gensym gridwriteindex
-    (; bw, gridindices) = binding
+    (; window) = binding
 
-    scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p)=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
     particle_replacements = cached_replacements(scope, p)
     inner_replacements = cached_replacements(scope, i, ip)
@@ -240,9 +329,9 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     body = quote
         $(particle_replacements...)
         $(hoist_exprs...)
-        $(basis_weight_exprs(binding, grid, weights, p)...)
-        for $ip in eachindex($gridindices)
-            $i = $gridindices[$ip]
+        $(support_window_exprs(binding, weights, p)...)
+        for $ip in eachindex($window)
+            $i = Tesserae.transfer_nodeindex($grid, $window, $ip)
             $gridwriteindex = Tesserae.p2g_write_index($grid, $i)
             $(inner_replacements...)
             $(sum_exprs...)
@@ -566,7 +655,7 @@ function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pr
         end
         code = quote
             $code
-            Tesserae.G2P(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $weights)
+            Tesserae.G2P(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, program.equations, i)), $particles, $weights)
         end
     end
 
@@ -594,11 +683,11 @@ function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) w
     kernel(f, grid, particles, weights; ndrange=length(particles))
 end
 
-function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector, binding::BasisWeightBinding=BasisWeightBinding())
-    (; bw, gridindices) = binding
+function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding())
+    (; window) = binding
 
     code = Expr(:block)
-    scope = TransferScope([grid=>i, particles=>p, bw=>ip]; cache=true)
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p)=>ip]; cache=true)
 
     if !isempty(sum_equations)
         sum_equations = resolve_sum_equations(sum_equations, scope, "@G2P", p)
@@ -619,9 +708,9 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         code = quote
             $(particle_replacements...)
             $(inits...)
-            $(basis_weight_exprs(binding, grid, weights, p)...)
-            for $ip in eachindex($gridindices)
-                $i = $gridindices[$ip]
+            $(support_window_exprs(binding, weights, p)...)
+            for $ip in eachindex($window)
+                $i = Tesserae.transfer_nodeindex($grid, $window, $ip)
                 $(inner_replacements...)
                 $(sum_exprs...)
             end
@@ -630,7 +719,7 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     end
 
     if !isempty(nosum_equations)
-        nosum_scope = TransferScope([grid=>i, particles=>p, bw=>ip])
+        nosum_scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p)=>ip])
         nosum_equations = map(eq -> Expr(eq.op, resolve_refs(eq.lhs, nosum_scope), resolve_refs(eq.rhs, nosum_scope)), nosum_equations)
         code = quote
             $code
@@ -722,7 +811,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         Tesserae.check_transfer_arguments("@G2P2G", $grid, $particles, $weights, $partition)
     end
     body = Expr(:block)
-    binding = BasisWeightBinding()
+    binding = SupportWindowBinding()
 
     if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
         expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, binding)
@@ -735,7 +824,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     if !isempty(stages.p2g_sum)
         # `G2P_sum_expr` binds the basis weight only when it has `@∑` equations,
         # so this half must load it itself otherwise.
-        p2g_binding = isempty(stages.g2p_sum) ? binding : BasisWeightBinding(binding; load=false)
+        p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
         pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding)
         code = quote
             $code
@@ -750,9 +839,10 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     if !DEBUG
         body = :(@inbounds $body)
     end
+    particle_equations = vcat(collect(stages.g2p_sum), collect(stages.g2p_nosum), collect(stages.p2g_sum))
     code = quote
         $code
-        Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $grid, $particles, $weights, $partition)
+        Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, particle_equations, i)), $particles, $weights, $partition)
     end
 
     if !isempty(stages.p2g_nosum)
@@ -762,7 +852,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         end
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $grid)
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $(narrowed_grid_expr(grid, stages.p2g_nosum, i)))
         end
     end
 
@@ -848,9 +938,20 @@ function resolve_refs(expr, scope::TransferScope)
     MacroTools.postwalk(expr) do ex
         if @capture(ex, x_[i_]) && haskey(scope.bindings, i)
             parent = scope.bindings[i]
-            resolved = :($parent.$x[$i])
+            if parent isa TrailingIndexed
+                if scope.replacements === nothing
+                    return :($(parent.parent).$x[$i, $(parent.trailing)])
+                end
+                viewsym = Symbol(:(view($(parent.parent).$x, $(parent.trailing))))
+                push_unique!(scope.replacements[parent.trailing],
+                             :($viewsym = Tesserae.weight_prop_view($(parent.parent), Val($(QuoteNode(x))), $(parent.trailing))))
+                resolved = :($viewsym[$i])
+                sym = Symbol(:($(parent.parent).$x[$i]))
+            else
+                resolved = :($parent.$x[$i])
+                sym = Symbol(resolved)
+            end
             scope.replacements === nothing && return resolved
-            sym = Symbol(resolved)
             push_unique!(scope.replacements[i], :($sym = $resolved))
             return sym
         end
