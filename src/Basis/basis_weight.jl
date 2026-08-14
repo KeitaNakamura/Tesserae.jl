@@ -318,12 +318,6 @@ function Base.show(io::IO, bw::BasisWeight)
     print(io, "  Support nodes: ", supportnodes(bw))
 end
 
-"""
-    BasisWeightArray
-
-Structure-of-arrays storage for multiple [`BasisWeight`](@ref)s.
-Use [`generate_basis_weights`](@ref) to construct a `BasisWeightArray`.
-"""
 # Stand-in for a basis-value array that is never stored, so a lazy
 # `BasisWeightArray` keeps the shape and naming of a stored one -- the property
 # order still gives the derivative order, and element types still infer --
@@ -347,6 +341,12 @@ is_lazy_values(::AbstractArray) = false
 KernelAbstractions.get_backend(::LazyBasisValues) = nothing
 Adapt.adapt_structure(to, A::LazyBasisValues) = A
 
+"""
+    BasisWeightArray
+
+Structure-of-arrays storage for multiple [`BasisWeight`](@ref)s.
+Use [`generate_basis_weights`](@ref) to construct a `BasisWeightArray`.
+"""
 struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}, N, O <: Order} <: AbstractArray{ElType, N}
     basis::B
     vals::Vals
@@ -619,6 +619,11 @@ end
 ```
 
 where [`LazyRow`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
+
+On weights built with `generate_basis_weights(...; lazy=true)` there is no storage
+to fill, so this is a no-op and a loop written for stored weights runs unchanged.
+The `lazy` keyword only lets you assert which kind you have: it defaults to
+[`Tesserae.is_lazy(weights)`](@ref) and errors if it disagrees.
 """
 function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh,
                  filter::AbstractArray{Bool}=Trues(size(mesh)); lazy::Bool=is_lazy(weights))
@@ -630,7 +635,15 @@ function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray,
         lazy || error("update!: these weights were built with `lazy=true` and have no storage for basis values, so they cannot be materialized. Build them without `lazy=true` to store the values.")
         return weights
     end
-    lazy && error("update!: `lazy=true` on stored weights is not supported yet; build them with `generate_basis_weights(...; lazy=true)` instead")
+    # Turning stored weights deferred for a single step is deliberately not
+    # offered: whether deferring wins is fixed by the backend, not by the step.
+    # Deferred evaluation costs the same arithmetic on every transfer, while
+    # storing pays it once per `update!`, so on the CPU deferring already loses
+    # at one transfer per update (~1.8x) and loses further as transfers per
+    # update grow. On the GPU the arithmetic is cheaper than the memory traffic
+    # it replaces, so deferring wins on every transfer and there is nothing to
+    # switch back to. Either way the choice belongs at construction.
+    lazy && error("update!: `lazy=true` is only available on weights built with `generate_basis_weights(...; lazy=true)`. Deferred evaluation is chosen at construction because whether it pays off depends on the backend, not on the step.")
     n = length(particles)
     @assert length(weights) ≥ n
     @assert size(mesh) == size(filter)
