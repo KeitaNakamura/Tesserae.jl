@@ -160,6 +160,14 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
     bs
 end
 
+# This runs one pass over the whole block array per chunk, so it grows with the
+# thread count -- 70 us to 139 us going from 8 threads to 16 on a 2D 512^2
+# partition. Sweeping the blocks once and carrying each block's running total
+# through the chunks instead looks like the fix and measures worse: the
+# elementwise add below vectorizes over two contiguous arrays, while a per-block
+# sweep touches one element of every chunk's array in turn. Splitting that sweep
+# across threads is worse again, because the whole phase is only tens of
+# microseconds and a fork-join costs about as much.
 function accumulate_chunk_counts!(bs::BlockStrategy)
     ws = bs.update_workspace
     nchunks = length(ws.chunk_counts)
@@ -343,19 +351,30 @@ function _permute_component!(component, perm, buffer)
         @inbounds for k in 1:n
             buffer[k] = component[perm[k]]
         end
-    else
-        nchunks = Threads.nthreads()
-        chunksize = cld(n, nchunks)
-        tforeach(1:nchunks) do chunk_id
-            firstp = (chunk_id - 1) * chunksize + 1
-            lastp = min(chunk_id * chunksize, n)
-            @inbounds for k in firstp:lastp
-                buffer[k] = component[perm[k]]
-            end
-        end
+        copyto!(component, buffer)
+        return component
     end
 
-    copyto!(component, buffer)
+    nchunks = Threads.nthreads()
+    chunksize = cld(n, nchunks)
+    chunk_bounds(chunk_id) =
+        ((chunk_id - 1) * chunksize + 1, min(chunk_id * chunksize, n))
+
+    tforeach(1:nchunks) do chunk_id
+        firstp, lastp = chunk_bounds(chunk_id)
+        @inbounds for k in firstp:lastp
+            buffer[k] = component[perm[k]]
+        end
+    end
+    # The copy back moves as many bytes as the gather did and used to run on one
+    # thread, which left it about a third of the reordering time. It has to stay
+    # a separate pass: the gather still reads elements that copying would
+    # overwrite.
+    tforeach(1:nchunks) do chunk_id
+        firstp, lastp = chunk_bounds(chunk_id)
+        @inbounds copyto!(component, firstp, buffer, firstp, lastp - firstp + 1)
+    end
+
     component
 end
 
