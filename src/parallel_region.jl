@@ -112,7 +112,13 @@ function balanced_bounds(strat::PartitionStrategy, group, nworkers::Int, weighte
             k += 1
             assigned += region_weight(strat, group[k])
         end
-        bounds[w+1] = k
+        # Every worker needs a region of its own, and has to leave one for each
+        # worker after it. The scan overshoots a target whenever a region is
+        # heavier than its share, which without this would hand the next worker
+        # an empty run -- and an idle worker costs a whole phase, so it hurts
+        # most when the regions barely outnumber the workers.
+        bounds[w+1] = nregions < nworkers ? min(k, nregions) :
+                                            clamp(k, w, nregions - (nworkers - w))
     end
     bounds
 end
