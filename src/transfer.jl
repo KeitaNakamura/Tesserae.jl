@@ -641,7 +641,22 @@ function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partiti
 end
 
 # GPU
-@kernel function gpukernel_P2G(f, grid, @Const(particles), @Const(weights))
+# `@Const` is deliberately absent from the container arguments below. It marks
+# an argument read-only so the backend can use its read-only cache path, and on
+# a plain device array it is free -- it stays on those elsewhere, where the same
+# A/B measures it neutral. Applied to a container it is not: KernelAbstractions
+# rewrites the argument's type, and indexing a `StructArray`, `BasisWeightArray`,
+# or mesh whose arrays have become `Const` wrappers loses far more than the cache
+# hint wins. On an RTX 5090 with 614k particles it made `@G2P` 3.4x slower and
+# `@P2G` 1.9x, for bit-identical results.
+#
+# Passing the arrays unpacked and annotating each one is not worth it either:
+# the same `@G2P` body over unpacked arrays runs at 0.0648 ms with `@Const` and
+# 0.0655 without, against 0.0677 for the container form here. There is nothing
+# for the read-only cache to win, because a particle's weights are read by that
+# particle alone and the grid reads are already absorbed by L2 -- removing them
+# from the kernel entirely does not change its time.
+@kernel function gpukernel_P2G(f, grid, particles, weights)
     p = @index(Global)
     @inline f(grid, particles, weights, p)
 end
@@ -672,7 +687,7 @@ P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particles, weight
 # particle-parallel path.
 const P2G_BLOCK_GROUPSIZE = 128
 
-@kernel function gpukernel_P2G_blocks(tilebody, grid, @Const(particles), @Const(weights),
+@kernel function gpukernel_P2G_blocks(tilebody, grid, particles, weights,
                                       @Const(particleindices), @Const(offsets), @Const(blocklist),
                                       ::Type{Tt}, ::Val{names}, ::Val{SIDE}, ::Val{TILELEN}, ::Val{TOTAL},
                                       ::Val{BW}, ::Val{HALO}, blkdims::Dims{dim}) where {Tt, names, SIDE, TILELEN, TOTAL, BW, HALO, dim}
@@ -739,7 +754,7 @@ G2P2G(f, device::CPUDevice, schedule, grid, particles, weights, partition) =
     P2G(f, device, schedule, grid, particles, weights, partition)
 
 # Unlike P2G, G2P2G writes interpolated and updated particle properties.
-@kernel function gpukernel_G2P2G(f, grid, particles, @Const(weights))
+@kernel function gpukernel_G2P2G(f, grid, particles, weights)
     p = @index(Global)
     @inline f(grid, particles, weights, p)
 end
@@ -953,7 +968,7 @@ function G2P(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights) where {
 end
 
 # GPU
-@kernel function gpukernel_G2P(f, @Const(grid), particles, @Const(weights))
+@kernel function gpukernel_G2P(f, grid, particles, weights)
     p = @index(Global)
     @inline f(grid, particles, weights, p)
 end

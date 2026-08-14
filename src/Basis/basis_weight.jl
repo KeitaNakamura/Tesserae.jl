@@ -536,7 +536,8 @@ end
 
 # accelerations
 
-@kernel function gpukernel_update_weight(weights, @Const(particles), @Const(mesh), @Const(filter))
+# See the note on `@Const` and nested containers in src/transfer.jl.
+@kernel function gpukernel_update_weight(weights, particles, mesh, filter)
     p = @index(Global)
     update!(weights[p], LazyRow(particles, p), mesh, filter)
 end
