@@ -397,8 +397,20 @@ end
     quote
         @_inline_meta
         @_propagate_inbounds_meta
-        BasisWeight(basis, NamedTuple{names}(tuple($(exps...))), view(indices, map(:, I, I)...), order)
+        BasisWeight(basis, NamedTuple{names}(tuple($(exps...))), view_supportnodes(indices, I...), order)
     end
+end
+
+# Element access wraps the supportnodes storage in a one-element array view.
+# When the storage is itself an integer-vector view (a subset of particles,
+# such as a constitutive group), composing range views would eagerly reindex
+# `parent_index[i:i]`, which allocates inside GPU kernels; read the parent
+# index as a scalar and take the one-element view on the parent instead.
+@inline view_supportnodes(indices::AbstractArray{<: Any, N}, I::Vararg{Integer, N}) where {N} = view(indices, map(:, I, I)...)
+@inline function view_supportnodes(indices::SubArray{<: Any, 1, <: AbstractVector, <: Tuple{AbstractVector{<: Integer}}}, i::Integer)
+    @_propagate_inbounds_meta
+    j = parentindices(indices)[1][i]
+    view(parent(indices), j:j)
 end
 
 @inline function viewcol(A::AbstractArray, I::Vararg{Integer, N}) where {N}

@@ -206,6 +206,17 @@ end
     cartesian_view = @inferred view(matrix_weights, CartesianIndex(2, 3))
     @test size(cartesian_view) == ()
     @test cartesian_view[].w == matrix_weights[2, 3].w
+
+    # Element access through an integer-vector view must stay lazy on the
+    # supportnodes storage: composing one-element range views would eagerly
+    # reindex `parent_index[i:i]`, which allocates inside GPU kernels.
+    vector_view = @inferred view(weights, [2, 4])
+    @test isconcretetype(eltype(vector_view))
+    element = vector_view[2]
+    @test element.w == weights[4].w
+    @test supportnodes(element) == supportnodes(weights[4])
+    @test parent(Tesserae.supportnodes_storage(element)) ===
+        getfield(weights, :indices)
 end
 
 end # BasisWeight
