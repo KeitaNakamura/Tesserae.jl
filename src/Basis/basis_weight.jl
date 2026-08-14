@@ -426,6 +426,7 @@ end
 
 @inline basis(x::BasisWeightArray) = getfield(x, :basis)
 @inline derivative_order(x::BasisWeightArray) = getfield(x, :order)
+@inline supportnodes_storage(x::BasisWeightArray) = getfield(x, :indices)
 
 @inline function Base.getindex(x::BasisWeightArray{<: Any, <: Any, <: Any, <: Any, N}, I::Vararg{Integer, N}) where {N}
     @boundscheck checkbounds(x, I...)
