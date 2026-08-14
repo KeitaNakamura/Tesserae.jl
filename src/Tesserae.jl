@@ -152,7 +152,7 @@ include("gmsh.jl")
 
 include("transfer.jl")
 include("foreach.jl")
-include("implicit.jl")
+include("Implicit/Implicit.jl")
 include("newton.jl")
 include("explain.jl")
 
