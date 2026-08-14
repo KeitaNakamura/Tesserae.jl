@@ -167,6 +167,28 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         N3, dN3 = @inferred Tesserae.cox_de_boor_values_and_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
         @test N3 ≈ Tesserae.cox_de_boor_values(Cubic(), cubic_knot_vector, 5, 0.375)
         @test dN3 ≈ Tesserae.cox_de_boor_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
+
+        # `cox_de_boor_values` evaluates the half-open span `knots[span] ≤ ξ <
+        # knots[span+1]`, so it vanishes at the closed upper end of the domain.
+        # `NURBS.active_basis` clamps the span instead and keeps the partition of
+        # unity there. Both are intended; they agree everywhere inside.
+        let
+            for deg in 1:3
+                degree = (Linear(), Quadratic(), Cubic())[deg]
+                kv = vcat(fill(0.0, deg+1), collect(range(0, 1; length=5))[2:end-1], fill(1.0, deg+1))
+                axis = Tesserae.NURBS.BSplineAxis(deg, kv)
+                for u in (0.125, 0.5, 0.875)
+                    sp = Tesserae.NURBS.knot_span(axis, u)
+                    _, active = Tesserae.NURBS.active_basis(axis, u)
+                    @test active ≈ collect(Tesserae.cox_de_boor_values(degree, kv, sp, u))
+                    @test sum(active) ≈ 1
+                end
+                sp_end = Tesserae.NURBS.knot_span(axis, 1.0)
+                _, active_end = Tesserae.NURBS.active_basis(axis, 1.0)
+                @test sum(active_end) ≈ 1
+                @test all(iszero, Tesserae.cox_de_boor_values(degree, kv, sp_end, 1.0))
+            end
+        end
     end
 
     @testset "Tensor product basis" begin
