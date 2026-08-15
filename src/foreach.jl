@@ -123,28 +123,12 @@ end
     @inbounds spinds[I]
 end
 
-# `@foreach` and the grid-only half of `@P2G` walk the same index spaces, and
-# both run bodies that read and write only the node they are given, so they
-# share the CPU loops below. `P2G_nosum` in transfer.jl is the `@P2G` entry
-# point; the GPU kernels further down are shared the same way.
+# `@foreach` and `@P2G`'s grid half (`P2G_nosum` in transfer.jl) run per-node
+# bodies over the same index spaces, so they share the loops and kernels here.
 #
-# Threading here does not hand single indices to `tforeach`. That leaves every
-# worker iterating a `CartesianIndices` by linear index -- an integer division
-# per dimension per node -- and gives up `@simd`. Splitting the index space
-# instead, so that each worker iterates a sub-block of it, keeps both.
-#
-# Whether threading is worth it at all is the caller's question, not the walk's.
-# Both entry points pass on whatever `@threaded` asked for and neither guesses.
-#
-# So a small `@foreach` over a cheap body can be slower threaded than
-# sequential. That is deliberate -- an item count cannot estimate a body nobody
-# has seen, and `@threaded` is a request, not a hint. What it pays is the cost
-# of threading at all rather than anything in this walk: it tracks the
-# fork-join, which is priced by thread count and not by how many chunks are
-# asked for. A caller already inside a parallel region can fold its work into
-# that region and never fork at all, which is not the same as forking more
-# cheaply; `@foreach` is handed a collection and nothing else, so it has no
-# region to fold into.
+# Threading splits the index space rather than handing single indices to
+# `tforeach`: a worker iterating `CartesianIndices` by linear index pays an
+# integer division per dimension per node and gives up `@simd`.
 function foreach_loop(f::F, ::CPUDevice, schedule::Val, collection) where {F}
     cpu_foreach(schedule, eachindex(collection)) do i
         @inline f(collection, i)
@@ -157,10 +141,8 @@ function foreach_loop(f::F, ::CPUDevice, schedule::Val, collection::SpGrid) wher
     end
 end
 
-# A slice is an index space in its own right: `CartesianIndices` of the selected
-# ranges visits the selected nodes directly, in the order the 1-based ndrange
-# used to be mapped into. That holds on an `SpGrid` too, so a sliced sparse grid
-# shares the dense walk and filters, rather than walking blocks.
+# A slice is an index space of its own, so a sliced `SpGrid` shares the dense
+# walk and filters on `isactive` instead of walking blocks.
 function foreach_loop(f::F, ::CPUDevice, schedule::Val, collection, slice::ForeachSlice) where {F}
     foreach_check_slice(collection, slice)
     cpu_foreach(schedule, CartesianIndices(slice.ranges)) do i
@@ -208,11 +190,8 @@ function foreach_split(inds, nworkers::Int)
     d, min(nworkers, size(inds, d))
 end
 
-# The `d`-th axis of `inds` restricted to positions `r`, every other axis taken
-# whole. Selecting all of an axis rather than passing it through is what keeps
-# the result concrete: `ax[r]` and `ax[1:end]` have the same type for every axis
-# type a slice can produce, whereas a `Base.OneTo` passed through would not match
-# the `UnitRange` that indexing it returns.
+# Every axis is reselected, not passed through: indexing a `Base.OneTo` gives a
+# `UnitRange`, so passing one through would make the result type depend on `d`.
 @inline foreach_subspace(inds::AbstractUnitRange, ::Int, r::UnitRange{Int}) = inds[r]
 @inline function foreach_subspace(inds::CartesianIndices{N}, d::Int, r::UnitRange{Int}) where {N}
     sel = ntuple(k -> ifelse(k == d, r, 1:size(inds, k)), Val(N))

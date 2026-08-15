@@ -614,9 +614,6 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         end
     end
 
-    # All the assigned fields as one tuple, handed to `P2G` rather than zeroed
-    # ahead of it: that lets the threaded path zero them inside the parallel
-    # region it already opens, instead of paying a fork-join of its own.
     Expr(:tuple, fillzero_targets...), body
 end
 
@@ -765,12 +762,9 @@ end
 Base.@propagate_inbounds p2g_write_index(grid, i) = i
 Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
 Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) = p2g_write_index(grid, get_spinds(grid)[Tuple(i)...])
-# `@boundscheck` here means debug-mode only, not "always": the transfer macros
-# wrap their generated body in `@inbounds` outside `debug_mode`, and that
-# propagates into this callee and elides the check. Calling `update_sparsity!`
-# is the caller's obligation under that same `@inbounds` contract, and
-# `supportnodes(::BasisWeight, ::SpGrid)` and `add!`'s `@debug checkbounds`
-# already assert it on the debug path.
+# `@boundscheck` means debug mode only here: the transfer macros wrap the
+# generated body in `@inbounds` outside `debug_mode`, which elides the check.
+# Calling `update_sparsity!` first is the caller's obligation.
 #
 # Do not promote this to an unconditional check without re-measuring. Making it
 # fire in release costs a noticeable fraction of an `SpGrid` transfer, and so
@@ -958,12 +952,6 @@ end
 # The grid-only part of `@P2G`. Every equation here reads and writes only its
 # own node, which makes it the same walk `@foreach` runs over the same grid, so
 # it shares the CPU loops and the GPU kernels in foreach.jl.
-#
-# Threading is the caller's call, exactly as it is for `@foreach`: this hands on
-# whatever `@threaded` asked for and does not second-guess it. A node count
-# cannot price the body anyway -- `m⁻¹[i] = inv(m[i])` moves 16 bytes and a 3D
-# `v` update eight times that -- and any threshold that could would be a number
-# read off one machine and shipped to every other.
 P2G_nosum(f::F, device::CPUDevice, schedule::Val, grid) where {F} =
     foreach_loop(f, device, schedule, grid)
 
@@ -980,9 +968,6 @@ function P2G_nosum(f, device::GPUDevice, ::Val, grid)
     end
 end
 
-# `macroname` is threaded through so every transfer macro reports its own name.
-# `@G2P` takes no partition and passes `nothing`, which skips the partition
-# checks exactly as before.
 function check_transfer_arguments(macroname, grid, particles, weights, partition)
     get_mesh(grid) isa AbstractMesh || error("$macroname: grid must have a mesh")
     eltype(weights) <: BasisWeight || error("$macroname: invalid `BasisWeight`s, got type $(typeof(weights))")

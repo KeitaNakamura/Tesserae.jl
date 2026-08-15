@@ -54,7 +54,7 @@ function fillzero!(x::AbstractArray)
 end
 
 # `fill!` stores a composite element such as `Vec{2,Float64}` one field at a
-# time, which is slower than a memset over the same bytes -- and grid fields are
+# time, which is slower than a memset over the same bytes, and grid fields are
 # mostly composite. Zeroing a dense array can go through memset instead whenever
 # a zero of the element type is all-zero bytes.
 #
@@ -104,9 +104,8 @@ _memset_buffers(::Tuple) = nothing
 # with wider lines still gets correct results, just some sharing at the seams.
 const FILLZERO_CHUNK_ALIGN = 64
 
-# Unrolled rather than a `foreach`, so that zeroing on one thread stays the run
-# of `fillzero!` calls that `@P2G` emitted inline before the fields were
-# handed over as a group.
+# Unrolled rather than a `foreach`, so zeroing on one thread stays a run of
+# inline `fillzero!` calls.
 @inline fillzero_each!(::Tuple{}) = nothing
 @inline fillzero_each!(targets::Tuple) = (fillzero!(first(targets)); fillzero_each!(Base.tail(targets)))
 
@@ -114,17 +113,9 @@ const FILLZERO_CHUNK_ALIGN = 64
     fillzero_prologue(targets::Tuple)
 
 A `prologue` for `partitioned_foreach` that zeroes `targets`, or `nothing` when
-they cannot be zeroed that way and the caller has to do it itself.
-
-Zeroing is order-free, so the bytes can be handed out in any split at all. What
-makes the split worth having is where it runs: as the transfer's first phase it
-adds one barrier, whereas its own parallel loop would add a fork-join, and a
-fork-join is priced by the thread count rather than by the work.
-
-The targets are split as one concatenated byte range rather than one at a time,
-because a transfer's fields are not the same size -- a scalar mass beside two
-`Vec` fields -- and splitting each on its own would leave the workers holding
-uneven shares of the total.
+they cannot be zeroed that way and the caller has to do it itself. The targets
+are split as one concatenated byte range, so fields of unequal size still give
+the workers even shares.
 """
 fillzero_prologue(::Tuple{}) = nothing
 fillzero_prologue(targets::Tuple) = _fillzero_prologue(memset_buffers(targets))
@@ -135,12 +126,6 @@ function _fillzero_prologue(buffers::Tuple)
     (nchunks, chunk_id) -> fillzero_chunk!(buffers, nbytes, nchunks, chunk_id)
 end
 
-# The chunk count is whatever the caller has workers for, which for a transfer
-# is set by its colour groups and can be well below `nthreads`. That is a
-# simplification and not a free one: a memset keeps getting faster with workers
-# well past the point where splitting by cache line suggests it would saturate.
-# Spawning workers the regions could never use would put them in every later
-# barrier to buy that, which is the trade this declines to make.
 function fillzero_chunk!(buffers::Tuple, nbytes::Int, nchunks::Int, chunk_id::Int)
     chunksize = FILLZERO_CHUNK_ALIGN * cld(nbytes, FILLZERO_CHUNK_ALIGN * nchunks)
     fillzero_byte_range!(buffers, chunk_range(chunk_id, chunksize, nbytes), 0)
@@ -281,8 +266,8 @@ get_scheduler(::Val{:dynamic}) = DynamicScheduler()
 get_scheduler(::Val{:greedy})  = GreedyScheduler()
 get_scheduler(::Val{:nothing}) = SequentialScheduler()
 
-# Chunk `chunk_id` of `n` items split into pieces of `chunksize`. Empty when the
-# last chunks have nothing left, which happens whenever `n` is not a multiple.
+# Chunk `chunk_id` of `n` items split into pieces of `chunksize`. Chunks past
+# the last piece are empty.
 @inline chunk_range(chunk_id::Int, chunksize::Int, n::Int) =
     ((chunk_id - 1) * chunksize + 1) : min(chunk_id * chunksize, n)
 
