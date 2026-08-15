@@ -30,15 +30,11 @@ end
 # across the loop to spill GPU registers into local memory, and that spill
 # traffic -- not the interpolation -- dominated the transfer kernels.
 
-# The per-particle weight columns, bound once and shared the way
-# `SupportWindowBinding` shares the window. `@G2P2G` makes this a correctness
-# requirement rather than an economy: a deferred column set holds a live row
-# into the particles, so rebinding it for the P2G half -- which runs after the
-# G2P half may have written `x[p]` -- would evaluate the basis at the new
-# position against the window taken at the old one. Binding once, before the
-# fused body, keeps both halves on the state the transfer started from, which is
-# what stored weights give. The names are the union over both halves so the one
-# evaluation serves them all.
+# The per-particle weight columns, bound once and shared as
+# `SupportWindowBinding` shares the window. For `@G2P2G` this is correctness, not
+# economy: the P2G half runs after the G2P half may have written `x[p]`, so
+# rebinding there would evaluate the basis at the new position against the window
+# taken at the old one. The names are the union over both halves.
 struct WeightColumnsBinding
     names::Any
     cols::Symbol
@@ -179,12 +175,11 @@ end
 @inline particle_cartesian(storage, p::CartesianIndex) = p
 
 # Weight references resolve in three steps so one basis evaluation serves every
-# referenced property. `weight_columns` is bound once per particle,
-# `weight_node_values` once per support node, and each reference reads a field
-# out of the result. A stored property gives a view and an index; the deferred
-# ones share a single jet, evaluated to the highest order the equations
-# reference -- not the order the weights were declared with, which is what makes
-# a transfer that only uses `w[ip]` cheap even on `Order(2)` weights.
+# referenced property: `weight_columns` per particle, `weight_node_values` per
+# support node, each reference reading a field out of the result. Deferred
+# properties share one jet, evaluated to the highest order the equations
+# reference rather than the order the weights were declared with -- which is what
+# keeps a transfer using only `w[ip]` cheap on `Order(2)` weights.
 struct DeferredWeights{K, B, P, M, W, S, F}
     basis::B
     pt::P      # the particle row: a basis may need more than the position
@@ -278,14 +273,10 @@ end
     window[ip]
 end
 
-# How far a block's shared-memory tile reaches past the block, in nodes. A
-# particle sits in the block its cell belongs to, and its support window starts
-# at most one node before that cell and spans `support_width` nodes, so the
-# window can reach one node past the block even for a width-1 basis --
-# `BSpline(Constant())` picks the nearest node, which for a particle in the
-# block's last cell is the first node of the next block. `p2g_tile_contains`
-# states the invariant the block-scheduled kernel relies on; test/transfer.jl
-# checks it for every basis.
+# How far a block's shared-memory tile reaches past the block, in nodes. A support
+# window starts at most one node before the particle's cell, so it reaches one node
+# past the block even at width 1: `BSpline(Constant())` on a particle in the last
+# cell picks the next block's first node. `p2g_tile_contains` states the invariant.
 @inline p2g_tile_halo(support_width::Integer) = max(support_width - 1, 1)
 
 function p2g_tile_contains(basis, mesh::CartesianMesh{dim}, window::CartesianIndices{dim}, block::CartesianIndex{dim}) where {dim}
@@ -784,14 +775,11 @@ function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partiti
 end
 
 # GPU
-# `@Const` is deliberately absent from the container arguments below. It marks
-# an argument read-only so the backend can use its read-only cache path, and on
-# a plain device array it is free -- it stays on those elsewhere, where the same
-# A/B measures it neutral. Applied to a container it is not: KernelAbstractions
-# rewrites the argument's type, and indexing a `StructArray`, `BasisWeightArray`,
-# or mesh whose arrays have become `Const` wrappers loses far more than the cache
-# hint wins. On an RTX 5090 with 614k particles it made `@G2P` 3.4x slower and
-# `@P2G` 1.9x, for bit-identical results.
+# `@Const` is deliberately absent from the container arguments below. It is free
+# on a plain device array and stays on those elsewhere, but KernelAbstractions
+# rewrites the argument's type, and indexing a `StructArray`, `BasisWeightArray`
+# or mesh whose arrays became `Const` wrappers costs far more than the read-only
+# cache hint wins -- measured 3.4x on `@G2P`, 1.9x on `@P2G`, same results.
 #
 # Passing the arrays unpacked and annotating each one is not worth it either:
 # the same `@G2P` body over unpacked arrays runs at 0.0648 ms with `@Const` and

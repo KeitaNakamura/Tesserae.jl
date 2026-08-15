@@ -124,11 +124,10 @@ end
 
 Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")")
 
-# Deferred evaluation. The moment matrix is a per-particle quantity, so it is
-# built once in the support loop's preamble and every node then reads it; that is
-# the whole of what made these bases look undeferrable. `full` records whether
-# the correction applies at all, which is what `KernelCorrection` branches on --
-# it is carried rather than acted on here so both arms have the same type.
+# Deferred evaluation: the moment matrix is per-particle, so it is built in the
+# support loop's preamble and every node reads it. `full` records whether the
+# correction applies at all -- carried rather than acted on, so both arms of
+# `KernelCorrection`'s node evaluation share a type.
 # Which pairings have one: a degree-2 or -3 cardinal B-spline against a linear
 # polynomial, matching `update_basis_values!` above.
 @inline has_closed_form_moments(::Any, ::Any) = false

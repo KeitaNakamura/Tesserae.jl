@@ -353,11 +353,9 @@ struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}
     indices::Indices
     order::O
     # What `update!` recorded for the transfers that follow. A transfer resolves
-    # stored-versus-evaluated from the type it is handed, so this is read on the
-    # host, once per transfer, to pick which type to hand it -- see
-    # `select_weights` in transfer.jl. Weights whose basis cannot defer carry
-    # nothing here, and neither does a copy adapted into a kernel, where the
-    # choice has already been made and the slot carries the filter instead.
+    # stored-versus-evaluated from the type it is handed, so `select_weights`
+    # reads this on the host to pick which type to hand it. A basis that cannot
+    # defer carries nothing; a kernel-bound copy carries the filter here instead.
     deferring::F
 end
 
@@ -462,17 +460,11 @@ end
     nodal_basis_jet(order, basis, pt, mesh, window[ip])
 end
 
-# Whether a basis can be evaluated inside a transfer instead of stored. A
-# `Kernel`'s value at a node follows from that node alone; `WLS` and
-# `KernelCorrection` additionally need a fit over the support, which the
-# per-particle level computes (see `deferred_particle_state`). FEM and IGA shapes
-# cannot: they also derive the cell Jacobian, the quadrature measure and boundary
-# normals, writing the last two into caller-owned arrays the equations read, and
-# a transfer has nowhere to put them.
-#
-# Each basis answers this once. The error below, the dispatch in
-# `select_weights` and the flag `update!` records all read the same answer, so a
-# basis cannot be half-enabled.
+# Whether a transfer can evaluate this basis itself. A `Kernel`'s value at a node
+# needs only that node; `WLS` and `KernelCorrection` also need a fit over the
+# support, which `deferred_particle_state` computes per particle. FEM and IGA
+# shapes cannot: they also derive cell geometry that the equations read back from
+# storage. One answer per basis, so none can be half-enabled.
 can_defer_basis(::Type{<: Kernel}) = true
 can_defer_basis(::Type) = false
 
@@ -752,10 +744,8 @@ cannot defer rather than silently doing nothing.
 """
 function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh,
                  filter::AbstractArray{Bool}=Trues(size(mesh)); deferred::Bool=storageless(weights))
-    # Lazy weights have nothing to fill: their basis values are evaluated inside
-    # the transfer. Calling `update!` on them is allowed and does nothing, so a
-    # simulation loop written for stored weights runs unchanged. Asking for the
-    # opposite is an error, because there is no storage to materialize into.
+    # Recorded before the early return below: weights that store nothing still
+    # need the filter, because it is their transfers that do the correcting.
     if deferred || storageless(weights)
         _record_filter!(deferring_state(weights), filter)
     end
@@ -764,8 +754,6 @@ function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray,
         return weights
     end
 
-    # Deferring is a per-step choice: the values are still there, but transfers
-    # are told to evaluate instead of read them until `deferred=false` refills them.
     if deferred
         can_defer(typeof(weights)) || _refuse_deferral(weights)
         return set_deferring!(weights, true)
