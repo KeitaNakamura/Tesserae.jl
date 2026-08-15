@@ -297,7 +297,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         end
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $(narrowed_grid_expr(grid, nosum_equations, i)))
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, nosum_equations, i)))
         end
     end
 
@@ -422,6 +422,18 @@ end
 Base.@propagate_inbounds p2g_write_index(grid, i) = i
 Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
 Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) = p2g_write_index(grid, get_spinds(grid)[Tuple(i)...])
+# `@boundscheck` here means debug-mode only, not "always": the transfer macros
+# wrap their generated body in `@inbounds` outside `debug_mode`, and that
+# propagates into this callee and elides the check. Calling `update_sparsity!`
+# is the caller's obligation under that same `@inbounds` contract, and
+# `supportnodes(::BasisWeight, ::SpGrid)` and `add!`'s `@debug checkbounds`
+# already assert it on the debug path.
+#
+# Do not promote this to an unconditional check without re-measuring. Making it
+# fire in release costs 5-9% on a 3D sequential `SpGrid` transfer and 11.6%
+# threaded; accumulating a flag branchlessly and raising once per particle still
+# costs ~5%. The only measured way back to zero is to give `SpArray.data` a
+# leading scrap slot so an inactive node lands there instead of out of bounds.
 @inline function p2g_write_index(::SpGrid, i::SpIndex)
     si = storageindex(i)
     @boundscheck iszero(si) && error("@P2G: inactive SpGrid support node. Call update_sparsity! before @P2G.")
@@ -448,11 +460,9 @@ end
 
 # CPU: multi-threading
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition) where {scheduler}
-    for group in threadsafe_groups(partition)
-        tforeach(group, scheduler) do region
-            for p in particle_indices(partition, particles, region)
-                @inline f(grid, particles, weights, p)
-            end
+    partitioned_foreach(strategy(partition), Val(scheduler)) do region
+        for p in particle_indices(partition, particles, region)
+            @inline f(grid, particles, weights, p)
         end
     end
 end
@@ -470,7 +480,8 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
     kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
 end
 
-G2P2G(f, device::CPUDevice, schedule, grid, particles, weights, partition) =
+# `f` is only handed on, so it takes a type parameter to be specialized on.
+G2P2G(f::F, device::CPUDevice, schedule, grid, particles, weights, partition) where {F} =
     P2G(f, device, schedule, grid, particles, weights, partition)
 
 # Unlike P2G, G2P2G writes interpolated and updated particle properties.
@@ -499,8 +510,96 @@ end
 
 # The grid-only part of `@P2G`. It walks the same indices as `@foreach` and
 # launches the same GPU kernels, both defined in foreach.jl, but keeps its own
-# CPU loops: routing them through `tforeach` costs 5-9% on a dense grid, and
-# `@inbounds @simd` here is worth that much.
+# CPU loops: handing single nodes to `tforeach` costs 5-9% on a dense grid,
+# because `@inbounds @simd` over a contiguous range is worth that much.
+#
+# Every equation here reads and writes only its own node, so the range can be
+# split across threads as long as each thread keeps a contiguous piece to run
+# `@simd` over. That is worth 2.7-3.3x on a grid large enough to cover the
+# fork-join, which is the whole grid-node half of a threaded step.
+const P2G_NOSUM_MIN_THREADED_LENGTH = 1 << 15
+
+function P2G_nosum(f::F, device::CPUDevice, ::Val{scheduler}, grid) where {F, scheduler}
+    nchunks, work = nosum_chunking(grid)
+    if scheduler === :nothing || Threads.nthreads() == 1 || nchunks < 2 ||
+       work < P2G_NOSUM_MIN_THREADED_LENGTH
+        return P2G_nosum(f, device, grid)
+    end
+    P2G_nosum_threaded(f, Val(scheduler), grid, nchunks)
+end
+
+# A dense grid splits along its trailing axis so that each worker still iterates
+# a `CartesianIndices` block. Chunking the flat range instead would make every
+# node pay a linear-to-Cartesian conversion -- an integer division per dimension
+# -- that the sequential loop does not.
+function nosum_chunking(grid)
+    inds = foreach_indices(grid)
+    nslabs = size(inds)[end]
+    min(Threads.nthreads(), nslabs), length(inds)
+end
+
+function P2G_nosum_threaded(f::F, ::Val{scheduler}, grid, nchunks::Int) where {F, scheduler}
+    inds = foreach_indices(grid)
+    axs = axes(inds)
+    slabs = axs[end]
+    chunksize = cld(length(slabs), nchunks)
+    tforeach(1:nchunks, scheduler) do chunk_id
+        r = chunk_range(chunk_id, chunksize, length(slabs))
+        isempty(r) && return
+        @inbounds slab = slabs[first(r)]:slabs[last(r)]
+        P2G_nosum_range(f, grid, CartesianIndices((Base.front(axs)..., slab)))
+    end
+end
+
+function P2G_nosum_range(f::F, grid, inds) where {F}
+    @inbounds @simd for i in inds
+        @inline f(grid, i)
+    end
+end
+
+# An `SpGrid` splits over blocks, the way `activeindices` walks them: an
+# inactive block is then skipped in one step rather than once per slot it owns,
+# and the block's coordinate is computed once instead of per node. Chunks are
+# finer than the thread count so that clustered activity does not land on one
+# worker.
+function nosum_chunking(grid::SpGrid)
+    spinds = get_spinds(grid)
+    numbering = blocknumbering(spinds)
+    nactive = 0
+    @inbounds for b in eachindex(numbering)
+        nactive += !iszero(numbering[b])
+    end
+    min(8 * Threads.nthreads(), length(numbering)), nactive * blocklength(spinds)
+end
+
+function P2G_nosum_threaded(f::F, ::Val{scheduler}, grid::SpGrid, nchunks::Int) where {F, scheduler}
+    spinds = get_spinds(grid)
+    nblks = length(blocknumbering(spinds))
+    chunksize = cld(nblks, nchunks)
+    tforeach(1:nchunks, scheduler) do chunk_id
+        P2G_nosum_blocks(f, grid, spinds, chunk_range(chunk_id, chunksize, nblks))
+    end
+end
+
+function P2G_nosum_blocks(f::F, grid, spinds, blks) where {F}
+    numbering = blocknumbering(spinds)
+    blocks = CartesianIndices(numbering)
+    localindices = CartesianIndices(blocksize(spinds))
+    @inbounds for b in blks
+        blocknumber = numbering[b]
+        iszero(blocknumber) && continue
+        block = blocks[b]
+        for l in 1:length(localindices)
+            active, i = _active_spindex(spinds, blocknumber, block, l, localindices)
+            active && @inline f(grid, i)
+        end
+    end
+end
+
+# The GPU path already parallelises, and the sequential path is what the
+# threaded one falls back to.
+P2G_nosum(f, device::GPUDevice, ::Val, grid) = P2G_nosum(f, device, grid)
+
 function P2G_nosum(f, ::CPUDevice, grid)
     @inbounds @simd for i in foreach_indices(grid)
         @inline f(grid, i)
@@ -852,7 +951,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         end
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $(narrowed_grid_expr(grid, stages.p2g_nosum, i)))
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, stages.p2g_nosum, i)))
         end
     end
 

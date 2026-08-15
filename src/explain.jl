@@ -100,13 +100,14 @@ end
 threads_loop(loop, schedule::QuoteNode) =
     Expr(:macrocall, Expr(:., :Threads, QuoteNode(Symbol("@threads"))), LineNumberNode(0, :none), schedule, loop)
 
+maybe_threaded(loop, threading) = threading.enabled ? threads_loop(loop, threading.schedule) : loop
+
 loop_expr(var, iter, body...) = Expr(:for, Expr(:(=), var, iter), expr_block(body))
 
 sequential_particle_loop((particles,p), body) = loop_expr(p, :(eachindex($particles)), body)
 
 function threaded_particle_loop((particles,p), body, threading)
-    loop = sequential_particle_loop((particles,p), body)
-    threading.enabled ? threads_loop(loop, threading.schedule) : loop
+    maybe_threaded(sequential_particle_loop((particles,p), body), threading)
 end
 
 function partitioned_particle_loop((particles,p), partition, body, threading)
@@ -119,8 +120,7 @@ function partitioned_particle_loop((particles,p), partition, body, threading)
     group = :group
     region = :region
     loop = loop_expr(region, group, loop_expr(p, :(particle_indices($partition, $particles, $region)), body))
-    inner = threading.enabled ? threads_loop(loop, threading.schedule) : loop
-    loop_expr(group, :(threadsafe_groups($partition)), inner)
+    loop_expr(group, :(threadsafe_groups($partition)), maybe_threaded(loop, threading))
 end
 
 function explain_transfer_call(kind::Symbol, args; threaded=false, schedule=QuoteNode(:nothing))
@@ -186,8 +186,8 @@ end
 
 fillzero_stmt(eq, scope) = :(fillzero!($(remove_indexing(resolve_refs(eq.lhs, scope)))))
 
-function explain_P2G_grid_loop((grid,i), nosum_equations)
-    loop_expr(i, :(eachindex($grid)), assign_stmts(nosum_equations, TransferScope([grid=>i]))...)
+function explain_P2G_grid_loop((grid,i), nosum_equations, threading)
+    maybe_threaded(loop_expr(i, :(eachindex($grid)), assign_stmts(nosum_equations, TransferScope([grid=>i]))...), threading)
 end
 
 function explain_G2P_particle_body((grid,i), (particles,p), (weights,ip), sum_equations, nosum_equations)
@@ -238,7 +238,7 @@ transfer_particle_loop(ctx, body, stages) = !isempty(stages.p2g_sum) ?
 function explain_transfer_stages(ctx, stages)
     particle_body = transfer_particle_body(ctx, stages)
     particle_loop = isempty(particle_body) ? () : transfer_particle_loop(ctx, expr_block(particle_body), stages)
-    grid_loop = isempty(stages.p2g_nosum) ? () : explain_P2G_grid_loop(ctx.grid_i, stages.p2g_nosum)
+    grid_loop = isempty(stages.p2g_nosum) ? () : explain_P2G_grid_loop(ctx.grid_i, stages.p2g_nosum, ctx.threading)
     expr_block(explain_P2G_fillzeros(ctx.grid_i, stages.p2g_sum), particle_loop, grid_loop)
 end
 

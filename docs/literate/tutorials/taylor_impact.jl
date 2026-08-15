@@ -114,14 +114,21 @@ function main()
             Δt::Float64 = CFL * spacing(grid.x) / maximum(particles.c)
         end
 
-        @timeit "Update basis weights" begin
-            update!(weights, particles, grid.x) # Automatically uses multi-threading
-        end
-
         if partition !== nothing
             @timeit "Update thread partition" begin
                 update!(partition, particles.x)
             end
+            @timeit "Reorder particles" begin
+                ## Called every step; the threshold decides which steps actually
+                ## reorder. This has to come before the basis weights are
+                ## updated, since reordering permutes the particles and not the
+                ## weights computed for them.
+                reorder_particles!(particles, partition; threshold=0.85)
+            end
+        end
+
+        @timeit "Update basis weights" begin
+            update!(weights, particles, grid.x) # Automatically uses multi-threading
         end
 
         @timeit "P2G transfer" begin
@@ -182,11 +189,6 @@ function main()
                         end
                         pvd[t] = vtm
                     end
-                end
-            end
-            if partition !== nothing
-                @timeit "Reorder particles" begin
-                    reorder_particles!(particles, partition)
                 end
             end
         end

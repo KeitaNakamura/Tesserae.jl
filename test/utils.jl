@@ -112,3 +112,27 @@
     @test prog.done
     @test occursin("100%", String(take!(io)))
 end
+
+@testset "fillzero!" begin
+    # Types whose zero is all-zero bytes take the memset path; the rest must
+    # still go through `fill!`, and both must produce the same array.
+    for T in (Float64, Float32, Int, Bool, Vec{2,Float64}, Vec{3,Float64},
+              SymmetricSecondOrderTensor{3,Float64,6}, SecondOrderTensor{2,Float64,4},
+              @NamedTuple{a::Float64, b::Vec{3,Float64}})
+        @test Tesserae.zeroed_by_memset(T)
+    end
+    @test !Tesserae.zeroed_by_memset(String)
+    @test !Tesserae.zeroed_by_memset(Vector{Float64})
+
+    randbytes!(A) = (GC.@preserve A rand!(unsafe_wrap(Array, Ptr{UInt8}(pointer(A)), sizeof(A))); A)
+    for T in (Float64, Int, Vec{2,Float64}, Vec{3,Float64}, SymmetricSecondOrderTensor{3,Float64,6})
+        A = randbytes!(Vector{T}(undef, 37))
+        B = copy(A)
+        Tesserae.fillzero!(A)
+        fill!(B, Tesserae.zero_recursive(T))
+        @test A == B
+        @test all(iszero, A)
+    end
+    M = randbytes!(Matrix{Vec{2,Float64}}(undef, 5, 7))
+    @test all(iszero, Tesserae.fillzero!(M))
+end

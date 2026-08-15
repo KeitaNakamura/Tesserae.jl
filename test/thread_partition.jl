@@ -1,3 +1,36 @@
+# Components of the same element type share one reorder buffer, so a reorder
+# has to finish with one component before starting the next. Two `Vec` fields
+# and two scalar fields catch a batching that forgets this.
+@testset "reorder_particles! with repeated component types" begin
+    mesh = CartesianMesh(0.1, (0,1), (0,1))
+    Prop = @NamedTuple begin
+        x :: Vec{2, Float64}
+        v :: Vec{2, Float64}
+        m :: Float64
+        V :: Float64
+    end
+    particles = generate_particles(Prop, mesh)
+    for p in eachindex(particles)
+        particles.v[p] = 10 * particles.x[p]
+        particles.m[p] = p
+        particles.V[p] = -p
+    end
+    before = (x=copy(particles.x), v=copy(particles.v), m=copy(particles.m), V=copy(particles.V))
+
+    bs = Tesserae.BlockStrategy(mesh)
+    Random.seed!(1234)
+    shuffle!(particles)
+    update!(bs, particles.x)
+    @test reorder_particles!(particles, bs)
+
+    # Every field must still travel with its own particle.
+    @test sort(particles.m) == sort(before.m)
+    for p in eachindex(particles)
+        @test particles.v[p] ≈ 10 * particles.x[p]
+        @test particles.V[p] == -particles.m[p]
+    end
+end
+
 @testset "ThreadPartition" begin
     @testset "BlockStrategy" begin
         mesh = CartesianMesh(0.25, (0,4), (0,4))

@@ -142,10 +142,8 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
 
     @threaded for chunk_id in eachindex(ws.chunk_counts)
         counts = ws.chunk_counts[chunk_id]
-        firstp = (chunk_id - 1) * chunksize + 1
-        lastp = min(chunk_id * chunksize, nₚ)
 
-        @inbounds for p in firstp:lastp
+        @inbounds for p in chunk_range(chunk_id, chunksize, nₚ)
             blk = sub2ind(blocklin, _findblock(xₚ[p], xmin, h_inv, dims, block_size))
             if iszero(blk)
                 ws.packed_particle_blocks[p] = 0
@@ -160,6 +158,17 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
     bs
 end
 
+# This runs one pass over the whole block array per chunk, so it grows with the
+# thread count -- 70 us to 139 us going from 8 threads to 16 on a 2D 512^2
+# partition. Sweeping the blocks once and carrying each block's running total
+# through the chunks instead looks like the fix and measures worse: the
+# elementwise add below vectorizes over two contiguous arrays, while a per-block
+# sweep touches one element of every chunk's array in turn.
+#
+# Splitting that sweep across threads measured worse again, but that was against
+# a `tforeach` fork-join costing about as much as the whole phase; running it as
+# one more phase of the transfer's worker pool (src/parallel_region.jl) was not
+# tried and is not ruled out.
 function accumulate_chunk_counts!(bs::BlockStrategy)
     ws = bs.update_workspace
     nchunks = length(ws.chunk_counts)
@@ -221,10 +230,7 @@ function scatter_particle_indices!(bs::BlockStrategy, nₚ::Integer, chunksize)
     ws = bs.update_workspace
 
     @threaded for chunk_id in eachindex(ws.chunk_counts)
-        firstp = (chunk_id - 1) * chunksize + 1
-        lastp = min(chunk_id * chunksize, nₚ)
-
-        @inbounds for p in firstp:lastp
+        @inbounds for p in chunk_range(chunk_id, chunksize, nₚ)
             packed = ws.packed_particle_blocks[p]
             if !iszero(packed)
                 blk = packed_block(packed)
@@ -297,18 +303,21 @@ end
 """
     reorder_particles!(particles, partition; threshold=1)
 
-Reorder particles by the current block partition.
+Reorder particles by the current block partition, and return whether it did.
 
-For `0 ≤ threshold ≤ 1`, larger values reorder more often. Particles are
-reordered when [`Tesserae.block_ordered_particle_contiguity`](@ref) is below
-`threshold`.
+Particles are reordered when [`Tesserae.block_ordered_particle_contiguity`](@ref)
+is below `threshold`, which by default is every call. For `0 ≤ threshold ≤ 1`,
+larger values reorder more often; `threshold=0` never reorders.
 
-At the endpoints, `threshold=0` never reorders and `threshold=1` always
-reorders.
+In a step loop, call this every step but pass a `threshold` below `1`, such as
+`0.85`, and let it decide which steps to act on. Reordering moves about as many
+bytes as the transfer it speeds up, so reordering on every step usually costs
+more than it saves.
 
-A practical value for adaptive reordering is `threshold=0.85`.
-
-Returns `true` when particles were reordered.
+!!! warning
+    This permutes `particles` and nothing else, so anything already computed per
+    particle -- basis weights above all -- is stale afterwards. Call it before
+    `update!(weights, particles, mesh)`, not between that and the transfer.
 """
 function reorder_particles!(particles::StructVector, bs::BlockStrategy; threshold=1)
     0 ≤ threshold ≤ 1 || throw(ArgumentError("threshold must be in [0, 1]."))
@@ -327,6 +336,12 @@ function _reorder_partition_particles!(particles::StructVector, bs::BlockStrateg
     particles
 end
 
+# One component at a time, because `buffer_for_component!` hands out one buffer
+# per element *type*: a particle set with two `Vec{3,Float64}` fields gets the
+# same buffer for both, so a component has to be gathered and copied back before
+# the next one starts. Batching the gathers of every component to share a
+# fork-join is therefore not available without a buffer per component, which
+# would double the scratch memory a reorder needs.
 function _permute_particles!(particles::StructVector, perm, buffers::ParticleReorderBuffers)
     for component in StructArrays.components(particles)
         buffer = buffer_for_component!(buffers, component)
@@ -335,27 +350,35 @@ function _permute_particles!(particles::StructVector, perm, buffers::ParticleReo
     particles
 end
 
+# _reorder_particles! passes a full-length valid permutation; the buffer has
+# the same length as the component, so the gather loop can skip bounds checks.
 function _permute_component!(component, perm, buffer)
     n = length(component)
-    # _reorder_particles! passes a full-length valid permutation; the buffer has
-    # the same length as the component, so the gather loop can skip bounds checks.
     if Threads.nthreads() == 1 || n < THREADED_COMPONENT_REORDER_MIN_LENGTH
         @inbounds for k in 1:n
             buffer[k] = component[perm[k]]
         end
-    else
-        nchunks = Threads.nthreads()
-        chunksize = cld(n, nchunks)
-        tforeach(1:nchunks) do chunk_id
-            firstp = (chunk_id - 1) * chunksize + 1
-            lastp = min(chunk_id * chunksize, n)
-            @inbounds for k in firstp:lastp
-                buffer[k] = component[perm[k]]
-            end
-        end
+        copyto!(component, buffer)
+        return component
     end
 
-    copyto!(component, buffer)
+    nchunks = Threads.nthreads()
+    chunksize = cld(n, nchunks)
+    tforeach(1:nchunks) do chunk_id
+        ks = chunk_range(chunk_id, chunksize, n)
+        @inbounds for k in ks
+            buffer[k] = component[perm[k]]
+        end
+    end
+    # The copy back moves as many bytes as the gather did and used to run on one
+    # thread, which left it about a third of the reordering time. It has to stay
+    # a separate pass: the gather still reads elements that copying would
+    # overwrite.
+    tforeach(1:nchunks) do chunk_id
+        ks = chunk_range(chunk_id, chunksize, n)
+        @inbounds copyto!(component, first(ks), buffer, first(ks), length(ks))
+    end
+
     component
 end
 
