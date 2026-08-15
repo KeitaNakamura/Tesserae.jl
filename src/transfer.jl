@@ -29,6 +29,24 @@ end
 # per-particle `BasisWeight` this used to build kept enough live SubArray state
 # across the loop to spill GPU registers into local memory, and that spill
 # traffic -- not the interpolation -- dominated the transfer kernels.
+
+# The per-particle weight columns, bound once and shared the way
+# `SupportWindowBinding` shares the window. `@G2P2G` makes this a correctness
+# requirement rather than an economy: a deferred column set holds a live row
+# into the particles, so rebinding it for the P2G half -- which runs after the
+# G2P half may have written `x[p]` -- would evaluate the basis at the new
+# position against the window taken at the old one. Binding once, before the
+# fused body, keeps both halves on the state the transfer started from, which is
+# what stored weights give. The names are the union over both halves so the one
+# evaluation serves them all.
+struct WeightColumnsBinding
+    names::Any
+    cols::Symbol
+    load::Bool
+end
+WeightColumnsBinding(names) = WeightColumnsBinding(Tuple(names), gensym(:wcols), true)
+WeightColumnsBinding(binding::WeightColumnsBinding; load::Bool) = WeightColumnsBinding(binding.names, binding.cols, load)
+
 struct TrailingIndexed
     parent::Any     # the weights array
     trailing::Any   # the particle index
@@ -38,10 +56,11 @@ struct TrailingIndexed
     names::Any      # every weight property the equations reference
     cols::Any       # symbol bound once per particle
     vals::Any       # symbol bound once per support node
+    loadcols::Bool  # whether this scope emits the per-particle binding
 end
-TrailingIndexed(parent, trailing) = TrailingIndexed(parent, trailing, nothing, nothing, nothing, nothing, nothing, nothing)
-function TrailingIndexed(parent, trailing, particles, grid, window, names)
-    TrailingIndexed(parent, trailing, particles, grid, window, Tuple(names), gensym(:wcols), gensym(:wvals))
+TrailingIndexed(parent, trailing) = TrailingIndexed(parent, trailing, nothing, nothing, nothing, nothing, nothing, nothing, false)
+function TrailingIndexed(parent, trailing, particles, grid, window, binding::WeightColumnsBinding)
+    TrailingIndexed(parent, trailing, particles, grid, window, binding.names, binding.cols, gensym(:wvals), binding.load)
 end
 
 struct TransferScope
@@ -159,8 +178,15 @@ struct DeferredWeights{K, B, P, M, W}
     mesh::M
     window::W
 end
+# The row is taken by value, not as a `LazyRow`. The basis is evaluated in the
+# support loop, which in a `@G2P2G` runs after the G2P half may have written
+# `x[p]`; a live row would then be read at the new position against the window
+# taken at the old one. Fields the basis does not read are dead and drop out.
 DeferredWeights{K}(basis::B, pt::P, mesh::M, window::W) where {K, B, P, M, W} =
     DeferredWeights{K, B, P, M, W}(basis, pt, mesh, window)
+
+@inline deferred_particle_row(particles::StructArray, p) = (@_propagate_inbounds_meta; particles[p])
+@inline deferred_particle_row(particles, p) = (@_propagate_inbounds_meta; LazyRow(particles, p))
 
 @inline function deferred_jet(d::DeferredWeights{K}, ip) where {K}
     @_propagate_inbounds_meta
@@ -195,7 +221,7 @@ end
     stored, _, orders = plan
     views = [:(weight_prop_view(weights, Val($(QuoteNode(n))), p)) for n in stored]
     deferred = isempty(orders) ? :nothing :
-        :(DeferredWeights{$(maximum(orders))}(basis(weights), LazyRow(particles, p), mesh, window))
+        :(DeferredWeights{$(maximum(orders))}(basis(weights), deferred_particle_row(particles, p), mesh, window))
     quote
         @_propagate_inbounds_meta
         (stored = NamedTuple{$stored}(($(views...),)), deferred = $deferred)
@@ -507,12 +533,13 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     esc(prettify(code; lines=true, alias=false))
 end
 
-function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding())
+function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding(),
+                      cols::Union{WeightColumnsBinding,Nothing}=nothing)
     @gensym gridwriteindex
     (; window) = binding
 
-    weight_names = collect_transfer_refs(sum_equations, ip)
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, weight_names)=>ip]; cache=true)
+    cols = something(cols, WeightColumnsBinding(collect_transfer_refs(sum_equations, ip)))
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, cols)=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
     particle_replacements = cached_replacements(scope, p)
     inner_replacements = cached_replacements(scope, i, ip)
@@ -553,8 +580,8 @@ function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations:
     binding = SupportWindowBinding()
     (; window) = binding
 
-    weight_names = collect_transfer_refs(sum_equations, ip)
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, weight_names)=>ip]; cache=true)
+    cols = WeightColumnsBinding(collect_transfer_refs(sum_equations, ip))
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, cols)=>ip]; cache=true)
     sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
     particle_replacements = cached_replacements(scope, p)
     inner_replacements = cached_replacements(scope, i, ip)
@@ -1074,12 +1101,13 @@ function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) w
     kernel(f, grid, particles, weights; ndrange=length(particles))
 end
 
-function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding())
+function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding(),
+                      cols::Union{WeightColumnsBinding,Nothing}=nothing)
     (; window) = binding
 
     code = Expr(:block)
-    weight_names = collect_transfer_refs(vcat(sum_equations, nosum_equations), ip)
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, weight_names)=>ip]; cache=true)
+    cols = something(cols, WeightColumnsBinding(collect_transfer_refs(vcat(sum_equations, nosum_equations), ip)))
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, cols)=>ip]; cache=true)
 
     if !isempty(sum_equations)
         sum_equations = resolve_sum_equations(sum_equations, scope, "@G2P", p)
@@ -1204,9 +1232,17 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     end
     body = Expr(:block)
     binding = SupportWindowBinding()
+    # Both halves resolve against one set of per-particle weight columns, holding
+    # every property either references. The P2G half must not rebind them: it
+    # runs after the G2P half's non-`@∑` equations, which is where an explicit
+    # step writes `x[p]`, and deferred columns read the particle row when the
+    # support loop evaluates the basis.
+    colsbinding = WeightColumnsBinding(union(
+        collect_transfer_refs(vcat(stages.g2p_sum, stages.g2p_nosum), ip),
+        collect_transfer_refs(stages.p2g_sum, ip)))
 
     if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
-        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, binding)
+        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, binding, colsbinding)
         body = quote
             $body
             $expr
@@ -1217,7 +1253,8 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         # `G2P_sum_expr` binds the basis weight only when it has `@∑` equations,
         # so this half must load it itself otherwise.
         p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
-        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding)
+        p2g_cols = isempty(stages.g2p_sum) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
+        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
         code = quote
             $code
             $pre
@@ -1337,7 +1374,7 @@ function resolve_refs(expr, scope::TransferScope)
                 # One binding per particle and one per node, both identical across
                 # every weight reference, so `push_unique!` emits each once and
                 # the properties share a single basis evaluation.
-                push_unique!(scope.replacements[parent.trailing],
+                parent.loadcols && push_unique!(scope.replacements[parent.trailing],
                              :($(parent.cols) = Tesserae.weight_columns($(parent.parent), Val($(parent.names)), $(parent.particles), $(parent.trailing), Tesserae.get_mesh($(parent.grid)), $(parent.window))))
                 push_unique!(scope.replacements[i],
                              :($(parent.vals) = Tesserae.weight_node_values($(parent.parent), $(parent.cols), Val($(parent.names)), $i)))

@@ -565,6 +565,32 @@
             # taking a deferred view must leave the stored values usable
             @test transfer(stored, particles)[1] ≈ reference[1]
 
+            # A fused step writes `x[p]` between the two halves of a `@G2P2G`.
+            # Deferred weights must still evaluate at the state the transfer
+            # started from, exactly as stored values do, so both halves have to
+            # share one per-particle binding taken before the write.
+            function fused(weights, particles)
+                grid = generate_grid(GridProp, mesh)
+                @P2G grid=>i particles=>p weights=>ip begin
+                    m[i]  = @∑ w[ip] * m[p]
+                    mv[i] = @∑ w[ip] * m[p] * v[p]
+                end
+                @G2P2G grid=>i particles=>p weights=>ip begin
+                    v[p]  = @∑ w[ip] * mv[i] / (m[i] + eps(Float64))
+                    x[p]  = x[p] + 0.005 * v[p]
+                    m[i]  = @∑ w[ip] * m[p]
+                    mv[i] = @∑ w[ip] * m[p] * v[p]
+                end
+                (copy(grid.m), copy(grid.mv), copy(particles.x))
+            end
+            fused_reference = fused(stored, deepcopy(particles))
+            for weights in (built, view)
+                moved = fused(weights, deepcopy(particles))
+                @test moved[1] ≈ fused_reference[1]
+                @test moved[2] ≈ fused_reference[2]
+                @test moved[3] ≈ fused_reference[3]
+            end
+
             # `update!` may be told what it already is, but not the opposite
             @test update!(built, particles, mesh; lazy=true) === built
             @test_throws ErrorException update!(built, particles, mesh; lazy=false)

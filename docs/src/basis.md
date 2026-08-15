@@ -64,6 +64,17 @@ The memory saved is substantial for high-order bases in 3D: storing a cubic
 B-spline's values and gradients for a million particles takes about 1 GB, which
 deferring removes entirely.
 
+!!! warning "When the values are taken"
+    Stored values date from the last [`update!`](@ref); deferred values are
+    evaluated by the transfer that reads them, from the particle state as it
+    stands when that transfer begins. Within one transfer the two agree, and a
+    [`@G2P2G`](@ref) that writes `x[p]` between its halves still evaluates both
+    halves at the state it started from. Across transfers they can differ: if
+    particles move between two transfers and no `update!` runs in between,
+    stored weights keep the old positions while deferred weights follow the new
+    ones. Call `update!` after moving particles — which a loop written for
+    stored weights already does — and the two agree.
+
 A deferred basis must be able to produce one node's value from the particle and
 the mesh alone. [`BSpline`](@ref), [`SteffenBSpline`](@ref) and [`uGIMP`](@ref)
 qualify. [`WLS`](@ref) and [`KernelCorrection`](@ref) do not, because each node's
