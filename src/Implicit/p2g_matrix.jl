@@ -91,7 +91,14 @@ end
 function check_arguments_for_P2G_Matrix(grid, particles, weights, partition)
     check_transfer_arguments("@P2G_Matrix", grid, particles, weights, partition)
     @assert get_device(grid) isa CPUDevice
+    # This macro reads the stored values directly rather than going through the
+    # transfer's weight resolution, so deferred weights would assemble from
+    # storage that was deliberately left unfilled -- a zero matrix, silently.
+    _reject_deferred_matrix(weights)
 end
+_reject_deferred_matrix(weights) =
+    isdeferred(weights) && error("@P2G_Matrix: cannot assemble from deferred basis weights; it reads the stored values, which deferring leaves unfilled. Call `update!` without `deferred=true` first.")
+_reject_deferred_matrix(weights::Tuple) = foreach(_reject_deferred_matrix, weights)
 
 # ---- macro implementation ----
 

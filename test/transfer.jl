@@ -653,6 +653,30 @@
                 @test actual[3] ≈ expected[3]
             end
         end
+        # `@P2G_Matrix` reads the stored values directly instead of going through
+        # the transfer's weight resolution, so it must refuse deferred weights
+        # rather than assemble a zero matrix from storage that was never filled.
+        @testset "deferred weights are refused by @P2G_Matrix" begin
+            pts = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            pts.m .= 1.0
+            grid = generate_grid(GridProp, mesh)
+            basis = BSpline(Quadratic())
+            assemble(w) = begin
+                K = create_sparse_matrix(basis, mesh; ndofs=2)
+                @P2G_Matrix grid=>(i,j) pts=>p w=>(ip,jp) begin
+                    K[i,j] = @∑ w[ip] * w[jp] * m[p] * one(Mat{2,2,Float64})
+                end
+                sum(abs, K)
+            end
+            stored = generate_basis_weights(basis, mesh, length(pts))
+            update!(stored, pts, mesh)
+            @test assemble(stored) > 0
+            flagged = generate_basis_weights(basis, mesh, length(pts))
+            update!(flagged, pts, mesh; deferred=true)
+            @test_throws ErrorException assemble(flagged)
+            @test_throws ErrorException assemble(generate_basis_weights(basis, mesh, length(pts); deferred=true))
+        end
+
         # a basis whose support is not a fixed Cartesian block still cannot defer
         @test_throws ErrorException generate_basis_weights(CPDI(), mesh, 4; deferred=true)
     end
