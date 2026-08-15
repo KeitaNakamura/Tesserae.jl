@@ -186,8 +186,9 @@ end
 
 fillzero_stmt(eq, scope) = :(fillzero!($(remove_indexing(resolve_refs(eq.lhs, scope)))))
 
-function explain_P2G_grid_loop((grid,i), nosum_equations)
-    loop_expr(i, :(eachindex($grid)), assign_stmts(nosum_equations, TransferScope([grid=>i]))...)
+function explain_P2G_grid_loop((grid,i), nosum_equations, threading)
+    loop = loop_expr(i, :(eachindex($grid)), assign_stmts(nosum_equations, TransferScope([grid=>i]))...)
+    threading.enabled ? threads_loop(loop, threading.schedule) : loop
 end
 
 function explain_G2P_particle_body((grid,i), (particles,p), (weights,ip), sum_equations, nosum_equations)
@@ -238,7 +239,7 @@ transfer_particle_loop(ctx, body, stages) = !isempty(stages.p2g_sum) ?
 function explain_transfer_stages(ctx, stages)
     particle_body = transfer_particle_body(ctx, stages)
     particle_loop = isempty(particle_body) ? () : transfer_particle_loop(ctx, expr_block(particle_body), stages)
-    grid_loop = isempty(stages.p2g_nosum) ? () : explain_P2G_grid_loop(ctx.grid_i, stages.p2g_nosum)
+    grid_loop = isempty(stages.p2g_nosum) ? () : explain_P2G_grid_loop(ctx.grid_i, stages.p2g_nosum, ctx.threading)
     expr_block(explain_P2G_fillzeros(ctx.grid_i, stages.p2g_sum), particle_loop, grid_loop)
 end
 

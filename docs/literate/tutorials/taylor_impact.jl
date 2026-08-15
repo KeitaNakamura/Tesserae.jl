@@ -186,7 +186,7 @@ function main()
             end
             if partition !== nothing
                 @timeit "Reorder particles" begin
-                    reorder_particles!(particles, partition)
+                    reorder_particles!(particles, partition; threshold=0.85)
                 end
             end
         end
