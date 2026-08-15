@@ -318,28 +318,28 @@ function Base.show(io::IO, bw::BasisWeight)
     print(io, "  Support nodes: ", supportnodes(bw))
 end
 
-# Stand-in for a basis-value array that is never stored, so a lazy
+# Stand-in for a basis-value array that is never stored, so a deferred
 # `BasisWeightArray` keeps the shape and naming of a stored one -- the property
 # order still gives the derivative order, and element types still infer --
 # while owning no memory. Reading one is a bug: the transfer lowering resolves
-# lazy properties by evaluating the basis instead.
-struct LazyBasisValues{T, N} <: AbstractArray{T, N}
+# deferred properties by evaluating the basis instead.
+struct DeferredBasisValues{T, N} <: AbstractArray{T, N}
     dims::Dims{N}
 end
-LazyBasisValues{T}(dims::Dims{N}) where {T, N} = LazyBasisValues{T, N}(dims)
-Base.size(A::LazyBasisValues) = A.dims
-Base.IndexStyle(::Type{<: LazyBasisValues}) = IndexLinear()
-Base.getindex(::LazyBasisValues, ::Integer) =
-    error("this basis value is not stored: the weights were built with `lazy=true`, so it is evaluated inside the transfer instead")
-Base.similar(A::LazyBasisValues{T}, ::Type{S}, dims::Dims) where {T, S} = LazyBasisValues{S}(dims)
+DeferredBasisValues{T}(dims::Dims{N}) where {T, N} = DeferredBasisValues{T, N}(dims)
+Base.size(A::DeferredBasisValues) = A.dims
+Base.IndexStyle(::Type{<: DeferredBasisValues}) = IndexLinear()
+Base.getindex(::DeferredBasisValues, ::Integer) =
+    error("this basis value is not stored: the weights were built with `deferred=true`, so it is evaluated inside the transfer instead")
+Base.similar(A::DeferredBasisValues{T}, ::Type{S}, dims::Dims) where {T, S} = DeferredBasisValues{S}(dims)
 
-is_lazy_values(::LazyBasisValues) = true
-is_lazy_values(::AbstractArray) = false
+is_deferred_values(::DeferredBasisValues) = true
+is_deferred_values(::AbstractArray) = false
 
 # Owning no memory, a placeholder lives wherever the rest of the weights do, so
 # it reports no backend of its own and the surrounding arrays decide.
-KernelAbstractions.get_backend(::LazyBasisValues) = nothing
-Adapt.adapt_structure(to, A::LazyBasisValues) = A
+KernelAbstractions.get_backend(::DeferredBasisValues) = nothing
+Adapt.adapt_structure(to, A::DeferredBasisValues) = A
 
 """
     BasisWeightArray
@@ -347,46 +347,82 @@ Adapt.adapt_structure(to, A::LazyBasisValues) = A
 Structure-of-arrays storage for multiple [`BasisWeight`](@ref)s.
 Use [`generate_basis_weights`](@ref) to construct a `BasisWeightArray`.
 """
-struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}, N, O <: Order} <: AbstractArray{ElType, N}
+struct BasisWeightArray{B, Vals <: NamedTuple, Indices, ElType <: BasisWeight{B}, N, O <: Order, F} <: AbstractArray{ElType, N}
     basis::B
     vals::Vals
     indices::Indices
     order::O
+    # Whether transfers should evaluate the values rather than read the stored
+    # ones, set by `update!(...; deferred=true)`. A transfer resolves that from the
+    # type it is handed, so this is read on the host, once per transfer, to pick
+    # which type to hand it -- see `select_weights` in transfer.jl. Arrays that
+    # store nothing are always deferred and carry no flag, and neither does a
+    # copy adapted into a kernel, where the choice has already been made.
+    deferring::F
 end
 
-function BasisWeightArray(basis::B, vals::Vals, indices::Indices, order::O) where {B, Vals <: NamedTuple, N, Indices <: AbstractArray{<: Any, N}, O <: Order}
+function BasisWeightArray(basis::B, vals::Vals, indices::Indices, order::O, deferring::F=deferring_flag(basis, vals)) where {B, Vals <: NamedTuple, N, Indices <: AbstractArray{<: Any, N}, O <: Order, F}
     ElType = Base._return_type(_getindex, Tuple{B, Vals, Indices, O, Vararg{Int, N}})
-    BasisWeightArray{B, Vals, Indices, ElType, N, O}(basis, vals, indices, order)
+    BasisWeightArray{B, Vals, Indices, ElType, N, O, F}(basis, vals, indices, order, deferring)
 end
+
+# Whether a transfer could evaluate this array's values instead of reading them.
+# A type-level answer, so the branch in `select_weights` folds away entirely for
+# weights that cannot.
+can_defer(::Type{<: BasisWeightArray{B}}) where {B} = B <: Kernel
+can_defer(::Type) = false
+@inline can_defer(weights) = can_defer(typeof(weights))
+
+# Only weights that store values and could evaluate them instead need a flag.
+function deferring_flag(basis, vals::NamedTuple)
+    any(is_deferred_values, values(vals)) && return nothing
+    basis isa Kernel ? Ref(false) : nothing
+end
+
+# Dispatch on the flag itself rather than on the array's type parameters: the
+# flag is present only where there is a choice to make.
+@inline _deferring(r::Base.RefValue{Bool}) = r[]
+@inline _deferring(::Nothing) = false
+@inline _set_deferring!(r::Base.RefValue{Bool}, on::Bool) = (r[] = on)
+@inline _set_deferring!(::Nothing, ::Bool) = false
+
+@inline is_deferring(weights::BasisWeightArray) = _deferring(getfield(weights, :deferring))
+@inline is_deferring(::AbstractArray{<: BasisWeight}) = false
+
+# Weights that carry no flag have nothing to switch: either they always defer or
+# they never can. `update!` rejects `deferred=true` on the latter before it gets
+# here, so only clearing reaches them.
+set_deferring!(weights::BasisWeightArray, on::Bool) = (_set_deferring!(getfield(weights, :deferring), on); weights)
+set_deferring!(weights::AbstractArray{<: BasisWeight}, ::Bool) = weights
 
 # AbstractMesh
-# `lazy` travels as a `Val` so the value arrays keep concrete types: with a
-# plain `Bool` the storage type widens to a union of stored and lazy arrays and
+# `deferred` travels as a `Val` so the value arrays keep concrete types: with a
+# plain `Bool` the storage type widens to a union of stored and deferred arrays and
 # every downstream inference on the weights degrades.
-function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1), lazy=Val(false)) where {Prop <: NamedTuple, dim}
-    _generate_basis_weights(Prop, basis, mesh, dims, derivative, aslazyval(lazy))
+function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1), deferred=Val(false)) where {Prop <: NamedTuple, dim}
+    _generate_basis_weights(Prop, basis, mesh, dims, derivative, asdeferredval(deferred))
 end
-function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims, derivative::Order, lazy::Val{L}) where {Prop <: NamedTuple, dim, L}
-    L && check_lazy_basis(basis)
+function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims, derivative::Order, deferred::Val{L}) where {Prop <: NamedTuple, dim, L}
+    L && check_deferred_basis(basis)
     template = allocate_basis_values(Prop, basis, Val(dim); derivative)
     njets = derivative_count(derivative)
     # The first `njets` properties are the basis value and its derivatives, which
-    # a lazy array re-evaluates; anything after them is caller-owned storage and
+    # a deferred array re-evaluates; anything after them is caller-owned storage and
     # is always allocated.
     vals = NamedTuple{keys(template)}(ntuple(Val(length(template))) do k
         v = template[k]
         sz = (size(v)..., dims...)
-        L && k <= njets ? LazyBasisValues{eltype(v)}(sz) : fill(zero(eltype(v)), sz)
+        L && k <= njets ? DeferredBasisValues{eltype(v)}(sz) : fill(zero(eltype(v)), sz)
     end)
     indices = _generate_supportnodes(basis, mesh, dims)
     BasisWeightArray(basis, vals, indices, derivative)
 end
-function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh, dims::Dims; derivative::Order=Order(1), name=Val(:w), lazy=Val(false)) where {T}
-    _generate_basis_weights(basis_property_type(T, name), basis, mesh, dims, derivative, aslazyval(lazy))
+function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh, dims::Dims; derivative::Order=Order(1), name=Val(:w), deferred=Val(false)) where {T}
+    _generate_basis_weights(basis_property_type(T, name), basis, mesh, dims, derivative, asdeferredval(deferred))
 end
 
-@inline aslazyval(::Val{L}) where {L} = Val(L::Bool)
-@inline aslazyval(lazy::Bool) = Val(lazy)
+@inline asdeferredval(::Val{L}) where {L} = Val(L::Bool)
+@inline asdeferredval(deferred::Bool) = Val(deferred)
 
 @inline derivative_count(::Order{k}) where {k} = k + 1
 
@@ -397,9 +433,9 @@ end
 # caller-owned arrays the equations then read; `WLS` and `KernelCorrection`
 # build a moment matrix over the whole support and use the value storage as
 # scratch while doing it, so no single node stands on its own.
-check_lazy_basis(::Kernel) = nothing
-check_lazy_basis(basis) =
-    error("lazy basis weights need a basis whose value at one node follows from the particle and the mesh alone, which $(nameof(typeof(basis))) is not: it derives its values from the whole support or from cell geometry. Build these weights without `lazy=true`.")
+check_deferred_basis(::Kernel) = nothing
+check_deferred_basis(basis) =
+    error("deferred basis weights need a basis whose value at one node follows from the particle and the mesh alone, which $(nameof(typeof(basis))) is not: it derives its values from the whole support or from cell geometry. Build these weights without `deferred=true`.")
 
 # CartesianMesh
 _generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
@@ -590,40 +626,23 @@ end
 # accelerations
 
 """
-    Tesserae.is_lazy(weights)
+    Tesserae.is_deferred(weights)
 
 Whether `weights` re-evaluates its basis values inside each transfer instead of
-storing them. True for arrays built with `generate_basis_weights(...; lazy=true)`.
+storing them. True for arrays built with `generate_basis_weights(...; deferred=true)`.
 """
-is_lazy(weights::BasisWeightArray) = any(is_lazy_values, values(getfield(weights, :vals)))
-is_lazy(::AbstractArray{<: BasisWeight}) = false
+is_deferred(weights::BasisWeightArray) = any(is_deferred_values, values(getfield(weights, :vals)))
+is_deferred(::AbstractArray{<: BasisWeight}) = false
 
-"""
-    Tesserae.deferred(weights)
-
-A deferred view of stored `weights`: the same basis, support nodes and element
-type, but with the basis values evaluated inside each transfer instead of read
-back. The view owns no storage of its own and shares everything with `weights`,
-so making one costs nothing and `weights` keeps its stored values.
-
-Use it to choose per step which side of the trade-off to pay, by passing either
-object to a transfer:
-
-```julia
-w = nmatvecs < 6 ? Tesserae.deferred(weights) : (update!(weights, particles, mesh); weights)
-@G2P grid=>i particles=>p w=>ip begin
-    ...
-end
-```
-
-Passing the deferred view does not need an [`update!`](@ref), because it has
-nothing to fill. Whether it is the faster choice depends on the basis and the
-backend; see the notes on deferred basis weights in the documentation.
-"""
-function deferred(weights::BasisWeightArray)
-    is_lazy(weights) && return weights
+# A deferred twin of stored weights: same basis, support nodes and element type,
+# but with the values evaluated in the transfer instead of read back. It shares
+# everything with `weights` and owns no storage, so `select_weights` can build
+# one per transfer for free. Internal -- users choose with
+# `update!(...; deferred=true)`, and this is how that choice reaches the type.
+function as_deferred(weights::BasisWeightArray)
+    is_deferred(weights) && return weights
     b = basis(weights)
-    check_lazy_basis(b)
+    check_deferred_basis(b)
     order = derivative_order(weights)
     njets = derivative_count(order)
     stored = getfield(weights, :vals)
@@ -632,7 +651,7 @@ function deferred(weights::BasisWeightArray)
     # after them is caller-owned storage and is shared as-is.
     vals = NamedTuple{keys(stored)}(ntuple(Val(length(stored))) do k
         v = stored[k]
-        k <= njets ? LazyBasisValues{eltype(v)}(size(v)) : v
+        k <= njets ? DeferredBasisValues{eltype(v)}(size(v)) : v
     end)
     BasisWeightArray(b, vals, getfield(weights, :indices), order)
 end
@@ -659,27 +678,32 @@ end
 
 where [`LazyRow`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
 
-On weights built with `generate_basis_weights(...; lazy=true)` there is no storage
+On weights built with `generate_basis_weights(...; deferred=true)` there is no storage
 to fill, so this is a no-op and a loop written for stored weights runs unchanged.
-The `lazy` keyword only lets you assert which kind you have: it defaults to
-[`Tesserae.is_lazy(weights)`](@ref) and errors if it disagrees.
+On weights that do store their values, `deferred=true` skips the fill and tells
+transfers to evaluate instead of read, until a later `update!` without it refills
+them. It is the per-step form of the same choice, and it errors on a basis that
+cannot defer rather than silently doing nothing.
 """
 function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh,
-                 filter::AbstractArray{Bool}=Trues(size(mesh)); lazy::Bool=is_lazy(weights))
+                 filter::AbstractArray{Bool}=Trues(size(mesh)); deferred::Bool=is_deferred(weights))
     # Lazy weights have nothing to fill: their basis values are evaluated inside
     # the transfer. Calling `update!` on them is allowed and does nothing, so a
     # simulation loop written for stored weights runs unchanged. Asking for the
     # opposite is an error, because there is no storage to materialize into.
-    if is_lazy(weights)
-        lazy || error("update!: these weights were built with `lazy=true` and have no storage for basis values, so they cannot be materialized. Build them without `lazy=true` to store the values.")
+    if is_deferred(weights)
+        deferred || error("update!: these weights were built with `deferred=true` and have no storage for basis values, so they cannot be materialized. Build them without `deferred=true` to store the values.")
         return weights
     end
-    # `lazy=true` cannot be honoured in place: which basis values a transfer
-    # reads is resolved from the type of the weights it is handed, so deferring
-    # means handing it a different object. Flipping a flag here would leave the
-    # stored values in place and silently stale for any transfer that still read
-    # them, so the deferred view is explicit instead.
-    lazy && error("update!: `lazy=true` cannot be applied to stored weights in place. Use `Tesserae.deferred(weights)` to get a deferred view and pass that to the transfer, or build the weights with `generate_basis_weights(...; lazy=true)`.")
+
+    # Deferring is a per-step choice: the values are still there, but transfers
+    # are told to evaluate instead of read them until `deferred=false` refills them.
+    if deferred
+        can_defer(weights) || error("update!: `deferred=true` needs a basis whose value at one node follows from the particle and the mesh alone, which $(nameof(typeof(basis(weights)))) is not.")
+        return set_deferring!(weights, true)
+    end
+    set_deferring!(weights, false)
+
     n = length(particles)
     @assert length(weights) ≥ n
     @assert size(mesh) == size(filter)

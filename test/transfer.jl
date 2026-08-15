@@ -546,17 +546,16 @@
             end
             stored = generate_basis_weights(basis, mesh, length(particles))
             update!(stored, particles, mesh)
-            built = generate_basis_weights(basis, mesh, length(particles); lazy=true)
+            built = generate_basis_weights(basis, mesh, length(particles); deferred=true)
             update!(built, particles, mesh) # no storage to fill, so this is a no-op
-            view = Tesserae.deferred(stored)
+            flagged = generate_basis_weights(basis, mesh, length(particles))
+            update!(flagged, particles, mesh; deferred=true)
 
-            @test Tesserae.is_lazy(built)
-            @test Tesserae.is_lazy(view)
-            @test !Tesserae.is_lazy(stored)
-            @test Tesserae.deferred(view) === view
+            @test Tesserae.is_deferred(built)
+            @test !Tesserae.is_deferred(stored)
 
             reference = transfer(stored, particles)
-            for weights in (built, view)
+            for weights in (built, flagged)
                 result = transfer(weights, particles)
                 @test result[1] ≈ reference[1]
                 @test result[2] ≈ reference[2]
@@ -584,22 +583,25 @@
                 (copy(grid.m), copy(grid.mv), copy(particles.x))
             end
             fused_reference = fused(stored, deepcopy(particles))
-            for weights in (built, view)
+            for weights in (built, flagged)
                 moved = fused(weights, deepcopy(particles))
                 @test moved[1] ≈ fused_reference[1]
                 @test moved[2] ≈ fused_reference[2]
                 @test moved[3] ≈ fused_reference[3]
             end
 
-            # `update!` may be told what it already is, but not the opposite
-            @test update!(built, particles, mesh; lazy=true) === built
-            @test_throws ErrorException update!(built, particles, mesh; lazy=false)
-            @test_throws ErrorException update!(stored, particles, mesh; lazy=true)
+            # the flag is a per-step choice: clearing it refills and reads again
+            @test update!(built, particles, mesh; deferred=true) === built
+            @test_throws ErrorException update!(built, particles, mesh; deferred=false)
+            update!(flagged, particles, mesh)
+            @test !Tesserae.is_deferred(flagged)
+            @test transfer(flagged, particles)[1] ≈ reference[1]
         end
         # a basis whose node values come from a fit over the whole support cannot defer
+        particles4 = generate_particles(ParticleProp, mesh; alg=GridSampling())
         for basis in (WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())))
-            @test_throws ErrorException generate_basis_weights(basis, mesh, 4; lazy=true)
-            @test_throws ErrorException Tesserae.deferred(generate_basis_weights(basis, mesh, 4))
+            @test_throws ErrorException generate_basis_weights(basis, mesh, length(particles4); deferred=true)
+            @test_throws ErrorException update!(generate_basis_weights(basis, mesh, 4), particles4, mesh; deferred=true)
         end
     end
 end

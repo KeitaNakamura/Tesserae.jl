@@ -39,11 +39,11 @@ supportnodes
 ## Deferred basis weights
 
 By default the basis values are computed by [`update!`](@ref) and stored, so each
-transfer reads them back. Passing `lazy=true` to [`generate_basis_weights`](@ref)
+transfer reads them back. Passing `deferred=true` to [`generate_basis_weights`](@ref)
 allocates no storage for them and evaluates them inside each transfer instead:
 
 ```julia
-weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(particles); lazy=true)
+weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(particles); deferred=true)
 update!(weights, particles, mesh)  # no-op, so an existing loop needs no change
 ```
 
@@ -84,16 +84,25 @@ so it is not stored either.
 
 ### Choosing per step
 
-When the number of transfers per `update!` varies from step to step — as in an
-implicit solve, where a matrix-free stiffness application is a
-[`@G2P`](@ref)/[`@P2G`](@ref) pair and the count follows the convergence of the
-linear solver — neither choice is right for every step.
-[`Tesserae.deferred`](@ref) gives a deferred view of stored weights, so both are
-available at once and each step can pass whichever it wants. The view shares its
-support nodes with the stored weights and owns no storage, so making one is free
-and the stored values stay intact and reusable.
+Whether deferring pays off can change from step to step: in an implicit solve a
+matrix-free stiffness application is a [`@G2P`](@ref)/[`@P2G`](@ref) pair, and
+how many of them a step issues follows the convergence of the linear solver.
+Stored weights can be told which way to go for the step ahead, and the transfers
+themselves need no change:
+
+```julia
+if nmatvecs < 6
+    update!(weights, particles, mesh; deferred=true)   # evaluate inside the transfers
+else
+    update!(weights, particles, mesh)                  # fill the values and read them
+end
+```
+
+`deferred=true` leaves the stored values untouched and simply stops transfers
+from reading them, so a later `update!` without the keyword refills them and goes
+back to reading. It needs a basis that can defer; on anything else it is an error
+rather than a silent no-op.
 
 ```@docs
-Tesserae.deferred
-Tesserae.is_lazy
+Tesserae.is_deferred
 ```

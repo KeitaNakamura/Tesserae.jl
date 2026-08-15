@@ -131,7 +131,7 @@ end
 # itself such an array, so its methods must be the more specific ones.
 @inline function transfer_support_window(weights::BasisWeightArray, particles, p, mesh)
     @_propagate_inbounds_meta
-    _transfer_support_window(Val(is_lazy(weights)), weights, particles, p, mesh)
+    _transfer_support_window(Val(is_deferred(weights)), weights, particles, p, mesh)
 end
 @inline function transfer_support_window(weights::AbstractArray{<: BasisWeight}, particles, p, mesh)
     @_propagate_inbounds_meta
@@ -146,6 +146,18 @@ end
 @inline function _transfer_support_window(::Val{true}, weights, particles, p, mesh)
     @_propagate_inbounds_meta
     supportnodes(basis(weights), LazyRow(particles, p), mesh)
+end
+
+# Which basis values a transfer reads is resolved from the type of the weights
+# it is handed, so the per-step choice made by `update!(...; deferred=true)` is
+# applied here: once per transfer, on the host, before the launch. Both arms are
+# fully specialized, and for weights that cannot defer the second never exists.
+@inline function select_weights(f::F, weights::W) where {F, W}
+    if can_defer(W)
+        is_deferring(weights) ? f(as_deferred(weights)) : f(weights)
+    else
+        f(weights)
+    end
 end
 
 # One weight property's column for particle `p`: the whole leading (support)
@@ -202,7 +214,7 @@ function deferred_order(W::Type, name::Symbol)
     njets = W.parameters[6].parameters[1] + 1
     pos = findfirst(==(name), fieldnames(Vals))
     pos === nothing && return missing
-    pos <= njets && fieldtype(Vals, pos) <: LazyBasisValues ? pos - 1 : nothing
+    pos <= njets && fieldtype(Vals, pos) <: DeferredBasisValues ? pos - 1 : nothing
 end
 
 function split_weight_properties(W::Type, names)
@@ -511,10 +523,12 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         code = quote
             $code
             $pre
-            Tesserae.P2G(Tesserae.P2GBodies(($grid, $particles, $weights, $p) -> $body,
-                                            ($(tile_args...), $grid, $particles, $weights, $p) -> $tile_body,
-                                            $names_val),
-                         Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, $weights, $partition)
+            Tesserae.select_weights($weights) do w
+                Tesserae.P2G(Tesserae.P2GBodies(($grid, $particles, $weights, $p) -> $body,
+                                                ($(tile_args...), $grid, $particles, $weights, $p) -> $tile_body,
+                                                $names_val),
+                             Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, w, $partition)
+            end
         end
     end
 
@@ -1073,7 +1087,9 @@ function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pr
         end
         code = quote
             $code
-            Tesserae.G2P(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, program.equations, i)), $particles, $weights)
+            Tesserae.select_weights($weights) do w
+                Tesserae.G2P(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, program.equations, i)), $particles, w)
+            end
         end
     end
 
@@ -1271,7 +1287,9 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     particle_equations = vcat(collect(stages.g2p_sum), collect(stages.g2p_nosum), collect(stages.p2g_sum))
     code = quote
         $code
-        Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, particle_equations, i)), $particles, $weights, $partition)
+        Tesserae.select_weights($weights) do w
+            Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, particle_equations, i)), $particles, w, $partition)
+        end
     end
 
     if !isempty(stages.p2g_nosum)
