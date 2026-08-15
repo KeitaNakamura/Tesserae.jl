@@ -600,16 +600,35 @@
             @test !Tesserae.isdeferred(flagged)
             @test transfer(flagged, particles)[1] ≈ reference[1]
         end
-        # a fit over the whole support is done per particle in the transfer, but
-        # it reads the boundary filter, which the transfer never receives
-        masked = generate_particles(ParticleProp, mesh; alg=GridSampling())
-        filter = trues(size(mesh)); filter[1, 1] = false
-        for basis in (WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())))
-            weights = generate_basis_weights(basis, mesh, length(masked))
-            @test_throws ErrorException update!(weights, masked, mesh, filter; deferred=true)
-            @test update!(weights, masked, mesh, filter) === weights   # storing still honours it
+        # bases that correct near boundaries read the filter `update!` was given,
+        # and must reach the same answer deferred as stored
+        @testset "deferred with a boundary filter" begin
+            masked = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            masked.m .= 1.0
+            masked.l .= 0.01
+            for p in eachindex(masked)
+                masked.v[p] = Vec(sin(3masked.x[p][1]), cos(2masked.x[p][2]))
+            end
+            mask = falses(size(mesh))
+            for basis in (WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())),
+                          KernelCorrection(uGIMP()))
+                fill!(mask, false)
+                for p in eachindex(masked), i in Tesserae.supportnodes(basis, Tesserae.LazyRow(masked, p), mesh)
+                    mask[i] = true
+                end
+                mask[cld(size(mesh,1),2), cld(size(mesh,2),2)] = false # a hole inside the body
+                stored = generate_basis_weights(basis, mesh, length(masked))
+                update!(stored, masked, mesh, mask)
+                flagged = generate_basis_weights(basis, mesh, length(masked))
+                update!(flagged, masked, mesh, mask; deferred=true)
+                expected = transfer(stored, masked)
+                actual = transfer(flagged, masked)
+                @test actual[1] ≈ expected[1]
+                @test actual[2] ≈ expected[2]
+                @test actual[3] ≈ expected[3]
+            end
         end
-        # bases that read neither a fit nor a filter are still refused
+        # a basis whose support is not a fixed Cartesian block still cannot defer
         @test_throws ErrorException generate_basis_weights(CPDI(), mesh, 4; deferred=true)
     end
 end

@@ -88,9 +88,10 @@ the fit is computed once per particle before the support loop and each node read
 it. The support window is always derived on the fly, so it is not stored either.
 
 `WLS` and `KernelCorrection` also consult the boundary filter passed to
-`update!` to decide where to correct, and a transfer has no filter to consult, so
-deferring them alongside one is currently an error. Bases outside the list above
-are refused rather than silently doing nothing.
+`update!` to decide where to correct. `update!` records it, so a deferred
+transfer corrects against the same nodes a stored one would, with no change at
+the transfer. Bases outside the list above are refused rather than silently doing
+nothing.
 
 !!! warning "When the values are taken"
     Stored values date from the last [`update!`](@ref). Deferred values are taken

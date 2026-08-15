@@ -129,7 +129,7 @@ Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")
 # the whole of what made these bases look undeferrable. `full` records whether
 # the correction applies at all, which is what `KernelCorrection` branches on --
 # it is carried rather than acted on here so both arms have the same type.
-@inline function wls_deferred_state(order::Order, kernel, poly, pt, mesh::CartesianMesh, window, full::Bool)
+@inline function wls_deferred_state(order::Order, kernel, poly, pt, mesh::CartesianMesh, window, filter, full::Bool)
     xₚ = getx(pt)
     P₀__ = jet(order, poly, zero(xₚ))
     P₀ = value(poly, zero(xₚ))
@@ -137,7 +137,7 @@ Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")
     M = fastsum(eachindex(window)) do ip
         @inbounds begin
             i = window[ip]
-            w = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i))
+            w = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)) * filterpasses(filter, i)
             P = value(poly, mesh[i] - xₚ)
             w * P ⊗ P
         end
@@ -145,20 +145,20 @@ Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")
     (false, inv(M), P₀__)
 end
 
-@inline function wls_deferred_jet(kernel, poly, state, pt, mesh::CartesianMesh, window, ip)
+@inline function wls_deferred_jet(kernel, poly, state, pt, mesh::CartesianMesh, window, filter, ip)
     @_propagate_inbounds_meta
     _, M⁻¹, P₀__ = state
     i = window[ip]
-    w = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i))
+    w = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)) * filterpasses(filter, i)
     P = value(poly, mesh[i] - getx(pt))
     wq = w * (M⁻¹ * P)
     map(P₀ -> wq ⊡ P₀, P₀__)
 end
 
-@inline deferred_particle_state(order::Order, wls::WLS, pt, mesh::CartesianMesh, window) =
-    wls_deferred_state(order, wls.kernel, wls.poly, pt, mesh, window, false)
-@inline deferred_node_jet(::Order, wls::WLS, state::Tuple, pt, mesh::CartesianMesh, window, ip) =
-    (@_propagate_inbounds_meta; wls_deferred_jet(wls.kernel, wls.poly, state, pt, mesh, window, ip))
+@inline deferred_particle_state(order::Order, wls::WLS, pt, mesh::CartesianMesh, window, filter) =
+    wls_deferred_state(order, wls.kernel, wls.poly, pt, mesh, window, filter, false)
+@inline deferred_node_jet(::Order, wls::WLS, state::Tuple, pt, mesh::CartesianMesh, window, filter, ip) =
+    (@_propagate_inbounds_meta; wls_deferred_jet(wls.kernel, wls.poly, state, pt, mesh, window, filter, ip))
 
 can_defer_basis(::Type{<: WLS}) = true
 check_deferred_basis(::WLS) = nothing

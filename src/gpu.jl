@@ -98,7 +98,9 @@ function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
     vals = map(a -> adapt(to, a), getfield(weights, :vals))
     indices = adapt(to, getfield(weights, :indices))
-    BasisWeightArray(b, vals, indices, derivative_order(weights), nothing)
+    # A `DeferralState` is host-side bookkeeping and does not survive; a filter
+    # in that slot is real data a deferred kernel reads, and travels with it.
+    BasisWeightArray(b, vals, indices, derivative_order(weights), adapt(to, getfield(weights, :deferring)))
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
     # Deferred value arrays report `nothing`; the stored arrays and the support
@@ -160,3 +162,5 @@ end
 function Adapt.adapt_structure(to, A::HybridArray)
     HybridArray(adapt(to, parent(A)), adapt(to, flatten(A)), get_device(A))
 end
+
+Adapt.adapt_structure(to, ::DeferralState) = nothing

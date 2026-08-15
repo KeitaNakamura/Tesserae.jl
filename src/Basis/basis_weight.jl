@@ -379,16 +379,35 @@ can_defer_basis(::Type) = false
 
 # Only weights that store values and could evaluate them instead need a flag.
 function deferring_flag(basis, vals::NamedTuple)
-    any(isdeferred, values(vals)) && return nothing
-    can_defer_basis(typeof(basis)) ? Ref(false) : nothing
+    can_defer_basis(typeof(basis)) ? DeferralState() : nothing
 end
 
-# Dispatch on the flag itself rather than on the array's type parameters: the
-# flag is present only where there is a choice to make.
-@inline _deferring(r::Base.RefValue{Bool}) = r[]
+# What `update!` records for the transfers that follow: whether to evaluate, and
+# the boundary filter it was given, which a basis that corrects near boundaries
+# needs and a transfer has no other way to learn. The filter is untyped here and
+# read only on the host, in `select_weights`, which gives it a concrete type
+# again before anything reaches a kernel.
+mutable struct DeferralState
+    on::Bool
+    filter::Any
+end
+DeferralState() = DeferralState(false, nothing)
+
+@inline _deferring(s::DeferralState) = s.on
 @inline _deferring(::Nothing) = false
-@inline _set_deferring!(r::Base.RefValue{Bool}, on::Bool) = (r[] = on)
+# A deferred copy has no choice left to make, so `as_deferred` reuses the slot to
+# carry the filter with a concrete type -- which is what a kernel needs and a
+# `DeferralState` cannot give.
+@inline _deferring(::Any) = false
+@inline _set_deferring!(s::DeferralState, on::Bool) = (s.on = on)
 @inline _set_deferring!(::Nothing, ::Bool) = false
+@inline _deferred_filter(s::DeferralState) = s.filter
+@inline _deferred_filter(::Nothing) = nothing
+@inline _deferred_filter(filter) = filter
+# `Trues` means "every node", which the deferred path spells as `nothing` so a
+# basis that ignores the filter carries nothing at all.
+@inline _record_filter!(s::DeferralState, filter) = (s.filter = filter isa Trues ? nothing : filter)
+@inline _record_filter!(::Nothing, filter) = nothing
 
 # Whether the values were never allocated, as opposed to allocated but currently
 # bypassed. Only `update!` needs to tell those apart: it refills the second and
@@ -437,8 +456,8 @@ end
 # how one node's jet follows from it. A `Kernel` needs neither: its value at a
 # node depends on nothing but that node. Bases that fit their values over the
 # whole support use these to do the fitting here rather than in `update!`.
-@inline deferred_particle_state(::Order, basis, pt, mesh, window) = nothing
-@inline function deferred_node_jet(order::Order, basis, ::Nothing, pt, mesh, window, ip)
+@inline deferred_particle_state(::Order, basis, pt, mesh, window, filter) = nothing
+@inline function deferred_node_jet(order::Order, basis, ::Nothing, pt, mesh, window, filter, ip)
     @_propagate_inbounds_meta
     nodal_basis_jet(order, basis, pt, mesh, window[ip])
 end
@@ -597,6 +616,12 @@ Base.show(io::IO, weights::BasisWeightArray) = _show_basis_weight_array(io, weig
     end
     true
 end
+# A deferred transfer spells "no filter" as `nothing`.
+@inline filterpasses(::Nothing, i) = true
+@inline filterpasses(A::AbstractArray{Bool}, i) = (@_propagate_inbounds_meta; A[i])
+@inline allpass(::Nothing, indices) = true
+@inline allpass(A::AbstractArray{Bool}, indices) = alltrue(A, indices)
+
 @inline function alltrue(A::Trues, indices::CartesianIndices)
     @debug checkbounds(A, indices)
     true
@@ -659,18 +684,19 @@ which store nothing, and for stored weights switched over with
 `update!(..., deferred=true)`.
 """
 isdeferred(weights::BasisWeightArray) = storageless(weights) || _deferring(getfield(weights, :deferring))
+@inline deferred_filter(weights::BasisWeightArray) = _deferred_filter(getfield(weights, :deferring))
 
 # A deferred twin of stored weights: same basis, support nodes and element type,
 # but with the values evaluated in the transfer instead of read back. It shares
 # everything with `weights` and owns no storage, so `select_weights` can build
 # one per transfer for free. Internal -- users choose with
 # `update!(...; deferred=true)`, and this is how that choice reaches the type.
-function as_deferred(weights::BasisWeightArray)
-    storageless(weights) && return weights
+function as_deferred(weights::BasisWeightArray, filter = deferred_filter(weights))
     b = basis(weights)
     check_deferred_basis(b)
     order = derivative_order(weights)
     njets = derivative_count(order)
+    storageless(weights) && return BasisWeightArray(b, getfield(weights, :vals), getfield(weights, :indices), order, filter)
     stored = getfield(weights, :vals)
     # Mirror `_generate_basis_weights`: the first `njets` properties are the
     # basis value and its derivatives, which the transfer re-evaluates; anything
@@ -679,7 +705,7 @@ function as_deferred(weights::BasisWeightArray)
         v = stored[k]
         k <= njets ? DeferredBasisValues{eltype(v)}(size(v)) : v
     end)
-    BasisWeightArray(b, vals, getfield(weights, :indices), order)
+    BasisWeightArray(b, vals, getfield(weights, :indices), order, filter)
 end
 
 # See the note on `@Const` and nested containers in src/transfer.jl.
@@ -717,8 +743,8 @@ function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray,
     # the transfer. Calling `update!` on them is allowed and does nothing, so a
     # simulation loop written for stored weights runs unchanged. Asking for the
     # opposite is an error, because there is no storage to materialize into.
-    if !(filter isa Trues) && (deferred || storageless(weights))
-        needs_filter(basis(weights)) && error("update!: deferred basis weights cannot honour a boundary filter yet, and $(nameof(typeof(basis(weights)))) needs one to decide where to correct. Update these weights without `deferred=true`.")
+    if deferred || storageless(weights)
+        _record_filter!(getfield(weights, :deferring), filter)
     end
     if storageless(weights)
         deferred || error("update!: these weights were built with `deferred=true` and have no storage for basis values, so they cannot be materialized. Build them without `deferred=true` to store the values.")
