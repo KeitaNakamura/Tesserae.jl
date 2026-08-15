@@ -297,7 +297,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         end
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $(narrowed_grid_expr(grid, nosum_equations, i)))
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, nosum_equations, i)))
         end
     end
 
@@ -498,8 +498,68 @@ end
 
 # The grid-only part of `@P2G`. It walks the same indices as `@foreach` and
 # launches the same GPU kernels, both defined in foreach.jl, but keeps its own
-# CPU loops: routing them through `tforeach` costs 5-9% on a dense grid, and
-# `@inbounds @simd` here is worth that much.
+# CPU loops: handing single nodes to `tforeach` costs 5-9% on a dense grid,
+# because `@inbounds @simd` over a contiguous range is worth that much.
+#
+# Every equation here reads and writes only its own node, so the range can be
+# split across threads as long as each thread keeps a contiguous piece to run
+# `@simd` over. That is worth 2.7-3.3x on a grid large enough to cover the
+# fork-join, which is the whole grid-node half of a threaded step.
+const P2G_NOSUM_MIN_THREADED_LENGTH = 1 << 15
+
+function P2G_nosum(f, device::CPUDevice, ::Val{scheduler}, grid) where {scheduler}
+    inds = foreach_indices(grid)
+    if scheduler === :nothing || Threads.nthreads() == 1 ||
+       length(inds) < P2G_NOSUM_MIN_THREADED_LENGTH
+        return P2G_nosum(f, device, grid)
+    end
+    nchunks = Threads.nthreads()
+    chunksize = cld(length(inds), nchunks)
+    tforeach(1:nchunks, scheduler) do chunk_id
+        firstk = (chunk_id - 1) * chunksize + 1
+        lastk = min(chunk_id * chunksize, length(inds))
+        P2G_nosum_chunk(f, grid, inds, firstk, lastk)
+    end
+end
+
+function P2G_nosum_chunk(f, grid, inds, firstk, lastk)
+    @inbounds @simd for k in firstk:lastk
+        @inline f(grid, inds[k])
+    end
+end
+
+# `activeindices` is an iterator with neither a length nor indexing, but the
+# same nodes are reachable by a flat index through `_active_spindex`, which is
+# how the GPU kernel walks them. Splitting that range needs no list of its own.
+# Inactive slots cost a lookup and a branch, so the chunks are finer than the
+# thread count to keep clustered activity from landing on one worker.
+function P2G_nosum(f, device::CPUDevice, ::Val{scheduler}, grid::SpGrid) where {scheduler}
+    spinds = get_spinds(grid)
+    ndrange = _spindex_ndrange(spinds)
+    if scheduler === :nothing || Threads.nthreads() == 1 ||
+       ndrange < P2G_NOSUM_MIN_THREADED_LENGTH
+        return P2G_nosum(f, device, grid)
+    end
+    nchunks = 8 * Threads.nthreads()
+    chunksize = cld(ndrange, nchunks)
+    tforeach(1:nchunks, scheduler) do chunk_id
+        firstk = (chunk_id - 1) * chunksize + 1
+        lastk = min(chunk_id * chunksize, ndrange)
+        P2G_nosum_spgrid_chunk(f, grid, spinds, firstk, lastk)
+    end
+end
+
+function P2G_nosum_spgrid_chunk(f, grid, spinds, firstk, lastk)
+    for k in firstk:lastk
+        active, i = _active_spindex(spinds, k)
+        active && @inbounds @inline f(grid, i)
+    end
+end
+
+# The GPU path already parallelises, and the sequential path is what the
+# threaded one falls back to.
+P2G_nosum(f, device::GPUDevice, ::Val, grid) = P2G_nosum(f, device, grid)
+
 function P2G_nosum(f, ::CPUDevice, grid)
     @inbounds @simd for i in foreach_indices(grid)
         @inline f(grid, i)
@@ -851,7 +911,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         end
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $(narrowed_grid_expr(grid, stages.p2g_nosum, i)))
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, stages.p2g_nosum, i)))
         end
     end
 
