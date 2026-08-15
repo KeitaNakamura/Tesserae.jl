@@ -129,11 +129,24 @@ Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")
 # the whole of what made these bases look undeferrable. `full` records whether
 # the correction applies at all, which is what `KernelCorrection` branches on --
 # it is carried rather than acted on here so both arms have the same type.
+# Which pairings have one: a degree-2 or -3 cardinal B-spline against a linear
+# polynomial, matching `update_basis_values!` above.
+@inline has_closed_form_moments(::Any, ::Any) = false
+@inline has_closed_form_moments(::Union{BSpline{Quadratic}, BSpline{Cubic}}, ::Polynomial{Linear}) = true
+
 @inline function wls_deferred_state(order::Order, kernel, poly, pt, mesh::CartesianMesh, window, filter, full::Bool)
     xₚ = getx(pt)
     P₀__ = jet(order, poly, zero(xₚ))
     P₀ = value(poly, zero(xₚ))
     full && return (true, zero(P₀ ⊗ P₀), P₀__)
+    # Over a whole support the moment matrix is known in closed form, so the
+    # sum below is skipped entirely -- the same shortcut `update_basis_values!`
+    # takes, and worth more here because a deferred transfer pays it per
+    # transfer rather than once per `update!`.
+    if has_closed_form_moments(kernel, poly) && filter === nothing &&
+            all(size(window) .== support_width(kernel))
+        return (false, full_support_moment_matrix_inv(kernel, mesh), P₀__)
+    end
     M = fastsum(eachindex(window)) do ip
         @inbounds begin
             i = window[ip]

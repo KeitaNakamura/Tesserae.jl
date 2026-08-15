@@ -532,6 +532,10 @@ In the `Prop` forms, `Prop` follows the same rules as in
 `BasisWeight(Prop, basis, mesh)`: its first field defines the basis value name
 and scalar type, generated derivative fields follow it, and its remaining
 fields are appended as custom storage.
+
+Passing `deferred=true` allocates no storage for the basis values and evaluates
+them inside each transfer instead. See the manual section on deferred basis
+weights for what that trades and which bases allow it.
 """
 function generate_basis_weights end
 
