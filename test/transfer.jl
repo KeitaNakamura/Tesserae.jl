@@ -734,4 +734,186 @@
         end
         @test_throws ErrorException macroexpand(@__MODULE__, ex)
     end
+
+    # The block-scheduled GPU @P2G accumulates a whole grid block in one
+    # shared-memory tile, so every particle assigned to a block must have its
+    # entire support window inside that block's tile. The kernel writes those
+    # slots unchecked, so a basis violating this would corrupt shared memory.
+    @testset "block tile contains every support window" begin
+        for basis in (BSpline(Constant()), BSpline(Linear()), BSpline(Quadratic()),
+                      BSpline(Cubic()), uGIMP(),
+                      WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())))
+            mesh = CartesianMesh(0.02, (0,1), (0,1))
+            ParticleProp = @NamedTuple{x::Vec{2,Float64}, l::Float64}
+            particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            particles.l .= 0.01
+            weights = generate_basis_weights(basis, mesh, length(particles))
+            update!(weights, particles, mesh)
+            @test all(eachindex(particles)) do p
+                block = Tesserae.findblock(particles.x[p], mesh)
+                block === nothing && return true
+                Tesserae.p2g_tile_contains(basis, mesh, Tesserae.supportnodes(weights[p]), block)
+            end
+        end
+    end
+
+    @testset "deferred basis weights" begin
+        mesh = CartesianMesh(0.02, (0,1), (0,1))
+        GridProp = @NamedTuple{x::Vec{2,Float64}, m::Float64, mv::Vec{2,Float64}}
+        ParticleProp = @NamedTuple{x::Vec{2,Float64}, l::Float64, m::Float64,
+                                   v::Vec{2,Float64}, ∇v::SecondOrderTensor{2,Float64,4}}
+        function transfer(weights, particles)
+            grid = generate_grid(GridProp, mesh)
+            @P2G grid=>i particles=>p weights=>ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+            end
+            @G2P grid=>i particles=>p weights=>ip begin
+                ∇v[p] = @∑ mv[i] ⊗ ∇w[ip]
+            end
+            (copy(grid.m), copy(grid.mv), copy(particles.∇v))
+        end
+        for basis in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), uGIMP(),
+                      WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())),
+                      KernelCorrection(uGIMP()))
+            particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            particles.m .= 1.0
+            particles.l .= 0.01
+            for p in eachindex(particles)
+                particles.v[p] = Vec(sin(3particles.x[p][1]), cos(2particles.x[p][2]))
+            end
+            stored = generate_basis_weights(basis, mesh, length(particles))
+            update!(stored, particles, mesh)
+            built = generate_basis_weights(basis, mesh, length(particles); deferred=true)
+            update!(built, particles, mesh) # no storage to fill, so this is a no-op
+            flagged = generate_basis_weights(basis, mesh, length(particles))
+            update!(flagged, particles, mesh; deferred=true)
+
+            @test Tesserae.isdeferred(built)     # stores nothing
+            @test Tesserae.isdeferred(flagged)   # stores values, told to evaluate
+            @test !Tesserae.isdeferred(stored)
+
+            reference = transfer(stored, particles)
+            for weights in (built, flagged)
+                result = transfer(weights, particles)
+                @test result[1] ≈ reference[1]
+                @test result[2] ≈ reference[2]
+                @test result[3] ≈ reference[3]
+            end
+            # taking a deferred view must leave the stored values usable
+            @test transfer(stored, particles)[1] ≈ reference[1]
+
+            # A fused step writes `x[p]` between the two halves of a `@G2P2G`.
+            # Deferred weights must still evaluate at the state the transfer
+            # started from, exactly as stored values do, so both halves have to
+            # share one per-particle binding taken before the write.
+            function fused(weights, particles)
+                grid = generate_grid(GridProp, mesh)
+                @P2G grid=>i particles=>p weights=>ip begin
+                    m[i]  = @∑ w[ip] * m[p]
+                    mv[i] = @∑ w[ip] * m[p] * v[p]
+                end
+                @G2P2G grid=>i particles=>p weights=>ip begin
+                    v[p]  = @∑ w[ip] * mv[i] / (m[i] + eps(Float64))
+                    x[p]  = x[p] + 0.005 * v[p]
+                    m[i]  = @∑ w[ip] * m[p]
+                    mv[i] = @∑ w[ip] * m[p] * v[p]
+                end
+                (copy(grid.m), copy(grid.mv), copy(particles.x))
+            end
+            fused_reference = fused(stored, deepcopy(particles))
+            for weights in (built, flagged)
+                moved = fused(weights, deepcopy(particles))
+                @test moved[1] ≈ fused_reference[1]
+                @test moved[2] ≈ fused_reference[2]
+                @test moved[3] ≈ fused_reference[3]
+            end
+
+            # A view must keep deferring. It reaches the transfer through the
+            # same path stored weights do, and getting this wrong scatters
+            # nothing at all rather than raising.
+            subset = 2:length(particles)-1
+            @test Tesserae.isdeferred(view(built, subset))
+            @test Tesserae.isdeferred(view(flagged, subset))
+            @test !Tesserae.isdeferred(view(stored, subset))
+            let pv = view(particles, subset)
+                viewed(w) = begin
+                    grid = generate_grid(GridProp, mesh)
+                    @P2G grid=>i pv=>p w=>ip begin
+                        m[i]  = @∑ w[ip] * m[p]
+                        mv[i] = @∑ w[ip] * m[p] * v[p]
+                    end
+                    (copy(grid.m), copy(grid.mv))
+                end
+                want = viewed(view(stored, subset))
+                @test !iszero(sum(want[1]))
+                for weights in (built, flagged)
+                    got = viewed(view(weights, subset))
+                    @test got[1] ≈ want[1]
+                    @test got[2] ≈ want[2]
+                end
+            end
+
+            # the flag is a per-step choice: clearing it refills and reads again
+            @test update!(built, particles, mesh; deferred=true) === built
+            @test_throws ErrorException update!(built, particles, mesh; deferred=false)
+            update!(flagged, particles, mesh)
+            @test !Tesserae.isdeferred(flagged)
+            @test transfer(flagged, particles)[1] ≈ reference[1]
+        end
+        # bases that correct near boundaries read the filter `update!` was given,
+        # and must reach the same answer deferred as stored
+        @testset "deferred with a boundary filter" begin
+            masked = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            masked.m .= 1.0
+            masked.l .= 0.01
+            for p in eachindex(masked)
+                masked.v[p] = Vec(sin(3masked.x[p][1]), cos(2masked.x[p][2]))
+            end
+            mask = falses(size(mesh))
+            for basis in (WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())),
+                          KernelCorrection(uGIMP()))
+                fill!(mask, false)
+                for p in eachindex(masked), i in Tesserae.supportnodes(basis, Tesserae.LazyRow(masked, p), mesh)
+                    mask[i] = true
+                end
+                mask[cld(size(mesh,1),2), cld(size(mesh,2),2)] = false # a hole inside the body
+                stored = generate_basis_weights(basis, mesh, length(masked))
+                update!(stored, masked, mesh, mask)
+                flagged = generate_basis_weights(basis, mesh, length(masked))
+                update!(flagged, masked, mesh, mask; deferred=true)
+                expected = transfer(stored, masked)
+                actual = transfer(flagged, masked)
+                @test actual[1] ≈ expected[1]
+                @test actual[2] ≈ expected[2]
+                @test actual[3] ≈ expected[3]
+            end
+        end
+        # `@P2G_Matrix` reads the stored values directly instead of going through
+        # the transfer's weight resolution, so it must refuse deferred weights
+        # rather than assemble a zero matrix from storage that was never filled.
+        @testset "deferred weights are refused by @P2G_Matrix" begin
+            pts = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            pts.m .= 1.0
+            grid = generate_grid(GridProp, mesh)
+            basis = BSpline(Quadratic())
+            assemble(w) = begin
+                K = create_sparse_matrix(basis, mesh; ndofs=2)
+                @P2G_Matrix grid=>(i,j) pts=>p w=>(ip,jp) begin
+                    K[i,j] = @∑ w[ip] * w[jp] * m[p] * one(Mat{2,2,Float64})
+                end
+                sum(abs, K)
+            end
+            stored = generate_basis_weights(basis, mesh, length(pts))
+            update!(stored, pts, mesh)
+            @test assemble(stored) > 0
+            flagged = generate_basis_weights(basis, mesh, length(pts))
+            update!(flagged, pts, mesh; deferred=true)
+            @test_throws ErrorException assemble(flagged)
+            @test_throws ErrorException assemble(generate_basis_weights(basis, mesh, length(pts); deferred=true))
+        end
+
+        # a basis whose support is not a fixed Cartesian block still cannot defer
+        @test_throws ErrorException generate_basis_weights(CPDI(), mesh, 4; deferred=true)
+    end
 end

@@ -123,3 +123,82 @@ end
 end
 
 Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")")
+
+# Deferred evaluation: the moment matrix is per-particle, so it is built in the
+# support loop's preamble and every node reads it. `full` records whether the
+# correction applies at all -- carried rather than acted on, so both arms of
+# `KernelCorrection`'s node evaluation share a type.
+# Which pairings have one: a degree-2 or -3 cardinal B-spline against a linear
+# polynomial, matching `update_basis_values!` above.
+@inline has_closed_form_moments(::Any, ::Any) = false
+@inline has_closed_form_moments(::Union{BSpline{Quadratic}, BSpline{Cubic}}, ::Polynomial{Linear}) = true
+
+@inline function wls_deferred_state(order::Order, kernel, poly, pt, mesh::CartesianMesh, window, filter, full::Bool)
+    xₚ = getx(pt)
+    P₀__ = jet(order, poly, zero(xₚ))
+    P₀ = value(poly, zero(xₚ))
+    full && return (true, zero(P₀ ⊗ P₀), P₀__)
+    # Over a whole support the moment matrix is known in closed form, so the
+    # sum below is skipped entirely -- the same shortcut `update_basis_values!`
+    # takes, and worth more here because a deferred transfer pays it per
+    # transfer rather than once per `update!`.
+    if has_closed_form_moments(kernel, poly) && filter === nothing &&
+            all(size(window) .== support_width(kernel))
+        return (false, full_support_moment_matrix_inv(kernel, mesh), P₀__)
+    end
+    M = fastsum(eachindex(window)) do ip
+        @inbounds begin
+            i = window[ip]
+            w = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)) * filterpasses(filter, i)
+            P = value(poly, mesh[i] - xₚ)
+            w * P ⊗ P
+        end
+    end
+    (false, inv(M), P₀__)
+end
+
+@inline function wls_deferred_jet(kernel, poly, state, pt, mesh::CartesianMesh, window, filter, ip)
+    @_propagate_inbounds_meta
+    _, M⁻¹, P₀__ = state
+    i = window[ip]
+    w = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)) * filterpasses(filter, i)
+    P = value(poly, mesh[i] - getx(pt))
+    wq = w * (M⁻¹ * P)
+    map(P₀ -> wq ⊡ P₀, P₀__)
+end
+
+@inline deferred_particle_state(order::Order, wls::WLS, pt, mesh::CartesianMesh, window, filter) =
+    wls_deferred_state(order, wls.kernel, wls.poly, pt, mesh, window, filter, false)
+@inline deferred_node_jet(::Order, wls::WLS, state::Tuple, pt, mesh::CartesianMesh, window, filter, ip) =
+    (@_propagate_inbounds_meta; wls_deferred_jet(wls.kernel, wls.poly, state, pt, mesh, window, filter, ip))
+
+can_defer_basis(::Type{<: WLS}) = true
+
+# The separable deferred form, mirroring `update_basis_values!` above: for
+# `MultiLinear` the fit decomposes into `dim` independent 1-D fits, so the
+# per-particle work is `dim` small problems over `support_width` nodes rather
+# than one pass over the whole support with a `(dim+1)²` inverse. Only reachable
+# without a filter, which is what makes the decomposition exact; the type of the
+# filter selects between this and the general form, so each stays type-stable.
+@inline function wls_axis_jets(order::Order, kernel, pt, mesh::CartesianMesh{dim}, window) where {dim}
+    wls_1d = WLS(kernel, Polynomial(Linear()))
+    T = eltype(getx(pt))
+    ntuple(Val(dim)) do d
+        mesh_1d = axismesh(mesh, d)
+        vals_1d = allocate_static_basis_values(@NamedTuple{w::T}, wls_1d, Val(1); derivative=order)
+        bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(CartesianIndices((window.indices[d],))), order)
+        # Must be inlined, as in the stored path: the small MArray must not escape.
+        update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
+        scalarize_axis_values(order, bw_1d)
+    end
+end
+
+@generated function wls_axis_jet_at(::Order{k}, axisjets::NTuple{dim, Any}, offsets::NTuple{dim, Int}) where {k, dim}
+    quote
+        @_inline_meta
+        vals1d = @ntuple $dim d -> (@ntuple $(k+1) a -> axisjets[d][a][offsets[d]])
+        @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
+    end
+end
+
+@inline node_offsets(window, ip) = (@_propagate_inbounds_meta; Tuple(window[ip] - first(window)) .+ 1)

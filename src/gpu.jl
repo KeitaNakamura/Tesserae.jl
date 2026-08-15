@@ -84,17 +84,30 @@ KernelAbstractions.get_backend(points::QuadraturePoints) = get_backend(parent(po
 Adapt.adapt_structure(to, A::CellSupportMatrix) = CellSupportMatrix(adapt(to, cellsupports(A)), size(A)...)
 KernelAbstractions.get_backend(A::CellSupportMatrix) = get_backend(cellsupports(A))
 
+# A device transfer gives the copy its own flag, cleared, so `update!` can set it
+# on the returned object; the choice is not carried across the move, because the
+# values are not either. Any other `to` -- notably the adapt a kernel launch does
+# -- drops the flag entirely, since `select_weights` has already read it.
+function Adapt.adapt_structure(to::AbstractDevice, weights::BasisWeightArray)
+    b = basis(weights)
+    vals = map(a -> adapt(to, a), getfield(weights, :vals))
+    indices = adapt(to, getfield(weights, :indices))
+    BasisWeightArray(b, vals, indices, derivative_order(weights), deferring_flag(b))
+end
 function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
     vals = map(a -> adapt(to, a), getfield(weights, :vals))
     indices = adapt(to, getfield(weights, :indices))
-    BasisWeightArray(b, vals, indices, derivative_order(weights))
+    # A `DeferralState` is host-side bookkeeping and does not survive; a filter
+    # in that slot is real data a deferred kernel reads, and travels with it.
+    BasisWeightArray(b, vals, indices, derivative_order(weights), adapt(to, deferring_state(weights)))
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
-    vals = getfield(weights, :vals)
-    backend = get_backend(first(values(vals)))
-    @assert all(==(backend), map(get_backend, vals))
-    @assert get_backend(getfield(weights, :indices)) == backend
+    # Deferred value arrays report `nothing`; the stored arrays and the support
+    # indices decide, and any that do report must agree.
+    backends = filter(!isnothing, map(get_backend, values(getfield(weights, :vals))))
+    backend = get_backend(getfield(weights, :indices))
+    @assert all(==(backend), backends)
     backend
 end
 
@@ -104,6 +117,18 @@ function Adapt.adapt_structure(to::AbstractDevice, A::SpIndices{dim, L}) where {
     workspace = BlockSparsityWorkspace(numbers)
     SpIndices{dim, L, typeof(numbers), typeof(workspace)}(A.dims, numbers, workspace)
 end
+# A partition transfers by rebuilding its strategy for the target device; the
+# CPU-side assignment state is not carried over, so `update!` must run after
+# the transfer, exactly as after construction.
+function Adapt.adapt_structure(to::GPUDevice, partition::ThreadPartition{<: BlockStrategy})
+    ThreadPartition(GPUBlockStrategy(adapt(to, strategy(partition).mesh)))
+end
+Adapt.adapt_structure(::GPUDevice, partition::ThreadPartition{<: GPUBlockStrategy}) = partition
+Adapt.adapt_structure(::GPUDevice, ::ThreadPartition{<: CellStrategy}) = error("ThreadPartition: FEM/IGA cell partitions are CPU-only")
+function Adapt.adapt_structure(to::CPUDevice, partition::ThreadPartition{<: GPUBlockStrategy})
+    ThreadPartition(BlockStrategy(adapt(to, strategy(partition).mesh)))
+end
+
 function Adapt.adapt_structure(to, tracker::ParticleBlockTracker)
     ParticleBlockTracker(adapt(to, tracker.blockids), adapt(to, tracker.counts))
 end
@@ -137,3 +162,5 @@ end
 function Adapt.adapt_structure(to, A::HybridArray)
     HybridArray(adapt(to, parent(A)), adapt(to, flatten(A)), get_device(A))
 end
+
+Adapt.adapt_structure(to, ::DeferralState) = nothing

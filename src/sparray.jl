@@ -424,6 +424,8 @@ function _activate_neighbor_blocks!(active, occupied, backend::GPU)
     active
 end
 
+update_sparsity!(::SpIndices, ::ThreadPartition{<: GPUBlockStrategy}) =
+    error("update_sparsity! from a partition is CPU-only; on GPU update the sparsity from particle positions")
 function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, partition::ThreadPartition{<: BlockStrategy}) where {dim}
     bs = strategy(partition)
     nblocks(spinds) == nblocks(bs) || throw(ArgumentError("blocks per dimension $(nblocks(spinds)) must match"))
