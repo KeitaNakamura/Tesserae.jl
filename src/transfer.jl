@@ -530,13 +530,17 @@ end
 # own node, which makes it the same walk `@foreach` runs over the same grid, so
 # it shares the CPU loops and the GPU kernels in foreach.jl.
 #
-# Below this many nodes the fork-join costs more than the loop it replaces:
-# threading the walk pays several times over on a grid large enough to cover it,
-# and is a loss under it -- a 129^2 node slice with a body this cheap measures 3x
-# slower threaded than sequential. Node count stands in for work only because
-# these bodies are a handful of arithmetic operations per node, which is why
-# `@foreach`, whose bodies are arbitrary and whose `@threaded` is an explicit
-# request, shares the walk but not the threshold.
+# Below this many nodes the fork-join costs more than the walk it parallelises.
+# Only `@P2G` gets a threshold, because only here is the body known; foreach.jl
+# has the rest of that argument, and the cost of leaving `@foreach` without one.
+#
+# Measured at 8 threads against a 3D velocity update, and only as good as both.
+# The work per node is whatever the non-`@∑` equations touch -- `m⁻¹[i] =
+# inv(m[i])` moves 16 bytes, a 3D `v` update eight times that -- and a node count
+# cannot tell them apart. Gating on `count * bytes-per-node` could, since
+# `narrow_transfer_grid` has already cut the grid down to the referenced fields
+# by the time this runs, but that is a recalibration rather than a rearrangement
+# and wants its own measurements instead of a ride on these.
 const P2G_NOSUM_MIN_THREADED_LENGTH = 1 << 15
 
 function P2G_nosum(f::F, device::CPUDevice, schedule::Val, grid) where {F}

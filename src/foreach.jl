@@ -138,6 +138,19 @@ end
 # `@foreach` passes on whatever `@threaded` asked for, because its body is
 # arbitrary user code, while `P2G_nosum` passes `Val(:nothing)` below the node
 # count where the fork-join stops paying for itself.
+#
+# So a small `@foreach` over a cheap body pays the fork-join with nothing to
+# gate it: 129^2 nodes writing one `Vec{3}` each measures 3x slower threaded
+# than sequential. That is deliberate -- an item count cannot estimate a body
+# nobody has seen, and `@threaded` is a request, not a hint. It is also the cost
+# of threading at all rather than of anything in this walk: it tracks the
+# fork-join, which measures about 12us at 8 threads here, 44 at 16 and 200 at 24
+# -- flat in how many chunks are asked for, and steep once `-t` passes
+# `Sys.CPU_THREADS`, 16 here. A caller already inside a parallel region can fold
+# its work into that region and never fork at all, which is not the same as
+# forking more cheaply; `@foreach` is handed a collection and nothing else, so
+# it has no region to fold into, and only a cheaper fork-join would move this
+# number.
 function foreach_loop(f::F, ::CPUDevice, schedule::Val, collection) where {F}
     cpu_foreach(schedule, eachindex(collection)) do i
         @inline f(collection, i)
