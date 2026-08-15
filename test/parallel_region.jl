@@ -108,7 +108,7 @@
             Tesserae.partitioned_foreach(bs, Val(schedule)) do region
                 region == victim && error("region failed")
                 # Regions of later groups must not run once the transfer failed.
-                region in last(groups) && Threads.atomic_add!(after, 1)
+                !(region in first(groups)) && Threads.atomic_add!(after, 1)
             end
         catch
         end
