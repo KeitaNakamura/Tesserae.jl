@@ -125,7 +125,8 @@ function support_window_exprs(binding::SupportWindowBinding, weights, particles,
     (:($(binding.window) = Tesserae.transfer_support_window($weights, $particles, $p, Tesserae.get_mesh($grid))),)
 end
 
-# The per-particle support window, straight from the weights storage. A plain
+# The per-particle support window: read from the weights storage when there is
+# any, derived from the particle position when there is not. A plain
 # array of `BasisWeight`s -- the macros accept any container whose `weights[p]`
 # is a `BasisWeight` -- goes through the element instead. `BasisWeightArray` is
 # itself such an array, so its methods must be the more specific ones.

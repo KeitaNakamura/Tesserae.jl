@@ -41,7 +41,7 @@ Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", kc.ke
 # evaluation produce the same type.
 @inline deferred_particle_state(order::Order, kc::KernelCorrection, pt, mesh::CartesianMesh, window, filter) =
     wls_deferred_state(order, kc.kernel, kc.poly, pt, mesh, window, filter,
-                       all(size(window) .== support_width(kc.kernel)) && allpass(filter, window))
+                       all(size(window) .== support_width(kc.kernel)) && alltrue(filter, window))
 
 @inline function deferred_node_jet(order::Order, kc::KernelCorrection, state::Tuple, pt, mesh::CartesianMesh, window, filter, ip)
     @_propagate_inbounds_meta

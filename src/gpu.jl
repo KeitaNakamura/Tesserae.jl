@@ -92,7 +92,7 @@ function Adapt.adapt_structure(to::AbstractDevice, weights::BasisWeightArray)
     b = basis(weights)
     vals = map(a -> adapt(to, a), getfield(weights, :vals))
     indices = adapt(to, getfield(weights, :indices))
-    BasisWeightArray(b, vals, indices, derivative_order(weights), Tesserae.deferring_flag(b, vals))
+    BasisWeightArray(b, vals, indices, derivative_order(weights), Tesserae.deferring_flag(b))
 end
 function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
@@ -100,7 +100,7 @@ function Adapt.adapt_structure(to, weights::BasisWeightArray)
     indices = adapt(to, getfield(weights, :indices))
     # A `DeferralState` is host-side bookkeeping and does not survive; a filter
     # in that slot is real data a deferred kernel reads, and travels with it.
-    BasisWeightArray(b, vals, indices, derivative_order(weights), adapt(to, getfield(weights, :deferring)))
+    BasisWeightArray(b, vals, indices, derivative_order(weights), adapt(to, Tesserae.deferring_state(weights)))
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
     # Deferred value arrays report `nothing`; the stored arrays and the support
