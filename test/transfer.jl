@@ -913,6 +913,16 @@
             @test_throws ErrorException assemble(generate_basis_weights(basis, mesh, length(pts); deferred=true))
         end
 
+        # `update!` takes any array of `BasisWeight`s, but only a `BasisWeightArray`
+        # has somewhere to record the choice; the rest must say so rather than
+        # reaching for a field they do not have.
+        let plain = [BasisWeight(BSpline(Quadratic()), mesh) for _ in 1:4],
+            pts = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            @test !Tesserae.isdeferred(plain)
+            @test_throws ErrorException update!(plain, pts, mesh; deferred=true)
+            @test_throws ErrorException update!(plain, pts, mesh, trues(size(mesh)); deferred=true)
+        end
+
         # a basis whose support is not a fixed Cartesian block still cannot defer
         @test_throws ErrorException generate_basis_weights(CPDI(), mesh, 4; deferred=true)
     end
