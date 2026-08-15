@@ -84,15 +84,15 @@ KernelAbstractions.get_backend(points::QuadraturePoints) = get_backend(parent(po
 Adapt.adapt_structure(to, A::CellSupportMatrix) = CellSupportMatrix(adapt(to, cellsupports(A)), size(A)...)
 KernelAbstractions.get_backend(A::CellSupportMatrix) = get_backend(cellsupports(A))
 
-# A device transfer keeps the flag, so `update!(gpu_weights; deferred=true)` works on
-# the returned object. Any other `to` -- notably the adapt a kernel launch does
-# -- drops it: `select_weights` has already picked the type by then, and a
-# mutable reference is not something a kernel argument can hold.
+# A device transfer gives the copy its own flag, cleared, so `update!` can set it
+# on the returned object; the choice is not carried across the move, because the
+# values are not either. Any other `to` -- notably the adapt a kernel launch does
+# -- drops the flag entirely, since `select_weights` has already read it.
 function Adapt.adapt_structure(to::AbstractDevice, weights::BasisWeightArray)
     b = basis(weights)
     vals = map(a -> adapt(to, a), getfield(weights, :vals))
     indices = adapt(to, getfield(weights, :indices))
-    BasisWeightArray(b, vals, indices, derivative_order(weights), Tesserae.deferring_flag(b))
+    BasisWeightArray(b, vals, indices, derivative_order(weights), deferring_flag(b))
 end
 function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
@@ -100,7 +100,7 @@ function Adapt.adapt_structure(to, weights::BasisWeightArray)
     indices = adapt(to, getfield(weights, :indices))
     # A `DeferralState` is host-side bookkeeping and does not survive; a filter
     # in that slot is real data a deferred kernel reads, and travels with it.
-    BasisWeightArray(b, vals, indices, derivative_order(weights), adapt(to, Tesserae.deferring_state(weights)))
+    BasisWeightArray(b, vals, indices, derivative_order(weights), adapt(to, deferring_state(weights)))
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
     # Deferred value arrays report `nothing`; the stored arrays and the support
