@@ -526,109 +526,24 @@ function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     Expr(:block, nosum_exprs...)
 end
 
-# The grid-only part of `@P2G`. It walks the same indices as `@foreach` and
-# launches the same GPU kernels, both defined in foreach.jl, but keeps its own
-# CPU loops: handing single nodes to `tforeach` costs 5-9% on a dense grid,
-# because `@inbounds @simd` over a contiguous range is worth that much.
+# The grid-only part of `@P2G`. Every equation here reads and writes only its
+# own node, which makes it the same walk `@foreach` runs over the same grid, so
+# it shares the CPU loops and the GPU kernels in foreach.jl.
 #
-# Every equation here reads and writes only its own node, so the range can be
-# split across threads as long as each thread keeps a contiguous piece to run
-# `@simd` over. That is worth 2.7-3.3x on a grid large enough to cover the
-# fork-join, which is the whole grid-node half of a threaded step.
+# Below this many nodes the fork-join costs more than the loop it replaces:
+# threading the walk pays several times over on a grid large enough to cover it,
+# and is a loss under it -- a 129^2 node slice with a body this cheap measures 3x
+# slower threaded than sequential. Node count stands in for work only because
+# these bodies are a handful of arithmetic operations per node, which is why
+# `@foreach`, whose bodies are arbitrary and whose `@threaded` is an explicit
+# request, shares the walk but not the threshold.
 const P2G_NOSUM_MIN_THREADED_LENGTH = 1 << 15
 
-function P2G_nosum(f::F, device::CPUDevice, ::Val{scheduler}, grid) where {F, scheduler}
-    nchunks, work = nosum_chunking(grid)
-    if scheduler === :nothing || Threads.nthreads() == 1 || nchunks < 2 ||
-       work < P2G_NOSUM_MIN_THREADED_LENGTH
-        return P2G_nosum(f, device, grid)
-    end
-    P2G_nosum_threaded(f, Val(scheduler), grid, nchunks)
-end
+P2G_nosum(f::F, ::CPUDevice, schedule::Val, grid) where {F} =
+    cpu_foreach_loop(f, schedule, grid, P2G_NOSUM_MIN_THREADED_LENGTH)
 
-# A dense grid splits along its trailing axis so that each worker still iterates
-# a `CartesianIndices` block. Chunking the flat range instead would make every
-# node pay a linear-to-Cartesian conversion -- an integer division per dimension
-# -- that the sequential loop does not.
-function nosum_chunking(grid)
-    inds = foreach_indices(grid)
-    nslabs = size(inds)[end]
-    min(Threads.nthreads(), nslabs), length(inds)
-end
-
-function P2G_nosum_threaded(f::F, ::Val{scheduler}, grid, nchunks::Int) where {F, scheduler}
-    inds = foreach_indices(grid)
-    axs = axes(inds)
-    slabs = axs[end]
-    chunksize = cld(length(slabs), nchunks)
-    tforeach(1:nchunks, scheduler) do chunk_id
-        r = chunk_range(chunk_id, chunksize, length(slabs))
-        isempty(r) && return
-        @inbounds slab = slabs[first(r)]:slabs[last(r)]
-        P2G_nosum_range(f, grid, CartesianIndices((Base.front(axs)..., slab)))
-    end
-end
-
-function P2G_nosum_range(f::F, grid, inds) where {F}
-    @inbounds @simd for i in inds
-        @inline f(grid, i)
-    end
-end
-
-# An `SpGrid` splits over blocks, the way `activeindices` walks them: an
-# inactive block is then skipped in one step rather than once per slot it owns,
-# and the block's coordinate is computed once instead of per node. Chunks are
-# finer than the thread count so that clustered activity does not land on one
-# worker.
-function nosum_chunking(grid::SpGrid)
-    spinds = get_spinds(grid)
-    numbering = blocknumbering(spinds)
-    nactive = 0
-    @inbounds for b in eachindex(numbering)
-        nactive += !iszero(numbering[b])
-    end
-    min(8 * Threads.nthreads(), length(numbering)), nactive * blocklength(spinds)
-end
-
-function P2G_nosum_threaded(f::F, ::Val{scheduler}, grid::SpGrid, nchunks::Int) where {F, scheduler}
-    spinds = get_spinds(grid)
-    nblks = length(blocknumbering(spinds))
-    chunksize = cld(nblks, nchunks)
-    tforeach(1:nchunks, scheduler) do chunk_id
-        P2G_nosum_blocks(f, grid, spinds, chunk_range(chunk_id, chunksize, nblks))
-    end
-end
-
-function P2G_nosum_blocks(f::F, grid, spinds, blks) where {F}
-    numbering = blocknumbering(spinds)
-    blocks = CartesianIndices(numbering)
-    localindices = CartesianIndices(blocksize(spinds))
-    @inbounds for b in blks
-        blocknumber = numbering[b]
-        iszero(blocknumber) && continue
-        block = blocks[b]
-        for l in 1:length(localindices)
-            active, i = _active_spindex(spinds, blocknumber, block, l, localindices)
-            active && @inline f(grid, i)
-        end
-    end
-end
-
-# The GPU path already parallelises, and the sequential path is what the
-# threaded one falls back to.
+# The GPU path already parallelises, so it ignores the scheduler.
 P2G_nosum(f, device::GPUDevice, ::Val, grid) = P2G_nosum(f, device, grid)
-
-function P2G_nosum(f, ::CPUDevice, grid)
-    @inbounds @simd for i in foreach_indices(grid)
-        @inline f(grid, i)
-    end
-end
-
-function P2G_nosum(f, ::CPUDevice, grid::SpGrid)
-    @inbounds for i in foreach_indices(grid)
-        @inline f(grid, i)
-    end
-end
 
 function P2G_nosum(f, device::GPUDevice, grid)
     backend = get_backend(device)
