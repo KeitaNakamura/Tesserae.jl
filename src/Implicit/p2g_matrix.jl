@@ -55,13 +55,11 @@ end
 
 function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles, weights, partition::ThreadPartition{<:BlockStrategy}) where {scheduler}
     matrix_buffer_pool = strategy(partition).matrix_buffer_pool
-    for group in threadsafe_groups(partition)
-        tforeach(group, scheduler) do block
-            block_particle_indices = particle_indices(partition, particles, block)
-            nodes_i = matrix_block_supportnodes(weights[1], block_particle_indices, grids[1])
-            nodes_j = grids[1] === grids[2] && weights[1] === weights[2] ? nodes_i : matrix_block_supportnodes(weights[2], block_particle_indices, grids[2])
-            @inline f(grids, particles, weights, block_particle_indices, BlockAssembly(nodes_i, nodes_j, matrix_buffer_pool))
-        end
+    partitioned_foreach(strategy(partition), Val(scheduler)) do block
+        block_particle_indices = particle_indices(partition, particles, block)
+        nodes_i = matrix_block_supportnodes(weights[1], block_particle_indices, grids[1])
+        nodes_j = grids[1] === grids[2] && weights[1] === weights[2] ? nodes_i : matrix_block_supportnodes(weights[2], block_particle_indices, grids[2])
+        @inline f(grids, particles, weights, block_particle_indices, BlockAssembly(nodes_i, nodes_j, matrix_buffer_pool))
     end
 end
 
@@ -81,10 +79,8 @@ end
 function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::QuadraturePoints,
                     weights::Tuple{<:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, <:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}},
                     partition::ThreadPartition{<:CellStrategy}) where {scheduler}
-    for group in threadsafe_groups(partition)
-        tforeach(group, scheduler) do cell
-            @inline f(grids, particles, weights, particle_indices(partition, particles, cell), CellAssembly())
-        end
+    partitioned_foreach(strategy(partition), Val(scheduler)) do cell
+        @inline f(grids, particles, weights, particle_indices(partition, particles, cell), CellAssembly())
     end
 end
 

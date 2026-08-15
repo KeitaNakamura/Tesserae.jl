@@ -139,6 +139,7 @@ include("mesh.jl")
 include("femesh.jl")
 include("igamesh.jl")
 include("thread_partition.jl")
+include("parallel_region.jl")
 include("sparray.jl")
 include("hybridarray.jl")
 

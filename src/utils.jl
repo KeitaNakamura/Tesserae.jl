@@ -53,9 +53,113 @@ function fillzero!(x::AbstractArray)
     x
 end
 
+# `fill!` stores a composite element such as `Vec{2,Float64}` one field at a
+# time, which measures about half the speed of a memset over the same bytes --
+# and grid fields are mostly composite. Zeroing a dense array can go through
+# memset instead whenever a zero of the element type is all-zero bytes.
+#
+# The test is structural -- every leaf field is a number or a `Bool`, whose zero
+# is all-zero bytes -- rather than an inspection of a zero value, since reading
+# the bytes of one would also read padding, which is undefined. A type built
+# only from numbers but with a `zero` that is not zero would take this path
+# wrongly; `zero_recursive` reaches leaves the same way, so such a type is
+# already outside what `fillzero!` promises. Padding itself is fine: memset
+# zeroes it and nothing reads it.
+Base.@assume_effects :foldable function zeroed_by_memset(::Type{T}) where {T}
+    isbitstype(T) && sizeof(T) > 0 || return false
+    T <: Union{Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64,
+               Int128, UInt128, Float16, Float32, Float64} && return true
+    isprimitivetype(T) && return false # unknown primitive: no zero to assume
+    fieldcount(T) > 0 && all(zeroed_by_memset, fieldtypes(T))
+end
+
+function fillzero!(x::Array{T}) where {T}
+    if zeroed_by_memset(T)
+        GC.@preserve x Libc.memset(Ptr{UInt8}(pointer(x)), 0, sizeof(T) * length(x))
+    else
+        fill!(x, zero_recursive(T))
+    end
+    x
+end
+
 function fillzero!(x::StructArray)
     StructArrays.foreachfield(fillzero!, x)
     x
+end
+
+# The buffer a `fillzero!` would memset, or `nothing` when it would not reach
+# one: a byte range is the only thing that can be split across threads.
+memset_buffer(x) = nothing
+memset_buffer(x::Array{T}) where {T} = zeroed_by_memset(T) ? x : nothing
+
+# `nothing` unless every target has a buffer. Dispatch rather than a test over
+# the mapped tuple, so that falling back is a matter of which method is called
+# and not of the compiler folding an `any`.
+memset_buffers(targets::Tuple) = _memset_buffers(map(memset_buffer, targets))
+_memset_buffers(buffers::Tuple{Vararg{Array}}) = buffers
+_memset_buffers(::Tuple) = nothing
+
+# Chunk boundaries land on cache lines, so two workers never write the same
+# line and no memset begins partway into one.
+const FILLZERO_CHUNK_ALIGN = 64
+
+# Unrolled rather than a `foreach`, so that zeroing on one thread stays the run
+# of `fillzero!` calls that `@P2G` emitted inline before the fields were
+# handed over as a group.
+@inline fillzero_each!(::Tuple{}) = nothing
+@inline fillzero_each!(targets::Tuple) = (fillzero!(first(targets)); fillzero_each!(Base.tail(targets)))
+
+"""
+    fillzero_prologue(targets::Tuple)
+
+A `prologue` for `partitioned_foreach` that zeroes `targets`, or `nothing` when
+they cannot be zeroed that way and the caller has to do it itself.
+
+Zeroing is order-free, so the bytes can be handed out in any split at all. What
+makes the split worth having is where it runs: as the transfer's first phase it
+adds one barrier, whereas its own parallel loop would add a fork-join, and a
+fork-join is priced by the thread count rather than by the work.
+
+The targets are split as one concatenated byte range rather than one at a time,
+because a transfer's fields are not the same size -- a scalar mass beside two
+`Vec` fields -- and splitting each on its own would leave the workers holding
+uneven shares of the total.
+"""
+fillzero_prologue(::Tuple{}) = nothing
+fillzero_prologue(targets::Tuple) = _fillzero_prologue(memset_buffers(targets))
+
+_fillzero_prologue(::Nothing) = nothing
+function _fillzero_prologue(buffers::Tuple)
+    nbytes = sum(sizeof, buffers)
+    (nchunks, chunk_id) -> fillzero_chunk!(buffers, nbytes, nchunks, chunk_id)
+end
+
+# The chunk count is whatever the caller has workers for, which for a transfer
+# is set by its colour groups and can be well below `nthreads`. That is a
+# simplification and not a free one: measured on 32 MB with the pool already
+# spawned, a memset keeps improving out to 24 workers -- 1.3x at 4, 1.6x at 8,
+# 1.9x at 12, 2.9x at 16, 4.3x at 24 -- so it does not saturate at a handful the
+# way splitting by cache line might suggest. Spawning workers the regions could
+# never use would put them in every later barrier to buy that, which is the
+# trade this declines to make.
+function fillzero_chunk!(buffers::Tuple, nbytes::Int, nchunks::Int, chunk_id::Int)
+    chunksize = FILLZERO_CHUNK_ALIGN * cld(nbytes, FILLZERO_CHUNK_ALIGN * nchunks)
+    fillzero_byte_range!(buffers, chunk_range(chunk_id, chunksize, nbytes), 0)
+end
+
+# `range` indexes the buffers laid end to end, and `offset` counts the bytes
+# the buffers ahead of this one take up. A buffer the range misses entirely
+# gives an empty overlap and is skipped.
+@inline fillzero_byte_range!(::Tuple{}, range::UnitRange{Int}, offset::Int) = nothing
+@inline function fillzero_byte_range!(buffers::Tuple, range::UnitRange{Int}, offset::Int)
+    buffer = first(buffers)
+    nbytes = sizeof(buffer)
+    from = max(first(range) - offset, 1)
+    to = min(last(range) - offset, nbytes)
+    if from ≤ to
+        GC.@preserve buffer Libc.memset(Ptr{UInt8}(pointer(buffer)) + (from-1), 0, to-from+1)
+    end
+    fillzero_byte_range!(Base.tail(buffers), range, offset + nbytes)
 end
 
 const SparseMatrixCSCView{T, P <: SparseMatrixCSC} = SubArray{T, 2, P}
@@ -178,7 +282,15 @@ get_scheduler(::Val{:dynamic}) = DynamicScheduler()
 get_scheduler(::Val{:greedy})  = GreedyScheduler()
 get_scheduler(::Val{:nothing}) = SequentialScheduler()
 
-function tforeach(f, iter, scheduler=DynamicScheduler(); kwargs...)
+# `f` is only handed on to `_tforeach`, which is the one case where Julia skips
+# specializing on a function argument, so it takes the type parameter here. The
+# `_tforeach` methods below call `f` and specialize without one.
+# Chunk `chunk_id` of `n` items split into pieces of `chunksize`. Empty when the
+# last chunks have nothing left, which happens whenever `n` is not a multiple.
+@inline chunk_range(chunk_id::Int, chunksize::Int, n::Int) =
+    ((chunk_id - 1) * chunksize + 1) : min(chunk_id * chunksize, n)
+
+function tforeach(f::F, iter, scheduler=DynamicScheduler(); kwargs...) where {F}
     if Threads.nthreads() > 1
         _tforeach(f, iter, get_scheduler(scheduler); kwargs...)
     else
@@ -218,6 +330,15 @@ A macro similar to `Threads.@threads`, but also works with
 
 The optional `scheduler` can be `:static`, `:dynamic`, `:greedy`, or `:nothing`
 (sequential execution). The default is `:dynamic`.
+
+What the three parallel schedulers select depends on what is being threaded. On
+a plain loop, and on [`@G2P`](@ref), they pick the corresponding
+`Threads.@threads` variant. On a partitioned transfer -- [`@P2G`](@ref),
+[`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) given a [`ThreadPartition`](@ref) --
+they instead pick how each color group is divided among the workers: `:static`
+by region count, `:dynamic` by particle count, and `:greedy` one region at a
+time on demand, which balances best and is several times slower because it
+scatters each worker's grid writes.
 
 See also [`ThreadPartition`](@ref).
 

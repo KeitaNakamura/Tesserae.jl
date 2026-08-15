@@ -246,4 +246,152 @@
         sparse_inactive = filter(i -> !Tesserae.isactive(sparse_grid.m, i), eachindex(sparse_grid.m))
         @test all(i -> iszero(sparse_grid.m[i]), sparse_inactive)
     end
+
+    @testset "SpGrid threading" begin
+        # The block walk is shared with the grid-only half of `@P2G`; only a run
+        # with more than one thread reaches its chunked form.
+        mesh = CartesianMesh(1.0, (0,16), (0,16))
+        GridProp = @NamedTuple{x::Vec{2,Float64}, m::Float64, n::Int}
+        grid = generate_grid(SpArray, GridProp, mesh)
+        update_sparsity!(grid, [Vec(1.0,1.0), Vec(15.0,15.0), Vec(8.0,3.0)])
+
+        active = collect(Tesserae.activeindices(Tesserae.get_spinds(grid)))
+        @test !isempty(active)
+
+        function count_visits!(g, run)
+            fillzero!(g.n)
+            run()
+            collect(g.n)
+        end
+
+        sequential = count_visits!(grid, () -> @foreach grid=>i begin n[i] += 1 end)
+        @test all(i -> grid.n[i] == 1, active)
+        @test count(isone, sequential) == length(active)
+
+        @test count_visits!(grid, () -> @threaded @foreach grid=>i begin n[i] += 1 end) == sequential
+        @test count_visits!(grid, () -> @threaded :static @foreach grid=>i begin n[i] += 1 end) == sequential
+    end
+
+    @testset "Threaded slice with a pinned trailing axis" begin
+        # The walk splits the trailing axis, so a slice that pins it has to fall
+        # back to an earlier one rather than leave every node to one worker.
+        mesh = CartesianMesh(1.0, (0,8), (0,8), (0,8))
+        grid = generate_grid(@NamedTuple{x::Vec{3,Float64}, n::Int}, mesh)
+
+        fillzero!(grid.n)
+        @threaded @foreach grid[:,:,begin]=>i begin
+            n[i] += 1
+        end
+
+        @test all(i -> grid.n[i] == (i[3] == 1), CartesianIndices(grid.n))
+    end
+
+    @testset "Particle index type" begin
+        # A one-dimensional collection is walked as a range of integers; handing
+        # the body a `CartesianIndex` instead would fail to convert here.
+        mesh = CartesianMesh(1.0, (0,4), (0,4))
+        particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, n::Int}, mesh; alg=GridSampling())
+
+        fillzero!(particles.n)
+        @foreach particles=>p begin
+            n[p] = p
+        end
+        @test particles.n == collect(1:length(particles))
+
+        fillzero!(particles.n)
+        @threaded @foreach particles=>p begin
+            n[p] = p
+        end
+        @test particles.n == collect(1:length(particles))
+    end
+
+    @testset "Index-space chunking" begin
+        # Whatever axis is split, the chunks handed to the workers must tile the
+        # index space exactly: every index once, none of them twice.
+        spaces = (Base.OneTo(10), Base.OneTo(1), Base.OneTo(0),
+                  CartesianIndices((3,4,5)), CartesianIndices((7,5,1)),
+                  CartesianIndices((6,1,1)), CartesianIndices((4,3,0)))
+        for inds in spaces, nworkers in 1:9
+            d, nchunks = Tesserae.foreach_split(inds, nworkers)
+            @test 1 ≤ d ≤ ndims(inds)
+            @test nchunks ≤ nworkers
+            nchunks < 2 && continue
+
+            n = size(inds, d)
+            visited = eltype(inds)[]
+            chunksize = cld(n, nchunks)
+            for chunk_id in 1:nchunks
+                r = Tesserae.chunk_range(chunk_id, chunksize, n)
+                isempty(r) && continue
+                append!(visited, vec(collect(Tesserae.foreach_subspace(inds, d, r))))
+            end
+
+            @test length(visited) == length(inds)
+            @test Set(visited) == Set(collect(inds))
+        end
+    end
+
+    @testset "Threading threshold" begin
+        # `@P2G` runs the same walk sequentially below a node count and chunked
+        # above it. Both sides have to visit the same nodes, and the threshold
+        # is the only part of the walk that `@foreach` alone never exercises.
+        mesh = CartesianMesh(1.0, (0,16), (0,16))
+        GridProp = @NamedTuple{x::Vec{2,Float64}, n::Int}
+
+        spgrid = generate_grid(SpArray, GridProp, mesh)
+        update_sparsity!(spgrid, [Vec(1.0,1.0), Vec(15.0,15.0)])
+        spinds = Tesserae.get_spinds(spgrid)
+        nactive_blocks = count(!iszero, Tesserae.blocknumbering(spinds))
+        @test Tesserae.p2g_nosum_node_count(spgrid) == nactive_blocks * Tesserae.blocklength(spinds)
+
+        dense = generate_grid(GridProp, mesh)
+        @test Tesserae.p2g_nosum_node_count(dense) == length(dense)
+        for (grid, nvisited) in (dense => length(dense),
+                                 spgrid => length(collect(Tesserae.activeindices(spinds))))
+            below, above = map((Val(:nothing), Val(:dynamic))) do schedule
+                fillzero!(grid.n)
+                Tesserae.foreach_loop(Tesserae.CPUDevice(), schedule, grid) do g, i
+                    g.n[i] += 1
+                end
+                collect(grid.n)
+            end
+            @test below == above
+            @test count(isone, below) == nvisited
+        end
+    end
+
+    @testset "Slice index mapping" begin
+        # The CPU walks `CartesianIndices(slice.ranges)` directly, while the GPU
+        # launches over a 1-based ndrange and maps each index back through
+        # `foreach_slice_index`. The two agreeing is what lets the CPU skip the
+        # mapping, and no CI runner has a GPU, so this is the only thing that
+        # checks the mapping at all.
+        mesh = CartesianMesh(1.0, (0,8), (0,8), (0,8))
+        nx, ny, nz = size(generate_grid(@NamedTuple{x::Vec{3,Float64}}, mesh))
+
+        slices = (Base.OneTo(nx), Base.OneTo(ny), 1:1),          # pinned trailing axis
+                 (nx:nx, Base.OneTo(ny), Base.OneTo(nz)),        # pinned leading axis
+                 (1:2:nx, 2:ny-1, nz:nz),                        # stepped and offset
+                 (2:1, Base.OneTo(ny), Base.OneTo(nz))           # empty
+
+        for ranges in slices
+            slice = Tesserae.ForeachSlice(ranges)
+            ndrange = Tesserae.foreach_slice_ndrange(slice)
+            @test ndrange == map(length, ranges)
+
+            mapped = map(j -> Tesserae.foreach_slice_index(slice, j), CartesianIndices(ndrange))
+            @test mapped == collect(CartesianIndices(ranges))
+        end
+
+        spgrid = generate_grid(SpArray, @NamedTuple{x::Vec{3,Float64}, m::Float64}, mesh)
+        update_sparsity!(spgrid, trues(Tesserae.nblocks(mesh)))
+        spinds = Tesserae.get_spinds(spgrid)
+
+        slice = Tesserae.ForeachSlice((Base.OneTo(nx), Base.OneTo(ny), 1:1))
+        ndrange = Tesserae.foreach_slice_ndrange(slice)
+        @test all(CartesianIndices(ndrange)) do j
+            i = Tesserae.foreach_slice_spindex(spinds, slice, j)
+            Tesserae.isactive(i) && Tesserae.logicalindex(i) == Tesserae.foreach_slice_index(slice, j)
+        end
+    end
 end

@@ -568,6 +568,10 @@ end
 
 fillzero!(A::SpArray) = (fillzero!(A.data); A)
 
+# Only the active nodes are stored, and they are stored contiguously, so an
+# `SpArray` splits across threads exactly as the dense array behind it does.
+memset_buffer(A::SpArray) = memset_buffer(get_data(A))
+
 function update_sparsity!(A::SpArray, blkspy)
     A.shared_spinds && error("""
     The sparsity pattern is shared among some `SpArray`s. \

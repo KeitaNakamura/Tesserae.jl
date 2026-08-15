@@ -8,6 +8,7 @@
 # paraview
 *.vtu
 *.vtr
+*.vts
 *.vtk
 *.vtm
 *.pvd

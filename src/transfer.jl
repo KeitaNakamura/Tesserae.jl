@@ -524,7 +524,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     end
 
     if !isempty(sum_equations)
-        pre, body = P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
+        zeroed, body = P2G_sum_expr(schedule, (grid,i), (particles,p), (weights,ip), sum_equations)
         if !DEBUG
             body = :(@inbounds $body)
         end
@@ -546,9 +546,8 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         end
         code = quote
             $code
-            $pre
             Tesserae.select_weights($weights) do w
-                Tesserae.P2G($bodies, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, w, $partition)
+                Tesserae.P2G($bodies, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, w, $partition, $zeroed)
             end
         end
     end
@@ -560,7 +559,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         end
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $(narrowed_grid_expr(grid, nosum_equations, i)))
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, nosum_equations, i)))
         end
     end
 
@@ -583,7 +582,8 @@ function p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations::Vec
        inner_symbols = p2g_cached_symbols(inner_replacements))
 end
 
-function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding(),
+function P2G_sum_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), sum_equations::Vector,
+                      binding::SupportWindowBinding=SupportWindowBinding(),
                       cols::Union{WeightColumnsBinding,Nothing}=nothing)
     @gensym gridwriteindex
     (; window) = binding
@@ -591,12 +591,12 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     (; equations, particle_replacements, inner_replacements, inner_symbols) =
         p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations, window, cols)
 
-    fillzeros = Any[]
+    fillzero_targets = Any[]
     hoist_exprs = Any[]
     sum_exprs = Any[]
     for eq in equations
         (; lhs, rhs, op) = eq
-        op == :(=)  && push_unique!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
+        op == :(=)  && push_unique!(fillzero_targets, remove_indexing(lhs))
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         push!(sum_exprs, p2g_sum_add_expr(lhs, gridwriteindex, rhs))
@@ -614,7 +614,10 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         end
     end
 
-    Expr(:block, fillzeros...), body
+    # All the assigned fields as one tuple, handed to `P2G` rather than zeroed
+    # ahead of it: that lets the threaded path zero them inside the parallel
+    # region it already opens, instead of paying a fork-join of its own.
+    Expr(:tuple, fillzero_targets...), body
 end
 
 # The tile lowering of the same scatter equations: writes go through
@@ -762,6 +765,18 @@ end
 Base.@propagate_inbounds p2g_write_index(grid, i) = i
 Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
 Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) = p2g_write_index(grid, get_spinds(grid)[Tuple(i)...])
+# `@boundscheck` here means debug-mode only, not "always": the transfer macros
+# wrap their generated body in `@inbounds` outside `debug_mode`, and that
+# propagates into this callee and elides the check. Calling `update_sparsity!`
+# is the caller's obligation under that same `@inbounds` contract, and
+# `supportnodes(::BasisWeight, ::SpGrid)` and `add!`'s `@debug checkbounds`
+# already assert it on the debug path.
+#
+# Do not promote this to an unconditional check without re-measuring. Making it
+# fire in release costs 5-9% on a 3D sequential `SpGrid` transfer and 11.6%
+# threaded; accumulating a flag branchlessly and raising once per particle still
+# costs ~5%. The only measured way back to zero is to give `SpArray.data` a
+# leading scrap slot so an inactive node lands there instead of out of bounds.
 @inline function p2g_write_index(::SpGrid, i::SpIndex)
     si = storageindex(i)
     @boundscheck iszero(si) && error("@P2G: inactive SpGrid support node. Call update_sparsity! before @P2G.")
@@ -777,22 +792,34 @@ end
 
 @inline _atomic_index(A::HybridArray{<:Any, <:Any, <:SpArray}, i::P2GSpGridStorageIndex) = i.i
 
+# `zeroed` are the grid fields the transfer assigns rather than accumulates
+# into, which have to hold zero before the first particle scatters. They are
+# passed down instead of being zeroed by the caller so that the threaded path
+# can fold them into the parallel region it already opens; every other path
+# zeroes them here, on this thread, before anything reads the grid.
+#
+# It defaults to `()` so that callers with nothing to zero -- `@P2G_Matrix`,
+# which zeroes its own matrix targets -- need not say so.
+
 # CPU: sequential
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "@P2G: `ThreadPartition` must be given for threaded computation" maxlog=1
 
+    fillzero_each!(zeroed)
     for p in eachindex(particles)
         @inline f(grid, particles, weights, p)
     end
 end
 
 # CPU: multi-threading
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition) where {scheduler}
-    for group in threadsafe_groups(partition)
-        tforeach(group, scheduler) do region
-            for p in particle_indices(partition, particles, region)
-                @inline f(grid, particles, weights, p)
-            end
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=()) where {scheduler}
+    # `partitioned_foreach` runs the prologue on its sequential paths too, so
+    # the only case left here is targets no memset can reach.
+    prologue = fillzero_prologue(zeroed)
+    prologue === nothing && fillzero_each!(zeroed)
+    partitioned_foreach(strategy(partition), Val(scheduler); prologue) do region
+        for p in particle_indices(partition, particles, region)
+            @inline f(grid, particles, weights, p)
         end
     end
 end
@@ -817,8 +844,9 @@ end
     p = @index(Global)
     @inline f(grid, particles, weights, p)
 end
-function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
+function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    fillzero_each!(zeroed)
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
@@ -828,12 +856,20 @@ end
 # Bodies fall back to the particle-parallel lowering everywhere except the
 # block-scheduled GPU path below. One method per particle-parallel signature,
 # so each is strictly more specific than its `f`-taking sibling.
-P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, ::Nothing) =
-    P2G(bodies.particle, device, schedule, grid, particles, weights, nothing)
-P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, partition::ThreadPartition) =
-    P2G(bodies.particle, device, schedule, grid, particles, weights, partition)
-P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particles, weights, ::Nothing) =
-    P2G(bodies.particle, device, schedule, grid, particles, weights, nothing)
+P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) =
+    P2G(bodies.particle, device, schedule, grid, particles, weights, nothing, zeroed)
+P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=()) =
+    P2G(bodies.particle, device, schedule, grid, particles, weights, partition, zeroed)
+P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) =
+    P2G(bodies.particle, device, schedule, grid, particles, weights, nothing, zeroed)
+
+# `@G2P2G` walks the same loop over the same arguments as `@P2G` on either
+# device; only the body differs. The block-scheduled path is not reachable from
+# here, `check_partition_for_transfer` rejecting a device partition from every
+# macro but `@P2G`. `f` is only handed on, so it takes a type parameter to be
+# specialized on.
+G2P2G(f::F, device::AbstractDevice, schedule, grid, particles, weights, partition, zeroed::Tuple=()) where {F} =
+    P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
 
 # GPU with a device partition: one workgroup per nonempty grid block. The
 # workgroup zeroes a shared tile, its threads accumulate their block's
@@ -880,8 +916,9 @@ const P2G_BLOCK_GROUPSIZE = 128
     end
 end
 
-function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition{<: GPUBlockStrategy}) where {scheduler}
+function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition{<: GPUBlockStrategy}, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    fillzero_each!(zeroed)
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     bs = strategy(partition)
     names = Val(scattered_names(bodies))
@@ -907,13 +944,6 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
            ndrange=P2G_BLOCK_GROUPSIZE * nactive(bs))
 end
 
-# `@G2P2G` puts more in the particle loop than `@P2G`, but it is the same loop
-# over the same arguments on either device. The block-scheduled path is not
-# reachable from here: `check_partition_for_transfer` rejects a device partition
-# from every macro but `@P2G`.
-G2P2G(f, device::AbstractDevice, schedule, grid, particles, weights, partition) =
-    P2G(f, device, schedule, grid, particles, weights, partition)
-
 function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     scope = TransferScope([grid=>i])
     nosum_equations = map(eq -> resolve_equation(eq, scope), nosum_equations)
@@ -925,21 +955,42 @@ function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     Expr(:block, nosum_exprs...)
 end
 
-# The grid-only part of `@P2G`. It walks the same indices as `@foreach` and
-# launches the same GPU kernels, both defined in foreach.jl, but keeps its own
-# CPU loops: routing them through `tforeach` costs 5-9% on a dense grid, and
-# `@inbounds @simd` here is worth that much.
-function P2G_nosum(f, ::CPUDevice, grid)
-    @inbounds @simd for i in foreach_indices(grid)
-        @inline f(grid, i)
+# The grid-only part of `@P2G`. Every equation here reads and writes only its
+# own node, which makes it the same walk `@foreach` runs over the same grid, so
+# it shares the CPU loops and the GPU kernels in foreach.jl.
+#
+# Below this many nodes the fork-join costs more than the walk it parallelises.
+# Only `@P2G` gets a threshold, because only here is the body known; foreach.jl
+# has the rest of that argument, and the cost of leaving `@foreach` without one.
+#
+# Measured at 8 threads against a 3D velocity update, and only as good as both.
+# The work per node is whatever the non-`@∑` equations touch -- `m⁻¹[i] =
+# inv(m[i])` moves 16 bytes, a 3D `v` update eight times that -- and a node count
+# cannot tell them apart. Gating on `count * bytes-per-node` could, since
+# `narrow_transfer_grid` has already cut the grid down to the referenced fields
+# by the time this runs, but that is a recalibration rather than a rearrangement
+# and wants its own measurements instead of a ride on these.
+const P2G_NOSUM_MIN_THREADED_LENGTH = 1 << 15
+
+function P2G_nosum(f::F, device::CPUDevice, schedule::Val, grid) where {F}
+    if p2g_nosum_node_count(grid) < P2G_NOSUM_MIN_THREADED_LENGTH
+        foreach_loop(f, device, Val(:nothing), grid)
+    else
+        foreach_loop(f, device, schedule, grid)
     end
 end
 
-function P2G_nosum(f, ::CPUDevice, grid::SpGrid)
-    @inbounds for i in foreach_indices(grid)
-        @inline f(grid, i)
-    end
+# The nodes the walk will visit: every slot of an active block on an `SpGrid`.
+# No count is stored, so that is a pass over the block numbering, cheap next to
+# the nodes it decides about, and one that `@foreach` never makes.
+p2g_nosum_node_count(grid) = length(grid)
+function p2g_nosum_node_count(grid::SpGrid)
+    spinds = get_spinds(grid)
+    count(!iszero, blocknumbering(spinds)) * blocklength(spinds)
 end
+
+# The GPU path already parallelises, so it ignores the scheduler.
+P2G_nosum(f, device::GPUDevice, ::Val, grid) = P2G_nosum(f, device, grid)
 
 function P2G_nosum(f, device::GPUDevice, grid)
     backend = get_backend(device)
@@ -1275,16 +1326,13 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         end
     end
 
+    zeroed = Expr(:tuple)
     if !isempty(stages.p2g_sum)
         # `G2P_sum_expr` binds the basis weight only when it has `@∑` equations,
         # so this half must load it itself otherwise.
         p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
         p2g_cols = isempty(stages.g2p_sum) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
-        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
-        code = quote
-            $code
-            $pre
-        end
+        zeroed, expr = P2G_sum_expr(schedule, (grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
         body = quote
             $body
             $expr
@@ -1298,7 +1346,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     code = quote
         $code
         Tesserae.select_weights($weights) do w
-            Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, particle_equations, i)), $particles, w, $partition)
+            Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, particle_equations, i)), $particles, w, $partition, $zeroed)
         end
     end
 
@@ -1309,7 +1357,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         end
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), $(narrowed_grid_expr(grid, stages.p2g_nosum, i)))
+            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, stages.p2g_nosum, i)))
         end
     end
 

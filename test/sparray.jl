@@ -291,6 +291,11 @@ end
     Tesserae.resize_fillzero_data!(A, length(Tesserae.get_data(A)))
     @test all(iszero, Tesserae.get_data(A))
 
+    # Only the active nodes are stored, and they are stored contiguously, so
+    # zeroing an `SpArray` splits across threads exactly as its packed data
+    # vector does.
+    @test Tesserae.memset_buffer(A) === Tesserae.get_data(A)
+
     fillzero!(A)
     for i in Tesserae.activeindices(A)
         A[i] = Float64(Tesserae.storageindex(i))

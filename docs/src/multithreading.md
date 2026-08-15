@@ -59,21 +59,20 @@ reorder_particles!(particles, partition)
 ```
 
 Reordering ensures that particles within the same grid block are stored contiguously in memory, reducing random memory access during parallel execution.
-When reordering is checked every step, use an adaptive threshold such as `threshold=0.85`:
+
+In a step loop, call it every step with a `threshold` below `1`, and let it decide which steps to act on. It permutes `particles` and nothing else, so it belongs before the basis weights are computed for them:
 
 ```julia
 update!(partition, particles.x)
 reorder_particles!(particles, partition; threshold=0.85)
+update!(weights, particles, grid.x)
 ```
 
-For `0 ≤ threshold ≤ 1`, larger values reorder more often. Particles are reordered when [`Tesserae.block_ordered_particle_contiguity`](@ref) is below `threshold`.
+For `0 ≤ threshold ≤ 1`, larger values reorder more often. Particles are reordered when [`Tesserae.block_ordered_particle_contiguity`](@ref) is below `threshold`. At the endpoints, `threshold=0` never reorders and `threshold=1`, the default, reorders on every call. `reorder_particles!` returns `true` on the calls where it reordered.
 
-At the endpoints, `threshold=0` never reorders and `threshold=1` always reorders.
-
-!!! warning
-    `reorder_particles!` can be expensive for large systems.
-    It is usually sufficient to reorder particles only when their spatial distribution has changed significantly.
-    Avoid forcing it on every step unless the P2G speedup is worth the reorder cost.
+!!! note
+    Reordering on every step makes each transfer as fast as it can be and is usually still slower overall, because reordering moves about as many bytes as the transfer it speeds up.
+    How far the order drifts per step depends on how fast particles cross blocks, so the threshold worth using varies with the problem.
 
 
 ## Multi-threading API
