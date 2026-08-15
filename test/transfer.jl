@@ -593,6 +593,31 @@
                 @test moved[3] ≈ fused_reference[3]
             end
 
+            # A view must keep deferring. It reaches the transfer through the
+            # same path stored weights do, and getting this wrong scatters
+            # nothing at all rather than raising.
+            subset = 2:length(particles)-1
+            @test Tesserae.isdeferred(view(built, subset))
+            @test Tesserae.isdeferred(view(flagged, subset))
+            @test !Tesserae.isdeferred(view(stored, subset))
+            let pv = view(particles, subset)
+                viewed(w) = begin
+                    grid = generate_grid(GridProp, mesh)
+                    @P2G grid=>i pv=>p w=>ip begin
+                        m[i]  = @∑ w[ip] * m[p]
+                        mv[i] = @∑ w[ip] * m[p] * v[p]
+                    end
+                    (copy(grid.m), copy(grid.mv))
+                end
+                want = viewed(view(stored, subset))
+                @test !iszero(sum(want[1]))
+                for weights in (built, flagged)
+                    got = viewed(view(weights, subset))
+                    @test got[1] ≈ want[1]
+                    @test got[2] ≈ want[2]
+                end
+            end
+
             # the flag is a per-step choice: clearing it refills and reads again
             @test update!(built, particles, mesh; deferred=true) === built
             @test_throws ErrorException update!(built, particles, mesh; deferred=false)

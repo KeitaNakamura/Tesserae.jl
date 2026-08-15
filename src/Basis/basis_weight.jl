@@ -544,7 +544,9 @@ Base.size(x::BasisWeightArray) = size(getfield(x, :indices))
 @inline function Base.view(x::BasisWeightArray, I...)
     indices = view(getfield(x, :indices), I...)
     vals = map(vals -> viewcol(vals, Val(ndims(x)), I...), getfield(x, :vals))
-    BasisWeightArray(getfield(x, :basis), vals, indices, derivative_order(x))
+    # The slot is shared, not copied: a view taken once outside the time loop
+    # then follows the parent's per-step `update!(...; deferred=true/false)`.
+    BasisWeightArray(getfield(x, :basis), vals, indices, derivative_order(x), getfield(x, :deferring))
 end
 
 Base.propertynames(x::BasisWeightArray) = propertynames(getfield(x, :vals))
@@ -588,6 +590,15 @@ end
     colons = nfill(:, Val(ndims(A)-N))
     @boundscheck checkbounds(A, colons..., I...)
     @inbounds view(A, colons..., I...)
+end
+# A placeholder owns nothing to view into, and must not become a `SubArray`:
+# `deferred_order` decides that a property is evaluated rather than read by
+# looking for `DeferredBasisValues` in the field type, so wrapping it would make
+# a view of deferred weights read storage that was never filled.
+@inline function viewcol(A::DeferredBasisValues{T}, ::Val{N}, I...) where {T, N}
+    colons = nfill(:, Val(ndims(A)-N))
+    @boundscheck checkbounds(A, colons..., I...)
+    DeferredBasisValues{T}(map(length, Base.index_shape(Base.to_indices(A, (colons..., I...))...)))
 end
 
 function _show_basis_weight_array(io::IO, weights::BasisWeightArray)
