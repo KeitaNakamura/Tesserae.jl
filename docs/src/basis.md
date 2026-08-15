@@ -80,12 +80,17 @@ stored values and gradients, and deferring removes that entirely.
 
 ### Requirements
 
-A basis can defer only if one node's value follows from the particle and the mesh
-alone. [`BSpline`](@ref), [`SteffenBSpline`](@ref) and [`uGIMP`](@ref) qualify.
-[`WLS`](@ref) and [`KernelCorrection`](@ref) do not, because each node's value
-comes from a fit over the whole support; asking for `deferred=true` on those is an
-error rather than a silent no-op. The support window is always derived on the fly,
-so it is not stored either.
+A basis can defer if one node's value follows from the particle, the mesh, and at
+most a quantity shared by the whole support. [`BSpline`](@ref),
+[`SteffenBSpline`](@ref) and [`uGIMP`](@ref) need only the first two.
+[`WLS`](@ref) and [`KernelCorrection`](@ref) fit their values over the support, so
+the fit is computed once per particle before the support loop and each node reads
+it. The support window is always derived on the fly, so it is not stored either.
+
+`WLS` and `KernelCorrection` also consult the boundary filter passed to
+`update!` to decide where to correct, and a transfer has no filter to consult, so
+deferring them alongside one is currently an error. Bases outside the list above
+are refused rather than silently doing nothing.
 
 !!! warning "When the values are taken"
     Stored values date from the last [`update!`](@ref). Deferred values are taken

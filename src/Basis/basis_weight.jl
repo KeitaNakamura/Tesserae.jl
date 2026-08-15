@@ -369,14 +369,18 @@ end
 # Whether a transfer could evaluate this array's values instead of reading them.
 # A type-level answer, so the branch in `select_weights` folds away entirely for
 # weights that cannot.
-can_defer(::Type{<: BasisWeightArray{B}}) where {B} = B <: Kernel
+can_defer(::Type{<: BasisWeightArray{B}}) where {B} = can_defer_basis(B)
 can_defer(::Type) = false
 @inline can_defer(weights) = can_defer(typeof(weights))
+# The same question about the basis alone. Bases defined in later files add their
+# own methods.
+can_defer_basis(::Type{<: Kernel}) = true
+can_defer_basis(::Type) = false
 
 # Only weights that store values and could evaluate them instead need a flag.
 function deferring_flag(basis, vals::NamedTuple)
     any(isdeferred, values(vals)) && return nothing
-    basis isa Kernel ? Ref(false) : nothing
+    can_defer_basis(typeof(basis)) ? Ref(false) : nothing
 end
 
 # Dispatch on the flag itself rather than on the array's type parameters: the
@@ -429,6 +433,16 @@ end
 
 @inline derivative_count(::Order{k}) where {k} = k + 1
 
+# What a deferred basis computes once per particle, before the support loop, and
+# how one node's jet follows from it. A `Kernel` needs neither: its value at a
+# node depends on nothing but that node. Bases that fit their values over the
+# whole support use these to do the fitting here rather than in `update!`.
+@inline deferred_particle_state(::Order, basis, pt, mesh, window) = nothing
+@inline function deferred_node_jet(order::Order, basis, ::Nothing, pt, mesh, window, ip)
+    @_propagate_inbounds_meta
+    nodal_basis_jet(order, basis, pt, mesh, window[ip])
+end
+
 # A basis can defer its values only if one node's value follows from the
 # particle and the mesh alone. `Kernel`s qualify. The others do not, for two
 # different reasons: FEM and IGA shapes also derive the cell Jacobian, the
@@ -436,9 +450,17 @@ end
 # caller-owned arrays the equations then read; `WLS` and `KernelCorrection`
 # build a moment matrix over the whole support and use the value storage as
 # scratch while doing it, so no single node stands on its own.
+# Whether a basis reads the boundary filter when it builds its values.
+needs_filter(::Basis) = false
+
 check_deferred_basis(::Kernel) = nothing
+# These fit their values over the whole support, which a deferred transfer does
+# in the support loop's preamble instead of in `update!` -- see
+# `wls_deferred_state`. What they cannot yet do is honour a boundary filter,
+# which the transfer never receives; `update!` refuses one below rather than
+# quietly correcting against the wrong support.
 check_deferred_basis(basis) =
-    error("deferred basis weights need a basis whose value at one node follows from the particle and the mesh alone, which $(nameof(typeof(basis))) is not: it derives its values from the whole support or from cell geometry. Build these weights without `deferred=true`.")
+    error("deferred basis weights need a basis whose value at one node follows from the particle and the mesh alone, which $(nameof(typeof(basis))) is not: it derives its values from cell geometry. Build these weights without `deferred=true`.")
 
 # CartesianMesh
 _generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
@@ -695,6 +717,9 @@ function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray,
     # the transfer. Calling `update!` on them is allowed and does nothing, so a
     # simulation loop written for stored weights runs unchanged. Asking for the
     # opposite is an error, because there is no storage to materialize into.
+    if !(filter isa Trues) && (deferred || storageless(weights))
+        needs_filter(basis(weights)) && error("update!: deferred basis weights cannot honour a boundary filter yet, and $(nameof(typeof(basis(weights)))) needs one to decide where to correct. Update these weights without `deferred=true`.")
+    end
     if storageless(weights)
         deferred || error("update!: these weights were built with `deferred=true` and have no storage for basis values, so they cannot be materialized. Build them without `deferred=true` to store the values.")
         return weights

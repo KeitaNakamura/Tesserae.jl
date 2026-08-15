@@ -184,25 +184,31 @@ end
 # ones share a single jet, evaluated to the highest order the equations
 # reference -- not the order the weights were declared with, which is what makes
 # a transfer that only uses `w[ip]` cheap even on `Order(2)` weights.
-struct DeferredWeights{K, B, P, M, W}
+struct DeferredWeights{K, B, P, M, W, S}
     basis::B
     pt::P      # the particle row: a basis may need more than the position
     mesh::M
     window::W
+    state::S   # whatever the basis needs computed once for this particle
 end
 # The row is taken by value, not as a `LazyRow`. The basis is evaluated in the
 # support loop, which in a `@G2P2G` runs after the G2P half may have written
 # `x[p]`; a live row would then be read at the new position against the window
 # taken at the old one. Fields the basis does not read are dead and drop out.
 DeferredWeights{K}(basis::B, pt::P, mesh::M, window::W) where {K, B, P, M, W} =
-    DeferredWeights{K, B, P, M, W}(basis, pt, mesh, window)
+    _deferred_weights(Order(K), basis, pt, mesh, window)
+@inline function _deferred_weights(::Order{K}, basis::B, pt::P, mesh::M, window::W) where {K, B, P, M, W}
+    @_propagate_inbounds_meta
+    state = deferred_particle_state(Order(K), basis, pt, mesh, window)
+    DeferredWeights{K, B, P, M, W, typeof(state)}(basis, pt, mesh, window, state)
+end
 
 @inline deferred_particle_row(particles::StructArray, p) = (@_propagate_inbounds_meta; particles[p])
 @inline deferred_particle_row(particles, p) = (@_propagate_inbounds_meta; LazyRow(particles, p))
 
 @inline function deferred_jet(d::DeferredWeights{K}, ip) where {K}
     @_propagate_inbounds_meta
-    nodal_basis_jet(Order(K), d.basis, d.pt, d.mesh, d.window[ip])
+    deferred_node_jet(Order(K), d.basis, d.state, d.pt, d.mesh, d.window, ip)
 end
 
 # Derivative order of a deferred property, `nothing` when it is stored, and

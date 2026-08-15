@@ -537,7 +537,9 @@
             end
             (copy(grid.m), copy(grid.mv), copy(particles.∇v))
         end
-        for basis in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), uGIMP())
+        for basis in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), uGIMP(),
+                      WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())),
+                      KernelCorrection(uGIMP()))
             particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
             particles.m .= 1.0
             particles.l .= 0.01
@@ -598,11 +600,16 @@
             @test !Tesserae.isdeferred(flagged)
             @test transfer(flagged, particles)[1] ≈ reference[1]
         end
-        # a basis whose node values come from a fit over the whole support cannot defer
-        particles4 = generate_particles(ParticleProp, mesh; alg=GridSampling())
+        # a fit over the whole support is done per particle in the transfer, but
+        # it reads the boundary filter, which the transfer never receives
+        masked = generate_particles(ParticleProp, mesh; alg=GridSampling())
+        filter = trues(size(mesh)); filter[1, 1] = false
         for basis in (WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())))
-            @test_throws ErrorException generate_basis_weights(basis, mesh, length(particles4); deferred=true)
-            @test_throws ErrorException update!(generate_basis_weights(basis, mesh, 4), particles4, mesh; deferred=true)
+            weights = generate_basis_weights(basis, mesh, length(masked))
+            @test_throws ErrorException update!(weights, masked, mesh, filter; deferred=true)
+            @test update!(weights, masked, mesh, filter) === weights   # storing still honours it
         end
+        # bases that read neither a fit nor a filter are still refused
+        @test_throws ErrorException generate_basis_weights(CPDI(), mesh, 4; deferred=true)
     end
 end
