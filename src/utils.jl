@@ -58,9 +58,13 @@ end
 # and grid fields are mostly composite. Zeroing a dense array can go through
 # memset instead whenever a zero of the element type is all-zero bytes.
 #
-# That is decided from the type's structure rather than by inspecting a zero
-# value, so a type whose zero is something else keeps the `fill!` path. Padding
-# bytes are not a concern: memset zeroes them and nothing reads them.
+# The test is structural -- every leaf field is a number or a `Bool`, whose zero
+# is all-zero bytes -- rather than an inspection of a zero value, since reading
+# the bytes of one would also read padding, which is undefined. A type built
+# only from numbers but with a `zero` that is not zero would take this path
+# wrongly; `zero_recursive` reaches leaves the same way, so such a type is
+# already outside what `fillzero!` promises. Padding itself is fine: memset
+# zeroes it and nothing reads it.
 Base.@assume_effects :foldable function zeroed_by_memset(::Type{T}) where {T}
     isbitstype(T) && sizeof(T) > 0 || return false
     T <: Union{Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64,
@@ -206,6 +210,11 @@ get_scheduler(::Val{:nothing}) = SequentialScheduler()
 # `f` is only handed on to `_tforeach`, which is the one case where Julia skips
 # specializing on a function argument, so it takes the type parameter here. The
 # `_tforeach` methods below call `f` and specialize without one.
+# Chunk `chunk_id` of `n` items split into pieces of `chunksize`. Empty when the
+# last chunks have nothing left, which happens whenever `n` is not a multiple.
+@inline chunk_range(chunk_id::Int, chunksize::Int, n::Int) =
+    ((chunk_id - 1) * chunksize + 1) : min(chunk_id * chunksize, n)
+
 function tforeach(f::F, iter, scheduler=DynamicScheduler(); kwargs...) where {F}
     if Threads.nthreads() > 1
         _tforeach(f, iter, get_scheduler(scheduler); kwargs...)
@@ -246,6 +255,15 @@ A macro similar to `Threads.@threads`, but also works with
 
 The optional `scheduler` can be `:static`, `:dynamic`, `:greedy`, or `:nothing`
 (sequential execution). The default is `:dynamic`.
+
+What the three parallel schedulers select depends on what is being threaded. On
+a plain loop, and on [`@G2P`](@ref), they pick the corresponding
+`Threads.@threads` variant. On a partitioned transfer -- [`@P2G`](@ref),
+[`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) given a [`ThreadPartition`](@ref) --
+they instead pick how each color group is divided among the workers: `:static`
+by region count, `:dynamic` by particle count, and `:greedy` one region at a
+time on demand, which balances best and is several times slower because it
+scatters each worker's grid writes.
 
 See also [`ThreadPartition`](@ref).
 

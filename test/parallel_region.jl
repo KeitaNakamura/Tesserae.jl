@@ -1,8 +1,3 @@
-struct FakeStrategy <: Tesserae.PartitionStrategy
-    weights::Vector{Int}
-end
-Tesserae.region_weight(s::FakeStrategy, region) = s.weights[region]
-
 @testset "partitioned_foreach" begin
     mesh = CartesianMesh(0.05, (0,1), (0,1))
     particles = generate_particles(@NamedTuple{x::Vec{2, Float64}}, mesh)
@@ -46,23 +41,23 @@ Tesserae.region_weight(s::FakeStrategy, region) = s.weights[region]
         end
     end
 
-    # A region heavier than its share makes the weighted scan overshoot, which
-    # used to leave a later worker with nothing to do. With one region per
-    # worker that idles a whole phase, which is where it was found.
+    # A region heavier than its share pushes the weighted split past the next
+    # worker's target, which used to leave that worker with nothing to do. With
+    # one region per worker that idles a whole phase, which is where it showed.
     @testset "no worker is left with an empty run" begin
-        for nworkers in 1:8, nregions in nworkers:(2*nworkers+3)
-            group = collect(1:nregions)
-            for weights in ([1 for _ in 1:nregions],            # equal
-                            [k for k in 1:nregions],            # increasing
-                            [nregions - k + 1 for k in 1:nregions], # decreasing
-                            [k == 1 ? 10^6 : 1 for k in 1:nregions]) # one giant
-                strat = FakeStrategy(weights)
-                bounds = Tesserae.balanced_bounds(strat, group, nworkers, true)
-                @test bounds[1] == 0 && bounds[end] == nregions
-                @test issorted(bounds)
-                @test all(w -> bounds[w+1] > bounds[w], 1:nworkers)
-                covered = reduce(vcat, [group[bounds[w]+1:bounds[w+1]] for w in 1:nworkers])
-                @test covered == group
+        for nworkers in 1:8
+            for group in Tesserae.threadsafe_groups(bs)
+                isempty(group) && continue
+                nregions = length(group)
+                nregions < nworkers && continue
+                for bounds in (Tesserae.equal_count_bounds(nregions, nworkers),
+                               Tesserae.particle_count_bounds(bs, group, nworkers))
+                    @test bounds[1] == 0 && bounds[end] == nregions
+                    @test issorted(bounds)
+                    @test all(w -> bounds[w+1] > bounds[w], 1:nworkers)
+                    covered = reduce(vcat, [group[bounds[w]+1:bounds[w+1]] for w in 1:nworkers])
+                    @test covered == group
+                end
             end
         end
     end

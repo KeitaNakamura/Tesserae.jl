@@ -519,52 +519,80 @@ end
 # fork-join, which is the whole grid-node half of a threaded step.
 const P2G_NOSUM_MIN_THREADED_LENGTH = 1 << 15
 
-function P2G_nosum(f, device::CPUDevice, ::Val{scheduler}, grid) where {scheduler}
+function P2G_nosum(f::F, device::CPUDevice, ::Val{scheduler}, grid) where {F, scheduler}
+    nchunks, work = nosum_chunking(grid)
+    if scheduler === :nothing || Threads.nthreads() == 1 || nchunks < 2 ||
+       work < P2G_NOSUM_MIN_THREADED_LENGTH
+        return P2G_nosum(f, device, grid)
+    end
+    P2G_nosum_threaded(f, Val(scheduler), grid, nchunks)
+end
+
+# A dense grid splits along its trailing axis so that each worker still iterates
+# a `CartesianIndices` block. Chunking the flat range instead would make every
+# node pay a linear-to-Cartesian conversion -- an integer division per dimension
+# -- that the sequential loop does not.
+function nosum_chunking(grid)
     inds = foreach_indices(grid)
-    if scheduler === :nothing || Threads.nthreads() == 1 ||
-       length(inds) < P2G_NOSUM_MIN_THREADED_LENGTH
-        return P2G_nosum(f, device, grid)
-    end
-    nchunks = Threads.nthreads()
-    chunksize = cld(length(inds), nchunks)
+    nslabs = size(inds)[end]
+    min(Threads.nthreads(), nslabs), length(inds)
+end
+
+function P2G_nosum_threaded(f::F, ::Val{scheduler}, grid, nchunks::Int) where {F, scheduler}
+    inds = foreach_indices(grid)
+    axs = axes(inds)
+    slabs = axs[end]
+    chunksize = cld(length(slabs), nchunks)
     tforeach(1:nchunks, scheduler) do chunk_id
-        firstk = (chunk_id - 1) * chunksize + 1
-        lastk = min(chunk_id * chunksize, length(inds))
-        P2G_nosum_chunk(f, grid, inds, firstk, lastk)
+        r = chunk_range(chunk_id, chunksize, length(slabs))
+        isempty(r) && return
+        @inbounds slab = slabs[first(r)]:slabs[last(r)]
+        P2G_nosum_range(f, grid, CartesianIndices((Base.front(axs)..., slab)))
     end
 end
 
-function P2G_nosum_chunk(f, grid, inds, firstk, lastk)
-    @inbounds @simd for k in firstk:lastk
-        @inline f(grid, inds[k])
+function P2G_nosum_range(f::F, grid, inds) where {F}
+    @inbounds @simd for i in inds
+        @inline f(grid, i)
     end
 end
 
-# `activeindices` is an iterator with neither a length nor indexing, but the
-# same nodes are reachable by a flat index through `_active_spindex`, which is
-# how the GPU kernel walks them. Splitting that range needs no list of its own.
-# Inactive slots cost a lookup and a branch, so the chunks are finer than the
-# thread count to keep clustered activity from landing on one worker.
-function P2G_nosum(f, device::CPUDevice, ::Val{scheduler}, grid::SpGrid) where {scheduler}
+# An `SpGrid` splits over blocks, the way `activeindices` walks them: an
+# inactive block is then skipped in one step rather than once per slot it owns,
+# and the block's coordinate is computed once instead of per node. Chunks are
+# finer than the thread count so that clustered activity does not land on one
+# worker.
+function nosum_chunking(grid::SpGrid)
     spinds = get_spinds(grid)
-    ndrange = _spindex_ndrange(spinds)
-    if scheduler === :nothing || Threads.nthreads() == 1 ||
-       ndrange < P2G_NOSUM_MIN_THREADED_LENGTH
-        return P2G_nosum(f, device, grid)
+    numbering = blocknumbering(spinds)
+    nactive = 0
+    @inbounds for b in eachindex(numbering)
+        nactive += !iszero(numbering[b])
     end
-    nchunks = 8 * Threads.nthreads()
-    chunksize = cld(ndrange, nchunks)
+    min(8 * Threads.nthreads(), length(numbering)), nactive * blocklength(spinds)
+end
+
+function P2G_nosum_threaded(f::F, ::Val{scheduler}, grid::SpGrid, nchunks::Int) where {F, scheduler}
+    spinds = get_spinds(grid)
+    nblks = length(blocknumbering(spinds))
+    chunksize = cld(nblks, nchunks)
     tforeach(1:nchunks, scheduler) do chunk_id
-        firstk = (chunk_id - 1) * chunksize + 1
-        lastk = min(chunk_id * chunksize, ndrange)
-        P2G_nosum_spgrid_chunk(f, grid, spinds, firstk, lastk)
+        P2G_nosum_blocks(f, grid, spinds, chunk_range(chunk_id, chunksize, nblks))
     end
 end
 
-function P2G_nosum_spgrid_chunk(f, grid, spinds, firstk, lastk)
-    for k in firstk:lastk
-        active, i = _active_spindex(spinds, k)
-        active && @inbounds @inline f(grid, i)
+function P2G_nosum_blocks(f::F, grid, spinds, blks) where {F}
+    numbering = blocknumbering(spinds)
+    blocks = CartesianIndices(numbering)
+    localindices = CartesianIndices(blocksize(spinds))
+    @inbounds for b in blks
+        blocknumber = numbering[b]
+        iszero(blocknumber) && continue
+        block = blocks[b]
+        for l in eachindex(localindices)
+            active, i = _active_spindex(spinds, blocknumber, block, l, localindices)
+            active && @inline f(grid, i)
+        end
     end
 end
 
