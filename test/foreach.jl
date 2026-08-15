@@ -342,14 +342,15 @@
         update_sparsity!(spgrid, [Vec(1.0,1.0), Vec(15.0,15.0)])
         spinds = Tesserae.get_spinds(spgrid)
         nactive_blocks = count(!iszero, Tesserae.blocknumbering(spinds))
-        @test Tesserae.active_node_count(spinds) == nactive_blocks * Tesserae.blocklength(spinds)
+        @test Tesserae.p2g_nosum_node_count(spgrid) == nactive_blocks * Tesserae.blocklength(spinds)
 
         dense = generate_grid(GridProp, mesh)
+        @test Tesserae.p2g_nosum_node_count(dense) == length(dense)
         for (grid, nvisited) in (dense => length(dense),
                                  spgrid => length(collect(Tesserae.activeindices(spinds))))
-            below, above = map((typemax(Int), 0)) do minthreaded
+            below, above = map((Val(:nothing), Val(:dynamic))) do schedule
                 fillzero!(grid.n)
-                Tesserae.cpu_foreach_loop(Val(:dynamic), grid, minthreaded) do g, i
+                Tesserae.foreach_loop(Tesserae.CPUDevice(), schedule, grid) do g, i
                     g.n[i] += 1
                 end
                 collect(grid.n)

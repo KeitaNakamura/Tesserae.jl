@@ -539,8 +539,22 @@ end
 # request, shares the walk but not the threshold.
 const P2G_NOSUM_MIN_THREADED_LENGTH = 1 << 15
 
-P2G_nosum(f::F, ::CPUDevice, schedule::Val, grid) where {F} =
-    cpu_foreach_loop(f, schedule, grid, P2G_NOSUM_MIN_THREADED_LENGTH)
+function P2G_nosum(f::F, device::CPUDevice, schedule::Val, grid) where {F}
+    if p2g_nosum_node_count(grid) < P2G_NOSUM_MIN_THREADED_LENGTH
+        foreach_loop(f, device, Val(:nothing), grid)
+    else
+        foreach_loop(f, device, schedule, grid)
+    end
+end
+
+# The nodes the walk will visit: every slot of an active block on an `SpGrid`.
+# No count is stored, so that is a pass over the block numbering, cheap next to
+# the nodes it decides about, and one that `@foreach` never makes.
+p2g_nosum_node_count(grid) = length(grid)
+function p2g_nosum_node_count(grid::SpGrid)
+    spinds = get_spinds(grid)
+    count(!iszero, blocknumbering(spinds)) * blocklength(spinds)
+end
 
 # The GPU path already parallelises, so it ignores the scheduler.
 P2G_nosum(f, device::GPUDevice, ::Val, grid) = P2G_nosum(f, device, grid)
