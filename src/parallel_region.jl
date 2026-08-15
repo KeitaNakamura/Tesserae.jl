@@ -6,10 +6,12 @@
 # joining tasks than scattering particles, and adding threads makes it worse.
 #
 # Here the workers are spawned once per transfer and separated by a barrier that
-# spins briefly and then parks, which costs a few microseconds instead. Each
-# worker still takes a contiguous run of regions, so grid writes stay as local
-# as they are in the sequential path, and regions keep their order within a
-# group, so the results are bitwise identical to the sequential path.
+# spins briefly and then parks, which costs a few microseconds instead. Results
+# stay bitwise identical to the sequential path because same-color regions share
+# no node, so no sum is ever reassociated no matter which worker takes which
+# region or in what order. Under `:static` and `:dynamic` each worker also takes
+# a contiguous run, which keeps grid writes as local as the sequential path;
+# `:greedy` gives that up for load balancing, not for reproducibility.
 #
 # The trade is that the workers are held for the whole transfer, so a worker the
 # OS deschedules stalls the others at the next barrier. That costs more than the
@@ -195,10 +197,13 @@ end
 # rather than as its own parallel loop before it.
 #
 # Its own loop would cost a whole fork-join, and a fork-join is priced by the
-# thread count rather than by the work: measured here, 11us at 8 threads, 20us
-# at 14, 40us at 16 and 180us at 24, the last unchanged whether the loop asks
-# for 2 chunks or 24. That is more than the zeroing itself at most grid sizes,
-# and it grows just as the machine gets wider.
+# thread count rather than by the work. Measured on a 16-performance-core Apple
+# Silicon Mac, three times independently and agreeing within 10%: 11-12us at 8
+# threads, 20us at 14, 40-44us at 16 and 180-200us at 24, the last unchanged
+# whether the loop asks for 2 chunks or 24, and steep once `-t` passes
+# `Sys.CPU_THREADS`. That is more than the zeroing itself at most grid sizes,
+# and it grows just as the machine gets wider. This is the one place these
+# numbers live; other files point here rather than restate them.
 #
 # The workers below are already spawned and already separated by barriers, so a
 # prologue costs one more barrier instead. At 8 threads that measured 2-3us

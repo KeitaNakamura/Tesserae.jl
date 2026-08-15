@@ -282,14 +282,14 @@ get_scheduler(::Val{:dynamic}) = DynamicScheduler()
 get_scheduler(::Val{:greedy})  = GreedyScheduler()
 get_scheduler(::Val{:nothing}) = SequentialScheduler()
 
-# `f` is only handed on to `_tforeach`, which is the one case where Julia skips
-# specializing on a function argument, so it takes the type parameter here. The
-# `_tforeach` methods below call `f` and specialize without one.
 # Chunk `chunk_id` of `n` items split into pieces of `chunksize`. Empty when the
 # last chunks have nothing left, which happens whenever `n` is not a multiple.
 @inline chunk_range(chunk_id::Int, chunksize::Int, n::Int) =
     ((chunk_id - 1) * chunksize + 1) : min(chunk_id * chunksize, n)
 
+# `f` is only handed on to `_tforeach`, which is the one case where Julia skips
+# specializing on a function argument, so it takes the type parameter here. The
+# `_tforeach` methods below call `f` and specialize without one.
 function tforeach(f::F, iter, scheduler=DynamicScheduler(); kwargs...) where {F}
     if Threads.nthreads() > 1
         _tforeach(f, iter, get_scheduler(scheduler); kwargs...)

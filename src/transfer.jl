@@ -524,7 +524,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     end
 
     if !isempty(sum_equations)
-        zeroed, body = P2G_sum_expr(schedule, (grid,i), (particles,p), (weights,ip), sum_equations)
+        zeroed, body = P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
         if !DEBUG
             body = :(@inbounds $body)
         end
@@ -582,7 +582,7 @@ function p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations::Vec
        inner_symbols = p2g_cached_symbols(inner_replacements))
 end
 
-function P2G_sum_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), sum_equations::Vector,
+function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector,
                       binding::SupportWindowBinding=SupportWindowBinding(),
                       cols::Union{WeightColumnsBinding,Nothing}=nothing)
     @gensym gridwriteindex
@@ -990,9 +990,7 @@ function p2g_nosum_node_count(grid::SpGrid)
 end
 
 # The GPU path already parallelises, so it ignores the scheduler.
-P2G_nosum(f, device::GPUDevice, ::Val, grid) = P2G_nosum(f, device, grid)
-
-function P2G_nosum(f, device::GPUDevice, grid)
+function P2G_nosum(f, device::GPUDevice, ::Val, grid)
     backend = get_backend(device)
     if grid isa SpGrid
         spinds = get_spinds(grid)
@@ -1332,7 +1330,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         # so this half must load it itself otherwise.
         p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
         p2g_cols = isempty(stages.g2p_sum) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
-        zeroed, expr = P2G_sum_expr(schedule, (grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
+        zeroed, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
         body = quote
             $body
             $expr

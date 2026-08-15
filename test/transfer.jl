@@ -455,7 +455,6 @@
     end
 
     @testset "every scheduler matches the sequential partitioned transfer" begin
-        Δt = 0.01
         grid, particles, weights = transfer_fixture()
         partition = ThreadPartition(grid.x)
         update!(partition, particles.x)
@@ -613,7 +612,6 @@
     # so the fixtures above never reach it. These grids do. Few particles keep it
     # quick: that loop walks every node regardless of how many particles there are.
     @testset "threaded grid-node half matches the sequential one (dense)" begin
-        Δt = 0.01
         mesh = CartesianMesh(0.005, (0,1), (0,1))  # 201^2 = 40401 nodes
         @test length(mesh) ≥ Tesserae.P2G_NOSUM_MIN_THREADED_LENGTH
         GridProp = @NamedTuple begin

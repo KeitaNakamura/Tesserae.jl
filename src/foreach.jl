@@ -144,9 +144,9 @@ end
 # than sequential. That is deliberate -- an item count cannot estimate a body
 # nobody has seen, and `@threaded` is a request, not a hint. It is also the cost
 # of threading at all rather than of anything in this walk: it tracks the
-# fork-join, which measures about 12us at 8 threads here, 44 at 16 and 200 at 24
+# fork-join, whose cost against thread count is measured in parallel_region.jl
 # -- flat in how many chunks are asked for, and steep once `-t` passes
-# `Sys.CPU_THREADS`, 16 here. A caller already inside a parallel region can fold
+# `Sys.CPU_THREADS`. A caller already inside a parallel region can fold
 # its work into that region and never fork at all, which is not the same as
 # forking more cheaply; `@foreach` is handed a collection and nothing else, so
 # it has no region to fold into, and only a cheaper fork-join would move this
@@ -231,8 +231,9 @@ end
 # `Vector{SpIndex}` first, since it is `SizeUnknown` and `tforeach` cannot index
 # it. On a 129^3 grid with 11.6% of blocks active that collection is 26MB per
 # call; walking the blocks is 5.3x sequential, 13.5x threaded, and allocates
-# 5.7KB. Chunks are finer than the thread count so that clustered activity does
-# not all land on one worker.
+# 5.7KB. More chunks than threads is only useful under `:greedy`, which takes
+# them one at a time and so can even out clustered activity; `:static` and
+# `:dynamic` hand each worker one contiguous run either way.
 function cpu_foreach_blocks(g::G, ::Val{scheduler}, spinds::SpIndices) where {G, scheduler}
     nblks = length(blocknumbering(spinds))
     nchunks = min(8 * Threads.nthreads(), nblks)
