@@ -486,11 +486,11 @@ const PARTITION_SCAN_GROUP = 256
 @inline packed_count(x::Int64) = x & Int64(0xffffffff)
 @inline packed_flags(x::Int64) = x >> 32
 
-function GPUBlockStrategy(mesh::CartesianMesh{dim}) where {dim}
+function GPUBlockStrategy(mesh::CartesianMesh)
     backend = get_backend(mesh)
     nb = prod(nblocks(mesh))
     alloc(::Type{T}, n) where {T} = fillzero!(KernelAbstractions.allocate(backend, T, n))
-    GPUBlockStrategy{dim, typeof(mesh), typeof(alloc(Int32, 0)), typeof(alloc(Int64, 0))}(
+    GPUBlockStrategy(
         mesh, alloc(Int32, 0), alloc(Int32, 0), alloc(Int32, nb), alloc(Int32, nb + 1), alloc(Int32, nb),
         alloc(Int64, cld(nb, PARTITION_SCAN_GROUP)), alloc(Int32, nb), alloc(Int32, 1), Ref(0),
     )

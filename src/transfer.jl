@@ -331,30 +331,42 @@ end
     end
 end
 
-# The tuple is spelled out because a generated body may not contain closures,
-# which rules out `ntuple` with a lambda.
-@generated function tile_load(tile, ::Val{TILELEN}, fieldoffset::Int, slot::Integer, ::Type{T}) where {TILELEN, T}
-    elems = [:(tile[(fieldoffset + $(j - 1)) * TILELEN + slot]) for j in 1:tile_ncomps(T)]
-    :(@inbounds ($(elems...),))
+# Where each scattered field starts in the tile: the component counts of the
+# fields before it. The scatter and the merge must agree on this, so it is
+# derived once here. Structural, so the generators below can call it.
+function tile_field_offsets(::Type{G}, names::Tuple) where {G}
+    offsets = Int[]
+    offset = 0
+    for name in names
+        push!(offsets, offset)
+        offset += tile_ncomps(fieldtype(eltype(G), name))
+    end
+    Tuple(offsets)
 end
+# The macro-emitted body has no types to lay the tile out with, so it reads the
+# offsets through this rather than rebuilding the rule in emitted code.
+@generated tile_offsets(grid, ::Val{names}) where {names} =
+    Expr(:tuple, tile_field_offsets(grid, names)...)
+
 @inline tile_rebuild(::Type{T}, comps) where {T <: Number} = comps[1]
 @inline tile_rebuild(::Type{T}, comps) where {T <: Union{Tensor, StaticArray}} = T(comps...)
 
 # Merge one tile node into the grid, fully unrolled over the scattered fields
 # at compile time: the GPU compiler must see every field eltype as a constant,
-# and recursion over the name tuple is too fragile for that.
+# and recursion over the name tuple is too fragile for that. Each field's
+# component tuple is spelled out here too, because a generated body may not
+# contain closures, which rules out `ntuple` with a lambda.
 @generated function merge_tile_node!(grid, tile, ::Val{names}, ::Val{TILELEN}, slot, node) where {names, TILELEN}
     exprs = Any[]
-    offset = 0
-    for name in names
+    for (name, offset) in zip(names, tile_field_offsets(grid, names))
         T = fieldtype(eltype(grid), name)
+        elems = [:(tile[$(offset + j - 1) * TILELEN + slot]) for j in 1:tile_ncomps(T)]
         push!(exprs, quote
-            comps = tile_load(tile, Val(TILELEN), $offset, slot, $T)
+            comps = @inbounds ($(elems...),)
             if !all(iszero, comps)
                 @inbounds add!(grid.$name, p2g_write_index(grid, node), tile_rebuild($T, comps))
             end
         end)
-        offset += tile_ncomps(T)
     end
     quote
         @_inline_meta
@@ -513,20 +525,30 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
 
     if !isempty(sum_equations)
         pre, body = P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
-        tile_names, tile_args, tile_body = P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
         if !DEBUG
             body = :(@inbounds $body)
-            tile_body = :(@inbounds $tile_body)
         end
-        names_val = :(Val($(Expr(:tuple, map(QuoteNode, tile_names)...))))
+        particle_body = :(($grid, $particles, $weights, $p) -> $body)
+        # Only the block-scheduled GPU path runs the tile lowering, and it is
+        # reached through a partition. Without one the call below passes a
+        # literal `nothing`, so no method that could use a tile body applies.
+        bodies = if partition === nothing
+            particle_body
+        else
+            tile_names, tile_args, tile_body = P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
+            if !DEBUG
+                tile_body = :(@inbounds $tile_body)
+            end
+            names_val = :(Val($(Expr(:tuple, map(QuoteNode, tile_names)...))))
+            :(Tesserae.P2GBodies($particle_body,
+                                 ($(tile_args...), $grid, $particles, $weights, $p) -> $tile_body,
+                                 $names_val))
+        end
         code = quote
             $code
             $pre
             Tesserae.select_weights($weights) do w
-                Tesserae.P2G(Tesserae.P2GBodies(($grid, $particles, $weights, $p) -> $body,
-                                                ($(tile_args...), $grid, $particles, $weights, $p) -> $tile_body,
-                                                $names_val),
-                             Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, w, $partition)
+                Tesserae.P2G($bodies, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, w, $partition)
             end
         end
     end
@@ -546,22 +568,33 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     esc(prettify(code; lines=true, alias=false))
 end
 
+# The two `@P2G` lowerings scatter the same equations and so must resolve them
+# identically: same weight columns, same scope, same per-particle and
+# per-support-node replacements. Only what they do with the resolved RHS
+# differs, so the resolution lives here and they share it.
+function p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations::Vector, window,
+                       cols::Union{WeightColumnsBinding,Nothing})
+    cols = something(cols, WeightColumnsBinding(collect_transfer_refs(sum_equations, ip)))
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, cols)=>ip]; cache=true)
+    equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
+    particle_replacements = cached_replacements(scope, p)
+    inner_replacements = cached_replacements(scope, i, ip)
+    (; scope, equations, particle_replacements, inner_replacements,
+       inner_symbols = p2g_cached_symbols(inner_replacements))
+end
+
 function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding(),
                       cols::Union{WeightColumnsBinding,Nothing}=nothing)
     @gensym gridwriteindex
     (; window) = binding
 
-    cols = something(cols, WeightColumnsBinding(collect_transfer_refs(sum_equations, ip)))
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, cols)=>ip]; cache=true)
-    sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
-    particle_replacements = cached_replacements(scope, p)
-    inner_replacements = cached_replacements(scope, i, ip)
-    inner_symbols = p2g_cached_symbols(inner_replacements)
+    (; equations, particle_replacements, inner_replacements, inner_symbols) =
+        p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations, window, cols)
 
     fillzeros = Any[]
     hoist_exprs = Any[]
     sum_exprs = Any[]
-    for eq in sum_equations
+    for eq in equations
         (; lhs, rhs, op) = eq
         op == :(=)  && push_unique!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
         op == :(-=) && (rhs = :(-$rhs))
@@ -589,36 +622,24 @@ end
 # every read (particles, weights, grid values on the RHS) stays as in the
 # particle-parallel body.
 function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
-    @gensym tile origin sideval tilelenval tileslot
+    @gensym tile origin sideval tilelenval tileslot offsets
     binding = SupportWindowBinding()
     (; window) = binding
 
-    cols = WeightColumnsBinding(collect_transfer_refs(sum_equations, ip))
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, cols)=>ip]; cache=true)
-    sum_equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
-    particle_replacements = cached_replacements(scope, p)
-    inner_replacements = cached_replacements(scope, i, ip)
-    inner_symbols = p2g_cached_symbols(inner_replacements)
+    (; scope, equations, particle_replacements, inner_replacements, inner_symbols) =
+        p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations, window, nothing)
 
     fieldnames = Symbol[]
-    offset_syms = Symbol[]
-    offset_exprs = Any[]
     hoist_exprs = Any[]
     sum_exprs = Any[]
-    for eq in sum_equations
+    for eq in equations
         (; lhs, rhs, op) = eq
         name = tile_field_name(lhs)
-        if !(name in fieldnames)
-            push!(fieldnames, name)
-            sym = Symbol(:tileoffset_, name)
-            push!(offset_syms, sym)
-            prev = length(offset_exprs) == 0 ? 0 : :($(offset_syms[end-1]) + Tesserae.tile_ncomps(eltype($grid.$(fieldnames[end-1]))))
-            push!(offset_exprs, :($sym = $prev))
-        end
+        name in fieldnames || push!(fieldnames, name)
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
-        sym = offset_syms[findfirst(==(name), fieldnames)]
-        push!(sum_exprs, :(Tesserae.tile_add!($tile, $tilelenval, $sym, $tileslot, $rhs)))
+        slot = findfirst(==(name), fieldnames)
+        push!(sum_exprs, :(Tesserae.tile_add!($tile, $tilelenval, $offsets[$slot], $tileslot, $rhs)))
     end
 
     # The node index is only needed when an equation mentions `i` -- as a grid
@@ -626,8 +647,9 @@ function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations:
     # local slot alone.
     uses_i = !isempty(scope.replacements[i]) || any(ex -> expr_contains_symbol(ex, i), sum_exprs)
     node_exprs = uses_i ? (:($i = Tesserae.transfer_nodeindex($grid, $window, $ip)),) : ()
+    names_val = :(Val($(Expr(:tuple, map(QuoteNode, fieldnames)...))))
     body = quote
-        $(offset_exprs...)
+        $offsets = Tesserae.tile_offsets($grid, $names_val)
         $(support_window_exprs(binding, weights, particles, p, grid)...)
         $(particle_replacements...)
         $(hoist_exprs...)
@@ -652,10 +674,11 @@ function expr_contains_symbol(ex, sym::Symbol)
     found
 end
 
+# `resolve_sum_equations` has already checked the LHS is `name[i]` on the grid
+# index and rewritten it, so `<grid>.<name>[i]` is the only shape reaching here.
 function tile_field_name(lhs)
-    @capture(lhs, x_.name_[i_]) && return name
-    @capture(lhs, x_[i_]) && return x isa Symbol ? x : error("@P2G: cannot derive the scattered field from `$(lhs)`")
-    error("@P2G: cannot derive the scattered field from `$(lhs)`")
+    @capture(lhs, x_.name_[i_]) || error("@P2G: cannot derive the scattered field from `$(lhs)`")
+    name
 end
 
 function p2g_cached_symbols(replacements)
@@ -774,8 +797,11 @@ function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partiti
     end
 end
 
-# GPU
-# `@Const` is deliberately absent from the container arguments below. It is free
+# GPU. One particle per thread with the body handed in: `@P2G`, `@G2P` and
+# `@G2P2G` all walk the same four arguments, so one kernel serves all three.
+# Each call site still compiles its own copy, `f` being a different closure type.
+#
+# `@Const` is deliberately absent from the container arguments. It is free
 # on a plain device array and stays on those elsewhere, but KernelAbstractions
 # rewrites the argument's type, and indexing a `StructArray`, `BasisWeightArray`
 # or mesh whose arrays became `Const` wrappers costs far more than the read-only
@@ -787,7 +813,7 @@ end
 # for the read-only cache to win, because a particle's weights are read by that
 # particle alone and the grid reads are already absorbed by L2 -- removing them
 # from the kernel entirely does not change its time.
-@kernel function gpukernel_P2G(f, grid, particles, weights)
+@kernel function gpukernel_transfer(f, grid, particles, weights)
     p = @index(Global)
     @inline f(grid, particles, weights, p)
 end
@@ -795,7 +821,7 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
-    kernel = gpukernel_P2G(backend)
+    kernel = gpukernel_transfer(backend)
     kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
 end
 
@@ -881,21 +907,12 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
            ndrange=P2G_BLOCK_GROUPSIZE * nactive(bs))
 end
 
-G2P2G(f, device::CPUDevice, schedule, grid, particles, weights, partition) =
+# `@G2P2G` puts more in the particle loop than `@P2G`, but it is the same loop
+# over the same arguments on either device. The block-scheduled path is not
+# reachable from here: `check_partition_for_transfer` rejects a device partition
+# from every macro but `@P2G`.
+G2P2G(f, device::AbstractDevice, schedule, grid, particles, weights, partition) =
     P2G(f, device, schedule, grid, particles, weights, partition)
-
-# Unlike P2G, G2P2G writes interpolated and updated particle properties.
-@kernel function gpukernel_G2P2G(f, grid, particles, weights)
-    p = @index(Global)
-    @inline f(grid, particles, weights, p)
-end
-function G2P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
-    particles = particles isa QuadraturePoints ? parent(particles) : particles
-    backend = get_backend(device)
-    kernel = gpukernel_G2P2G(backend)
-    kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
-end
 
 function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     scope = TransferScope([grid=>i])
@@ -1100,16 +1117,13 @@ function G2P(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights) where {
     end
 end
 
-# GPU
-@kernel function gpukernel_G2P(f, grid, particles, weights)
-    p = @index(Global)
-    @inline f(grid, particles, weights, p)
-end
+# GPU. Shares `gpukernel_transfer` with `@P2G`; the grid goes in unwrapped here,
+# since nothing in a `@G2P` body scatters and so none of it needs atomics.
 function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
-    kernel = gpukernel_G2P(backend)
+    kernel = gpukernel_transfer(backend)
     kernel(f, grid, particles, weights; ndrange=length(particles))
 end
 
