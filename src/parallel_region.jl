@@ -45,8 +45,11 @@ PhaseBarrier(nworkers::Integer, nphases::Integer) =
 # Spinning pays off only while the workers we wait for are running. Past that,
 # parking is what keeps a straggler from being starved by the very workers
 # waiting on it -- which is what happens when the machine is also busy with
-# something else. Measured on 16 cores, short phases stop getting faster around
-# here.
+# something else.
+#
+# What this bound has to be is finite. It is not picked to optimise anything:
+# any value that ends the spin before a descheduled worker can be starved does
+# the job, which is why it is a round number and not a measured one.
 const BARRIER_SPIN_BUDGET = 1024
 
 @inline barrier_aborted(barrier::PhaseBarrier) = @atomic barrier.aborted
@@ -124,8 +127,7 @@ equal_count_bounds(nregions::Int, nworkers::Int) =
 # Splitting by particle count instead of region count pays off when the density
 # varies over the mesh in a way that follows the region order, which is what a
 # body occupying part of the domain looks like: a run of regions is then either
-# all interior or all boundary. Measured on a sphere of particles, weighting was
-# ~9% faster; on a uniformly filled mesh the two were within noise.
+# all interior or all boundary. On a uniformly filled mesh the two are the same.
 #
 # `assign_block_ranges!` already laid this group's regions out contiguously and
 # in order inside `particleindices`, so `stops` *is* the running particle count
@@ -196,23 +198,15 @@ end
 # fields it assigns is the one caller -- goes in as the region's first phase
 # rather than as its own parallel loop before it.
 #
-# Its own loop would cost a whole fork-join, and a fork-join is priced by the
-# thread count rather than by the work. Measured on a 16-performance-core Apple
-# Silicon Mac, three times independently and agreeing within 10%: 11-12us at 8
-# threads, 20us at 14, 40-44us at 16 and 180-200us at 24, the last unchanged
-# whether the loop asks for 2 chunks or 24, and steep once `-t` passes
-# `Sys.CPU_THREADS`. That is more than the zeroing itself at most grid sizes,
-# and it grows just as the machine gets wider. This is the one place these
-# numbers live; other files point here rather than restate them.
+# Its own loop would cost a whole fork-join, which is priced by the thread count
+# rather than by the work and climbs steeply once `-t` passes `Sys.CPU_THREADS`.
+# That is more than the zeroing itself at most grid sizes, and it grows just as
+# the machine gets wider.
 #
 # The workers below are already spawned and already separated by barriers, so a
-# prologue costs one more barrier instead. At 8 threads that measured 2-3us
-# against the fork-join's 11. Above 8 it could not be measured on this machine:
-# repeat attempts disagreed by more than 5x, and a 24-thread run perturbs itself
-# badly enough to move its own baseline 40%. The claim there rests on the shape
-# rather than a number -- a barrier over workers that are already running and
-# spinning cannot cost more than starting and joining them -- and on the
-# transfer being faster end to end at 16 threads, which is measurable.
+# prologue costs one more barrier instead. A barrier over workers that are
+# already running and spinning cannot cost more than starting and joining them,
+# which is the whole argument -- it does not rest on a number.
 run_prologue(::Nothing, nworkers::Int, w::Int) = nothing
 run_prologue(prologue::P, nworkers::Int, w::Int) where {P} = (@inline prologue(nworkers, w); nothing)
 

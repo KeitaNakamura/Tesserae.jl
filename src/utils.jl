@@ -54,9 +54,9 @@ function fillzero!(x::AbstractArray)
 end
 
 # `fill!` stores a composite element such as `Vec{2,Float64}` one field at a
-# time, which measures about half the speed of a memset over the same bytes --
-# and grid fields are mostly composite. Zeroing a dense array can go through
-# memset instead whenever a zero of the element type is all-zero bytes.
+# time, which is slower than a memset over the same bytes -- and grid fields are
+# mostly composite. Zeroing a dense array can go through memset instead whenever
+# a zero of the element type is all-zero bytes.
 #
 # The test is structural -- every leaf field is a number or a `Bool`, whose zero
 # is all-zero bytes -- rather than an inspection of a zero value, since reading
@@ -99,8 +99,9 @@ memset_buffers(targets::Tuple) = _memset_buffers(map(memset_buffer, targets))
 _memset_buffers(buffers::Tuple{Vararg{Array}}) = buffers
 _memset_buffers(::Tuple) = nothing
 
-# Chunk boundaries land on cache lines, so two workers never write the same
-# line and no memset begins partway into one.
+# Chunk boundaries are aligned so that workers do not share the line they write
+# and no memset begins partway into one. 64 is the common line width; a machine
+# with wider lines still gets correct results, just some sharing at the seams.
 const FILLZERO_CHUNK_ALIGN = 64
 
 # Unrolled rather than a `foreach`, so that zeroing on one thread stays the run
@@ -136,12 +137,10 @@ end
 
 # The chunk count is whatever the caller has workers for, which for a transfer
 # is set by its colour groups and can be well below `nthreads`. That is a
-# simplification and not a free one: measured on 32 MB with the pool already
-# spawned, a memset keeps improving out to 24 workers -- 1.3x at 4, 1.6x at 8,
-# 1.9x at 12, 2.9x at 16, 4.3x at 24 -- so it does not saturate at a handful the
-# way splitting by cache line might suggest. Spawning workers the regions could
-# never use would put them in every later barrier to buy that, which is the
-# trade this declines to make.
+# simplification and not a free one: a memset keeps getting faster with workers
+# well past the point where splitting by cache line suggests it would saturate.
+# Spawning workers the regions could never use would put them in every later
+# barrier to buy that, which is the trade this declines to make.
 function fillzero_chunk!(buffers::Tuple, nbytes::Int, nchunks::Int, chunk_id::Int)
     chunksize = FILLZERO_CHUNK_ALIGN * cld(nbytes, FILLZERO_CHUNK_ALIGN * nchunks)
     fillzero_byte_range!(buffers, chunk_range(chunk_id, chunksize, nbytes), 0)
