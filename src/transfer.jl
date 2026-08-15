@@ -279,14 +279,13 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     end
 
     if !isempty(sum_equations)
-        pre, body = P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
+        zeroed, body = P2G_sum_expr(schedule, (grid,i), (particles,p), (weights,ip), sum_equations)
         if !DEBUG
             body = :(@inbounds $body)
         end
         code = quote
             $code
-            $pre
-            Tesserae.P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, $weights, $partition)
+            Tesserae.P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, $weights, $partition, $zeroed)
         end
     end
 
@@ -305,7 +304,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     esc(prettify(code; lines=true, alias=false))
 end
 
-function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding())
+function P2G_sum_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), sum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding())
     @gensym gridwriteindex
     (; window) = binding
 
@@ -315,12 +314,12 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     inner_replacements = cached_replacements(scope, i, ip)
     inner_symbols = p2g_cached_symbols(inner_replacements)
 
-    fillzeros = Any[]
+    fillzero_targets = Any[]
     hoist_exprs = Any[]
     sum_exprs = Any[]
     for eq in sum_equations
         (; lhs, rhs, op) = eq
-        op == :(=)  && push_unique!(fillzeros, :(Tesserae.fillzero!($(remove_indexing(lhs)))))
+        op == :(=)  && push_unique!(fillzero_targets, remove_indexing(lhs))
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         push!(sum_exprs, p2g_sum_add_expr(lhs, gridwriteindex, rhs))
@@ -338,7 +337,10 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         end
     end
 
-    Expr(:block, fillzeros...), body
+    # All the assigned fields as one tuple, handed to `P2G` rather than zeroed
+    # ahead of it: that lets the threaded path zero them inside the parallel
+    # region it already opens, instead of paying a fork-join of its own.
+    Expr(:tuple, fillzero_targets...), body
 end
 
 function p2g_cached_symbols(replacements)
@@ -449,18 +451,32 @@ end
 
 @inline _atomic_index(A::HybridArray{<:Any, <:Any, <:SpArray}, i::P2GSpGridStorageIndex) = i.i
 
+# `zeroed` are the grid fields the transfer assigns rather than accumulates
+# into, which have to hold zero before the first particle scatters. They are
+# passed down instead of being zeroed by the caller so that the threaded path
+# can fold them into the parallel region it already opens; every other path
+# zeroes them here, on this thread, before anything reads the grid.
+#
+# It defaults to `()` so that callers with nothing to zero -- `@P2G_Matrix`,
+# which zeroes its own matrix targets -- need not say so.
+
 # CPU: sequential
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "@P2G: `ThreadPartition` must be given for threaded computation" maxlog=1
 
+    fillzero_each!(zeroed)
     for p in eachindex(particles)
         @inline f(grid, particles, weights, p)
     end
 end
 
 # CPU: multi-threading
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition) where {scheduler}
-    partitioned_foreach(strategy(partition), Val(scheduler)) do region
+function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=()) where {scheduler}
+    # `partitioned_foreach` runs the prologue on its sequential paths too, so
+    # the only case left here is targets no memset can reach.
+    prologue = fillzero_prologue(zeroed)
+    prologue === nothing && fillzero_each!(zeroed)
+    partitioned_foreach(strategy(partition), Val(scheduler); prologue) do region
         for p in particle_indices(partition, particles, region)
             @inline f(grid, particles, weights, p)
         end
@@ -472,8 +488,9 @@ end
     p = @index(Global)
     @inline f(grid, particles, weights, p)
 end
-function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
+function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    fillzero_each!(zeroed)
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
     kernel = gpukernel_P2G(backend)
@@ -481,16 +498,17 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
 end
 
 # `f` is only handed on, so it takes a type parameter to be specialized on.
-G2P2G(f::F, device::CPUDevice, schedule, grid, particles, weights, partition) where {F} =
-    P2G(f, device, schedule, grid, particles, weights, partition)
+G2P2G(f::F, device::CPUDevice, schedule, grid, particles, weights, partition, zeroed::Tuple=()) where {F} =
+    P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
 
 # Unlike P2G, G2P2G writes interpolated and updated particle properties.
 @kernel function gpukernel_G2P2G(f, grid, particles, @Const(weights))
     p = @index(Global)
     @inline f(grid, particles, weights, p)
 end
-function G2P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing) where {scheduler}
+function G2P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    fillzero_each!(zeroed)
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
     kernel = gpukernel_G2P2G(backend)
@@ -920,15 +938,12 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         end
     end
 
+    zeroed = Expr(:tuple)
     if !isempty(stages.p2g_sum)
         # `G2P_sum_expr` binds the basis weight only when it has `@∑` equations,
         # so this half must load it itself otherwise.
         p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
-        pre, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding)
-        code = quote
-            $code
-            $pre
-        end
+        zeroed, expr = P2G_sum_expr(schedule, (grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding)
         body = quote
             $body
             $expr
@@ -941,7 +956,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     particle_equations = vcat(collect(stages.g2p_sum), collect(stages.g2p_nosum), collect(stages.p2g_sum))
     code = quote
         $code
-        Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, particle_equations, i)), $particles, $weights, $partition)
+        Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, particle_equations, i)), $particles, $weights, $partition, $zeroed)
     end
 
     if !isempty(stages.p2g_nosum)

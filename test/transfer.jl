@@ -497,6 +497,99 @@
         end
     end
 
+    @testset "@P2G hands its assigned fields down to the transfer" begin
+        # The fields are passed into `P2G` rather than zeroed ahead of it, which
+        # is what lets the threaded path zero them inside the parallel region it
+        # already opens instead of paying a fork-join of its own. Zeroing them
+        # before the call would still be correct, so this looks at the emitted
+        # call rather than at the result.
+        function collect_calls(ex, callee, found=Any[])
+            Meta.isexpr(ex, :call) && ex.args[1] == callee && push!(found, ex)
+            ex isa Expr && foreach(arg -> collect_calls(arg, callee, found), ex.args)
+            found
+        end
+
+        expanded = @macroexpand @threaded :static @P2G grid=>i particles=>p weights=>ip partition begin
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
+        end
+        @test isempty(collect_calls(expanded, :(Tesserae.fillzero!)))
+        call = only(collect_calls(expanded, :(Tesserae.P2G)))
+        # `-=` accumulates onto what is already there, so `f` is not zeroed.
+        @test call.args[end] == :((grid.m, grid.mv))
+
+        # `@G2P2G` zeroes the same way, and passes an empty tuple when its
+        # particle half is all it has.
+        g2p2g = @macroexpand @threaded :static @G2P2G grid=>i particles=>p weights=>ip partition begin
+            v[p] = @∑ w[ip] * v[i]
+            m[i] = @∑ w[ip] * m[p]
+        end
+        @test only(collect_calls(g2p2g, :(Tesserae.G2P2G))).args[end] == :((grid.m,))
+        g2p_only = @macroexpand @threaded :static @G2P2G grid=>i particles=>p weights=>ip partition begin
+            v[p] = @∑ w[ip] * v[i]
+        end
+        @test only(collect_calls(g2p_only, :(Tesserae.G2P2G))).args[end] == :(())
+    end
+
+    @testset "a threaded transfer zeroes every byte of a grid its particles do not cover" begin
+        # The grid is zeroed whole while only the occupied part is scattered
+        # into, so a byte the split misses is a byte no later write covers. The
+        # other transfer tests use a 3x3 grid, which one worker's chunk covers
+        # entirely; this one is big enough for the chunks to have boundaries,
+        # with the particles left in a corner so only the zeroing pays for it.
+        mesh = CartesianMesh(1.0, (0,400), (0,400))
+        GridProp = @NamedTuple begin
+            x  :: Vec{2, Float64}
+            m  :: Float64
+            mv :: Vec{2, Float64}
+            f  :: Vec{2, Float64}
+        end
+        ParticleProp = @NamedTuple begin
+            x :: Vec{2, Float64}
+            m :: Float64
+            V :: Float64
+            v :: Vec{2, Float64}
+            σ :: SecondOrderTensor{2, Float64, 4}
+        end
+        grid = generate_grid(GridProp, mesh)
+        @test sizeof(grid.m) + sizeof(grid.mv) + sizeof(grid.f) > 4 * Tesserae.FILLZERO_CHUNK_ALIGN * Threads.nthreads()
+
+        particles = generate_particles(ParticleProp, CartesianMesh(1.0, (0,20), (0,20)); alg=GridSampling())
+        particles.m .= 1.0
+        particles.V .= 1.0
+        particles.v .= [rand(Vec{2}) for _ in 1:length(particles)]
+        particles.σ .= [rand(SecondOrderTensor{2}) for _ in 1:length(particles)]
+        weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))
+        update!(weights, particles, mesh)
+        partition = ThreadPartition(grid.x)
+        update!(partition, particles.x)
+
+        # Dirty the fields first, so a byte the zeroing misses shows up as a
+        # difference instead of reading as a zero that was there anyway.
+        dirty!(g) = (fill!(g.m, NaN); fill!(g.mv, Vec(NaN,NaN)); fill!(g.f, Vec(NaN,NaN)); g)
+
+        reference = dirty!(deepcopy(grid))
+        @threaded :nothing @P2G reference=>i particles=>p weights=>ip partition begin
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
+        end
+        @test !any(isnan, reference.m)
+
+        out = dirty!(deepcopy(grid))
+        @threaded :dynamic @P2G out=>i particles=>p weights=>ip partition begin
+            m[i]  = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            f[i]  = @∑ -V[p] * σ[p] * ∇w[ip]
+        end
+        # Same partition, so the same accumulation order into every node: only
+        # the zeroing differs, and it is order-free.
+        @test out.m == reference.m
+        @test out.mv == reference.mv
+        @test out.f == reference.f
+    end
+
     @testset "a failing threaded transfer throws instead of hanging" begin
         grid, particles, weights = transfer_fixture()
         partition = ThreadPartition(grid.x)
