@@ -163,3 +163,32 @@ end
 can_defer_basis(::Type{<: WLS}) = true
 check_deferred_basis(::WLS) = nothing
 needs_filter(::WLS) = true
+
+# The separable deferred form, mirroring `update_basis_values!` above: for
+# `MultiLinear` the fit decomposes into `dim` independent 1-D fits, so the
+# per-particle work is `dim` small problems over `support_width` nodes rather
+# than one pass over the whole support with a `(dim+1)²` inverse. Only reachable
+# without a filter, which is what makes the decomposition exact; the type of the
+# filter selects between this and the general form, so each stays type-stable.
+@inline function wls_axis_jets(order::Order, kernel, pt, mesh::CartesianMesh{dim}, window) where {dim}
+    wls_1d = WLS(kernel, Polynomial(Linear()))
+    T = eltype(getx(pt))
+    ntuple(Val(dim)) do d
+        mesh_1d = axismesh(mesh, d)
+        vals_1d = allocate_static_basis_values(@NamedTuple{w::T}, wls_1d, Val(1); derivative=order)
+        bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(CartesianIndices((window.indices[d],))), order)
+        # Must be inlined, as in the stored path: the small MArray must not escape.
+        update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
+        scalarize_axis_values(order, bw_1d)
+    end
+end
+
+@generated function wls_axis_jet_at(::Order{k}, axisjets::NTuple{dim, Any}, offsets::NTuple{dim, Int}) where {k, dim}
+    quote
+        @_inline_meta
+        vals1d = @ntuple $dim d -> (@ntuple $(k+1) a -> axisjets[d][a][offsets[d]])
+        @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
+    end
+end
+
+@inline node_offsets(window, ip) = (@_propagate_inbounds_meta; Tuple(window[ip] - first(window)) .+ 1)
