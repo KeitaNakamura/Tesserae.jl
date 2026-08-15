@@ -359,4 +359,39 @@
             @test count(isone, below) == nvisited
         end
     end
+
+    @testset "Slice index mapping" begin
+        # The CPU walks `CartesianIndices(slice.ranges)` directly, while the GPU
+        # launches over a 1-based ndrange and maps each index back through
+        # `foreach_slice_index`. The two agreeing is what lets the CPU skip the
+        # mapping, and no CI runner has a GPU, so this is the only thing that
+        # checks the mapping at all.
+        mesh = CartesianMesh(1.0, (0,8), (0,8), (0,8))
+        nx, ny, nz = size(generate_grid(@NamedTuple{x::Vec{3,Float64}}, mesh))
+
+        slices = (Base.OneTo(nx), Base.OneTo(ny), 1:1),          # pinned trailing axis
+                 (nx:nx, Base.OneTo(ny), Base.OneTo(nz)),        # pinned leading axis
+                 (1:2:nx, 2:ny-1, nz:nz),                        # stepped and offset
+                 (2:1, Base.OneTo(ny), Base.OneTo(nz))           # empty
+
+        for ranges in slices
+            slice = Tesserae.ForeachSlice(ranges)
+            ndrange = Tesserae.foreach_slice_ndrange(slice)
+            @test ndrange == map(length, ranges)
+
+            mapped = map(j -> Tesserae.foreach_slice_index(slice, j), CartesianIndices(ndrange))
+            @test mapped == collect(CartesianIndices(ranges))
+        end
+
+        spgrid = generate_grid(SpArray, @NamedTuple{x::Vec{3,Float64}, m::Float64}, mesh)
+        update_sparsity!(spgrid, trues(Tesserae.nblocks(mesh)))
+        spinds = Tesserae.get_spinds(spgrid)
+
+        slice = Tesserae.ForeachSlice((Base.OneTo(nx), Base.OneTo(ny), 1:1))
+        ndrange = Tesserae.foreach_slice_ndrange(slice)
+        @test all(CartesianIndices(ndrange)) do j
+            i = Tesserae.foreach_slice_spindex(spinds, slice, j)
+            Tesserae.isactive(i) && Tesserae.logicalindex(i) == Tesserae.foreach_slice_index(slice, j)
+        end
+    end
 end
