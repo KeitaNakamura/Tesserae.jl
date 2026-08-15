@@ -131,7 +131,7 @@ end
 # itself such an array, so its methods must be the more specific ones.
 @inline function transfer_support_window(weights::BasisWeightArray, particles, p, mesh)
     @_propagate_inbounds_meta
-    _transfer_support_window(Val(is_deferred(weights)), weights, particles, p, mesh)
+    _transfer_support_window(Val(isdeferred(weights)), weights, particles, p, mesh)
 end
 @inline function transfer_support_window(weights::AbstractArray{<: BasisWeight}, particles, p, mesh)
     @_propagate_inbounds_meta
@@ -154,7 +154,7 @@ end
 # fully specialized, and for weights that cannot defer the second never exists.
 @inline function select_weights(f::F, weights::W) where {F, W}
     if can_defer(W)
-        is_deferring(weights) ? f(as_deferred(weights)) : f(weights)
+        isdeferring(weights) ? f(as_deferred(weights)) : f(weights)
     else
         f(weights)
     end

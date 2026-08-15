@@ -551,8 +551,8 @@
             flagged = generate_basis_weights(basis, mesh, length(particles))
             update!(flagged, particles, mesh; deferred=true)
 
-            @test Tesserae.is_deferred(built)
-            @test !Tesserae.is_deferred(stored)
+            @test Tesserae.isdeferred(built)
+            @test !Tesserae.isdeferred(stored)
 
             reference = transfer(stored, particles)
             for weights in (built, flagged)
@@ -594,7 +594,7 @@
             @test update!(built, particles, mesh; deferred=true) === built
             @test_throws ErrorException update!(built, particles, mesh; deferred=false)
             update!(flagged, particles, mesh)
-            @test !Tesserae.is_deferred(flagged)
+            @test !Tesserae.isdeferred(flagged)
             @test transfer(flagged, particles)[1] ≈ reference[1]
         end
         # a basis whose node values come from a fit over the whole support cannot defer

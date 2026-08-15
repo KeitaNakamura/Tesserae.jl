@@ -333,8 +333,8 @@ Base.getindex(::DeferredBasisValues, ::Integer) =
     error("this basis value is not stored: the weights were built with `deferred=true`, so it is evaluated inside the transfer instead")
 Base.similar(A::DeferredBasisValues{T}, ::Type{S}, dims::Dims) where {T, S} = DeferredBasisValues{S}(dims)
 
-is_deferred_values(::DeferredBasisValues) = true
-is_deferred_values(::AbstractArray) = false
+isdeferred(::DeferredBasisValues) = true
+isdeferred(::AbstractArray) = false
 
 # Owning no memory, a placeholder lives wherever the rest of the weights do, so
 # it reports no backend of its own and the surrounding arrays decide.
@@ -375,7 +375,7 @@ can_defer(::Type) = false
 
 # Only weights that store values and could evaluate them instead need a flag.
 function deferring_flag(basis, vals::NamedTuple)
-    any(is_deferred_values, values(vals)) && return nothing
+    any(isdeferred, values(vals)) && return nothing
     basis isa Kernel ? Ref(false) : nothing
 end
 
@@ -386,8 +386,16 @@ end
 @inline _set_deferring!(r::Base.RefValue{Bool}, on::Bool) = (r[] = on)
 @inline _set_deferring!(::Nothing, ::Bool) = false
 
-@inline is_deferring(weights::BasisWeightArray) = _deferring(getfield(weights, :deferring))
-@inline is_deferring(::AbstractArray{<: BasisWeight}) = false
+"""
+    Tesserae.isdeferring(weights)
+
+Whether transfers will evaluate `weights`' basis values instead of reading the
+stored ones, as set for the step by `update!(..., deferred=true)`. Always true
+for weights that store nothing, where [`Tesserae.isdeferred`](@ref) is the same
+question asked of the storage.
+"""
+@inline isdeferring(weights::BasisWeightArray) = _deferring(getfield(weights, :deferring))
+@inline isdeferring(::AbstractArray{<: BasisWeight}) = false
 
 # Weights that carry no flag have nothing to switch: either they always defer or
 # they never can. `update!` rejects `deferred=true` on the latter before it gets
@@ -626,13 +634,14 @@ end
 # accelerations
 
 """
-    Tesserae.is_deferred(weights)
+    Tesserae.isdeferred(weights)
 
 Whether `weights` re-evaluates its basis values inside each transfer instead of
-storing them. True for arrays built with `generate_basis_weights(...; deferred=true)`.
+storing them. True for arrays built with `generate_basis_weights(...; deferred=true)`,
+which have no storage at all; for stored weights switched over for the step with
+`update!(..., deferred=true)`, see [`Tesserae.isdeferring`](@ref).
 """
-is_deferred(weights::BasisWeightArray) = any(is_deferred_values, values(getfield(weights, :vals)))
-is_deferred(::AbstractArray{<: BasisWeight}) = false
+isdeferred(weights::BasisWeightArray) = any(isdeferred, values(getfield(weights, :vals)))
 
 # A deferred twin of stored weights: same basis, support nodes and element type,
 # but with the values evaluated in the transfer instead of read back. It shares
@@ -640,7 +649,7 @@ is_deferred(::AbstractArray{<: BasisWeight}) = false
 # one per transfer for free. Internal -- users choose with
 # `update!(...; deferred=true)`, and this is how that choice reaches the type.
 function as_deferred(weights::BasisWeightArray)
-    is_deferred(weights) && return weights
+    isdeferred(weights) && return weights
     b = basis(weights)
     check_deferred_basis(b)
     order = derivative_order(weights)
@@ -686,12 +695,12 @@ them. It is the per-step form of the same choice, and it errors on a basis that
 cannot defer rather than silently doing nothing.
 """
 function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh,
-                 filter::AbstractArray{Bool}=Trues(size(mesh)); deferred::Bool=is_deferred(weights))
+                 filter::AbstractArray{Bool}=Trues(size(mesh)); deferred::Bool=isdeferred(weights))
     # Lazy weights have nothing to fill: their basis values are evaluated inside
     # the transfer. Calling `update!` on them is allowed and does nothing, so a
     # simulation loop written for stored weights runs unchanged. Asking for the
     # opposite is an error, because there is no storage to materialize into.
-    if is_deferred(weights)
+    if isdeferred(weights)
         deferred || error("update!: these weights were built with `deferred=true` and have no storage for basis values, so they cannot be materialized. Build them without `deferred=true` to store the values.")
         return weights
     end

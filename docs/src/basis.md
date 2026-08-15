@@ -104,5 +104,6 @@ back to reading. It needs a basis that can defer; on anything else it is an erro
 rather than a silent no-op.
 
 ```@docs
-Tesserae.is_deferred
+Tesserae.isdeferred
+Tesserae.isdeferring
 ```
