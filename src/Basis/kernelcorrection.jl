@@ -50,8 +50,6 @@ Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", kc.ke
 end
 
 can_defer_basis(::Type{<: KernelCorrection}) = true
-check_deferred_basis(::KernelCorrection) = nothing
-needs_filter(::KernelCorrection) = true
 
 const SeparableKernelCorrection = KernelCorrection{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}
 

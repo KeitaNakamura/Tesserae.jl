@@ -372,10 +372,6 @@ end
 can_defer(::Type{<: BasisWeightArray{B}}) where {B} = can_defer_basis(B)
 can_defer(::Type) = false
 @inline can_defer(weights) = can_defer(typeof(weights))
-# The same question about the basis alone. Bases defined in later files add their
-# own methods.
-can_defer_basis(::Type{<: Kernel}) = true
-can_defer_basis(::Type) = false
 
 # Only weights that store values and could evaluate them instead need a flag.
 function deferring_flag(basis, vals::NamedTuple)
@@ -462,24 +458,23 @@ end
     nodal_basis_jet(order, basis, pt, mesh, window[ip])
 end
 
-# A basis can defer its values only if one node's value follows from the
-# particle and the mesh alone. `Kernel`s qualify. The others do not, for two
-# different reasons: FEM and IGA shapes also derive the cell Jacobian, the
-# quadrature measure, and boundary normals, writing the last two into
-# caller-owned arrays the equations then read; `WLS` and `KernelCorrection`
-# build a moment matrix over the whole support and use the value storage as
-# scratch while doing it, so no single node stands on its own.
-# Whether a basis reads the boundary filter when it builds its values.
-needs_filter(::Basis) = false
+# Whether a basis can be evaluated inside a transfer instead of stored. A
+# `Kernel`'s value at a node follows from that node alone; `WLS` and
+# `KernelCorrection` additionally need a fit over the support, which the
+# per-particle level computes (see `deferred_particle_state`). FEM and IGA shapes
+# cannot: they also derive the cell Jacobian, the quadrature measure and boundary
+# normals, writing the last two into caller-owned arrays the equations read, and
+# a transfer has nowhere to put them.
+#
+# Each basis answers this once. The error below, the dispatch in
+# `select_weights` and the flag `update!` records all read the same answer, so a
+# basis cannot be half-enabled.
+can_defer_basis(::Type{<: Kernel}) = true
+can_defer_basis(::Type) = false
 
-check_deferred_basis(::Kernel) = nothing
-# These fit their values over the whole support, which a deferred transfer does
-# in the support loop's preamble instead of in `update!` -- see
-# `wls_deferred_state`. What they cannot yet do is honour a boundary filter,
-# which the transfer never receives; `update!` refuses one below rather than
-# quietly correcting against the wrong support.
 check_deferred_basis(basis) =
-    error("deferred basis weights need a basis whose value at one node follows from the particle and the mesh alone, which $(nameof(typeof(basis))) is not: it derives its values from cell geometry. Build these weights without `deferred=true`.")
+    can_defer_basis(typeof(basis)) ? nothing :
+    error("basis values can only be deferred for a basis a transfer can evaluate on its own, which $(nameof(typeof(basis))) is not: it also derives cell geometry that the equations read back from storage.")
 
 # CartesianMesh
 _generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
@@ -754,7 +749,7 @@ function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray,
     # Deferring is a per-step choice: the values are still there, but transfers
     # are told to evaluate instead of read them until `deferred=false` refills them.
     if deferred
-        can_defer(weights) || error("update!: `deferred=true` needs a basis whose value at one node follows from the particle and the mesh alone, which $(nameof(typeof(basis(weights)))) is not.")
+        check_deferred_basis(basis(weights))
         return set_deferring!(weights, true)
     end
     set_deferring!(weights, false)

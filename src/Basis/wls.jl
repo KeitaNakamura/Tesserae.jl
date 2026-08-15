@@ -161,8 +161,6 @@ end
     (@_propagate_inbounds_meta; wls_deferred_jet(wls.kernel, wls.poly, state, pt, mesh, window, filter, ip))
 
 can_defer_basis(::Type{<: WLS}) = true
-check_deferred_basis(::WLS) = nothing
-needs_filter(::WLS) = true
 
 # The separable deferred form, mirroring `update_basis_values!` above: for
 # `MultiLinear` the fit decomposes into `dim` independent 1-D fits, so the
