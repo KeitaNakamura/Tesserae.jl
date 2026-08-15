@@ -386,16 +386,11 @@ end
 @inline _set_deferring!(r::Base.RefValue{Bool}, on::Bool) = (r[] = on)
 @inline _set_deferring!(::Nothing, ::Bool) = false
 
-"""
-    Tesserae.isdeferring(weights)
-
-Whether transfers will evaluate `weights`' basis values instead of reading the
-stored ones, as set for the step by `update!(..., deferred=true)`. Always true
-for weights that store nothing, where [`Tesserae.isdeferred`](@ref) is the same
-question asked of the storage.
-"""
-@inline isdeferring(weights::BasisWeightArray) = _deferring(getfield(weights, :deferring))
-@inline isdeferring(::AbstractArray{<: BasisWeight}) = false
+# Whether the values were never allocated, as opposed to allocated but currently
+# bypassed. Only `update!` needs to tell those apart: it refills the second and
+# has nothing to do for the first.
+@inline storageless(weights::BasisWeightArray) = any(isdeferred, values(getfield(weights, :vals)))
+@inline storageless(::AbstractArray{<: BasisWeight}) = false
 
 # Weights that carry no flag have nothing to switch: either they always defer or
 # they never can. `update!` rejects `deferred=true` on the latter before it gets
@@ -636,12 +631,12 @@ end
 """
     Tesserae.isdeferred(weights)
 
-Whether `weights` re-evaluates its basis values inside each transfer instead of
-storing them. True for arrays built with `generate_basis_weights(...; deferred=true)`,
-which have no storage at all; for stored weights switched over for the step with
-`update!(..., deferred=true)`, see [`Tesserae.isdeferring`](@ref).
+Whether transfers evaluate `weights`' basis values instead of reading stored
+ones. True both for weights built with `generate_basis_weights(...; deferred=true)`,
+which store nothing, and for stored weights switched over with
+`update!(..., deferred=true)`.
 """
-isdeferred(weights::BasisWeightArray) = any(isdeferred, values(getfield(weights, :vals)))
+isdeferred(weights::BasisWeightArray) = storageless(weights) || _deferring(getfield(weights, :deferring))
 
 # A deferred twin of stored weights: same basis, support nodes and element type,
 # but with the values evaluated in the transfer instead of read back. It shares
@@ -649,7 +644,7 @@ isdeferred(weights::BasisWeightArray) = any(isdeferred, values(getfield(weights,
 # one per transfer for free. Internal -- users choose with
 # `update!(...; deferred=true)`, and this is how that choice reaches the type.
 function as_deferred(weights::BasisWeightArray)
-    isdeferred(weights) && return weights
+    storageless(weights) && return weights
     b = basis(weights)
     check_deferred_basis(b)
     order = derivative_order(weights)
@@ -695,12 +690,12 @@ them. It is the per-step form of the same choice, and it errors on a basis that
 cannot defer rather than silently doing nothing.
 """
 function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh,
-                 filter::AbstractArray{Bool}=Trues(size(mesh)); deferred::Bool=isdeferred(weights))
+                 filter::AbstractArray{Bool}=Trues(size(mesh)); deferred::Bool=storageless(weights))
     # Lazy weights have nothing to fill: their basis values are evaluated inside
     # the transfer. Calling `update!` on them is allowed and does nothing, so a
     # simulation loop written for stored weights runs unchanged. Asking for the
     # opposite is an error, because there is no storage to materialize into.
-    if isdeferred(weights)
+    if storageless(weights)
         deferred || error("update!: these weights were built with `deferred=true` and have no storage for basis values, so they cannot be materialized. Build them without `deferred=true` to store the values.")
         return weights
     end

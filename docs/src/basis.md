@@ -38,72 +38,66 @@ supportnodes
 
 ## Deferred basis weights
 
-By default the basis values are computed by [`update!`](@ref) and stored, so each
-transfer reads them back. Passing `deferred=true` to [`generate_basis_weights`](@ref)
-allocates no storage for them and evaluates them inside each transfer instead:
+By default [`update!`](@ref) computes the basis values and stores them, and each
+transfer reads them back. Deferred weights store nothing and evaluate the values
+inside the transfer that needs them.
+
+Build them by passing `deferred=true` to [`generate_basis_weights`](@ref):
 
 ```julia
 weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(particles); deferred=true)
-update!(weights, particles, mesh)  # no-op, so an existing loop needs no change
 ```
 
-This trades arithmetic for memory traffic. Deferring pays the evaluation on every
-transfer, while storing pays it once per `update!` and amortizes it over the
-transfers that follow, so the comparison depends on how many transfers one
-`update!` serves:
+`update!` on such weights has nothing to fill and does nothing, so a loop written
+for stored weights runs unchanged.
 
-- **On the CPU, storing wins.** Deferring is already about 1.8x slower at one
-  transfer per `update!` and falls further behind as that count grows. Its value
-  on the CPU is memory: nothing is allocated for the values.
-- **On the GPU it depends on the basis.** For [`BSpline`](@ref) the recomputation
-  costs less than the memory traffic it replaces, so deferring is faster at every
-  transfer count. For [`uGIMP`](@ref), evaluation is dearer relative to its
-  footprint and deferring only wins below a few matvecs per `update!`.
-
-The memory saved is substantial for high-order bases in 3D: storing a cubic
-B-spline's values and gradients for a million particles takes about 1 GB, which
-deferring removes entirely.
-
-!!! warning "When the values are taken"
-    Stored values date from the last [`update!`](@ref); deferred values are
-    evaluated by the transfer that reads them, from the particle state as it
-    stands when that transfer begins. Within one transfer the two agree, and a
-    [`@G2P2G`](@ref) that writes `x[p]` between its halves still evaluates both
-    halves at the state it started from. Across transfers they can differ: if
-    particles move between two transfers and no `update!` runs in between,
-    stored weights keep the old positions while deferred weights follow the new
-    ones. Call `update!` after moving particles — which a loop written for
-    stored weights already does — and the two agree.
-
-A deferred basis must be able to produce one node's value from the particle and
-the mesh alone. [`BSpline`](@ref), [`SteffenBSpline`](@ref) and [`uGIMP`](@ref)
-qualify. [`WLS`](@ref) and [`KernelCorrection`](@ref) do not, because each node's
-value depends on a fit over the whole support, and they are rejected with an
-error at construction. The support window itself is always derived on the fly,
-so it is not stored either.
-
-### Choosing per step
-
-Whether deferring pays off can change from step to step: in an implicit solve a
-matrix-free stiffness application is a [`@G2P`](@ref)/[`@P2G`](@ref) pair, and
-how many of them a step issues follows the convergence of the linear solver.
-Stored weights can be told which way to go for the step ahead, and the transfers
-themselves need no change:
+Stored weights can also be switched over for a single step, which is useful when
+the number of transfers per `update!` varies — as in an implicit solve, where a
+matrix-free stiffness application is a [`@G2P`](@ref)/[`@P2G`](@ref) pair and the
+count follows the convergence of the linear solver:
 
 ```julia
-if nmatvecs < 6
-    update!(weights, particles, mesh; deferred=true)   # evaluate inside the transfers
-else
-    update!(weights, particles, mesh)                  # fill the values and read them
-end
+update!(weights, particles, mesh; deferred=true)   # evaluate inside the transfers
+update!(weights, particles, mesh)                  # fill the values and read them
 ```
 
-`deferred=true` leaves the stored values untouched and simply stops transfers
-from reading them, so a later `update!` without the keyword refills them and goes
-back to reading. It needs a basis that can defer; on anything else it is an error
-rather than a silent no-op.
+The keyword leaves the stored values in place and only stops transfers from
+reading them, so switching back costs a refill and nothing else. The transfers
+themselves are written the same way either way.
+
+### Which to use
+
+Deferring trades memory traffic for arithmetic: it saves the storage and the
+reads, and pays the evaluation again on every transfer, where storing pays it
+once per `update!` and amortizes it over the transfers that follow.
+
+Which wins depends on the backend, the basis and how many transfers one `update!`
+serves, so it is worth measuring. As a starting point, deferring tends to pay off
+on a GPU, where the values it recomputes can cost less than the memory traffic
+they replace, and to lose on a CPU, where reading is cheap. Its other benefit is
+independent of speed: high-order bases in 3D spend a large amount of memory on
+stored values and gradients, and deferring removes that entirely.
+
+### Requirements
+
+A basis can defer only if one node's value follows from the particle and the mesh
+alone. [`BSpline`](@ref), [`SteffenBSpline`](@ref) and [`uGIMP`](@ref) qualify.
+[`WLS`](@ref) and [`KernelCorrection`](@ref) do not, because each node's value
+comes from a fit over the whole support; asking for `deferred=true` on those is an
+error rather than a silent no-op. The support window is always derived on the fly,
+so it is not stored either.
+
+!!! warning "When the values are taken"
+    Stored values date from the last [`update!`](@ref). Deferred values are taken
+    from the particle state as it stands when a transfer begins, and a
+    [`@G2P2G`](@ref) that writes `x[p]` between its halves still evaluates both
+    halves at the state it started from.
+
+    The two therefore differ if particles move between transfers with no
+    `update!` in between: stored weights keep the old positions, deferred weights
+    follow the new ones. Calling `update!` after moving particles, as a loop
+    written for stored weights already does, keeps them in agreement.
 
 ```@docs
 Tesserae.isdeferred
-Tesserae.isdeferring
 ```

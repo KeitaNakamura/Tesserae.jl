@@ -551,7 +551,8 @@
             flagged = generate_basis_weights(basis, mesh, length(particles))
             update!(flagged, particles, mesh; deferred=true)
 
-            @test Tesserae.isdeferred(built)
+            @test Tesserae.isdeferred(built)     # stores nothing
+            @test Tesserae.isdeferred(flagged)   # stores values, told to evaluate
             @test !Tesserae.isdeferred(stored)
 
             reference = transfer(stored, particles)
