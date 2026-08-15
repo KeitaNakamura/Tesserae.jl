@@ -87,6 +87,81 @@ function fillzero!(x::StructArray)
     x
 end
 
+# The buffer a `fillzero!` would memset, or `nothing` when it would not reach
+# one: a byte range is the only thing that can be split across threads.
+memset_buffer(x) = nothing
+memset_buffer(x::Array{T}) where {T} = zeroed_by_memset(T) ? x : nothing
+
+# `nothing` unless every target has a buffer. Dispatch rather than a test over
+# the mapped tuple, so that falling back is a matter of which method is called
+# and not of the compiler folding an `any`.
+memset_buffers(targets::Tuple) = _memset_buffers(map(memset_buffer, targets))
+_memset_buffers(buffers::Tuple{Vararg{Array}}) = buffers
+_memset_buffers(::Tuple) = nothing
+
+# Chunk boundaries land on cache lines, so two workers never write the same
+# line and no memset begins partway into one.
+const FILLZERO_CHUNK_ALIGN = 64
+
+# Unrolled rather than a `foreach`, so that zeroing on one thread stays the run
+# of `fillzero!` calls that `@P2G` emitted inline before the fields were
+# handed over as a group.
+@inline fillzero_each!(::Tuple{}) = nothing
+@inline fillzero_each!(targets::Tuple) = (fillzero!(first(targets)); fillzero_each!(Base.tail(targets)))
+
+"""
+    fillzero_prologue(targets::Tuple)
+
+A `prologue` for `partitioned_foreach` that zeroes `targets`, or `nothing` when
+they cannot be zeroed that way and the caller has to do it itself.
+
+Zeroing is order-free, so the bytes can be handed out in any split at all. What
+makes the split worth having is where it runs: as the transfer's first phase it
+adds one barrier, whereas its own parallel loop would add a fork-join, and a
+fork-join is priced by the thread count rather than by the work.
+
+The targets are split as one concatenated byte range rather than one at a time,
+because a transfer's fields are not the same size -- a scalar mass beside two
+`Vec` fields -- and splitting each on its own would leave the workers holding
+uneven shares of the total.
+"""
+fillzero_prologue(::Tuple{}) = nothing
+fillzero_prologue(targets::Tuple) = _fillzero_prologue(memset_buffers(targets))
+
+_fillzero_prologue(::Nothing) = nothing
+function _fillzero_prologue(buffers::Tuple)
+    nbytes = sum(sizeof, buffers)
+    (nchunks, chunk_id) -> fillzero_chunk!(buffers, nbytes, nchunks, chunk_id)
+end
+
+# The chunk count is whatever the caller has workers for, which for a transfer
+# is set by its colour groups and can be well below `nthreads`. That is a
+# simplification and not a free one: measured on 32 MB with the pool already
+# spawned, a memset keeps improving out to 24 workers -- 1.3x at 4, 1.6x at 8,
+# 1.9x at 12, 2.9x at 16, 4.3x at 24 -- so it does not saturate at a handful the
+# way splitting by cache line might suggest. Spawning workers the regions could
+# never use would put them in every later barrier to buy that, which is the
+# trade this declines to make.
+function fillzero_chunk!(buffers::Tuple, nbytes::Int, nchunks::Int, chunk_id::Int)
+    chunksize = FILLZERO_CHUNK_ALIGN * cld(nbytes, FILLZERO_CHUNK_ALIGN * nchunks)
+    fillzero_byte_range!(buffers, chunk_range(chunk_id, chunksize, nbytes), 0)
+end
+
+# `range` indexes the buffers laid end to end, and `offset` counts the bytes
+# the buffers ahead of this one take up. A buffer the range misses entirely
+# gives an empty overlap and is skipped.
+@inline fillzero_byte_range!(::Tuple{}, range::UnitRange{Int}, offset::Int) = nothing
+@inline function fillzero_byte_range!(buffers::Tuple, range::UnitRange{Int}, offset::Int)
+    buffer = first(buffers)
+    nbytes = sizeof(buffer)
+    from = max(first(range) - offset, 1)
+    to = min(last(range) - offset, nbytes)
+    if from ≤ to
+        GC.@preserve buffer Libc.memset(Ptr{UInt8}(pointer(buffer)) + (from-1), 0, to-from+1)
+    end
+    fillzero_byte_range!(Base.tail(buffers), range, offset + nbytes)
+end
+
 const SparseMatrixCSCView{T, P <: SparseMatrixCSC} = SubArray{T, 2, P}
 
 function fillzero!(matrix::SparseMatrixCSCView)

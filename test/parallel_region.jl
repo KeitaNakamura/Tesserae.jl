@@ -16,6 +16,41 @@
         @test all(v -> v[] == 1, values(visits))
     end
 
+    # `@P2G` zeroes its grid fields in the prologue, so a path that skips it
+    # scatters into a grid still holding the previous step's values -- silently,
+    # and only on whichever path was missed. Every early return has to run it,
+    # the sequential ones included, since those are what a user hits with no
+    # `@threaded` at all.
+    @testset "the prologue runs on every path ($schedule)" for schedule in (:nothing, :static, :dynamic, :greedy)
+        empty_bs = Tesserae.BlockStrategy(mesh)
+        update!(empty_bs, Vec{2,Float64}[])
+        @test all(isempty, Tesserae.threadsafe_groups(empty_bs))
+
+        for (label, strat) in (("with regions", bs), ("no regions at all", empty_bs))
+            ran = Threads.Atomic{Int}(0)
+            covered = Threads.Atomic{Int}(0)
+            Tesserae.partitioned_foreach(strat, Val(schedule);
+                                         prologue = (nchunks, chunk_id) -> begin
+                                             Threads.atomic_add!(ran, 1)
+                                             chunk_id == 1 && Threads.atomic_add!(covered, nchunks)
+                                         end) do region
+                nothing
+            end
+            # One call per worker, and the workers between them see every chunk.
+            @test ran[] ≥ 1
+            @test ran[] == covered[]
+        end
+    end
+
+    # A prologue that throws has to fail the same way a region does, rather than
+    # leaving the workers parked on a barrier that never opens.
+    @testset "a failing prologue throws instead of hanging ($schedule)" for schedule in (:static, :dynamic, :greedy)
+        @test_throws "prologue failed" Tesserae.partitioned_foreach(bs, Val(schedule);
+                                                                    prologue = (_, _) -> error("prologue failed")) do region
+            nothing
+        end
+    end
+
     # A worker that throws must release the workers already waiting on the phase
     # barrier. If it does not, this hangs rather than fails.
     @testset "one failing region throws instead of hanging ($schedule)" for schedule in (:static, :dynamic, :greedy)

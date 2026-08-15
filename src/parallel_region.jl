@@ -190,8 +190,29 @@ function sequential_foreach(work::F, groups) where {F}
     nothing
 end
 
+# Work that has to finish before any region runs -- `@P2G` zeroing the grid
+# fields it assigns is the one caller -- goes in as the region's first phase
+# rather than as its own parallel loop before it.
+#
+# Its own loop would cost a whole fork-join, and a fork-join is priced by the
+# thread count rather than by the work: measured here, 11us at 8 threads, 20us
+# at 14, 40us at 16 and 180us at 24, the last unchanged whether the loop asks
+# for 2 chunks or 24. That is more than the zeroing itself at most grid sizes,
+# and it grows just as the machine gets wider.
+#
+# The workers below are already spawned and already separated by barriers, so a
+# prologue costs one more barrier instead. At 8 threads that measured 2-3us
+# against the fork-join's 11. Above 8 it could not be measured on this machine:
+# repeat attempts disagreed by more than 5x, and a 24-thread run perturbs itself
+# badly enough to move its own baseline 40%. The claim there rests on the shape
+# rather than a number -- a barrier over workers that are already running and
+# spinning cannot cost more than starting and joining them -- and on the
+# transfer being faster end to end at 16 threads, which is measurable.
+run_prologue(::Nothing, nworkers::Int, w::Int) = nothing
+run_prologue(prologue::P, nworkers::Int, w::Int) where {P} = (@inline prologue(nworkers, w); nothing)
+
 """
-    partitioned_foreach(work, strategy, Val(scheduler))
+    partitioned_foreach(work, strategy, Val(scheduler); prologue = nothing)
 
 Apply `work` to every region of every color group, running the regions of one
 group in parallel and the groups one after another.
@@ -201,34 +222,53 @@ group in parallel and the groups one after another.
 hands out single regions on demand, which balances better still but scatters
 each worker's grid writes and is several times slower for it. `:nothing`, or a
 single available thread, runs everything sequentially.
+
+`prologue`, when given, is called as `prologue(nworkers, w)` on every worker
+before the first region and is followed by a barrier, so whatever it does is
+complete everywhere before any region runs. It runs on the sequential paths
+too, as `prologue(1, 1)`.
 """
-partitioned_foreach(work::F, strat::PartitionStrategy, ::Val{scheduler}) where {F, scheduler} =
-    partitioned_foreach(work, strat, get_scheduler(Val(scheduler)))
+partitioned_foreach(work::F, strat::PartitionStrategy, ::Val{scheduler}; kwargs...) where {F, scheduler} =
+    partitioned_foreach(work, strat, get_scheduler(Val(scheduler)); kwargs...)
 
 # `work` is captured into the worker closure rather than called here, which is
 # the case Julia declines to specialize on without the type parameter.
-function partitioned_foreach(work::F, strat::PartitionStrategy, sched::Scheduler) where {F}
+function partitioned_foreach(work::F, strat::PartitionStrategy, sched::Scheduler; prologue::P=nothing) where {F, P}
     groups = threadsafe_groups(strat)
 
     if sched isa SequentialScheduler || Threads.nthreads() == 1
+        run_prologue(prologue, 1, 1)
         return sequential_foreach(work, groups)
     end
 
     # Empty groups would only add a barrier, and every worker drops the same
     # ones, so the phases stay in step.
     active = filter(!isempty, groups)
-    isempty(active) && return nothing
+    if isempty(active)
+        run_prologue(prologue, 1, 1)
+        return nothing
+    end
 
     # The thread count is taken as given; the only regions-based limit is not
     # spawning workers that could never take a region in any group.
     nworkers = min(Threads.nthreads(), maximum(length, active))
-    nworkers == 1 && return sequential_foreach(work, active)
+    if nworkers == 1
+        run_prologue(prologue, 1, 1)
+        return sequential_foreach(work, active)
+    end
 
-    nphases = length(active)
+    ngroups = length(active)
+    nphases = ngroups + (prologue === nothing ? 0 : 1)
     plans = [group_plan(sched, strat, group, nworkers) for group in active]
     spawn_region_workers(nworkers, nphases - 1) do w, barrier
         run_worker_phases(barrier, nphases) do k
-            @inbounds run_group(work, active[k], plans[k], w)
+            if prologue === nothing
+                @inbounds run_group(work, active[k], plans[k], w)
+            elseif k == 1
+                run_prologue(prologue, nworkers, w)
+            else
+                @inbounds run_group(work, active[k-1], plans[k-1], w)
+            end
         end
     end
     nothing

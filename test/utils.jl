@@ -136,3 +136,57 @@ end
     M = randbytes!(Matrix{Vec{2,Float64}}(undef, 5, 7))
     @test all(iszero, Tesserae.fillzero!(M))
 end
+
+@testset "fillzero_prologue" begin
+    randbytes!(A) = (GC.@preserve A rand!(unsafe_wrap(Array, Ptr{UInt8}(pointer(A)), sizeof(A))); A)
+
+    # The targets are split as one concatenated byte range, so the offset
+    # arithmetic has to leave no byte of any buffer behind -- whatever the
+    # buffer sizes, and however many chunks the bytes are cut into. Sizes that
+    # are not multiples of the alignment, and a buffer smaller than one chunk,
+    # are the cases where a split point can land badly.
+    for nbuffers in 1:4, nchunks in 1:9
+        buffers = ntuple(k -> fill!(Vector{UInt8}(undef, (37, 1024, 5, 64_000)[k]), 0xff), nbuffers)
+        nbytes = sum(sizeof, buffers)
+        for chunk_id in 1:nchunks
+            Tesserae.fillzero_chunk!(buffers, nbytes, nchunks, chunk_id)
+        end
+        @test all(buffer -> all(iszero, buffer), buffers)
+    end
+
+    # `memset_buffer` reaches a buffer only if `zeroed_by_memset` folds away at
+    # compile time. If it stopped folding, every target would look unreachable,
+    # every transfer would fall back to zeroing on one thread, and nothing would
+    # fail -- it would just be slower. Inference is what says otherwise.
+    @test @inferred(Tesserae.memset_buffers((zeros(3), zeros(Vec{2,Float64}, 3)))) isa
+        Tuple{Vector{Float64}, Vector{Vec{2,Float64}}}
+
+    # A prologue splits its targets over however many chunks it is handed, and
+    # every chunk count has to leave them all zero -- one worker included, which
+    # is what `partitioned_foreach`'s sequential paths call it with.
+    for nchunks in (1, 2, 4, 7)
+        a = randbytes!(Vector{Float64}(undef, 1000))
+        b = randbytes!(Vector{Vec{2,Float64}}(undef, 1000))
+        prologue = Tesserae.fillzero_prologue((a, b))
+        @test prologue !== nothing
+        for chunk_id in 1:nchunks
+            prologue(nchunks, chunk_id)
+        end
+        @test all(iszero, a)
+        @test all(iszero, b)
+    end
+
+    # No prologue when there is nothing to zero, and none when a target is one
+    # no memset can reach -- a strided view here. The caller zeroes those on its
+    # own thread instead, and must not touch what the view skips over.
+    @test Tesserae.fillzero_prologue(()) === nothing
+    backing = randbytes!(Vector{Float64}(undef, 100))
+    strided = view(backing, 1:2:100)
+    dense = randbytes!(Vector{Float64}(undef, 100))
+    @test Tesserae.memset_buffer(strided) === nothing
+    @test Tesserae.fillzero_prologue((dense, strided)) === nothing
+    Tesserae.fillzero_each!((dense, strided))
+    @test all(iszero, dense)
+    @test all(iszero, strided)
+    @test all(!iszero, view(backing, 2:2:100))
+end
