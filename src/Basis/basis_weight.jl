@@ -598,6 +598,45 @@ storing them. True for arrays built with `generate_basis_weights(...; lazy=true)
 is_lazy(weights::BasisWeightArray) = any(is_lazy_values, values(getfield(weights, :vals)))
 is_lazy(::AbstractArray{<: BasisWeight}) = false
 
+"""
+    Tesserae.deferred(weights)
+
+A deferred view of stored `weights`: the same basis, support nodes and element
+type, but with the basis values evaluated inside each transfer instead of read
+back. The view owns no storage of its own and shares everything with `weights`,
+so making one costs nothing and `weights` keeps its stored values.
+
+Use it to choose per step which side of the trade-off to pay, by passing either
+object to a transfer:
+
+```julia
+w = nmatvecs < 6 ? Tesserae.deferred(weights) : (update!(weights, particles, mesh); weights)
+@G2P grid=>i particles=>p w=>ip begin
+    ...
+end
+```
+
+Passing the deferred view does not need an [`update!`](@ref), because it has
+nothing to fill. Whether it is the faster choice depends on the basis and the
+backend; see the notes on deferred basis weights in the documentation.
+"""
+function deferred(weights::BasisWeightArray)
+    is_lazy(weights) && return weights
+    b = basis(weights)
+    check_lazy_basis(b)
+    order = derivative_order(weights)
+    njets = derivative_count(order)
+    stored = getfield(weights, :vals)
+    # Mirror `_generate_basis_weights`: the first `njets` properties are the
+    # basis value and its derivatives, which the transfer re-evaluates; anything
+    # after them is caller-owned storage and is shared as-is.
+    vals = NamedTuple{keys(stored)}(ntuple(Val(length(stored))) do k
+        v = stored[k]
+        k <= njets ? LazyBasisValues{eltype(v)}(size(v)) : v
+    end)
+    BasisWeightArray(b, vals, getfield(weights, :indices), order)
+end
+
 # See the note on `@Const` and nested containers in src/transfer.jl.
 @kernel function gpukernel_update_weight(weights, particles, mesh, filter)
     p = @index(Global)
@@ -635,15 +674,12 @@ function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray,
         lazy || error("update!: these weights were built with `lazy=true` and have no storage for basis values, so they cannot be materialized. Build them without `lazy=true` to store the values.")
         return weights
     end
-    # Turning stored weights deferred for a single step is deliberately not
-    # offered: whether deferring wins is fixed by the backend, not by the step.
-    # Deferred evaluation costs the same arithmetic on every transfer, while
-    # storing pays it once per `update!`, so on the CPU deferring already loses
-    # at one transfer per update (~1.8x) and loses further as transfers per
-    # update grow. On the GPU the arithmetic is cheaper than the memory traffic
-    # it replaces, so deferring wins on every transfer and there is nothing to
-    # switch back to. Either way the choice belongs at construction.
-    lazy && error("update!: `lazy=true` is only available on weights built with `generate_basis_weights(...; lazy=true)`. Deferred evaluation is chosen at construction because whether it pays off depends on the backend, not on the step.")
+    # `lazy=true` cannot be honoured in place: which basis values a transfer
+    # reads is resolved from the type of the weights it is handed, so deferring
+    # means handing it a different object. Flipping a flag here would leave the
+    # stored values in place and silently stale for any transfer that still read
+    # them, so the deferred view is explicit instead.
+    lazy && error("update!: `lazy=true` cannot be applied to stored weights in place. Use `Tesserae.deferred(weights)` to get a deferred view and pass that to the transfer, or build the weights with `generate_basis_weights(...; lazy=true)`.")
     n = length(particles)
     @assert length(weights) ≥ n
     @assert size(mesh) == size(filter)

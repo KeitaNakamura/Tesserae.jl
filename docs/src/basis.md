@@ -47,18 +47,22 @@ weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(particles); 
 update!(weights, particles, mesh)  # no-op, so an existing loop needs no change
 ```
 
-This trades arithmetic for memory traffic, and which side wins is a property of
-the backend rather than of the step, so the choice is made at construction and
-cannot be switched afterwards:
+This trades arithmetic for memory traffic. Deferring pays the evaluation on every
+transfer, while storing pays it once per `update!` and amortizes it over the
+transfers that follow, so the comparison depends on how many transfers one
+`update!` serves:
 
-- **On the GPU it is faster**, because the values it recomputes cost less than
-  the memory traffic of reading them back. Deferred weights are the better
-  default for GPU transfers.
-- **On the CPU it is slower** (roughly 1.8x even at one transfer per `update!`,
-  and worse as the number of transfers per update grows, since `update!`
-  amortizes the same work over all of them). Its value there is memory: nothing
-  is allocated for the values, which is a few hundred megabytes at a few million
-  particles.
+- **On the CPU, storing wins.** Deferring is already about 1.8x slower at one
+  transfer per `update!` and falls further behind as that count grows. Its value
+  on the CPU is memory: nothing is allocated for the values.
+- **On the GPU it depends on the basis.** For [`BSpline`](@ref) the recomputation
+  costs less than the memory traffic it replaces, so deferring is faster at every
+  transfer count. For [`uGIMP`](@ref), evaluation is dearer relative to its
+  footprint and deferring only wins below a few matvecs per `update!`.
+
+The memory saved is substantial for high-order bases in 3D: storing a cubic
+B-spline's values and gradients for a million particles takes about 1 GB, which
+deferring removes entirely.
 
 A deferred basis must be able to produce one node's value from the particle and
 the mesh alone. [`BSpline`](@ref), [`SteffenBSpline`](@ref) and [`uGIMP`](@ref)
@@ -67,6 +71,18 @@ value depends on a fit over the whole support, and they are rejected with an
 error at construction. The support window itself is always derived on the fly,
 so it is not stored either.
 
+### Choosing per step
+
+When the number of transfers per `update!` varies from step to step — as in an
+implicit solve, where a matrix-free stiffness application is a
+[`@G2P`](@ref)/[`@P2G`](@ref) pair and the count follows the convergence of the
+linear solver — neither choice is right for every step.
+[`Tesserae.deferred`](@ref) gives a deferred view of stored weights, so both are
+available at once and each step can pass whichever it wants. The view shares its
+support nodes with the stored weights and owns no storage, so making one is free
+and the stored values stay intact and reusable.
+
 ```@docs
+Tesserae.deferred
 Tesserae.is_lazy
 ```

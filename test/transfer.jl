@@ -520,4 +520,60 @@
             end
         end
     end
+
+    @testset "deferred basis weights" begin
+        mesh = CartesianMesh(0.02, (0,1), (0,1))
+        GridProp = @NamedTuple{x::Vec{2,Float64}, m::Float64, mv::Vec{2,Float64}}
+        ParticleProp = @NamedTuple{x::Vec{2,Float64}, l::Float64, m::Float64,
+                                   v::Vec{2,Float64}, ∇v::SecondOrderTensor{2,Float64,4}}
+        function transfer(weights, particles)
+            grid = generate_grid(GridProp, mesh)
+            @P2G grid=>i particles=>p weights=>ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+            end
+            @G2P grid=>i particles=>p weights=>ip begin
+                ∇v[p] = @∑ mv[i] ⊗ ∇w[ip]
+            end
+            (copy(grid.m), copy(grid.mv), copy(particles.∇v))
+        end
+        for basis in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), uGIMP())
+            particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
+            particles.m .= 1.0
+            particles.l .= 0.01
+            for p in eachindex(particles)
+                particles.v[p] = Vec(sin(3particles.x[p][1]), cos(2particles.x[p][2]))
+            end
+            stored = generate_basis_weights(basis, mesh, length(particles))
+            update!(stored, particles, mesh)
+            built = generate_basis_weights(basis, mesh, length(particles); lazy=true)
+            update!(built, particles, mesh) # no storage to fill, so this is a no-op
+            view = Tesserae.deferred(stored)
+
+            @test Tesserae.is_lazy(built)
+            @test Tesserae.is_lazy(view)
+            @test !Tesserae.is_lazy(stored)
+            @test Tesserae.deferred(view) === view
+
+            reference = transfer(stored, particles)
+            for weights in (built, view)
+                result = transfer(weights, particles)
+                @test result[1] ≈ reference[1]
+                @test result[2] ≈ reference[2]
+                @test result[3] ≈ reference[3]
+            end
+            # taking a deferred view must leave the stored values usable
+            @test transfer(stored, particles)[1] ≈ reference[1]
+
+            # `update!` may be told what it already is, but not the opposite
+            @test update!(built, particles, mesh; lazy=true) === built
+            @test_throws ErrorException update!(built, particles, mesh; lazy=false)
+            @test_throws ErrorException update!(stored, particles, mesh; lazy=true)
+        end
+        # a basis whose node values come from a fit over the whole support cannot defer
+        for basis in (WLS(BSpline(Quadratic())), KernelCorrection(BSpline(Quadratic())))
+            @test_throws ErrorException generate_basis_weights(basis, mesh, 4; lazy=true)
+            @test_throws ErrorException Tesserae.deferred(generate_basis_weights(basis, mesh, 4))
+        end
+    end
 end
