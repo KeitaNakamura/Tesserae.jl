@@ -422,6 +422,18 @@ end
 Base.@propagate_inbounds p2g_write_index(grid, i) = i
 Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
 Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) = p2g_write_index(grid, get_spinds(grid)[Tuple(i)...])
+# `@boundscheck` here means debug-mode only, not "always": the transfer macros
+# wrap their generated body in `@inbounds` outside `debug_mode`, and that
+# propagates into this callee and elides the check. Calling `update_sparsity!`
+# is the caller's obligation under that same `@inbounds` contract, and
+# `supportnodes(::BasisWeight, ::SpGrid)` and `add!`'s `@debug checkbounds`
+# already assert it on the debug path.
+#
+# Do not promote this to an unconditional check without re-measuring. Making it
+# fire in release costs 5-9% on a 3D sequential `SpGrid` transfer and 11.6%
+# threaded; accumulating a flag branchlessly and raising once per particle still
+# costs ~5%. The only measured way back to zero is to give `SpArray.data` a
+# leading scrap slot so an inactive node lands there instead of out of bounds.
 @inline function p2g_write_index(::SpGrid, i::SpIndex)
     si = storageindex(i)
     @boundscheck iszero(si) && error("@P2G: inactive SpGrid support node. Call update_sparsity! before @P2G.")
