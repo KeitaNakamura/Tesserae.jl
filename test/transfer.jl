@@ -516,6 +516,87 @@
         end)
     end
 
+    # The grid-node half only runs on all threads above P2G_NOSUM_MIN_THREADED_LENGTH,
+    # so the fixtures above never reach it. These grids do. Few particles keep it
+    # quick: that loop walks every node regardless of how many particles there are.
+    @testset "threaded grid-node half matches the sequential one (dense)" begin
+        Δt = 0.01
+        mesh = CartesianMesh(0.005, (0,1), (0,1))  # 201^2 = 40401 nodes
+        @test length(mesh) ≥ Tesserae.P2G_NOSUM_MIN_THREADED_LENGTH
+        GridProp = @NamedTuple begin
+            x::Vec{2,Float64}; m::Float64; m⁻¹::Float64; mv::Vec{2,Float64}; v::Vec{2,Float64}
+        end
+        grid = generate_grid(GridProp, mesh)
+        particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, grid.x)
+        filter!(pt -> all(c -> 0.1 < c < 0.15, pt.x), particles)
+        particles.m .= 1.0
+        for p in eachindex(particles); particles.v[p] = Vec(0.1, 0.2); end
+        weights = generate_basis_weights(BSpline(Quadratic()), grid.x, length(particles))
+        update!(weights, particles, grid.x)
+        partition = ThreadPartition(mesh)
+        update!(partition, particles.x)
+
+        run!(out, schedule) = schedule === :nothing ?
+            (@P2G out=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+                v[i] = mv[i] * m⁻¹[i]
+            end) :
+            (@threaded @P2G out=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+                v[i] = mv[i] * m⁻¹[i]
+            end)
+
+        reference = deepcopy(grid); run!(reference, :nothing)
+        threaded = deepcopy(grid); run!(threaded, :dynamic)
+        @test threaded.m == reference.m
+        @test threaded.m⁻¹ == reference.m⁻¹
+        @test threaded.v == reference.v
+    end
+
+    @testset "threaded grid-node half matches the sequential one (SpGrid)" begin
+        mesh = CartesianMesh(0.005, (0,1), (0,1))
+        GridProp = @NamedTuple begin
+            x::Vec{2,Float64}; m::Float64; m⁻¹::Float64; mv::Vec{2,Float64}; v::Vec{2,Float64}
+        end
+        grid = generate_grid(SpArray, GridProp, mesh)
+        particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, grid.x)
+        filter!(pt -> all(c -> 0.1 < c < 0.15, pt.x), particles)
+        particles.m .= 1.0
+        for p in eachindex(particles); particles.v[p] = Vec(0.1, 0.2); end
+        # Activate every block directly, so the node loop is large without
+        # needing the particles that would otherwise have to fill the mesh.
+        update_sparsity!(grid, trues(Tesserae.nblocks(mesh)))
+        weights = generate_basis_weights(BSpline(Quadratic()), grid.x, length(particles))
+        update!(weights, particles, grid.x)
+        partition = ThreadPartition(mesh)
+        update!(partition, particles.x)
+
+        run!(out, schedule) = schedule === :nothing ?
+            (@P2G out=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+                v[i] = mv[i] * m⁻¹[i]
+            end) :
+            (@threaded @P2G out=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+                v[i] = mv[i] * m⁻¹[i]
+            end)
+
+        reference = deepcopy(grid); run!(reference, :nothing)
+        threaded = deepcopy(grid); run!(threaded, :dynamic)
+        for name in (:m, :m⁻¹, :v)
+            @test Tesserae.get_data(getproperty(threaded, name)) ==
+                  Tesserae.get_data(getproperty(reference, name))
+        end
+    end
+
     @testset "threaded P2G requires updated Cartesian partition" begin
         grid, particles, weights = transfer_fixture()
         partition = ThreadPartition(grid.x)

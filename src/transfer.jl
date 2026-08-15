@@ -589,7 +589,7 @@ function P2G_nosum_blocks(f::F, grid, spinds, blks) where {F}
         blocknumber = numbering[b]
         iszero(blocknumber) && continue
         block = blocks[b]
-        for l in eachindex(localindices)
+        for l in 1:length(localindices)
             active, i = _active_spindex(spinds, blocknumber, block, l, localindices)
             active && @inline f(grid, i)
         end
