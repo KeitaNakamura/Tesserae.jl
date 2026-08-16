@@ -31,6 +31,25 @@
     end
 end
 
+@testset "_permute_component! gathers correctly at every size" begin
+    # Sizes either side of the chunk count, so the last chunk is short, exact,
+    # and empty in turn. Which of those a worker gets is a scheduling detail;
+    # none of them may change the result.
+    Random.seed!(1234)
+    nt = Threads.nthreads()
+    for T in (Float64, Vec{3,Float64})
+        for len in (1, 2, nt - 1, nt, nt + 1, 2nt, 2nt + 3, 1000)
+            len < 1 && continue
+            component = T[T <: Real ? T(k) : T(ntuple(i -> Float64(10k + i), 3)) for k in 1:len]
+            perm = randperm(len)
+            buffer = similar(component)
+            expected = component[perm]
+            Tesserae._permute_component!(component, perm, buffer)
+            @test component == expected
+        end
+    end
+end
+
 @testset "ThreadPartition" begin
     @testset "BlockStrategy" begin
         mesh = CartesianMesh(0.25, (0,4), (0,4))

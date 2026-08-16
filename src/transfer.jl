@@ -524,7 +524,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     end
 
     if !isempty(sum_equations)
-        zeroed, body = P2G_sum_expr(schedule, (grid,i), (particles,p), (weights,ip), sum_equations)
+        zeroed, body = P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
         if !DEBUG
             body = :(@inbounds $body)
         end
@@ -582,7 +582,7 @@ function p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations::Vec
        inner_symbols = p2g_cached_symbols(inner_replacements))
 end
 
-function P2G_sum_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), sum_equations::Vector,
+function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector,
                       binding::SupportWindowBinding=SupportWindowBinding(),
                       cols::Union{WeightColumnsBinding,Nothing}=nothing)
     @gensym gridwriteindex
@@ -614,9 +614,6 @@ function P2G_sum_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip)
         end
     end
 
-    # All the assigned fields as one tuple, handed to `P2G` rather than zeroed
-    # ahead of it: that lets the threaded path zero them inside the parallel
-    # region it already opens, instead of paying a fork-join of its own.
     Expr(:tuple, fillzero_targets...), body
 end
 
@@ -765,18 +762,15 @@ end
 Base.@propagate_inbounds p2g_write_index(grid, i) = i
 Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
 Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) = p2g_write_index(grid, get_spinds(grid)[Tuple(i)...])
-# `@boundscheck` here means debug-mode only, not "always": the transfer macros
-# wrap their generated body in `@inbounds` outside `debug_mode`, and that
-# propagates into this callee and elides the check. Calling `update_sparsity!`
-# is the caller's obligation under that same `@inbounds` contract, and
-# `supportnodes(::BasisWeight, ::SpGrid)` and `add!`'s `@debug checkbounds`
-# already assert it on the debug path.
+# `@boundscheck` means debug mode only here: the transfer macros wrap the
+# generated body in `@inbounds` outside `debug_mode`, which elides the check.
+# Calling `update_sparsity!` first is the caller's obligation.
 #
 # Do not promote this to an unconditional check without re-measuring. Making it
-# fire in release costs 5-9% on a 3D sequential `SpGrid` transfer and 11.6%
-# threaded; accumulating a flag branchlessly and raising once per particle still
-# costs ~5%. The only measured way back to zero is to give `SpArray.data` a
-# leading scrap slot so an inactive node lands there instead of out of bounds.
+# fire in release costs a noticeable fraction of an `SpGrid` transfer, and so
+# does accumulating a flag branchlessly to raise once per particle. The only
+# way back to zero cost is to give `SpArray.data` a leading scrap slot so an
+# inactive node lands there instead of out of bounds.
 @inline function p2g_write_index(::SpGrid, i::SpIndex)
     si = storageindex(i)
     @boundscheck iszero(si) && error("@P2G: inactive SpGrid support node. Call update_sparsity! before @P2G.")
@@ -958,41 +952,11 @@ end
 # The grid-only part of `@P2G`. Every equation here reads and writes only its
 # own node, which makes it the same walk `@foreach` runs over the same grid, so
 # it shares the CPU loops and the GPU kernels in foreach.jl.
-#
-# Below this many nodes the fork-join costs more than the walk it parallelises.
-# Only `@P2G` gets a threshold, because only here is the body known; foreach.jl
-# has the rest of that argument, and the cost of leaving `@foreach` without one.
-#
-# Measured at 8 threads against a 3D velocity update, and only as good as both.
-# The work per node is whatever the non-`@∑` equations touch -- `m⁻¹[i] =
-# inv(m[i])` moves 16 bytes, a 3D `v` update eight times that -- and a node count
-# cannot tell them apart. Gating on `count * bytes-per-node` could, since
-# `narrow_transfer_grid` has already cut the grid down to the referenced fields
-# by the time this runs, but that is a recalibration rather than a rearrangement
-# and wants its own measurements instead of a ride on these.
-const P2G_NOSUM_MIN_THREADED_LENGTH = 1 << 15
-
-function P2G_nosum(f::F, device::CPUDevice, schedule::Val, grid) where {F}
-    if p2g_nosum_node_count(grid) < P2G_NOSUM_MIN_THREADED_LENGTH
-        foreach_loop(f, device, Val(:nothing), grid)
-    else
-        foreach_loop(f, device, schedule, grid)
-    end
-end
-
-# The nodes the walk will visit: every slot of an active block on an `SpGrid`.
-# No count is stored, so that is a pass over the block numbering, cheap next to
-# the nodes it decides about, and one that `@foreach` never makes.
-p2g_nosum_node_count(grid) = length(grid)
-function p2g_nosum_node_count(grid::SpGrid)
-    spinds = get_spinds(grid)
-    count(!iszero, blocknumbering(spinds)) * blocklength(spinds)
-end
+P2G_nosum(f::F, device::CPUDevice, schedule::Val, grid) where {F} =
+    foreach_loop(f, device, schedule, grid)
 
 # The GPU path already parallelises, so it ignores the scheduler.
-P2G_nosum(f, device::GPUDevice, ::Val, grid) = P2G_nosum(f, device, grid)
-
-function P2G_nosum(f, device::GPUDevice, grid)
+function P2G_nosum(f, device::GPUDevice, ::Val, grid)
     backend = get_backend(device)
     if grid isa SpGrid
         spinds = get_spinds(grid)
@@ -1004,9 +968,6 @@ function P2G_nosum(f, device::GPUDevice, grid)
     end
 end
 
-# `macroname` is threaded through so every transfer macro reports its own name.
-# `@G2P` takes no partition and passes `nothing`, which skips the partition
-# checks exactly as before.
 function check_transfer_arguments(macroname, grid, particles, weights, partition)
     get_mesh(grid) isa AbstractMesh || error("$macroname: grid must have a mesh")
     eltype(weights) <: BasisWeight || error("$macroname: invalid `BasisWeight`s, got type $(typeof(weights))")
@@ -1332,7 +1293,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         # so this half must load it itself otherwise.
         p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
         p2g_cols = isempty(stages.g2p_sum) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
-        zeroed, expr = P2G_sum_expr(schedule, (grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
+        zeroed, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
         body = quote
             $body
             $expr

@@ -5,8 +5,6 @@ struct ParticleReorderBuffers
 end
 ParticleReorderBuffers() = ParticleReorderBuffers(Dict{DataType, Any}())
 
-const THREADED_COMPONENT_REORDER_MIN_LENGTH = 2^16
-
 function buffer_for_component!(buffers::ParticleReorderBuffers, component::T) where {T}
     buffer = get(buffers.by_component_type, T, nothing)
     if !(buffer isa T) || length(buffer) != length(component)
@@ -16,13 +14,9 @@ function buffer_for_component!(buffers::ParticleReorderBuffers, component::T) wh
     buffer::T
 end
 
-# Reusable buffers owned by BlockStrategy:
-#   * per-chunk block histograms
-#   * per-particle packed block ids and 1-based numbers within each chunk/block
-#   * particle reorder buffers for StructVector component arrays
 struct BlockUpdateWorkspace{dim}
-    chunk_counts::Vector{Array{Int, dim}}
-    packed_particle_blocks::Vector{UInt64}
+    chunk_counts::Vector{Array{Int, dim}}   # per-chunk block histogram
+    packed_particle_blocks::Vector{UInt64}  # block id and number within chunk/block
     particle_reorder_buffers::ParticleReorderBuffers
 end
 
@@ -100,10 +94,6 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
     chunksize = prepare_partition_update!(bs, nₚ)
     blocklin = LinearIndices(nblocks(bs))
 
-    # Particles are split into fixed chunks by index. For each chunk, count how
-    # many particles fall in each block, and remember each particle's block plus
-    # its 1-based number within that chunk/block. The scatter pass derives the
-    # chunk from the same index ranges, so no per-particle chunk id is needed.
     count_particles_by_block!(bs, xₚ, chunksize, blocklin)
 
     # Accumulate dense block histograms, then scan blocks in linear order to
@@ -114,7 +104,6 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
     # Assign active block ranges in P2G color-group order.
     assign_block_ranges!(bs)
 
-    # Scatter particle ids into the block-contiguous index array.
     scatter_particle_indices!(bs, nₚ, chunksize)
     bs
 end
@@ -158,17 +147,8 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
     bs
 end
 
-# This runs one pass over the whole block array per chunk, so it grows with the
-# thread count -- 70 us to 139 us going from 8 threads to 16 on a 2D 512^2
-# partition. Sweeping the blocks once and carrying each block's running total
-# through the chunks instead looks like the fix and measures worse: the
-# elementwise add below vectorizes over two contiguous arrays, while a per-block
-# sweep touches one element of every chunk's array in turn.
-#
-# Splitting that sweep across threads measured worse again, but that was against
-# a `tforeach` fork-join costing about as much as the whole phase; running it as
-# one more phase of the transfer's worker pool (src/parallel_region.jl) was not
-# tried and is not ruled out.
+# Accumulate chunk by chunk so each pass adds two contiguous arrays; a sweep
+# carrying one block's running total through the chunks is strided instead.
 function accumulate_chunk_counts!(bs::BlockStrategy)
     ws = bs.update_workspace
     nchunks = length(ws.chunk_counts)
@@ -216,11 +196,9 @@ function check_packed_block_number_limits!(bs::BlockStrategy, nₚ::Integer)
     nothing
 end
 
-# packed_particle_blocks[p] stores two values in one UInt64:
-#   upper 32 bits: linear block id
-#   lower 32 bits: 1-based number within that particle's chunk/block
-# The chunk id is not stored because count and scatter use the same fixed
-# particle index ranges.
+# packed_particle_blocks[p] holds the linear block id in the upper 32 bits and
+# the 1-based number within that particle's chunk/block in the lower 32. The
+# chunk id is not stored; count and scatter walk the same index ranges.
 @inline pack_block_number(block::Integer, number::Integer) =
     (UInt64(block) << PACKED_BLOCK_NUMBER_BITS) | UInt64(number)
 @inline packed_block(packed::UInt64) = Int(packed >> PACKED_BLOCK_NUMBER_BITS)
@@ -236,8 +214,6 @@ function scatter_particle_indices!(bs::BlockStrategy, nₚ::Integer, chunksize)
                 blk = packed_block(packed)
                 chunk_offset = isone(chunk_id) ? 0 : ws.chunk_counts[chunk_id - 1][blk]
                 number = chunk_offset + packed_number(packed)
-                # starts[blk] is the block's global range start; number is this
-                # particle's 1-based number inside that block after previous chunks.
                 bs.particleindices[bs.starts[blk] + number - 1] = p
             end
         end
@@ -291,8 +267,6 @@ function block_ordered_particle_contiguity(bs::BlockStrategy)
     n_assigned = nassigned(bs)
     n_assigned ≤ 1 && return 1.0
 
-    # After reorder, the block-ordered particle list is 1, 2, 3, ...
-    # This score drops as particles move across blocks and memory order diverges.
     consecutive = 0
     @inbounds for i in 2:n_assigned
         consecutive += bs.particleindices[i] == bs.particleindices[i-1] + 1
@@ -336,12 +310,8 @@ function _reorder_partition_particles!(particles::StructVector, bs::BlockStrateg
     particles
 end
 
-# One component at a time, because `buffer_for_component!` hands out one buffer
-# per element *type*: a particle set with two `Vec{3,Float64}` fields gets the
-# same buffer for both, so a component has to be gathered and copied back before
-# the next one starts. Batching the gathers of every component to share a
-# fork-join is therefore not available without a buffer per component, which
-# would double the scratch memory a reorder needs.
+# `buffer_for_component!` returns one buffer per element type, so components of
+# the same type share it; each must be copied back before the next is gathered.
 function _permute_particles!(particles::StructVector, perm, buffers::ParticleReorderBuffers)
     for component in StructArrays.components(particles)
         buffer = buffer_for_component!(buffers, component)
@@ -354,14 +324,6 @@ end
 # the same length as the component, so the gather loop can skip bounds checks.
 function _permute_component!(component, perm, buffer)
     n = length(component)
-    if Threads.nthreads() == 1 || n < THREADED_COMPONENT_REORDER_MIN_LENGTH
-        @inbounds for k in 1:n
-            buffer[k] = component[perm[k]]
-        end
-        copyto!(component, buffer)
-        return component
-    end
-
     nchunks = Threads.nthreads()
     chunksize = cld(n, nchunks)
     tforeach(1:nchunks) do chunk_id
@@ -370,9 +332,8 @@ function _permute_component!(component, perm, buffer)
             buffer[k] = component[perm[k]]
         end
     end
-    # The copy back moves as many bytes as the gather did and used to run on one
-    # thread, which left it about a third of the reordering time. It has to stay
-    # a separate pass: the gather still reads elements that copying would
+    # The copy back moves as many bytes as the gather did. It has to stay a
+    # separate pass: the gather still reads elements that copying would
     # overwrite.
     tforeach(1:nchunks) do chunk_id
         ks = chunk_range(chunk_id, chunksize, n)
@@ -388,8 +349,7 @@ function _reorder_particles!(particles::StructVector, particleindices::AbstractV
     (firstindex(particles) == 1 && lastindex(particles) == nₚ) || throw(ArgumentError("reorder_particles!: particles must be 1-based indexed (`Vector`-like)."))
     nₚ_assigned > nₚ && error("reorder_particles!: The block assignment contains more particle IDs than exist (assigned=$nₚ_assigned, total=$nₚ).")
 
-    # Common case: every particle is inside the mesh, so the flat block-ordered
-    # particleindices array is already the complete reorder permutation.
+    # With every particle assigned, particleindices is already the permutation.
     if nₚ_assigned == nₚ
         particle_order = view(particleindices, 1:nₚ)
         _permute_particles!(particles, particle_order, buffers)

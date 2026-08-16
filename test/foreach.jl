@@ -273,8 +273,8 @@
     end
 
     @testset "Threaded slice with a pinned trailing axis" begin
-        # The walk splits the trailing axis, so a slice that pins it has to fall
-        # back to an earlier one rather than leave every node to one worker.
+        # Whichever axis the split falls back to, the slice's nodes are each
+        # visited once and nothing outside it is touched.
         mesh = CartesianMesh(1.0, (0,8), (0,8), (0,8))
         grid = generate_grid(@NamedTuple{x::Vec{3,Float64}, n::Int}, mesh)
 
@@ -306,6 +306,14 @@
     end
 
     @testset "Index-space chunking" begin
+        # An axis too short for the workers steps back to an earlier one. The
+        # tiling loop below cannot see this: it skips whatever splits into one
+        # chunk, which is exactly what dropping the fallback would produce here.
+        @test Tesserae.foreach_split(CartesianIndices((7,5,1)), 4) == (2, 4)
+        @test Tesserae.foreach_split(CartesianIndices((6,1,1)), 3) == (1, 3)
+        # It steps back no further than the first axis, however short that is.
+        @test Tesserae.foreach_split(CartesianIndices((2,1,1)), 8) == (1, 2)
+
         # Whatever axis is split, the chunks handed to the workers must tile the
         # index space exactly: every index once, none of them twice.
         spaces = (Base.OneTo(10), Base.OneTo(1), Base.OneTo(0),
@@ -331,32 +339,27 @@
         end
     end
 
-    @testset "Threading threshold" begin
-        # `@P2G` runs the same walk sequentially below a node count and chunked
-        # above it. Both sides have to visit the same nodes, and the threshold
-        # is the only part of the walk that `@foreach` alone never exercises.
+    @testset "Sequential and chunked walks visit the same nodes" begin
+        # The scheduler picks how the walk is split, never which nodes it covers.
         mesh = CartesianMesh(1.0, (0,16), (0,16))
         GridProp = @NamedTuple{x::Vec{2,Float64}, n::Int}
 
         spgrid = generate_grid(SpArray, GridProp, mesh)
         update_sparsity!(spgrid, [Vec(1.0,1.0), Vec(15.0,15.0)])
         spinds = Tesserae.get_spinds(spgrid)
-        nactive_blocks = count(!iszero, Tesserae.blocknumbering(spinds))
-        @test Tesserae.p2g_nosum_node_count(spgrid) == nactive_blocks * Tesserae.blocklength(spinds)
 
         dense = generate_grid(GridProp, mesh)
-        @test Tesserae.p2g_nosum_node_count(dense) == length(dense)
         for (grid, nvisited) in (dense => length(dense),
                                  spgrid => length(collect(Tesserae.activeindices(spinds))))
-            below, above = map((Val(:nothing), Val(:dynamic))) do schedule
+            sequential, chunked = map((Val(:nothing), Val(:dynamic))) do schedule
                 fillzero!(grid.n)
                 Tesserae.foreach_loop(Tesserae.CPUDevice(), schedule, grid) do g, i
                     g.n[i] += 1
                 end
                 collect(grid.n)
             end
-            @test below == above
-            @test count(isone, below) == nvisited
+            @test sequential == chunked
+            @test count(isone, sequential) == nvisited
         end
     end
 

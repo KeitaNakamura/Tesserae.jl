@@ -455,7 +455,6 @@
     end
 
     @testset "every scheduler matches the sequential partitioned transfer" begin
-        Δt = 0.01
         grid, particles, weights = transfer_fixture()
         partition = ThreadPartition(grid.x)
         update!(partition, particles.x)
@@ -609,13 +608,12 @@
         end)
     end
 
-    # The grid-node half only runs on all threads above P2G_NOSUM_MIN_THREADED_LENGTH,
-    # so the fixtures above never reach it. These grids do. Few particles keep it
-    # quick: that loop walks every node regardless of how many particles there are.
+    # A grid big enough to be split across every worker, so the chunk boundaries
+    # are exercised rather than a single worker taking the lot. Few particles
+    # keep it quick: that loop walks every node regardless of how many particles
+    # there are.
     @testset "threaded grid-node half matches the sequential one (dense)" begin
-        Δt = 0.01
         mesh = CartesianMesh(0.005, (0,1), (0,1))  # 201^2 = 40401 nodes
-        @test length(mesh) ≥ Tesserae.P2G_NOSUM_MIN_THREADED_LENGTH
         GridProp = @NamedTuple begin
             x::Vec{2,Float64}; m::Float64; m⁻¹::Float64; mv::Vec{2,Float64}; v::Vec{2,Float64}
         end
@@ -660,7 +658,7 @@
         filter!(pt -> all(c -> 0.1 < c < 0.15, pt.x), particles)
         particles.m .= 1.0
         for p in eachindex(particles); particles.v[p] = Vec(0.1, 0.2); end
-        # Activate every block directly, so the node loop is large without
+        # Activate every block directly, so the walk has nodes to visit without
         # needing the particles that would otherwise have to fill the mesh.
         update_sparsity!(grid, trues(Tesserae.nblocks(mesh)))
         weights = generate_basis_weights(BSpline(Quadratic()), grid.x, length(particles))
