@@ -708,6 +708,20 @@
         end
     end
 
+    @testset "@P2G with no @∑ equations" begin
+        mesh = CartesianMesh(0.25, (0,1), (0,1))
+        grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)
+        particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
+        weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))
+        update!(weights, particles, mesh)
+        fill!(grid.m, 2.0)
+
+        @P2G grid=>i particles=>p weights=>ip begin
+            v[i] = Vec(m[i], 0.0)
+        end
+        @test all(==(Vec(2.0, 0.0)), grid.v)
+    end
+
     @testset "threaded P2G requires updated Cartesian partition" begin
         grid, particles, weights = transfer_fixture()
         partition = ThreadPartition(grid.x)
