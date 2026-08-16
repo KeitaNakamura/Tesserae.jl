@@ -544,22 +544,31 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
                                  ($(tile_args...), $grid, $particles, $weights, $p) -> $tile_body,
                                  $names_val))
         end
+        # The node body is bound before the `do w` block, not inside it: `w` is
+        # that block's parameter and would shadow a user variable of the same
+        # name that a non-`@∑` equation reads.
+        args = [bodies, :(Tesserae.get_device($grid)), :(Val($schedule)),
+                narrowed_grid_expr(grid, sum_equations, i), particles, :w, partition, zeroed]
+        bind = nothing
+        if !isempty(nosum_equations)
+            @gensym nodebody nodegrid
+            bind = nosum_binding_expr(nodebody, nodegrid, grid, i, nosum_equations)
+            append!(args, (nodebody, nodegrid))
+        end
+        call = isempty(nosum_equations) ? :(Tesserae.P2G($(args...))) : :(Tesserae.P2G_halves($(args...)))
         code = quote
             $code
+            $bind
             Tesserae.select_weights($weights) do w
-                Tesserae.P2G($bodies, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, sum_equations, i)), $particles, w, $partition, $zeroed)
+                $call
             end
         end
-    end
-
-    if !isempty(nosum_equations)
-        body = P2G_nosum_expr((grid,i), nosum_equations)
-        if !DEBUG
-            body = :(@inbounds $body)
-        end
+    elseif !isempty(nosum_equations)
+        @gensym nodebody nodegrid
         code = quote
             $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, nosum_equations, i)))
+            $(nosum_binding_expr(nodebody, nodegrid, grid, i, nosum_equations))
+            Tesserae.P2G_nosum($nodebody, Tesserae.get_device($grid), Val($schedule), $nodegrid)
         end
     end
 
@@ -806,17 +815,44 @@ function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothi
 end
 
 # CPU: multi-threading
-function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=()) where {scheduler}
+function P2G(f, device::CPUDevice, schedule::Val, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=())
+    p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, nothing)
+end
+
+# `epilogue` is how `@P2G`'s grid-node half rides this region instead of forking
+# one of its own; see `P2G_halves`.
+function p2g_region(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights,
+                    partition::ThreadPartition, zeroed::Tuple, epilogue::E) where {scheduler, E}
     # `partitioned_foreach` runs the prologue on its sequential paths too, so
     # the only case left here is targets no memset can reach.
     prologue = fillzero_prologue(zeroed)
     prologue === nothing && fillzero_each!(zeroed)
-    partitioned_foreach(strategy(partition), Val(scheduler); prologue) do region
+    partitioned_foreach(strategy(partition), Val(scheduler); prologue, epilogue) do region
         for p in particle_indices(partition, particles, region)
             @inline f(grid, particles, weights, p)
         end
     end
 end
+
+# Only the threaded CPU path fuses the two halves. Keeping the rest as separate
+# calls is what makes the GPU tile fallback safe: the node half is discharged
+# here, not inside a method that may return early.
+function P2G_halves(f, device, schedule, grid, particles, weights, partition, zeroed,
+                    nodebody::N, nodegrid) where {N}
+    P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
+    P2G_nosum(nodebody, device, schedule, nodegrid)
+end
+
+function P2G_halves(f, device::CPUDevice, schedule::Val, grid, particles, weights,
+                    partition::ThreadPartition, zeroed::Tuple, nodebody::N, nodegrid) where {N}
+    epilogue = (nworkers, w) -> foreach_worker_loop(nodebody, device, nodegrid, nworkers, w)
+    p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, epilogue)
+end
+
+# Only the block-scheduled GPU path uses the tile body.
+P2G_halves(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights,
+           partition::ThreadPartition, zeroed::Tuple, nodebody, nodegrid) =
+    P2G_halves(bodies.particle, device, schedule, grid, particles, weights, partition, zeroed, nodebody, nodegrid)
 
 # GPU. One particle per thread with the body handed in: `@P2G`, `@G2P` and
 # `@G2P2G` all walk the same four arguments, so one kernel serves all three.
@@ -936,6 +972,16 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
            bs.particleindices, bs.offsets, bs.blocklist,
            Tt, names, Val(side), Val(tilelen), Val(total), Val(BW), Val(halo), nblocks(bs);
            ndrange=P2G_BLOCK_GROUPSIZE * nactive(bs))
+end
+
+# Shared so the fused and separate routes hand on the same pair.
+function nosum_binding_expr(nodebody, nodegrid, grid, i, nosum_equations::Vector)
+    body = P2G_nosum_expr((grid,i), nosum_equations)
+    DEBUG || (body = :(@inbounds $body))
+    quote
+        local $nodebody = ($grid, $i) -> $body
+        local $nodegrid = $(narrowed_grid_expr(grid, nosum_equations, i))
+    end
 end
 
 function P2G_nosum_expr((grid,i), nosum_equations::Vector)

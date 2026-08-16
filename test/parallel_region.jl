@@ -42,6 +42,35 @@
         end
     end
 
+    # The epilogue carries `@P2G`'s grid-node half, which reads what the regions
+    # wrote. Missing it on one path leaves those equations unevaluated; running
+    # it early reads half-scattered values. Both are silent.
+    @testset "the epilogue runs on every path, after every region ($schedule)" for schedule in (:nothing, :static, :dynamic, :greedy)
+        empty_bs = Tesserae.BlockStrategy(mesh)
+        update!(empty_bs, Vec{2,Float64}[])
+
+        for (label, strat) in (("with regions", bs), ("no regions at all", empty_bs))
+            ran = Threads.Atomic{Int}(0)
+            covered = Threads.Atomic{Int}(0)
+            regions = Threads.Atomic{Int}(0)
+            seen = Threads.Atomic{Int}(0)
+            Tesserae.partitioned_foreach(strat, Val(schedule);
+                                         epilogue = (nchunks, chunk_id) -> begin
+                                             Threads.atomic_add!(ran, 1)
+                                             chunk_id == 1 && Threads.atomic_add!(covered, nchunks)
+                                             Threads.atomic_add!(seen, regions[])
+                                         end) do region
+                Threads.atomic_add!(regions, 1)
+            end
+            nregions = sum(length, Tesserae.threadsafe_groups(strat))
+            @test ran[] ≥ 1
+            @test ran[] == covered[]
+            @test regions[] == nregions
+            # Every worker saw the full region count, so the barrier held.
+            @test seen[] == ran[] * nregions
+        end
+    end
+
     # A prologue that throws has to fail the same way a region does, rather than
     # leaving the workers parked on a barrier that never opens.
     @testset "a failing prologue throws instead of hanging ($schedule)" for schedule in (:static, :dynamic, :greedy)

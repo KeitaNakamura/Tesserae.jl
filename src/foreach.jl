@@ -179,6 +179,41 @@ function foreach_subspace_loop(g::G, inds) where {G}
     end
 end
 
+# `nchunks < 2` must not short-circuit to the whole space the way `cpu_foreach`
+# does: there one task does everything, here every worker calls in, so the space
+# would be walked `nworkers` times.
+function foreach_worker(g::G, inds, nworkers::Int, w::Int) where {G}
+    d, nchunks = foreach_split(inds, nworkers)
+    iszero(nchunks) && return nothing
+    n = size(inds, d)
+    r = chunk_range(w, cld(n, nchunks), n)
+    isempty(r) || foreach_subspace_loop(g, foreach_subspace(inds, d, r))
+    nothing
+end
+
+function foreach_worker_blocks(g::G, spinds::SpIndices, nworkers::Int, w::Int) where {G}
+    nblks = length(blocknumbering(spinds))
+    nchunks = min(nworkers, nblks)
+    iszero(nchunks) && return nothing
+    foreach_blocks_loop(g, spinds, chunk_range(w, cld(nblks, nchunks), nblks))
+    nothing
+end
+
+# Takes `spinds`, never the partition: a partition's groups hold only blocks
+# carrying particles, while `update_sparsity!` also activates their neighbours,
+# and those nodes need their equations run too.
+function foreach_worker_loop(f::F, ::CPUDevice, collection, nworkers::Int, w::Int) where {F}
+    foreach_worker(eachindex(collection), nworkers, w) do i
+        @inline f(collection, i)
+    end
+end
+
+function foreach_worker_loop(f::F, ::CPUDevice, collection::SpGrid, nworkers::Int, w::Int) where {F}
+    foreach_worker_blocks(get_spinds(collection), nworkers, w) do i
+        @inline f(collection, i)
+    end
+end
+
 # Split along the trailing axis, which keeps each chunk's nodes closest together
 # in memory, and fall back to an earlier one only when it is too short to give
 # every worker a piece: a slice can pin trailing axes to a single index.

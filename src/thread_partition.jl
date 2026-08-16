@@ -322,24 +322,17 @@ end
 
 # _reorder_particles! passes a full-length valid permutation; the buffer has
 # the same length as the component, so the gather loop can skip bounds checks.
+# Sequential on purpose: threading costs two fork-joins per component and
+# measured slower across every size tried.
+#
+# The copy back has to stay a separate pass: the gather still reads elements
+# that copying would overwrite.
 function _permute_component!(component, perm, buffer)
     n = length(component)
-    nchunks = Threads.nthreads()
-    chunksize = cld(n, nchunks)
-    tforeach(1:nchunks) do chunk_id
-        ks = chunk_range(chunk_id, chunksize, n)
-        @inbounds for k in ks
-            buffer[k] = component[perm[k]]
-        end
+    @inbounds for k in 1:n
+        buffer[k] = component[perm[k]]
     end
-    # The copy back moves as many bytes as the gather did. It has to stay a
-    # separate pass: the gather still reads elements that copying would
-    # overwrite.
-    tforeach(1:nchunks) do chunk_id
-        ks = chunk_range(chunk_id, chunksize, n)
-        @inbounds copyto!(component, first(ks), buffer, first(ks), length(ks))
-    end
-
+    copyto!(component, buffer)
     component
 end
 
