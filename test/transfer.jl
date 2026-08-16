@@ -642,10 +642,19 @@
             end)
 
         reference = deepcopy(grid); run!(reference, :nothing)
-        threaded = deepcopy(grid); run!(threaded, :dynamic)
-        @test threaded.m == reference.m
-        @test threaded.m⁻¹ == reference.m⁻¹
-        @test threaded.v == reference.v
+        # Comparing the two runs cannot tell that the node half ran at all: drop
+        # it on both and `m⁻¹` and `v` stay zero on both sides and agree.
+        @test any(!iszero, reference.m⁻¹)
+        @test any(!iszero, reference.v)
+        nz = findall(!iszero, reference.m)
+        @test all(k -> reference.m⁻¹[k] == inv(reference.m[k]), nz)
+
+        for schedule in (:static, :dynamic, :greedy)
+            threaded = deepcopy(grid); run!(threaded, schedule)
+            @test threaded.m == reference.m
+            @test threaded.m⁻¹ == reference.m⁻¹
+            @test threaded.v == reference.v
+        end
     end
 
     @testset "threaded grid-node half matches the sequential one (SpGrid)" begin
@@ -681,10 +690,21 @@
             end)
 
         reference = deepcopy(grid); run!(reference, :nothing)
-        threaded = deepcopy(grid); run!(threaded, :dynamic)
-        for name in (:m, :m⁻¹, :v)
-            @test Tesserae.get_data(getproperty(threaded, name)) ==
-                  Tesserae.get_data(getproperty(reference, name))
+        # The blocks the partition holds are only those carrying particles,
+        # while `update_sparsity!` also activated their neighbours. Splitting the
+        # node walk over the partition instead of over `spinds` would skip those
+        # halo nodes, and comparing two runs that both skip them would not show
+        # it, so assert the count directly.
+        active = Tesserae.get_data(reference.m⁻¹)
+        @test count(!iszero, active) > sum(length, Tesserae.threadsafe_groups(Tesserae.strategy(partition)))
+        @test any(!iszero, Tesserae.get_data(reference.v))
+
+        for schedule in (:static, :dynamic, :greedy)
+            threaded = deepcopy(grid); run!(threaded, schedule)
+            for name in (:m, :m⁻¹, :v)
+                @test Tesserae.get_data(getproperty(threaded, name)) ==
+                      Tesserae.get_data(getproperty(reference, name))
+            end
         end
     end
 
