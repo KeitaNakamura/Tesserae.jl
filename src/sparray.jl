@@ -48,17 +48,24 @@ function ParticleBlockTracker(blocknumbering::AbstractArray)
 end
 
 # Owned by `SpIndices`, so particle-driven sparsity updates reuse storage
-# instead of allocating block-sized temporaries every step.
-struct BlockSparsityWorkspace{O <: AbstractArray{Bool}, A <: AbstractArray{Bool}, T <: ParticleBlockTracker}
-    occupied::O  # blocks containing particles
-    active::A    # blocks allocated for basis support
-    tracker::T   # particle block ids and per-block particle counts
+# instead of allocating block-sized temporaries every step. The two 1-element
+# readback buffers live here for the same reason: on GPU a fresh device
+# allocation per step can itself stall the stream.
+struct BlockSparsityWorkspace{O <: AbstractArray{Bool}, A <: AbstractArray{Bool}, T <: ParticleBlockTracker,
+                              C <: AbstractVector{Int}, G <: AbstractVector{Int32}}
+    occupied::O      # blocks containing particles
+    active::A        # blocks allocated for basis support
+    tracker::T       # particle block ids and per-block particle counts
+    active_count::C  # readback of the active block count after renumbering
+    changed::G       # readback of the occupied-set change flag
 end
 
 function BlockSparsityWorkspace(blocknumbering::AbstractArray)
     occupied = fillzero!(similar(blocknumbering, Bool))
     active = fillzero!(similar(blocknumbering, Bool))
-    BlockSparsityWorkspace(occupied, active, ParticleBlockTracker(blocknumbering))
+    active_count = similar(vec(blocknumbering), Int, 1)
+    changed = fillzero!(similar(vec(blocknumbering), Int32, 1))
+    BlockSparsityWorkspace(occupied, active, ParticleBlockTracker(blocknumbering), active_count, changed)
 end
 
 # Block sparsity is stored as a dense array over block coordinates.
@@ -266,7 +273,7 @@ end
 
 function _number_blocks!(sp::SpIndices, activity, backend::GPU)
     block_numbers = blocknumbering(sp)
-    active_count_buffer = similar(vec(block_numbers), eltype(block_numbers), 1)
+    active_count_buffer = sparsity_workspace(sp).active_count
 
     # Build compact block numbers with an inclusive scan:
     # activity -> 0/1 markers -> prefix sum -> inactive blocks reset to 0.
@@ -371,7 +378,7 @@ function _update_particle_block_tracker!(spinds::SpIndices, xₚ, mesh, backend:
     tracker = sparsity_tracker(spinds)
     # Only the occupied set decides whether expansion and numbering are needed;
     # individual particle moves are an intermediate detail.
-    changed = fillzero!(similar(vec(blocknumbering(spinds)), Int32, 1))
+    changed = fillzero!(sparsity_workspace(spinds).changed)
 
     update_kernel = gpukernel_update_particle_block_tracker!(backend)
     update_kernel(tracker.blockids, tracker.counts, xₚ, mesh; ndrange=length(xₚ))
@@ -443,7 +450,17 @@ function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, part
         end
     end
 
+    # Reuse numbering when the active block set is unchanged, mirroring the
+    # particle-positions path: most steps move no block in or out of the set.
+    _block_activity_unchanged(blocknumbering(spinds), activity) && return nothing
     _apply_block_activity!(spinds, activity)
+end
+
+function _block_activity_unchanged(numbers, activity)
+    @inbounds for i in eachindex(numbers, activity)
+        iszero(numbers[i]) == iszero(activity[i]) || return false
+    end
+    true
 end
 
 # ---- SpArray ----
@@ -457,7 +474,7 @@ For example, trying to `setindex!` doesn't change anything without any errors as
 
 ```jldoctest sparray
 julia> A = SpArray{Float64}(undef, 5, 5)
-5×5 SpArray{Float64, 2, Vector{Float64}, Tesserae.SpIndices{2, 2, Matrix{Int64}, Tesserae.BlockSparsityWorkspace{Matrix{Bool}, Matrix{Bool}, Tesserae.ParticleBlockTracker{Vector{Int64}, Matrix{Int32}}}}}:
+5×5 SpArray{Float64, 2, Vector{Float64}, Tesserae.SpIndices{2, 2, Matrix{Int64}, Tesserae.BlockSparsityWorkspace{Matrix{Bool}, Matrix{Bool}, Tesserae.ParticleBlockTracker{Vector{Int64}, Matrix{Int32}}, Vector{Int64}, Vector{Int32}}}}:
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
  ⋅  ⋅  ⋅  ⋅  ⋅
@@ -493,7 +510,7 @@ julia> A[1,1] = 2
 2
 
 julia> A
-5×5 SpArray{Float64, 2, Vector{Float64}, Tesserae.SpIndices{2, 2, Matrix{Int64}, Tesserae.BlockSparsityWorkspace{Matrix{Bool}, Matrix{Bool}, Tesserae.ParticleBlockTracker{Vector{Int64}, Matrix{Int32}}}}}:
+5×5 SpArray{Float64, 2, Vector{Float64}, Tesserae.SpIndices{2, 2, Matrix{Int64}, Tesserae.BlockSparsityWorkspace{Matrix{Bool}, Matrix{Bool}, Tesserae.ParticleBlockTracker{Vector{Int64}, Matrix{Int32}}, Vector{Int64}, Vector{Int32}}}}:
  2.0  0.0  0.0  0.0  0.0
  0.0  0.0  0.0  0.0  0.0
  0.0  0.0  0.0  0.0  0.0
@@ -575,6 +592,7 @@ fillzero!(A::SpArray) = (fillzero!(A.data); A)
 # Only the active nodes are stored, and they are stored contiguously, so an
 # `SpArray` splits across threads exactly as the dense array behind it does.
 memset_buffer(A::SpArray) = memset_buffer(get_data(A))
+zero_buffer(A::SpArray) = get_data(A)
 
 function update_sparsity!(A::SpArray, blkspy)
     A.shared_spinds && error("""
@@ -582,6 +600,7 @@ function update_sparsity!(A::SpArray, blkspy)
     Perhaps you should use `update_sparsity!(grid, blkspy)` instead of applying it to each `SpArray`.
     """)
     n = update_sparsity!(get_spinds(A), blkspy)
+    n === nothing && (fillzero!(A); return nothing)
     resize_fillzero_data!(A, n)
     n
 end

@@ -20,6 +20,15 @@ function buffer_for_component!(buffers::ParticleReorderBuffers, component::T) wh
     buffer::T
 end
 
+# Owned by the strategy, so every `partitioned_foreach` entry reuses the same
+# group filter and per-group plans instead of allocating them per transfer.
+struct RegionScratch{G}
+    active::Vector{G}
+    bounds::Vector{Vector{Int}}
+    cursors::Vector{Threads.Atomic{Int}}
+end
+RegionScratch{G}() where {G} = RegionScratch{G}(G[], Vector{Int}[], Threads.Atomic{Int}[])
+
 struct BlockUpdateWorkspace{dim}
     chunk_counts::Vector{Array{Int, dim}}   # per-chunk block histogram
     packed_particle_blocks::Vector{UInt64}  # block id and number within chunk/block
@@ -50,6 +59,7 @@ struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: PartitionStrategy
     blockcolors::Array{Int, dim}
     update_workspace::BlockUpdateWorkspace{dim}
     matrix_buffer_pool::BlockMatrixBufferPool
+    region_scratch::RegionScratch{Vector{CartesianIndex{dim}}}
 end
 
 function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
@@ -72,6 +82,7 @@ function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
         blockcolors,
         BlockUpdateWorkspace(blkdims),
         BlockMatrixBufferPool(),
+        RegionScratch{Vector{CartesianIndex{dim}}}(),
     )
 end
 
@@ -115,7 +126,6 @@ function prepare_partition_update!(bs::BlockStrategy, nₚ::Integer)
     resize!(bs.particleindices, nₚ)
     resize!(ws.packed_particle_blocks, nₚ)
     check_packed_block_number_limits!(bs, nₚ)
-    foreach(fillzero!, ws.chunk_counts)
     fillzero!(bs.starts)
     fillzero!(bs.stops)
 
@@ -132,7 +142,9 @@ function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
     block_size = Val(block_size_log2(bs))
 
     @threaded for chunk_id in eachindex(ws.chunk_counts)
-        counts = ws.chunk_counts[chunk_id]
+        # Zeroed by the worker that owns the histogram: doing it serially before
+        # this loop is O(nthreads x nblocks) work that grows with `-t`.
+        counts = fillzero!(ws.chunk_counts[chunk_id])
 
         @inbounds for p in chunk_range(chunk_id, chunksize, nₚ)
             blk = sub2ind(blocklin, _findblock(xₚ[p], xmin, h_inv, dims, block_size))
@@ -596,6 +608,7 @@ end
 
 struct CellStrategy <: PartitionStrategy
     threadsafe_groups::Vector{Vector{Int}}
+    region_scratch::RegionScratch{Vector{Int}}
 end
 
 threadsafe_groups(cs::CellStrategy) = cs.threadsafe_groups
@@ -610,7 +623,7 @@ function CellStrategy(mesh::AbstractCellMesh)
         push!(groups[coloring.colors[cellid]], cellid)
     end
 
-    CellStrategy(groups)
+    CellStrategy(groups, RegionScratch{Vector{Int}}())
 end
 
 function _cell_conflict_graph(mesh::AbstractCellMesh)

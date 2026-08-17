@@ -45,6 +45,8 @@ end
 Tesserae.fillzero!(x::StencilArray) = (Tesserae.fillzero!(parent(x)); x)
 
 Tesserae.hybrid(A::StencilArray) = Tesserae.HybridArray(parent(A), Tesserae.flatten(parent(A)), Tesserae.get_device(A))
+Tesserae.hybrid(A::StencilArray, device::Tesserae.AbstractDevice) = Tesserae.HybridArray(parent(A), Tesserae.flatten(parent(A)), device)
+Tesserae.zero_buffer(A::StencilArray) = Tesserae.zero_buffer(parent(A))
 
 function Adapt.adapt_structure(to, A::StencilArray)
     StencilArray(getlocation(A), adapt(to, parent(A)))

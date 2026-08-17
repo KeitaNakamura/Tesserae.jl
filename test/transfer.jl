@@ -701,6 +701,181 @@
         end
     end
 
+    # `@G2P2G`'s grid-only half rides the scatter's parallel region as its
+    # epilogue, the same fusion `@P2G` has; every scheduler must still match the
+    # sequential run bit for bit on both halves.
+    @testset "threaded @G2P2G with a grid-only half matches sequential" begin
+        Δt = 0.01
+        grid, particles, weights = transfer_fixture()
+        partition = ThreadPartition(grid.x)
+        update!(partition, particles.x)
+
+        transfers = (
+            :nothing => (g, ps) -> (@threaded :nothing @G2P2G g=>i ps=>p weights=>ip partition begin
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                F[p] = (one(F[p]) + ∇v[p] * Δt) * F[p]
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+                v[i] = mv[i] * m⁻¹[i]
+            end),
+            :static => (g, ps) -> (@threaded :static @G2P2G g=>i ps=>p weights=>ip partition begin
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                F[p] = (one(F[p]) + ∇v[p] * Δt) * F[p]
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+                v[i] = mv[i] * m⁻¹[i]
+            end),
+            :dynamic => (g, ps) -> (@threaded :dynamic @G2P2G g=>i ps=>p weights=>ip partition begin
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                F[p] = (one(F[p]) + ∇v[p] * Δt) * F[p]
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+                v[i] = mv[i] * m⁻¹[i]
+            end),
+            :greedy => (g, ps) -> (@threaded :greedy @G2P2G g=>i ps=>p weights=>ip partition begin
+                ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                F[p] = (one(F[p]) + ∇v[p] * Δt) * F[p]
+                m[i] = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+                v[i] = mv[i] * m⁻¹[i]
+            end),
+        )
+
+        # The fusion is otherwise visible only through timing: pin the lowering
+        # so the node half cannot silently fall back to a separate call.
+        expanded = string(@macroexpand @threaded :static @G2P2G grid=>i particles=>p weights=>ip partition begin
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+            m[i] = @∑ w[ip] * m[p]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+        end)
+        @test contains(expanded, "G2P2G_halves")
+        @test !contains(expanded, "P2G_nosum(")
+
+        reference_grid = deepcopy(grid)
+        reference_particles = deepcopy(particles)
+        last(transfers[1])(reference_grid, reference_particles)
+        @test any(!iszero, reference_particles.∇v)
+        @test any(!iszero, reference_grid.m⁻¹)
+        @test any(!iszero, reference_grid.v)
+        for (name, transfer!) in transfers[2:end]
+            out_grid = deepcopy(grid)
+            out_particles = deepcopy(particles)
+            transfer!(out_grid, out_particles)
+            @test out_particles.∇v == reference_particles.∇v
+            @test out_particles.F == reference_particles.F
+            @test out_grid.m == reference_grid.m
+            @test out_grid.mv == reference_grid.mv
+            @test out_grid.m⁻¹ == reference_grid.m⁻¹
+            @test out_grid.v == reference_grid.v
+        end
+    end
+
+    # Every other partitioned test runs in 2D, where a transfer crosses only 4
+    # colour groups; 3D crosses all 8, which is the regime barrier restructures
+    # change most.
+    @testset "3D partitioned transfers cross all 8 colour groups" begin
+        mesh = CartesianMesh(0.5, (0,4), (0,4), (0,4))
+        GridProp = @NamedTuple begin
+            x::Vec{3,Float64}; m::Float64; m⁻¹::Float64; mv::Vec{3,Float64}; v::Vec{3,Float64}
+        end
+        ParticleProp = @NamedTuple begin
+            x::Vec{3,Float64}; m::Float64; V::Float64; v::Vec{3,Float64}
+            ∇v::SecondOrderTensor{3,Float64,9}; σ::SecondOrderTensor{3,Float64,9}
+        end
+        grid = generate_grid(GridProp, mesh)
+        particles = generate_particles(ParticleProp, mesh; alg=GridSampling())
+        for p in eachindex(particles)
+            particles.m[p] = 1.0 + 0.05p
+            particles.V[p] = 0.2 + 0.01p
+            particles.v[p] = Vec(0.15 + 0.02p, -0.25 + 0.015p, 0.05 - 0.01p)
+            particles.σ[p] = symmetric(Vec(1.0 + 0.03p, 0.2, -0.1) ⊗ Vec(0.4, 0.8 + 0.01p, 0.3))
+        end
+        for i in eachindex(grid)
+            I = Tuple(i)
+            grid.v[i] = Vec(0.04 * I[1], -0.03 * I[2], 0.02 * I[3])
+        end
+        weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(particles))
+        update!(weights, particles, mesh)
+        partition = ThreadPartition(mesh)
+        update!(partition, particles.x)
+
+        groups = Tesserae.threadsafe_groups(Tesserae.strategy(partition))
+        @test length(groups) == 8
+        @test all(!isempty, groups)
+
+        # Two blocks of one colour never share a support node.
+        bs = Tesserae.strategy(partition)
+        for group in groups
+            group_nodes = Set{CartesianIndex{3}}()
+            for blk in group
+                block_nodes = Set{CartesianIndex{3}}()
+                for p in Tesserae.particle_indices(bs, blk)
+                    union!(block_nodes, Tesserae.supportnodes(BSpline(Quadratic()), particles.x[p], mesh))
+                end
+                @test isempty(intersect(group_nodes, block_nodes))
+                union!(group_nodes, block_nodes)
+            end
+        end
+
+        p2g!(g, ps, ::Val{:nothing}) = @threaded :nothing @P2G g=>i ps=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            v[i] = mv[i] * m⁻¹[i]
+        end
+        p2g!(g, ps, ::Val{:static}) = @threaded :static @P2G g=>i ps=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            v[i] = mv[i] * m⁻¹[i]
+        end
+        p2g!(g, ps, ::Val{:greedy}) = @threaded :greedy @P2G g=>i ps=>p weights=>ip partition begin
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+            v[i] = mv[i] * m⁻¹[i]
+        end
+        reference = deepcopy(grid)
+        p2g!(reference, particles, Val(:nothing))
+        @test any(!iszero, reference.m⁻¹)
+        for schedule in (:static, :greedy)
+            out = deepcopy(grid)
+            p2g!(out, particles, Val(schedule))
+            @test out.m == reference.m
+            @test out.mv == reference.mv
+            @test out.m⁻¹ == reference.m⁻¹
+            @test out.v == reference.v
+        end
+
+        g2p2g!(g, ps, ::Val{:nothing}) = @threaded :nothing @G2P2G g=>i ps=>p weights=>ip partition begin
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+        end
+        g2p2g!(g, ps, ::Val{:dynamic}) = @threaded :dynamic @G2P2G g=>i ps=>p weights=>ip partition begin
+            ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+            m[i] = @∑ w[ip] * m[p]
+            mv[i] = @∑ w[ip] * m[p] * v[p]
+            m⁻¹[i] = inv(m[i]) * !iszero(m[i])
+        end
+        reference_grid = deepcopy(grid)
+        reference_particles = deepcopy(particles)
+        g2p2g!(reference_grid, reference_particles, Val(:nothing))
+        @test any(!iszero, reference_particles.∇v)
+        out_grid = deepcopy(grid)
+        out_particles = deepcopy(particles)
+        g2p2g!(out_grid, out_particles, Val(:dynamic))
+        @test out_particles.∇v == reference_particles.∇v
+        @test out_grid.m == reference_grid.m
+        @test out_grid.mv == reference_grid.mv
+        @test out_grid.m⁻¹ == reference_grid.m⁻¹
+    end
+
     @testset "@P2G with no @∑ equations" begin
         mesh = CartesianMesh(0.25, (0,1), (0,1))
         grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)

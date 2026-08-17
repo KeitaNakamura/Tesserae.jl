@@ -183,3 +183,20 @@ end
     @test all(iszero, strided)
     @test all(!iszero, view(backing, 2:2:100))
 end
+
+@testset "fused zeroing kernel" begin
+    # The GPU transfer zeroes all its assigned fields in one launch; run the
+    # kernel on the CPU backend with mixed lengths and eltypes.
+    a = rand(6)
+    b = [Vec(rand(), rand()) for _ in 1:10]
+    c = rand(Float32, 3, 4)
+    buffers = map(Tesserae.zero_buffer, (a, b, c))
+    @test buffers === (a, b, c)
+    backend = Tesserae.CPU()
+    kernel = Tesserae.gpukernel_fillzero_each(backend)
+    kernel(buffers; ndrange=maximum(length, buffers))
+    Tesserae.synchronize(backend)
+    @test all(iszero, a)
+    @test all(x -> all(iszero, x), b)
+    @test all(iszero, c)
+end

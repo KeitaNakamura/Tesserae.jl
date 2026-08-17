@@ -122,7 +122,8 @@ function Adapt.adapt_structure(to, tracker::ParticleBlockTracker)
     ParticleBlockTracker(adapt(to, tracker.blockids), adapt(to, tracker.counts))
 end
 function Adapt.adapt_structure(to, workspace::BlockSparsityWorkspace)
-    BlockSparsityWorkspace(adapt(to, workspace.occupied), adapt(to, workspace.active), adapt(to, workspace.tracker))
+    BlockSparsityWorkspace(adapt(to, workspace.occupied), adapt(to, workspace.active), adapt(to, workspace.tracker),
+                           adapt(to, workspace.active_count), adapt(to, workspace.changed))
 end
 function Adapt.adapt_structure(to, A::SpIndices{dim, L}) where {dim, L}
     numbers = adapt(to, blocknumbering(A))

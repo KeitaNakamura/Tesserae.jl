@@ -86,14 +86,19 @@ end
 
 # ---- splitting a color group ----
 
+function equal_count_bounds!(bounds::Vector{Int}, nregions::Int, nworkers::Int)
+    for w in 0:nworkers
+        @inbounds bounds[w+1] = (nregions * w) ÷ nworkers
+    end
+    bounds
+end
 equal_count_bounds(nregions::Int, nworkers::Int) =
-    [(nregions * w) ÷ nworkers for w in 0:nworkers]
+    equal_count_bounds!(Vector{Int}(undef, nworkers + 1), nregions, nworkers)
 
 # `assign_block_ranges!` laid this group out contiguously and in order inside
 # `particleindices`, so `stops` is already the running particle count.
-function particle_count_bounds(bs::BlockStrategy, group, nworkers::Int)
+function particle_count_bounds!(bounds::Vector{Int}, bs::BlockStrategy, group, nworkers::Int)
     nregions = length(group)
-    bounds = Vector{Int}(undef, nworkers + 1)
     bounds[1] = 0
     bounds[nworkers+1] = nregions
 
@@ -113,17 +118,45 @@ function particle_count_bounds(bs::BlockStrategy, group, nworkers::Int)
     end
     bounds
 end
+particle_count_bounds(bs::BlockStrategy, group, nworkers::Int) =
+    particle_count_bounds!(Vector{Int}(undef, nworkers + 1), bs, group, nworkers)
 
 # A `CellStrategy`'s regions carry one quadrature column each, so both splits
 # coincide.
-weighted_bounds(strat::PartitionStrategy, group, nworkers::Int) =
-    equal_count_bounds(length(group), nworkers)
-weighted_bounds(bs::BlockStrategy, group, nworkers::Int) =
-    particle_count_bounds(bs, group, nworkers)
+weighted_bounds!(bounds::Vector{Int}, strat::PartitionStrategy, group, nworkers::Int) =
+    equal_count_bounds!(bounds, length(group), nworkers)
+weighted_bounds!(bounds::Vector{Int}, bs::BlockStrategy, group, nworkers::Int) =
+    particle_count_bounds!(bounds, bs, group, nworkers)
 
-group_plan(::GreedyScheduler, strat, group, nworkers::Int) = Threads.Atomic{Int}(0)
-group_plan(::StaticScheduler, strat, group, nworkers::Int) = equal_count_bounds(length(group), nworkers)
-group_plan(::Scheduler, strat, group, nworkers::Int) = weighted_bounds(strat, group, nworkers)
+group_plan!(bounds::Vector{Int}, ::StaticScheduler, strat, group, nworkers::Int) =
+    equal_count_bounds!(bounds, length(group), nworkers)
+group_plan!(bounds::Vector{Int}, ::Scheduler, strat, group, nworkers::Int) =
+    weighted_bounds!(bounds, strat, group, nworkers)
+
+region_scratch(strat::PartitionStrategy) = RegionScratch{eltype(threadsafe_groups(strat))}()
+region_scratch(strat::Union{BlockStrategy, CellStrategy}) = strat.region_scratch
+
+function group_plans!(scratch::RegionScratch, ::GreedyScheduler, strat, active, nworkers::Int)
+    cursors = scratch.cursors
+    for _ in length(cursors)+1:length(active)
+        push!(cursors, Threads.Atomic{Int}(0))
+    end
+    for k in 1:length(active)
+        @inbounds cursors[k][] = 0
+    end
+    cursors
+end
+
+function group_plans!(scratch::RegionScratch, sched::Scheduler, strat, active, nworkers::Int)
+    bounds = scratch.bounds
+    for _ in length(bounds)+1:length(active)
+        push!(bounds, Int[])
+    end
+    for k in 1:length(active)
+        @inbounds group_plan!(resize!(bounds[k], nworkers + 1), sched, strat, active[k], nworkers)
+    end
+    bounds
+end
 
 function run_group(work::F, group, bounds::Vector{Int}, w::Int) where {F}
     @inbounds for k in bounds[w]+1:bounds[w+1]
@@ -191,7 +224,11 @@ function partitioned_foreach(work::F, strat::PartitionStrategy, sched::Scheduler
     end
 
     # Every worker drops the same empty groups, so the phases stay in step.
-    active = filter(!isempty, groups)
+    scratch = region_scratch(strat)
+    active = empty!(scratch.active)
+    for group in groups
+        isempty(group) || push!(active, group)
+    end
     isempty(active) && return on_one_worker(active)
 
     # Regions cap the workers only when they are all there is to do: an epilogue
@@ -203,7 +240,7 @@ function partitioned_foreach(work::F, strat::PartitionStrategy, sched::Scheduler
     ngroups = length(active)
     nphases = ngroups + (prologue === nothing ? 0 : 1) + (epilogue === nothing ? 0 : 1)
     offset = prologue === nothing ? 0 : 1
-    plans = [group_plan(sched, strat, group, nworkers) for group in active]
+    plans = group_plans!(scratch, sched, strat, active, nworkers)
     spawn_region_workers(nworkers, nphases - 1) do w, barrier
         run_worker_phases(barrier, nphases) do k
             if prologue !== nothing && k == 1

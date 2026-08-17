@@ -101,6 +101,32 @@ const FILLZERO_CHUNK_ALIGN = 64
 @inline fillzero_each!(::Tuple{}) = nothing
 @inline fillzero_each!(targets::Tuple) = (fillzero!(first(targets)); fillzero_each!(Base.tail(targets)))
 
+# The GPU counterpart of `fillzero_prologue`: one launch zeroes every target,
+# where a `fillzero!` per field costs one launch each.
+zero_buffer(A::AbstractArray) = A
+
+@inline _fillzero_at!(::Tuple{}, I) = nothing
+@inline function _fillzero_at!(buffers::Tuple, I)
+    buffer = first(buffers)
+    if I <= length(buffer)
+        @inbounds buffer[I] = zero_recursive(eltype(buffer))
+    end
+    _fillzero_at!(Base.tail(buffers), I)
+end
+
+@kernel function gpukernel_fillzero_each(buffers)
+    I = @index(Global)
+    _fillzero_at!(buffers, I)
+end
+
+fillzero_each!(::GPUDevice, ::Tuple{}) = nothing
+function fillzero_each!(device::GPUDevice, targets::Tuple)
+    buffers = map(zero_buffer, targets)
+    kernel = gpukernel_fillzero_each(get_backend(device))
+    kernel(buffers; ndrange=maximum(length, buffers))
+    nothing
+end
+
 """
     fillzero_prologue(targets::Tuple)
 

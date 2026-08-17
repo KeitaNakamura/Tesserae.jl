@@ -135,6 +135,58 @@ end
     @test all(iszero, Tesserae.blocknumbering(spinds))
 end
 
+@testset "partition-driven update_sparsity! reuses unchanged numbering" begin
+    mesh = CartesianMesh(1.0, (0,40), (0,40))
+    spinds = Tesserae.SpIndices(mesh)
+    partition = ThreadPartition(mesh)
+    xₚ = [Vec(1.0, 1.0), Vec(39.0, 39.0)]
+    update!(partition, xₚ)
+    n₁ = update_sparsity!(spinds, partition)
+    @test n₁ isa Int
+    numbering = copy(Tesserae.blocknumbering(spinds))
+
+    # Particles moved inside their blocks: same active set, numbering reused.
+    update!(partition, [x + Vec(0.1, 0.1) for x in xₚ])
+    @test update_sparsity!(spinds, partition) === nothing
+    @test Tesserae.blocknumbering(spinds) == numbering
+
+    # The grid keeps its zero-on-update behavior on the reused path.
+    grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
+    update_sparsity!(grid, partition)
+    nstored = length(Tesserae.get_data(grid.m))
+    @test nstored > 0
+    Tesserae.get_data(grid.m) .= 1.0
+    update_sparsity!(grid, partition)
+    @test length(Tesserae.get_data(grid.m)) == nstored
+    @test all(iszero, Tesserae.get_data(grid.m))
+
+    # A newly occupied block renumbers again.
+    update!(partition, push!(copy(xₚ), Vec(20.0, 20.0)))
+    n₂ = update_sparsity!(spinds, partition)
+    @test n₂ isa Int
+    @test n₂ > n₁
+    @test Tesserae.blocknumbering(spinds) != numbering
+end
+
+@testset "zero_buffer and device-carrying hybrid" begin
+    mesh = CartesianMesh(1.0, (0,8), (0,8))
+    grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, mv::Vec{2,Float64}}, mesh)
+    update_sparsity!(grid, trues(Tesserae.nblocks(mesh)))
+    @test Tesserae.zero_buffer(grid.m) === Tesserae.get_data(grid.m)
+
+    device = Tesserae.get_device(grid)
+    ha = Tesserae.hybrid(grid)
+    hb = Tesserae.hybrid(grid, device)
+    for name in (:m, :mv)
+        a = getproperty(ha, name)
+        b = getproperty(hb, name)
+        @test parent(b) === parent(a)
+        @test Tesserae.get_device(b) === Tesserae.get_device(a)
+        @test typeof(Tesserae.flatten(b)) === typeof(Tesserae.flatten(a))
+    end
+    @test Tesserae.get_mesh(hb) === Tesserae.get_mesh(ha)
+end
+
 @testset "SpArray GPU sparsity kernels on CPU backend" begin
     backend = Tesserae.CPU()
 

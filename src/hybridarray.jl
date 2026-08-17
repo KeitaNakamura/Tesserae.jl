@@ -62,3 +62,9 @@ get_data(A::HybridArray{<:Any, <:Any, <:SpArray}) = get_data(parent(A))
 hybrid(A::AbstractArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
 hybrid(A::StructArray) = StructArray(map(hybrid, StructArrays.components(A)))
 hybrid(mesh::AbstractMesh) = mesh
+
+# Callers on the launch path already resolved the device once; re-deriving it
+# per component re-walks and re-asserts every array's backend.
+hybrid(A::AbstractArray, device::AbstractDevice) = HybridArray(A, flatten(A), device)
+hybrid(A::StructArray, device::AbstractDevice) = StructArray(map(a -> hybrid(a, device), StructArrays.components(A)))
+hybrid(mesh::AbstractMesh, ::AbstractDevice) = mesh

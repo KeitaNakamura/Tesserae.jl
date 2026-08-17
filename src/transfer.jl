@@ -827,11 +827,11 @@ P2G_halves(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles,
 end
 function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
-    fillzero_each!(zeroed)
+    fillzero_each!(device, zeroed)
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
-    kernel(f, hybrid(grid), particles, weights; ndrange=length(particles))
+    kernel(f, hybrid(grid, device), particles, weights; ndrange=length(particles))
 end
 
 # Bodies fall back to the particle-parallel lowering everywhere except the
@@ -850,6 +850,20 @@ P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particles, weight
 # handed on, so it takes a type parameter to be specialized on.
 G2P2G(f::F, device::AbstractDevice, schedule, grid, particles, weights, partition, zeroed::Tuple=()) where {F} =
     P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
+
+# The `@G2P2G` twin of `P2G_halves`: the grid-node half rides the threaded CPU
+# region as its epilogue and is discharged as a separate call everywhere else.
+function G2P2G_halves(f::F, device, schedule, grid, particles, weights, partition, zeroed,
+                      nodebody::N, nodegrid) where {F, N}
+    G2P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
+    P2G_nosum(nodebody, device, schedule, nodegrid)
+end
+
+function G2P2G_halves(f::F, device::CPUDevice, schedule::Val, grid, particles, weights,
+                      partition::ThreadPartition, zeroed::Tuple, nodebody::N, nodegrid) where {F, N}
+    epilogue = (nworkers, w) -> foreach_worker_loop(nodebody, device, nodegrid, nworkers, w)
+    p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, epilogue)
+end
 
 # GPU with a device partition: one workgroup per nonempty grid block, merging a
 # shared tile into the grid with a handful of global atomics per node instead of
@@ -896,7 +910,7 @@ end
 
 function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition{<: GPUBlockStrategy}, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
-    fillzero_each!(zeroed)
+    fillzero_each!(device, zeroed)
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     bs = strategy(partition)
     names = Val(scattered_names(bodies))
@@ -916,7 +930,7 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
         return P2G(bodies.particle, device, Val(scheduler), grid, particles, weights, nothing)
     end
     kernel = gpukernel_P2G_blocks(backend, (P2G_BLOCK_GROUPSIZE,))
-    kernel(bodies.tile, hybrid(grid), particles, weights,
+    kernel(bodies.tile, hybrid(grid, device), particles, weights,
            bs.particleindices, bs.offsets, bs.blocklist,
            Tt, names, Val(side), Val(tilelen), Val(total), Val(BW), Val(halo), nblocks(bs);
            ndrange=P2G_BLOCK_GROUPSIZE * nactive(bs))
@@ -945,21 +959,8 @@ end
 
 # Every equation in the grid-only part reads and writes only its own node, which
 # is the same walk `@foreach` runs, so it shares the loops and kernels in foreach.jl.
-P2G_nosum(f::F, device::CPUDevice, schedule::Val, grid) where {F} =
+P2G_nosum(f::F, device::AbstractDevice, schedule::Val, grid) where {F} =
     foreach_loop(f, device, schedule, grid)
-
-# The GPU path already parallelises, so it ignores the scheduler.
-function P2G_nosum(f, device::GPUDevice, ::Val, grid)
-    backend = get_backend(device)
-    if grid isa SpGrid
-        spinds = get_spinds(grid)
-        kernel = gpukernel_foreach_spgrid(backend)
-        kernel(f, grid, spinds; ndrange=_spindex_ndrange(spinds))
-    else
-        kernel = gpukernel_foreach(backend)
-        kernel(f, grid; ndrange=size(grid))
-    end
-end
 
 function check_transfer_arguments(macroname, grid, particles, weights, partition)
     get_mesh(grid) isa AbstractMesh || error("$macroname: grid must have a mesh")
@@ -1000,7 +1001,7 @@ function check_partition_for_transfer(macroname, grid, weights, strat::BlockStra
     if nassigned(strat) == 0
         error("$macroname: No particles assigned to any block in ThreadPartition")
     end
-    check_partition_support(macroname, basis(first(weights)), strat)
+    check_partition_support(macroname, transfer_basis(weights), strat)
 end
 function check_partition_for_transfer(macroname, grid, weights, strat::GPUBlockStrategy)
     @assert nblocks(get_mesh(grid)) == nblocks(strat)
@@ -1014,6 +1015,11 @@ function check_partition_support(macroname, b, strat)
         error("$macroname: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
     end
 end
+
+# Reading `first(weights)` from a `BasisWeightArray` builds the row struct the
+# file header calls out as expensive; the array itself already knows its basis.
+transfer_basis(weights::AbstractArray) = basis(first(weights))
+transfer_basis(weights::BasisWeightArray) = basis(weights)
 
 # ---- @G2P ----
 
@@ -1296,21 +1302,20 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         body = :(@inbounds $body)
     end
     particle_equations = vcat(collect(stages.g2p_sum), collect(stages.g2p_nosum), collect(stages.p2g_sum))
+    args = [:(($grid, $particles, $weights, $p) -> $body), :(Tesserae.get_device($grid)), :(Val($schedule)),
+            narrowed_grid_expr(grid, particle_equations, i), particles, :w, partition, zeroed]
+    bind = nothing
+    if !isempty(stages.p2g_nosum)
+        @gensym nodebody nodegrid
+        bind = nosum_binding_expr(nodebody, nodegrid, grid, i, stages.p2g_nosum)
+        append!(args, (nodebody, nodegrid))
+    end
+    call = isempty(stages.p2g_nosum) ? :(Tesserae.G2P2G($(args...))) : :(Tesserae.G2P2G_halves($(args...)))
     code = quote
         $code
+        $bind
         Tesserae.select_weights($weights) do w
-            Tesserae.G2P2G(($grid, $particles, $weights, $p) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, particle_equations, i)), $particles, w, $partition, $zeroed)
-        end
-    end
-
-    if !isempty(stages.p2g_nosum)
-        body = P2G_nosum_expr((grid,i), stages.p2g_nosum)
-        if !DEBUG
-            body = :(@inbounds $body)
-        end
-        code = quote
-            $code
-            Tesserae.P2G_nosum(($grid, $i) -> $body, Tesserae.get_device($grid), Val($schedule), $(narrowed_grid_expr(grid, stages.p2g_nosum, i)))
+            $call
         end
     end
 

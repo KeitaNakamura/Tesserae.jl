@@ -89,6 +89,7 @@ get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
 function update_sparsity!(A::SpGrid, blkspy)
     n = update_sparsity!(get_spinds(A), blkspy)
+    n === nothing && return fillzero!(A)
     StructArrays.foreachfield(a->resize_fillzero_data!(a,n), A)
     A
 end
