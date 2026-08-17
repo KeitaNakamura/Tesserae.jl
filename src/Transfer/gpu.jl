@@ -105,6 +105,8 @@ end
     first(types)
 end
 
+# ---- kernels and dispatch ----
+
 # `@P2G`, `@G2P` and `@G2P2G` all walk the same four arguments, so one kernel
 # serves all three, each call site compiling its own copy of `f`.
 #

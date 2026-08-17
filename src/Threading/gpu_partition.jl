@@ -6,7 +6,6 @@
 # no host synchronization happens beyond one readback of the active-block count.
 # Particle order within a block is whatever the atomic scatter produced, which
 # permutes a floating-point sum that particle motion reorders anyway.
-# ---- GPUBlockStrategy ----
 
 struct GPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}, Vi <: AbstractVector{Int32}, Vl <: AbstractVector{Int64}} <: PartitionStrategy
     mesh::Mesh

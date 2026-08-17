@@ -2,8 +2,6 @@
 #  ThreadPartition
 # -----------------------------------------------------------------------------
 
-# ---- ThreadPartition ----
-
 """
     ThreadPartition(::CartesianMesh)
     ThreadPartition(::FEMesh)

@@ -2,8 +2,6 @@
 #  Zeroing
 # -----------------------------------------------------------------------------
 
-nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
-
 @generated function zero_recursive(::Type{T}) where {T}
     isbitstype(T) || return :(throw(ArgumentError("`zero_recursive` supports only `isbitstype`, got $T")))
     :(@_inline_meta; zero(T))
@@ -47,6 +45,17 @@ end
 function fillzero!(x::StructArray)
     StructArrays.foreachfield(fillzero!, x)
     x
+end
+
+function resize_fillzero!(A::AbstractVector, n::Integer)
+    # Existing Metal buffers cannot resize to zero length. Zeroing stale
+    # storage is enough when the active numbering no longer references it.
+    if iszero(n) && get_device(A) isa MetalDevice
+        fillzero!(A)
+    else
+        fillzero!(resize!(A, n))
+    end
+    A
 end
 
 # A byte range is the only thing that can be split across threads, so a target

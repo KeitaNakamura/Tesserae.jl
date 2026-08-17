@@ -131,7 +131,7 @@ end
 
 # ---- loops and kernels ----
 
-# `@foreach` and `@P2G`'s grid half (`P2G_nosum` in transfer.jl) run per-node
+# `@foreach` and `@P2G`'s grid half (`P2G_nosum` in runtime.jl) run per-node
 # bodies over the same index spaces, so they share the loops and kernels here.
 #
 # Threading splits the index space rather than handing single indices to

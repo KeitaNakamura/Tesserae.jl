@@ -2,7 +2,19 @@
 #  Sparsity updates
 # -----------------------------------------------------------------------------
 
-# ---- update_sparsity! ----
+@inline elone(A) = one(eltype(A))
+@inline elzero(A) = zero(eltype(A))
+
+function _check_nblocks(sp::SpIndices, blocks)
+    nblocks(sp) == size(blocks) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
+end
+function _check_nblocks(sp::SpIndices, mesh::CartesianMesh)
+    nblocks(sp) == nblocks(mesh) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
+end
+
+function _check_same_backend(label, x, backend)
+    get_backend(x) == backend || throw(ArgumentError("SpIndices and $label must live on the same backend"))
+end
 
 function update_sparsity!(sp::SpIndices, blkspy::AbstractArray)
     _apply_block_activity!(sp, blkspy)

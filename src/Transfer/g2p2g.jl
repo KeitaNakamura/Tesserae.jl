@@ -23,8 +23,6 @@ function G2P2G_halves(f::F, device::CPUDevice, schedule::Val, grid, particles, w
     p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, epilogue)
 end
 
-# ---- @G2P2G ----
-
 """
     @G2P2G grid=>i particles=>p weights=>ip [partition] begin
         equations...

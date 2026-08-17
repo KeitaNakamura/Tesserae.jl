@@ -2,8 +2,6 @@
 #  CellStrategy
 # -----------------------------------------------------------------------------
 
-# ---- CellStrategy ----
-
 struct CellStrategy <: PartitionStrategy
     threadsafe_groups::Vector{Vector{Int}}
     region_scratch::RegionScratch{Vector{Int}}

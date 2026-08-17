@@ -2,6 +2,8 @@
 #  Helpers
 # -----------------------------------------------------------------------------
 
+nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
+
 @inline function fastsum(f, iter)
     ret = zero(Base._return_type(f, Tuple{eltype(iter)}))
     @simd for x in iter

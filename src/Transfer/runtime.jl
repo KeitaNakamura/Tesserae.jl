@@ -229,6 +229,7 @@ function check_partition_support(macroname, b, strat)
 end
 
 # Reading `first(weights)` from a `BasisWeightArray` builds the row struct the
-# file header calls out as expensive; the array itself already knows its basis.
+# weight-references note in program.jl calls out as expensive; the array itself
+# already knows its basis.
 transfer_basis(weights::AbstractArray) = basis(first(weights))
 transfer_basis(weights::BasisWeightArray) = basis(weights)

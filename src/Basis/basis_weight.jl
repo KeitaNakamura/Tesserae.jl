@@ -682,7 +682,7 @@ function as_deferred(weights::BasisWeightArray, filter = deferred_filter(weights
     BasisWeightArray(b, vals, getfield(weights, :indices), order, filter)
 end
 
-# See the note on `@Const` and nested containers in src/transfer.jl.
+# See the note on `@Const` and nested containers in src/Transfer/gpu.jl.
 @kernel function gpukernel_update_weight(weights, particles, mesh, filter)
     p = @index(Global)
     update!(weights[p], LazyRow(particles, p), mesh, filter)

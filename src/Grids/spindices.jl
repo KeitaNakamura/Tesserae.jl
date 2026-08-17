@@ -2,8 +2,6 @@
 #  Sparse block indices
 # -----------------------------------------------------------------------------
 
-# ---- SpIndex / SpIndices ----
-
 struct SpIndex{I}
     index::I
     spindex::Int
@@ -15,26 +13,12 @@ end
 @inline storageindex(x::SpIndex) = x.spindex
 isactive(x::SpIndex) = !iszero(x.spindex)
 
-@inline elone(A) = one(eltype(A))
-@inline elzero(A) = zero(eltype(A))
-
 @inline function Base.getindex(A::AbstractArray, i::SpIndex)
     @boundscheck checkbounds(A, logicalindex(i))
     @inbounds isactive(i) ? A[logicalindex(i)] : zero_recursive(eltype(A))
 end
 
 Base.show(io::IO, x::SpIndex) = print(io, "SpIndex(", x.index, ", ", ifelse(isactive(x), x.spindex, CDot()), ")")
-
-function resize_fillzero!(A::AbstractVector, n::Integer)
-    # Existing Metal buffers cannot resize to zero length. Zeroing stale
-    # storage is enough when the active numbering no longer references it.
-    if iszero(n) && get_device(A) isa MetalDevice
-        fillzero!(A)
-    else
-        fillzero!(resize!(A, n))
-    end
-    A
-end
 
 struct ParticleBlockTracker{B <: AbstractArray{Int}, C <: AbstractArray{Int32}}
     blockids::B  # block id currently recorded for each particle
@@ -199,14 +183,3 @@ end
     @inbounds !iszero(blocknumbering(sp)[block...])
 end
 @inline isactive(sp::SpIndices, I::CartesianIndex) = (@_propagate_inbounds_meta; isactive(sp, Tuple(I)...))
-
-function _check_nblocks(sp::SpIndices, blocks)
-    nblocks(sp) == size(blocks) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
-end
-function _check_nblocks(sp::SpIndices, mesh::CartesianMesh)
-    nblocks(sp) == nblocks(mesh) || throw(ArgumentError("blocks per dimension $(nblocks(sp)) must match"))
-end
-
-function _check_same_backend(label, x, backend)
-    get_backend(x) == backend || throw(ArgumentError("SpIndices and $label must live on the same backend"))
-end

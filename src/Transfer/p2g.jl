@@ -2,8 +2,6 @@
 #  @P2G
 # -----------------------------------------------------------------------------
 
-# ---- @P2G ----
-
 """
     @P2G grid=>i particles=>p weights=>ip [partition] begin
         equations...
@@ -366,7 +364,7 @@ P2G_halves(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles,
     P2G_halves(bodies.particle, device, schedule, grid, particles, weights, partition, zeroed, nodebody, nodegrid)
 
 # Bodies fall back to the particle-parallel lowering everywhere except the
-# block-scheduled GPU path below. One method per signature, so each is strictly
+# block-scheduled GPU path in gpu.jl. One method per signature, so each is strictly
 # more specific than its `f`-taking sibling.
 P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) =
     P2G(bodies.particle, device, schedule, grid, particles, weights, nothing, zeroed)
