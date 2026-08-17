@@ -8,3 +8,5 @@ include("wls.jl")
 include("kernelcorrection.jl")
 
 include("iga.jl")
+
+include("fem.jl")

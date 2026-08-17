@@ -232,3 +232,54 @@ end
         ifelse(isinside, CartesianIndex(@. unsafe_trunc(Int, index) + 1), nothing)
     end
 end
+
+# ---- block operations ----
+
+blockwidth(::Val{L}) where {L} = 1 << L
+blockwidth(mesh::CartesianMesh) = blockwidth(Val(block_size_log2(mesh)))
+
+nblocks(gridsize::Tuple{Vararg{Int}}; block_size_log2::Val{L}) where {L} =
+    (_check_block_size_log2(block_size_log2); map(n -> ((n - 1) >> L) + 1, gridsize))
+nblocks(mesh::CartesianMesh) = nblocks(size(mesh); block_size_log2=Val(block_size_log2(mesh)))
+
+"""
+    Tesserae.findblock(x::Vec, mesh::CartesianMesh)
+
+Return block index where `x` locates.
+The unit block size is `2^block_size_log2(mesh)` cells.
+
+# Examples
+```jldoctest
+julia> mesh = CartesianMesh(1, (0,10), (0,10))
+11×11 CartesianMesh{2, Float64, Vector{Float64}, 2}:
+ [0.0, 0.0]   [0.0, 1.0]   [0.0, 2.0]   …  [0.0, 9.0]   [0.0, 10.0]
+ [1.0, 0.0]   [1.0, 1.0]   [1.0, 2.0]      [1.0, 9.0]   [1.0, 10.0]
+ [2.0, 0.0]   [2.0, 1.0]   [2.0, 2.0]      [2.0, 9.0]   [2.0, 10.0]
+ [3.0, 0.0]   [3.0, 1.0]   [3.0, 2.0]      [3.0, 9.0]   [3.0, 10.0]
+ [4.0, 0.0]   [4.0, 1.0]   [4.0, 2.0]      [4.0, 9.0]   [4.0, 10.0]
+ [5.0, 0.0]   [5.0, 1.0]   [5.0, 2.0]   …  [5.0, 9.0]   [5.0, 10.0]
+ [6.0, 0.0]   [6.0, 1.0]   [6.0, 2.0]      [6.0, 9.0]   [6.0, 10.0]
+ [7.0, 0.0]   [7.0, 1.0]   [7.0, 2.0]      [7.0, 9.0]   [7.0, 10.0]
+ [8.0, 0.0]   [8.0, 1.0]   [8.0, 2.0]      [8.0, 9.0]   [8.0, 10.0]
+ [9.0, 0.0]   [9.0, 1.0]   [9.0, 2.0]      [9.0, 9.0]   [9.0, 10.0]
+ [10.0, 0.0]  [10.0, 1.0]  [10.0, 2.0]  …  [10.0, 9.0]  [10.0, 10.0]
+
+julia> Tesserae.findblock(Vec(8.5, 1.5), mesh)
+CartesianIndex(3, 1)
+```
+"""
+@inline function findblock(x::Vec{dim}, mesh::CartesianMesh{dim, T, V, L}) where {dim, T, V, L}
+    _findblock(x, get_xmin(mesh), spacing_inv(mesh), size(mesh), Val(L))
+end
+
+# Same boundary rule as `findcell`, but returning the block index directly: the
+# 0-based cell index shifted by `block_size_log2`, plus one.
+@generated function _findblock(x::Vec{dim}, xmin::Vec{dim}, h_inv, dims::Dims{dim}, ::Val{L}) where {dim, L}
+    quote
+        @_inline_meta
+        @nexprs $dim d -> cell0_d = unsafe_trunc(Int, floor((x[d] - xmin[d]) * h_inv))
+        inside = @nall $dim d -> 0 ≤ cell0_d ≤ dims[d] - 2
+        inside || return nothing
+        CartesianIndex(@ntuple $dim d -> (cell0_d >> $L) + 1)
+    end
+end
