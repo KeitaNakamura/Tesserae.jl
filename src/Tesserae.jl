@@ -134,7 +134,7 @@ import .Progress: @showprogress
 include("NURBS/NURBS.jl")
 include("Mesh/Mesh.jl")
 include("Threading/Threading.jl")
-include("Grid/Grid.jl")
+include("Grids/Grids.jl")
 include("particles.jl")
 include("Basis/Basis.jl")
 include("Transfer/Transfer.jl")
