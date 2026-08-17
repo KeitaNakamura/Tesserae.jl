@@ -23,6 +23,7 @@ import Preferences
 
 # multithreading
 using Graphs
+using MacroTools
 using TaskLocalValues
 
 # GPU
@@ -131,34 +132,17 @@ include("utils.jl")
 include("progress.jl")
 import .Progress: @showprogress
 
-include("shapes.jl")
-include("quadrature.jl")
 include("NURBS/NURBS.jl")
-
-include("mesh.jl")
-include("femesh.jl")
-include("igamesh.jl")
-include("thread_partition.jl")
-include("parallel_region.jl")
-include("sparray.jl")
-include("hybridarray.jl")
-
-include("grid.jl")
+include("Mesh/Mesh.jl")
+include("Threading/Threading.jl")
+include("Grid/Grid.jl")
 include("particles.jl")
-
 include("Basis/Basis.jl")
-
-include("fem.jl")
-include("gmsh.jl")
-
-include("transfer.jl")
-include("foreach.jl")
+include("Transfer/Transfer.jl")
 include("Implicit/Implicit.jl")
-include("newton.jl")
-include("explain.jl")
+include("IO/IO.jl")
 
-include("export.jl")
-include("gpu.jl")
+include("adapt.jl")
 include("deprecated.jl")
 
 include("Stencil/Stencil.jl")

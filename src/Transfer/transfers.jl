@@ -2,8 +2,6 @@
 #  Transfer macros
 # -----------------------------------------------------------------------------
 
-using MacroTools
-
 # ---- equations ----
 
 struct TransferEquation

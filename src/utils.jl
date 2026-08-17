@@ -372,27 +372,3 @@ function threaded_expr(schedule::QuoteNode, expr::Expr)
         error("wrong usage for @threaded")
     end
 end
-
-# C = Aᵀ B α + C β
-function tmul!(C::StridedVecOrMat{T}, A::SparseMatrixCSC{T}, B::StridedVecOrMat{T}, α, β) where {T <: Real}
-    rows = rowvals(A)
-    vals = nonzeros(A)
-    if β != 1
-        β != 0 ? rmul!(C, β) : fill!(C, zero(eltype(C)))
-    end
-    for k in 1:size(C, 2)
-        @threaded for j in 1:size(A, 2)
-            @inbounds begin
-                tmp = zero(T)
-                for i in nzrange(A, j)
-                    row = rows[i]
-                    val = vals[i]
-                    tmp += val * B[row, k]
-                end
-                C[j, k] += tmp * α
-            end
-        end
-    end
-    C
-end
-tmul!(C::StridedVecOrMat, A::SparseMatrixCSC, B::StridedVecOrMat) = tmul!(C, A, B, true, false)
