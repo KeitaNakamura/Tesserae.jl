@@ -205,7 +205,6 @@ function generate_field_meshes(meshes::AbstractDict{K, <: FEMesh}, order::Union{
     Dict(key => _build_field_mesh(mesh, field_nodes, nodemap, order) for (key, mesh) in meshes)
 end
 
-# Return the requested field shape and the positions of its nodes in the geometry connectivity.
 _field_interpolation(shape::Shape, ::Nothing) = shape, eachindex(localnodes(shape))
 _field_interpolation(shape::Line, ::Order{1}) = Line2(), primarynodes_indices(shape)
 _field_interpolation(shape::Quad, ::Order{1}) = Quad4(), primarynodes_indices(shape)
@@ -217,7 +216,7 @@ function _field_interpolation(shape::Shape, order::Order)
     throw(ArgumentError("cannot generate an order-$(_order_value(order)) field from $(typeof(shape)) geometry; omit `order` to preserve the geometry shape or pass `Order(1)` to replace it with its first-order shape"))
 end
 
-# Preserve cell order and local orientation while translating connectivity to the shared field numbering.
+# Cell order and local orientation are preserved across the renumbering.
 function _build_field_mesh(mesh::FEMesh, field_nodes, nodemap, order)
     geometry_shape = cellshape(mesh)
     field_shape, localindices = _field_interpolation(geometry_shape, order)
@@ -281,8 +280,7 @@ function _prepare_field_meshes(meshes, order)
     view(geometry_nodes, nodeindices), nodemap
 end
 
-# Walk the cell's faces recursively. Match by shape and complete node set while
-# ignoring local orientation.
+# Faces are matched by shape and complete node set, ignoring local orientation.
 function _match_field_subentities!(unmatched, shape::Shape, indices)
     delete!(unmatched[get_dimension(shape)], shape => sort(indices))
     get_dimension(shape) == 1 && return

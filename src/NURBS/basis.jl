@@ -117,8 +117,7 @@ defined by `axis`.
 """
 function greville_abscissae(axis::BSplineAxis)
     p = axis.degree
-    # Greville abscissae are the standard parametric locations associated with
-    # control points of a B-spline curve.
+    # Greville abscissae: the parametric locations of the control points.
     map(1:nbasis(axis)) do i
         sum(j -> axis.knot_vector[i+j], 1:p) / p
     end
@@ -210,8 +209,7 @@ Entry `(i, j)` is the value of the `j`-th basis function at `points[i]`.
 function basis_matrix(axis::BSplineAxis{T}, points::AbstractVector) where {T}
     values = zeros(T, length(points), nbasis(axis))
     for (row, ξ) in pairs(points)
-        # Only p + 1 basis functions are nonzero at a point, so fill the dense
-        # matrix row from the active span values.
+        # Only p + 1 basis functions are nonzero at a point.
         indices, local_values = active_basis(axis, ξ)
         for (id, value) in zip(indices, local_values)
             values[row, id] = value

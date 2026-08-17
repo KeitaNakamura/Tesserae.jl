@@ -6,10 +6,8 @@
 
 function matrix_supportnodes(bw, grid)
     @_propagate_inbounds_meta
-    # Matrix assembly indexes global DOF tables, which are built on logical
-    # grid indices. For an SpGrid, supportnodes(bw, grid) returns SpIndex
-    # storage tokens instead. Using those here would require SpIndex to fully
-    # support AbstractArray indexing.
+    # The global DOF tables are built on logical grid indices, where
+    # `supportnodes(bw, grid)` would hand back an `SpGrid`'s storage tokens.
     nodes = supportnodes(bw)
     @boundscheck checkbounds(get_mesh(grid), nodes)
     nodes, nodes
@@ -17,8 +15,7 @@ end
 
 function matrix_supportnodes(bw_i, grid_i, bw_j, grid_j)
     @_propagate_inbounds_meta
-    # See the single-grid method: matrix DOF tables need logical grid indices,
-    # not SpGrid storage tokens.
+    # Logical grid indices, not `SpGrid` storage tokens; see the single-grid method.
     nodes_i = supportnodes(bw_i)
     nodes_j = supportnodes(bw_j)
     @boundscheck checkbounds(get_mesh(grid_i), nodes_i)
@@ -87,9 +84,8 @@ end
 function check_arguments_for_P2G_Matrix(grid, particles, weights, partition)
     check_transfer_arguments("@P2G_Matrix", grid, particles, weights, partition)
     @assert get_device(grid) isa CPUDevice
-    # This macro reads the stored values directly rather than going through the
-    # transfer's weight resolution, so deferred weights would assemble from
-    # storage that was deliberately left unfilled -- a zero matrix, silently.
+    # This macro reads the stored values directly, so deferred weights would
+    # assemble from storage left unfilled -- a zero matrix, silently.
     _reject_deferred_matrix(weights)
 end
 _reject_deferred_matrix(weights) =
@@ -186,10 +182,9 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     j_replacements = cached_replacements(scope, j, jp)
     inner_symbols = p2g_cached_symbols(cached_replacements(scope, i, j, ip, jp))
 
-    # One record per matrix target. `gmats` and `hoist_exprs` stay shared across
-    # equations: the first is the duplicate-target guard, read while the records
-    # are still being built, and the second collects a flat cross-equation list
-    # that is emitted once, before the loops.
+    # Shared across equations: `gmats` is the duplicate-target guard, read while
+    # the records are still being built, and `hoist_exprs` collects a flat
+    # cross-equation list emitted once, before the loops.
     gmats = Any[]
     hoist_exprs = Expr[]
     targets = map(equations) do equation
@@ -214,10 +209,9 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
                $assembler = Tesserae.matrix_assembler($matrix, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
                $matrix_cache = Tesserae.local_matrix_cache($matrix, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
            end,
-           # Spliced only into the non-block branch, so the `else` is
-           # unreachable -- but it must stay and it must throw: without it
-           # `buffer` is a possibly-undefined local afterwards, which widens its
-           # type and puts an undef check in the assembly loop.
+           # The `else` is unreachable but must stay and must throw: without it
+           # `buffer` becomes a possibly-undefined local, which widens its type
+           # and puts an undef check in the assembly loop.
            buffer_init = quote
                if $matrix_assembly isa Tesserae.ParticleAssembly
                    $buffer = nothing

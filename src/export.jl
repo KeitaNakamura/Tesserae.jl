@@ -1,4 +1,10 @@
+# -----------------------------------------------------------------------------
+#  Export
+# -----------------------------------------------------------------------------
+
 import WriteVTK
+
+# ---- VTK ----
 
 to_vtk_celltype(::Line2) = WriteVTK.VTKCellTypes.VTK_LINE
 to_vtk_celltype(::Line3) = WriteVTK.VTKCellTypes.VTK_QUADRATIC_EDGE
@@ -32,7 +38,6 @@ struct Polyline{V <: AbstractVector{<: Vec}}
     vertices::V
 end
 
-# vtk_grid
 function _vtk_grid(vtk, x::Polyline; kwargs...)
     coords = vtk_format(f32(x.vertices))
     cells = [WriteVTK.MeshCell(WriteVTK.VTKCellTypes.VTK_POLY_LINE, 1:length(x.vertices))]
@@ -60,7 +65,6 @@ function _vtk_grid(vtk, mesh::FEMesh; kwargs...)
     WriteVTK.vtk_grid(vtk, maparray(x->Vec{3,Float32}(resize(x,3)), mesh), vtk_cells; kwargs...)
 end
 
-# add_field_data
 function WriteVTK.add_field_data(vtk::WriteVTK.DatasetFile, data::AbstractArray{Float64}, name::AbstractString, loc::WriteVTK.AbstractFieldData; kwargs...)
     WriteVTK.add_field_data(vtk, f32(data), name, loc; kwargs...)
 end
@@ -78,7 +82,6 @@ function _vtk_format(A::AbstractArray{<: SymmetricSecondOrderTensor{3, T}}) wher
     _vtk_format(maparray(x->Vec{6, T}(x[1,1],x[2,2],x[3,3],x[1,2],x[2,3],x[3,1]), A))
 end
 
-# open/close
 openvtk(vtk, x; kwargs...) = _vtk_grid(vtk, x; kwargs...)
 function openvtk(f::Function, args...; kwargs...)
     vtk = openvtk(args...; kwargs...)
@@ -96,7 +99,6 @@ closevtk(file::WriteVTK.DatasetFile) = WriteVTK.vtk_save(file)
 closevtm(file::WriteVTK.MultiblockFile) = WriteVTK.vtk_save(file)
 closepvd(file::WriteVTK.CollectionFile) = WriteVTK.vtk_save(file)
 
-# f32
 f32(A::AbstractArray{Float64}) = maparray(Float32, A)
 f32(A::AbstractArray{Float32}) = A
 f32(A::AbstractArray{<: Tensor{<: Any, Float64}}) = maparray(concrete_tensortype(eltype(A), Float32), A)
@@ -107,7 +109,8 @@ function concrete_tensortype(::Type{TT}, ::Type{T}) where {TT <: Tensor, T}
     Tensorial.tensortype(space){T, Tensorial.tensororder(space), Tensorial.ncomponents(space)}
 end
 
-# write ply binary
+# ---- PLY ----
+
 function write_ply(name::AbstractString, xs::AbstractArray{<: Vec})
     file = string(name, ".ply")
     n = length(xs)

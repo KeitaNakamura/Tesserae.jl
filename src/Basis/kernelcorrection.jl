@@ -35,10 +35,9 @@ end
 
 Base.show(io::IO, kc::KernelCorrection) = print(io, KernelCorrection, "(", kc.kernel, ", ", kc.poly, ")")
 
-# Deferred evaluation. The branch `update_basis_values!` takes per particle --
-# plain kernel where the support is whole, the weighted fit where the mesh cuts
-# it -- is decided once here and recorded in the state, so both arms of the node
-# evaluation produce the same type.
+# Which branch `update_basis_values!` would take -- plain kernel on a whole
+# support, weighted fit where the mesh cuts it -- is decided once here and
+# recorded in the state, so both arms of the node evaluation share a type.
 @inline deferred_particle_state(order::Order, kc::KernelCorrection, pt, mesh::CartesianMesh, window, filter) =
     wls_deferred_state(order, kc.kernel, kc.poly, pt, mesh, window, filter,
                        all(size(window) .== support_width(kc.kernel)) && alltrue(filter, window))

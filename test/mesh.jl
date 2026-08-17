@@ -1,5 +1,4 @@
 @testset "CartesianMesh" begin
-    # constructor
     ## default
     (@inferred CartesianMesh(Float32, 1, (0,3), (1,4)))::CartesianMesh{2, Float32}
     (@inferred CartesianMesh(Float64, 1, (0,3), (1,4), (0,2)))::CartesianMesh{3, Float64}
@@ -25,7 +24,6 @@
     @test mesh == mesh2
     @test_throws MethodError CartesianMesh(range(0,3,step=1), range(1,4,step=1), range(0,2,step=1))
 
-    # misc
     mesh = CartesianMesh(0.2, (0,3), (0,4))
     @test size(mesh) === (16,21)
     @test IndexStyle(mesh) === IndexCartesian()
@@ -41,7 +39,6 @@
     @test Tesserae.block_size_log2(mesh_block3[2:10, 3:15]) === 3
     @test_throws MethodError CartesianMesh(0.2, (0,3), (0,4); block_size_log2=3)
 
-    # isinside
     @test (@inferred Tesserae.isinside(Vec(0.1,0.3), mesh)) === true
     @test (@inferred Tesserae.isinside(Vec(0.2,0.4), mesh)) === true
     ## exactly on the boundary
@@ -51,7 +48,6 @@
     @test (@inferred Tesserae.isinside(Vec(-1.0,3.0), mesh)) === false
     @test (@inferred Tesserae.isinside(Vec(1.0,-3.0), mesh)) === false
 
-    # supportnodes
     @test (@inferred supportnodes(Vec(0.1,0.1), 1, mesh)) === CartesianIndices((1:2,1:2))
     @test (@inferred supportnodes(Vec(0.3,0.1), 2, mesh)) === CartesianIndices((1:4,1:3))
     @test (@inferred supportnodes(Vec(0.1,0.3), 2, mesh)) === CartesianIndices((1:3,1:4))
@@ -62,7 +58,6 @@
     ## outside
     @test (@inferred supportnodes(Vec(-0.1,3.05), 3, mesh)) === CartesianIndices((1:0,1:0))
 
-    # findcell
     @test findcell(Vec(0.1,0.1), mesh) === CartesianIndex(1,1)
     @test findcell(Vec(2.3,1.1), mesh) === CartesianIndex(12,6)
     ## exactly on the node

@@ -36,11 +36,10 @@ end
 
 # -- destination layout --
 
-# The DoF tables index the logical destination. `row_slots_per_node` is the
-# stride between nodes in the destination's nonzeros run. It is the parent's row
-# DoFs per node for a plain matrix and for a CSC view, but the block's own for a
-# `SparseMatrixBlockView`, whose `column_slots` already restrict each column to
-# the block -- so it is deliberately not named after the parent.
+# `row_slots_per_node` is the stride between nodes in the destination's nonzeros
+# run: the parent's row DoFs per node for a plain matrix or a CSC view, but the
+# block's own for a `SparseMatrixBlockView`, whose `column_slots` already restrict
+# each column to the block. Hence the name not mentioning the parent.
 struct CartesianSparseMatrixAssembler{M <: AbstractMatrix, D <: LinearIndices}
     matrix::M
     row_dof_table::D
@@ -64,11 +63,10 @@ function cartesian_matrix_column_slots(assembler::CartesianSparseMatrixAssembler
     matrix.column_slots[col_dof_table[b,col_node]]
 end
 
-# Maps a within-node row DoF (`1:row_ndofs`) to the parent's row DoF component.
-# Not the parent's index list: only the first `row_ndofs` entries are ever read,
-# and they are the components at every node because
+# Maps a within-node row DoF to the parent's row DoF component. Only the first
+# `row_ndofs` entries are read, and they hold at every node because
 # `check_cartesian_sparse_matrix_view_indices` requires the view to select the
-# same ones node by node. Consumed only by `add_entry_values!`.
+# same components node by node.
 @inline function cartesian_matrix_row_components(assembler::CartesianSparseMatrixAssembler)
     first(matrix_parent_indices(assembler.matrix))
 end

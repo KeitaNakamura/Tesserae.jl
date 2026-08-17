@@ -195,30 +195,18 @@ end
 
 # ---- parent matrix ----
 #
-# How a matrix target reaches the array that owns its values. An `AbstractArray`
-# is its own parent, and its indices are its own axes, so `mapped_index` is
-# the identity. A wrapper that keeps its values elsewhere -- a view, or a block
-# of a shared matrix -- overrides `matrix_parent`/`matrix_parent_indices` so
-# that `extract` and the assemblers below reach the parent and remap indices
-# into it. `fillzero!` follows the same split: it must zero only the entries the
-# target owns, not the whole parent.
+# A wrapper keeping its values elsewhere, a view or a block of a shared matrix,
+# overrides `matrix_parent`/`matrix_parent_indices` so that `extract` and the
+# assemblers reach the parent and remap into it. `fillzero!` follows the same
+# split: it must zero only the entries the target owns.
 #
-# `mapped_index` is only the lookup; what the result means is the caller's. At
-# every site but one it takes a global logical DoF number and returns the
-# parent's row or column number -- fed to `nzrange`, compared against `rowvals`,
-# or used to index the parent directly.
-#
-# The exception is `add_entry_values!`, which passes a within-node DoF number
-# (`1:ndofs`) and adds the result to a slot into `nonzeros`. There the result is
-# the parent's DoF *component*, and using it as an offset is valid only because
-# a view must select the same components at every node --
-# `check_cartesian_sparse_matrix_view_indices` enforces exactly that, per node.
-#
-# So it is neither "an index into the parent" nor "an index into the stored
-# values"; either name is wrong at some call site. `storageindex` is the one
-# that really is a position in the stored values: for a `SparseMatrixBlockView`
-# an index into `nonzeros(parent(block))`, for an `SpArray` an index into its
-# data array.
+# What `mapped_index` returns is the caller's to interpret. Everywhere but one it
+# maps a global logical DoF number to the parent's row or column. The exception is
+# `add_entry_values!`, which passes a within-node DoF number and gets the parent's
+# DoF *component* back; using that as an offset into `nonzeros` is valid only
+# because `check_cartesian_sparse_matrix_view_indices` requires a view to select
+# the same components at every node. `storageindex` is the one that really is a
+# position in the stored values.
 
 matrix_parent(matrix) = matrix
 matrix_parent(matrix::Union{SparseMatrixCSCView, SparseMatrixBlockView, SparseMatrixBlocks}) = parent(matrix)

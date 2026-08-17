@@ -25,7 +25,7 @@ support_width(wls::WLS) = support_width(wls.kernel)
     update_wls_values!(bw, wls, pt, mesh, filter)
 end
 
-# a bit faster implementation for B-splines
+# A whole B-spline support has a closed-form moment matrix, so the fit is skipped.
 @inline function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
     indices = supportnodes(bw)
     if has_full_support(bw, indices, filter)
@@ -38,15 +38,11 @@ end
         update_wls_values!(bw, wls, pt, mesh, filter)
     end
 end
-# Over its full support a degree-`n` cardinal B-spline has unit mass, zero first
-# moment, and second moment `(n+1)h²/12`, independent of where the particle sits
-# in the cell, so the linear-basis moment matrix is diagonal and known in closed
-# form. That holds from `n = 2` only: for `n = 1` the second moment varies with
-# the position as ξ(1-ξ), so `Linear` is excluded rather than given a wrong
-# matrix. `12//(n+1)` is evaluated as a rational before dividing by `h²`, so
-# the quotient is the exact 4 or 3 the two hand-written entries used and the
-# result stays in the mesh scalar type — a `12/(n+1)` float quotient would
-# promote the matrix to Float64, which Metal kernels cannot compile.
+# A degree-`n` cardinal B-spline has unit mass, zero first moment and second
+# moment `(n+1)h²/12` over its full support, independent of the particle position,
+# from `n = 2` only: at `n = 1` the second moment varies as ξ(1-ξ). `12//(n+1)`
+# stays a rational until the division so the result keeps the mesh scalar type --
+# a float quotient would promote to Float64, which Metal kernels cannot compile.
 @inline function full_support_moment_matrix_inv(::AbstractBSpline{Degree{n}}, mesh::CartesianMesh{dim}) where {n, dim}
     n ≥ 2 || throw(ArgumentError("the full-support moment matrix is position-dependent below degree 2"))
     diagm([1; ones(Vec{dim,Int}) * (12//(n+1)) / spacing(mesh)^2])
@@ -88,10 +84,9 @@ end
 end
 
 function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}, pt, mesh::CartesianMesh{dim}, filter::AbstractArray{Bool}) where {dim}
-    # Masked cases require the general moment matrix.
+    # A mask breaks the axis-wise decomposition below, so it needs the general matrix.
     filter isa Trues || return update_wls_values!(bw, wls, pt, mesh, filter)
 
-    # For MultiLinear, decompose into axis-wise Linear bases.
     wls_1d = WLS(wls.kernel, Polynomial(Linear()))
     if dim == 1
         return update_basis_values!(bw, wls_1d, pt, mesh, filter)
@@ -104,10 +99,9 @@ function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadrat
         vals_1d = allocate_static_basis_values(@NamedTuple{w::T}, wls_1d, Val(1); derivative=order)
         indices_1d = CartesianIndices((supportnodes(bw).indices[d],))
         bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(indices_1d), order)
-        # Must be inlined: creates/updates a small StaticArray (MVector/MArray) on the GPU.
-        # If not inlined, the temporary may escape and trigger dynamic allocation (gpu_gc_pool_alloc).
+        # Must be inlined: otherwise the small MArray escapes and the GPU falls
+        # back to dynamic allocation (gpu_gc_pool_alloc).
         update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
-        # Get scalar value from Vec{1} for each property.
         scalarize_axis_values(order, bw_1d)
     end
     set_values!(bw, tensor_product_axis_values(order, vals_axes))
@@ -124,24 +118,20 @@ end
 
 Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")")
 
-# Deferred evaluation: the moment matrix is per-particle, so it is built in the
-# support loop's preamble and every node reads it. `full` records whether the
-# correction applies at all -- carried rather than acted on, so both arms of
-# `KernelCorrection`'s node evaluation share a type.
-# Which pairings have one: a degree-2 or -3 cardinal B-spline against a linear
-# polynomial, matching `update_basis_values!` above.
+# Matches the pairings `update_basis_values!` above shortcuts.
 @inline has_closed_form_moments(::Any, ::Any) = false
 @inline has_closed_form_moments(::Union{BSpline{Quadratic}, BSpline{Cubic}}, ::Polynomial{Linear}) = true
 
+# The moment matrix is per-particle, so it is built in the support loop's preamble
+# and read by every node. `full` is carried rather than acted on, so both arms of
+# `KernelCorrection`'s node evaluation share a type.
 @inline function wls_deferred_state(order::Order, kernel, poly, pt, mesh::CartesianMesh, window, filter, full::Bool)
     xₚ = getx(pt)
     P₀__ = jet(order, poly, zero(xₚ))
     P₀ = value(poly, zero(xₚ))
     full && return (true, zero(P₀ ⊗ P₀), P₀__)
-    # Over a whole support the moment matrix is known in closed form, so the
-    # sum below is skipped entirely -- the same shortcut `update_basis_values!`
-    # takes, and worth more here because a deferred transfer pays it per
-    # transfer rather than once per `update!`.
+    # The same shortcut `update_basis_values!` takes, worth more here because a
+    # deferred transfer pays the sum per transfer rather than once per `update!`.
     if has_closed_form_moments(kernel, poly) && filter === nothing &&
             all(size(window) .== support_width(kernel))
         return (false, full_support_moment_matrix_inv(kernel, mesh), P₀__)
@@ -174,12 +164,10 @@ end
 
 can_defer_basis(::Type{<: WLS}) = true
 
-# The separable deferred form, mirroring `update_basis_values!` above: for
-# `MultiLinear` the fit decomposes into `dim` independent 1-D fits, so the
-# per-particle work is `dim` small problems over `support_width` nodes rather
-# than one pass over the whole support with a `(dim+1)²` inverse. Only reachable
-# without a filter, which is what makes the decomposition exact; the type of the
-# filter selects between this and the general form, so each stays type-stable.
+# For `MultiLinear` the fit decomposes into `dim` independent 1-D fits, cheaper
+# than one pass over the whole support with a `(dim+1)²` inverse. What makes the
+# decomposition exact is the absence of a filter, whose type selects between this
+# and the general form, so each stays type-stable.
 @inline function wls_axis_jets(order::Order, kernel, pt, mesh::CartesianMesh{dim}, window) where {dim}
     wls_1d = WLS(kernel, Polynomial(Linear()))
     T = eltype(getx(pt))

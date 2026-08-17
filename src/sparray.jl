@@ -1,11 +1,16 @@
+# -----------------------------------------------------------------------------
+#  Sparse arrays
+# -----------------------------------------------------------------------------
+
+# ---- SpIndex / SpIndices ----
+
 struct SpIndex{I}
     index::I
     spindex::Int
 end
 
-# `SpIndex` is tied to the current numbering of a `SpIndices` object.
-# It should be treated as a short-lived token and not stored across
-# `update_sparsity!` calls.
+# Tied to the current numbering of a `SpIndices`, so it is a short-lived token
+# and must not be stored across `update_sparsity!` calls.
 @inline logicalindex(x::SpIndex) = x.index
 @inline storageindex(x::SpIndex) = x.spindex
 isactive(x::SpIndex) = !iszero(x.spindex)
@@ -147,9 +152,8 @@ struct ActiveSpIndices{dim, S <: SpIndices{dim}}
     spinds::S
 end
 
-# Iterate active logical indices in storage order. This is intentionally not
-# Cartesian iteration order; callers that work with `SpArray.data` can use the
-# resulting `SpIndex` values without re-sorting.
+# Storage order, deliberately not Cartesian order, so callers working with
+# `SpArray.data` can use the resulting `SpIndex` values without re-sorting.
 activeindices(sp::SpIndices) = ActiveSpIndices(sp)
 
 Base.IteratorSize(::Type{<: ActiveSpIndices}) = Base.SizeUnknown()
@@ -199,6 +203,8 @@ end
 function _check_same_backend(label, x, backend)
     get_backend(x) == backend || throw(ArgumentError("SpIndices and $label must live on the same backend"))
 end
+
+# ---- update_sparsity! ----
 
 function update_sparsity!(sp::SpIndices, blkspy::AbstractArray)
     _apply_block_activity!(sp, blkspy)
@@ -276,9 +282,8 @@ function _number_blocks!(sp::SpIndices, activity, backend::GPU)
     only(Array(active_count_buffer)) * blocklength(sp)
 end
 
-# Particle block tracker.
-# Manual sparsity updates bypass particle positions, so the particle tracker is
-# no longer a valid description of the current sparsity state.
+# Manual sparsity updates bypass particle positions, so the tracker no longer
+# describes the current sparsity state.
 function _invalidate_particle_block_tracker!(spinds::SpIndices)
     tracker = sparsity_tracker(spinds)
     resize_fillzero!(tracker.blockids, 0)
@@ -300,8 +305,8 @@ end
 
 @inline blockid(dims::Dims, x::Vec, mesh::CartesianMesh)::Int = sub2ind(dims, findblock(x, mesh))
 
-# Update particle -> block ids and per-block particle counts. The expensive
-# active expansion and numbering are needed only when occupied blocks change.
+# The expensive active expansion and numbering are needed only when the occupied
+# blocks change, which is what the return value reports.
 function _update_particle_block_tracker!(spinds::SpIndices, xₚ, mesh, ::CPU)
     reset = _reset_particle_block_tracker!(spinds, length(xₚ))
     tracker = sparsity_tracker(spinds)
@@ -323,8 +328,6 @@ function _update_particle_block_tracker!(spinds::SpIndices, xₚ, mesh, ::CPU)
     moved && _refresh_occupied_blocks!(occupied_blocks(spinds), counts, reset)
 end
 
-# Convert block particle counts into occupied flags and report whether the
-# occupied set changed.
 function _refresh_occupied_blocks!(occupied, counts, tracker_reset::Bool)
     changed = tracker_reset
     @inbounds for i in eachindex(occupied, counts)
@@ -366,8 +369,8 @@ end
 function _update_particle_block_tracker!(spinds::SpIndices, xₚ, mesh, backend::GPU)
     reset = _reset_particle_block_tracker!(spinds, length(xₚ))
     tracker = sparsity_tracker(spinds)
-    # Only the occupied set decides whether active expansion and numbering are
-    # needed; individual particle moves are just an intermediate detail.
+    # Only the occupied set decides whether expansion and numbering are needed;
+    # individual particle moves are an intermediate detail.
     changed = fillzero!(similar(vec(blocknumbering(spinds)), Int32, 1))
 
     update_kernel = gpukernel_update_particle_block_tracker!(backend)
@@ -442,6 +445,8 @@ function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, part
 
     _apply_block_activity!(spinds, activity)
 end
+
+# ---- SpArray ----
 
 """
     SpArray{T}(undef, dims...)
@@ -528,7 +533,6 @@ function Base.fill!(A::SpArray, x)
     A
 end
 
-# return zero if the index is not active
 @inline function Base.getindex(A::SpArray, i::SpIndex)
     @boundscheck checkbounds(A, logicalindex(i))
     isactive(i) || return zero_recursive(eltype(A))
@@ -536,7 +540,7 @@ end
     @inbounds get_data(A)[storageindex(i)]
 end
 
-# do nothing if the index is not active (do not throw error!!)
+# Writing to an inactive index must be a no-op, not an error.
 @inline function Base.setindex!(A::SpArray, v, i::SpIndex)
     @boundscheck checkbounds(A, logicalindex(i))
     isactive(i) || return A
@@ -588,16 +592,12 @@ function resize_fillzero_data!(A::SpArray, n::Integer)
 end
 resize_fillzero_data!(A::AbstractMesh, n) = A
 
-#############
-# Broadcast #
-#############
+# ---- broadcast ----
 
-# Non-mutating broadcasts normally materialize a dense array over the logical
-# domain.  We keep a sparse result only for simple zero-preserving operations
-# whose flattened arguments are all SpArrays sharing the exact same SpIndices
-# object (`===`), not merely an equal sparsity pattern.  Mutating broadcasts to
-# a SpArray never change its sparsity; they write only into the destination's
-# active storage.
+# A non-mutating broadcast keeps a sparse result only for zero-preserving
+# operations whose flattened arguments are all `SpArray`s sharing the very same
+# `SpIndices` object (`===`), not merely an equal sparsity pattern. A mutating
+# broadcast never changes sparsity: it writes into the destination's storage.
 
 Broadcast.BroadcastStyle(::Type{<: SpArray}) = ArrayStyle{SpArray}()
 
@@ -627,10 +627,9 @@ function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
     axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
     bc = Broadcast.instantiate(bc)
     bcf = Broadcast.flatten(bc)
-    # Flattening changes the nesting, not the set of operands, so `bcf.args` is
-    # the one place every leaf array is reachable in a single tuple -- that is
-    # what the shared-sparsity test needs. The copy itself stays on the
-    # unflattened `bc`, whose nesting `_get_data` rebuilds over the data arrays.
+    # The shared-sparsity test needs every leaf array in one tuple, which only the
+    # flattened form gives. The copy stays on the unflattened `bc`, whose nesting
+    # `_get_data` rebuilds over the data arrays.
     if identical_spinds(dest, bcf.args...)
         Base.copyto!(_get_data(dest), _get_data(bc))
     else
@@ -662,15 +661,12 @@ function _copyto_sp_broadcast!(device::GPUDevice, dest::SpArray, bc::Broadcasted
     dest
 end
 
-# Fast path for broadcasts over SpArrays with identical sparsity: unwrap the
-# data vectors, but instantiate the broadcast here so GPU kernels do not infer
-# broadcast axes from the sparse wrapper.
+# Instantiated here so GPU kernels do not infer broadcast axes from the sparse wrapper.
 @inline _get_data(bc::Broadcasted{ArrayStyle{SpArray}}) = Broadcast.instantiate(Broadcast.broadcasted(bc.f, map(_get_data, bc.args)...))
 @inline _get_data(x::SpArray) = get_data(x)
 @inline _get_data(x::Any) = x
 
-# helpers for copyto!
-# all abstract arrays except SpArray and Tensor are not allowed in broadcasting
+# No abstract array other than `SpArray` and `Tensor` may take the fast path.
 _ok(::Type{<: AbstractArray}) = false
 _ok(::Type{<: SpArray}) = true
 _ok(::Type{<: Tensor})  = true
@@ -685,9 +681,7 @@ _ok(::Type{<: Any})     = true
     end
 end
 
-###############
-# Custom show #
-###############
+# ---- custom show ----
 
 struct CDot end
 Base.show(io::IO, x::CDot) = print(io, "⋅")
@@ -697,8 +691,8 @@ struct ShowSpArray{T, N, A <: AbstractArray{T, N}, S} <: AbstractArray{T, N}
     summary_parent::S
 end
 
-# Array display scalar-indexes through `getindex`; show GPU-backed sparse arrays
-# through a CPU copy while keeping the original object for the printed summary.
+# Array display scalar-indexes through `getindex`, so a GPU-backed array is shown
+# through a CPU copy, the original being kept for the printed summary.
 ShowSpArray(parent) = ShowSpArray(_show_parent(parent), parent)
 _show_parent(parent) = get_device(parent) isa CPUDevice ? parent : cpu(parent)
 

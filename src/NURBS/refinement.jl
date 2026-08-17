@@ -37,7 +37,6 @@ function insert_knot(net::ControlNet{dim, pdim, T}, knots::AbstractVector{T}; di
     rational_control_net(Base.setindex(net.axes, axis_new, direction), points)
 end
 
-# Refine one parametric direction until its axis matches the requested axis.
 function refineto(net::ControlNet{dim, pdim, T}, axis_new::BSplineAxis{T}; direction::Int) where {dim, pdim, T}
     check_parametric_direction(direction, pdim)
     axis_old = net.axes[direction]
@@ -66,8 +65,8 @@ function refine_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new::
 
     isempty(knots) && return values
 
-    # Standard knot-refinement pass. The inserted knots are handled in one
-    # backward sweep, so each tensor-product fiber is copied only once.
+    # One backward sweep over the inserted knots, so each tensor-product fiber
+    # is copied only once.
     r = length(knots) - 1
 
     # Only the basis functions between the first and last inserted knots change.

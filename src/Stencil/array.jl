@@ -1,4 +1,3 @@
-# padded to construct padded arrays
 function padded(A::AbstractArray; pad::Int)
     B = similar(A, size(A) .+ 2*pad)
     inner(B; pad) .= A
@@ -73,7 +72,6 @@ Base.view(A::StencilArray, I...) = view(parent(A), I...)
 getlocation(x::StencilArray) = x.loc
 getaxis(x::StencilArray{Face}) = getaxis(getlocation(x))
 
-# interior_indices
 function interior_indices(::Cell, axes::NTuple{N, AbstractUnitRange}; pad::Int) where {N}
     ranges = map(axes) do ax
         first(ax) + pad : last(ax) - pad
@@ -111,9 +109,8 @@ outerfront_axis(loc::Face, ax::AbstractUnitRange, d::Int, n::Int, pad::Int) = d 
 innerback_axis(loc::Face, ax::AbstractUnitRange, d::Int, n::Int, pad::Int) = d == getaxis(loc) ? (last(ax)-pad-n : last(ax)-pad) : innerback_axis(Cell(), ax, d, n, pad)
 outerback_axis(loc::Face, ax::AbstractUnitRange, d::Int, n::Int, pad::Int) = d == getaxis(loc) ? (last(ax)-pad : last(ax)-pad+n) : outerback_axis(Cell(), ax, d, n, pad)
 
-# Build an N-dimensional CartesianIndices region where axis `d` uses the explicit `range`,
-# and every other axis uses `offaxis_range(axes[j], pad, trim)` (i.e. either the full axis
-# or the axis trimmed by `pad`, depending on `trim`).
+# Axis `d` takes the explicit `range`; every other axis is either full or trimmed
+# by `pad`, according to `trim`.
 function _build_indices(range::AbstractUnitRange, axes::NTuple{N, AbstractUnitRange}, d::Int, pad::Int, trim::Bool) where {N}
     ax = axes[d]
     @assert first(ax) ≤ first(range) ≤ last(range) ≤ last(ax)
@@ -157,13 +154,10 @@ function outer_indices(loc::Location, axes::NTuple{N, AbstractUnitRange}, d::Int
 end
 outer_indices(loc::Location, axes::NTuple{N, AbstractUnitRange}, d::Int; pad::Int, trim::Bool=false) where {N} = outer_indices(loc, axes, d, pad; pad, trim)
 
-# inner/outer
 inner(A::StencilArray; kwargs...) = view(A, interior_indices(getlocation(A), axes(A); kwargs...))
 outer(A::StencilArray, args...; kwargs...) = view(A, outer_indices(getlocation(A), axes(A), args...; kwargs...))
-# innerfront/outerfront
 innerfront(A::StencilArray, args...; kwargs...) = view(A, innerfront_indices(getlocation(A), axes(A), args...; kwargs...))
 outerfront(A::StencilArray, args...; kwargs...) = view(A, outerfront_indices(getlocation(A), axes(A), args...; kwargs...))
-# innerback/outerback
 innerback(A::StencilArray, args...; kwargs...) = view(A, innerback_indices(getlocation(A), axes(A), args...; kwargs...))
 outerback(A::StencilArray, args...; kwargs...) = view(A, outerback_indices(getlocation(A), axes(A), args...; kwargs...))
 
@@ -187,7 +181,6 @@ function foldpadback!(f, dest::StencilArray{Loc}, axis::Int, srcs::StencilArray{
     return dest
 end
 
-# flip shortcut (self-fold)
 foldpadfront!(A::StencilArray, axis::Int; pad::Int, flip::Bool=false) = foldpadfront!(ifelse(flip, -, +), A, axis, A; pad)
 foldpadback!(A::StencilArray, axis::Int; pad::Int, flip::Bool=false) = foldpadback!(ifelse(flip, -, +), A, axis, A; pad)
 foldpad!(A::StencilArray, axis::Int; pad::Int, flip::Bool=false) = (foldpadfront!(A, axis; pad, flip); foldpadback!(A, axis; pad, flip))
@@ -213,7 +206,6 @@ function mirrorpadback!(f, dest::StencilArray, axis::Int; pad::Int)
     return dest
 end
 
-# flip shortcut
 mirrorpadfront!(A::StencilArray, axis::Int; pad::Int, flip::Bool=false) = mirrorpadfront!(ifelse(flip, -, +), A, axis; pad)
 mirrorpadback!(A::StencilArray, axis::Int; pad::Int, flip::Bool=false) = mirrorpadback!(ifelse(flip, -, +), A, axis; pad)
 mirrorpad!(A::StencilArray, axis::Int; pad::Int, flip::Bool=false) = (mirrorpadfront!(A, axis; pad, flip); mirrorpadback!(A, axis; pad, flip))
@@ -225,12 +217,10 @@ function mirrorpad!(A::StencilArray; pad::Int, flip::AbstractVector{Bool}=falses
     return A
 end
 
-# extendsize
 function extendsize(dims::NTuple{N}, ax::Int, n::Int) where {N}
     ntuple(d -> d == ax ? dims[d]+n : dims[d], Val(N))
 end
 
-# infersize
 infersize(destloc::Cell, srcloc::Cell, srcdims::Dims) = srcdims
 function infersize(destloc::Face, srcloc::Cell, srcdims::Dims)
     extendsize(srcdims, getaxis(destloc), 1)
@@ -243,12 +233,10 @@ function infersize(destloc::Face, srcloc::Face, srcdims::Dims)
     return srcdims
 end
 
-# check_size
 function check_size(dest::StencilArray, src::StencilArray)
     @assert size(dest) == infersize(getlocation(dest), getlocation(src), size(src))
 end
 
-# similar for `Location`
 function Base.similar(src::StencilArray, ::Type{T}, destloc::Location) where {T}
     destdims = infersize(destloc, getlocation(src), size(src))
     StencilArray(destloc, similar(parent(src), T, destdims))

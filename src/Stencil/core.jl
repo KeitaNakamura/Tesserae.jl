@@ -18,7 +18,6 @@ end
     end
 end
 
-# CPU
 function _stencil!(::CPUDevice, combine, dest, src, offsets, weights, baseshift, indices)
     @inbounds @simd for I in indices
         tmp = dot_unrolled(src, offsets, weights, baseshift, I)
@@ -26,7 +25,6 @@ function _stencil!(::CPUDevice, combine, dest, src, offsets, weights, baseshift,
     end
 end
 
-# GPU
 @kernel function kernel_stencil(combine, dest, @Const(src), @Const(offsets), @Const(weights), @Const(baseshift), @Const(I0))
     I = I0 - oneunit(I0) + @index(Global, Cartesian)
     @inbounds begin

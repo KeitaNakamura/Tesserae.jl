@@ -150,9 +150,8 @@ end
 
 # ---- block buffer selection ----
 
-# Canonical Cartesian CSC matrices, component views, and block views use a
-# block buffer. Other matrices are written directly within the thread-safe
-# block schedule.
+# Only the Cartesian path needs a buffer; anything else is safe to write directly
+# within the thread-safe block schedule.
 function block_matrix_buffer(assembler::CartesianSparseMatrixAssembler, assembly::BlockAssembly, orientation)
     row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
     acquire!(assembly.matrix_buffer_pool, BlockMatrixBufferKey(assembler, row_nodes, col_nodes))

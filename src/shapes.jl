@@ -1,5 +1,8 @@
-# This is basically for FEM
+# -----------------------------------------------------------------------------
+#  Cell shapes
+# -----------------------------------------------------------------------------
 
+# Cell shapes for FEM and IGA meshes.
 abstract type Shape{dim} end
 
 localnodes(s::Shape) = localnodes(Float64, s)
@@ -9,9 +12,7 @@ nsupportnodes(s::Shape) = nlocalnodes(s)
 
 get_dimension(::Shape{dim}) where {dim} = dim
 
-########
-# Line #
-########
+# ---- Line ----
 
 abstract type Line <: Shape{1} end
 
@@ -117,9 +118,7 @@ function value(::Line4, X::Vec{1, T}) where {T}
     )
 end
 
-########
-# Quad #
-########
+# ---- Quad ----
 
 abstract type Quad <: Shape{2} end
 
@@ -273,9 +272,7 @@ function value(::Quad9, X::Vec{2, T}) where {T}
     )
 end
 
-#######
-# Hex #
-#######
+# ---- Hex ----
 
 abstract type Hex <: Shape{3} end
 
@@ -505,9 +502,7 @@ function value(::Hex27, X::Vec{3, T}) where {T}
     )
 end
 
-#######
-# Tri #
-#######
+# ---- Tri ----
 
 abstract type Tri <: Shape{2} end
 
@@ -598,9 +593,7 @@ function value(::Tri6, X::Vec{2, T}) where {T}
     )
 end
 
-#######
-# Tet #
-#######
+# ---- Tet ----
 
 abstract type Tet <: Shape{3} end
 

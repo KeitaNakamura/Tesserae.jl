@@ -1,3 +1,7 @@
+# -----------------------------------------------------------------------------
+#  Progress meter
+# -----------------------------------------------------------------------------
+
 module Progress
 
 using Printf
@@ -8,6 +12,8 @@ const ENABLED = Preferences.@load_preference("enable_showprogress_macro", true)
 
 const BAR_FRONTS = ('▏', '▎', '▍', '▌', '▋', '▊', '▉')
 const LINE_OVERHEAD = 29
+
+# ---- running statistics ----
 
 # P2 median estimator. It keeps five moving markers instead of storing all step times.
 mutable struct P2Median
@@ -20,7 +26,6 @@ end
 
 P2Median() = P2Median(0, Float64[], zeros(Int, 5), zeros(5), [0.0, 0.25, 0.5, 0.75, 1.0])
 
-# Convert the first five exact samples into the five P2 marker heights and positions.
 function initialize_markers!(state::P2Median)
     sort!(state.q)
     state.n .= 1:5
@@ -28,8 +33,7 @@ function initialize_markers!(state::P2Median)
     state
 end
 
-# Try the parabolic P2 marker update first; callers fall back to linear interpolation
-# when the parabolic estimate would break marker ordering.
+# Callers fall back to `linear_marker` when this would break marker ordering.
 function parabolic_marker(q, n, i, d)
     left = n[i] - n[i - 1]
     right = n[i + 1] - n[i]
@@ -39,8 +43,6 @@ end
 
 linear_marker(q, n, i, d) = q[i] + d * (q[i + d] - q[i]) / (n[i + d] - n[i])
 
-# Return the marker interval that contains value, updating the outer markers when
-# value becomes the new observed minimum or maximum.
 function marker_interval!(q, value)
     value < q[1] && (q[1] = value; return 1)
     value < q[2] && return 1
@@ -89,8 +91,10 @@ function median(state::P2Median)
     state.q[3]
 end
 
-# Meter stores both simulation progress and terminal rendering state so resize-safe
-# refreshes can overwrite the previous multi-line display.
+# ---- Meter ----
+
+# The terminal rendering state is kept alongside the progress so a resize-safe
+# refresh can overwrite the previous multi-line display.
 Base.@kwdef mutable struct Meter
     # Simulation progress
     t_start::Float64
@@ -173,7 +177,6 @@ end
 
 speedstring(seconds_per_iteration) = timestring(seconds_per_iteration) * "/it"
 
-# Record one wall-clock loop step for the final summary.
 function record_step!(p::Meter, seconds)
     isfinite(seconds) && seconds ≥ 0 || return p
     push!(p.step_median, seconds)
@@ -187,7 +190,6 @@ function record_step!(p::Meter, seconds)
     p
 end
 
-# Record the simulation-time increment between successive loop updates.
 function record_timestep!(p::Meter, seconds)
     isfinite(seconds) && seconds ≥ 0 || return p
     push!(p.timestep_median, seconds)
@@ -213,7 +215,6 @@ end
 # Leave room for the description, percentage, and ETA/elapsed text around the bar.
 tty_width(p::Meter) = max(0, displaysize(p.output)[2] - length(p.desc) - LINE_OVERHEAD)
 
-# Convert the current simulation time into a monotone 0..1 progress fraction.
 function fraction(p::Meter, t, t_stop)
     current = Float64(t)
     stop = Float64(t_stop)
@@ -225,7 +226,6 @@ function fraction(p::Meter, t, t_stop)
     clamp((current - p.t_start) / span, 0.0, 1.0)
 end
 
-# Update ETA from the smoothed wall-time-per-simulation-time estimate.
 function update_eta!(p::Meter, t, interval_seconds)
     update_rate!(p, t, interval_seconds)
     p.has_rate || return p
@@ -242,7 +242,7 @@ function eta(p::Meter)
     durationstring(round(Int, p.eta))
 end
 
-# Show current and median simulation timestep in the same width as stepstring.
+# Same width as `stepstring`, so the two rows line up.
 function timestepstring(p::Meter)
     p.has_timestep || return "N/A"
     current = timestring(p.timestep)
@@ -252,7 +252,6 @@ function timestepstring(p::Meter)
     string(current, " (median ", timestring(m), ")")
 end
 
-# Show current and median wall-clock time per loop step.
 function stepstring(p::Meter, step_seconds)
     current = timestring(step_seconds)
     p.step_count > 0 || return current
@@ -261,7 +260,7 @@ function stepstring(p::Meter, step_seconds)
     string(current, " (median ", timestring(m), ")")
 end
 
-# Build the single-line progress meter; value rows are rendered separately below it.
+# The value rows are rendered separately, below this line.
 function line(p::Meter, percentage_complete; finished = false)
     bar = barstring(tty_width(p), percentage_complete)
     spacer = endswith(p.desc, " ") ? "" : " "
@@ -286,7 +285,6 @@ function printstyledln(io::IO, color::Symbol, args...)
     println(io)
 end
 
-# Clear previously printed value rows before redrawing them at the new terminal width.
 function clear_values(io::IO, numlines::Integer)
     for _ in 1:numlines
         # Clear the current value row, then move up toward the progress line.
@@ -294,7 +292,6 @@ function clear_values(io::IO, numlines::Integer)
     end
 end
 
-# Print aligned value rows and remember how many terminal rows they occupied.
 function printvalues!(p::Meter, showvalues)
     isempty(showvalues) && (p.numprintedvalues = 0; return p)
     maxwidth = maximum(length(string(name)) for (name, _) in showvalues)
@@ -309,7 +306,6 @@ function printvalues!(p::Meter, showvalues)
     p
 end
 
-# Redraw the progress line and value rows in-place.
 function refresh!(p::Meter, line::AbstractString, showvalues)
     # The cursor is left on the progress line; move to the last value row first.
     print(p.output, "\n" ^ p.numprintedvalues)
@@ -323,16 +319,14 @@ function refresh!(p::Meter, line::AbstractString, showvalues)
     p
 end
 
-# Smooth wall seconds per simulation-time unit using the latest printed interval.
 function update_rate!(p::Meter, t, wall_interval)
     current = Float64(t)
     sim_interval = current - p.t_last_print
     if sim_interval > 0 && isfinite(sim_interval) && wall_interval ≥ 0 && isfinite(wall_interval)
-        # ETA is estimated as remaining simulation time times wall time per simulation time.
         rate = wall_interval / sim_interval
         observed = current - p.t_start
-        # Give each printed interval at least its elapsed share of the run so early
-        # estimates settle faster than a fixed-alpha EMA.
+        # Each printed interval gets at least its elapsed share of the run, so
+        # early estimates settle faster than a fixed-alpha EMA would.
         alpha = p.has_rate && observed > 0 ? max(p.alpha, sim_interval / observed) : 1.0
         p.rate_ema = alpha * rate + (1 - alpha) * p.rate_ema
         p.has_rate = true
@@ -348,7 +342,6 @@ function showvalues(p::Meter, elapsed, step_seconds)
      ("Wall time/step", stepstring(p, step_seconds))]
 end
 
-# Called after each loop body execution.
 function update!(p::Meter, t, t_stop = p.t_stop)
     p.done && return p
     now = time()
@@ -382,7 +375,6 @@ function update!(p::Meter, t, t_stop = p.t_stop)
     p
 end
 
-# Clear the live meter, print the completed line, and optionally print the summary.
 function finish!(p::Meter)
     p.done && return p
     p.done = true
@@ -405,7 +397,6 @@ function step_std(p::Meter)
     sqrt(p.step_m2 / (p.step_count - 1))
 end
 
-# Print final wall-clock step statistics gathered online during update!.
 function printsummary!(p::Meter)
     p.step_count == 0 && return p
     σ = step_std(p)

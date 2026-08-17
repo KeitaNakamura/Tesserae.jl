@@ -24,12 +24,7 @@ support_width(::uGIMP) = 3
 end
 @inline _normalized_particle_length(pt, mesh::CartesianMesh) = pt.l / spacing(mesh)
 
-# simple uGIMP calculation
-# See Eq.(40) in
-# Bardenhagen, S. G., & Kober, E. M. (2004).
-# The generalized interpolation material point method.
-# Computer Modeling in Engineering and Sciences, 5(6), 477-496.
-# boundary treatment is ignored
+# Eq.(40) of Bardenhagen & Kober (2004); boundary treatment is ignored.
 @inline function value(::uGIMP, ξ::Real, l::Real) # `l` is the particle size normalized by h
     ξ = abs(ξ)
     ξ < l/2   ? 1 - (4ξ^2+l^2)/4l :

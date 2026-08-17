@@ -6,12 +6,9 @@ struct Polynomial{D <: Union{Degree, MultiLinear, MultiQuadratic}}
 end
 Base.show(io::IO, poly::Polynomial) = print(io, Polynomial, "(", poly.degree, ")")
 
-# Polynomial bases admissible for a least-squares correction (`WLS`,
-# `KernelCorrection`). Higher degrees are deliberately excluded: a kernel support
-# does not carry enough independent nodes to condition the moment matrix, so
-# `inv(M)` silently returns garbage. With `Polynomial(Quadratic())` on a
-# quadratic B-spline support, 94% of interior points give negative weights and
-# `sum(w)` reaches 1e16 instead of 1.
+# Higher degrees are deliberately excluded: a kernel support does not carry enough
+# independent nodes to condition the moment matrix, so `inv(M)` silently returns
+# garbage rather than failing.
 const CorrectionPolynomial = Polynomial{<: Union{Linear, MultiLinear}}
 
 function unsupported_correction_polynomial(name, poly)

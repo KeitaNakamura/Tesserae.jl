@@ -1,6 +1,8 @@
-###########
-# cpu/gpu #
-###########
+# -----------------------------------------------------------------------------
+#  CPU/GPU transfers
+# -----------------------------------------------------------------------------
+
+# ---- entry points ----
 
 # NOTE: `gpu` always tries to convert Float64 to Float32 (is this really good?)
 
@@ -8,17 +10,13 @@ function Adapt.adapt_storage(::CPUDevice, A::AbstractArray)
     get_device(A) isa CPUDevice ? A : Array(A)
 end
 
-# These helpers call `adapt` with a Tesserae `AbstractDevice` as `to`.
-# Methods specialized on `to::AbstractDevice` are therefore explicit Tesserae
-# device transfers, while unspecialized `adapt_structure(to, ...)` methods may
-# also be used by other Adapt callers.
+# A method specialized on `to::AbstractDevice` is an explicit Tesserae transfer,
+# while an unspecialized `adapt_structure(to, ...)` may serve other Adapt callers.
 cpu(A) = A |> CPUDevice()
 gpu(A) = A |> gpu_device(CastFloat32)
 gpu_preserve(A) = A |> gpu_device(PreserveEltype)
 
-###################################
-# Special conversions in Tesserae #
-###################################
+# ---- special conversions ----
 
 # Unlike StructArrays.jl, this also `adapt` each array `to` GPU (no need?)
 function Adapt.adapt_structure(to::GPUDevice, A::StructArray)
@@ -48,13 +46,10 @@ function Adapt.adapt_structure(to::GPUDevice{CastFloat32}, x::StepRangeLen{T, R,
     StepRangeLen{Tnew, Rnew, Snew, L}(x)
 end
 
-#######################
-# GPU compatibilities #
-#######################
+# ---- GPU compatibility ----
 
 KernelAbstractions.get_backend(::BitArray) = CPU() # should be implemented in KernelAbstractions.jl
 
-# CartesianMesh
 function Adapt.adapt_structure(to, mesh::CartesianMesh)
     axes = map(a -> adapt(to, a), mesh.axes)
     T = eltype(eltype(axes))
@@ -65,7 +60,6 @@ function KernelAbstractions.get_backend(mesh::CartesianMesh)
     get_backend(mesh.axes[1])
 end
 
-# FEMesh
 function KernelAbstractions.get_backend(mesh::FEMesh)
     backend = get_backend(mesh.nodes)
     @assert get_backend(cellsupports(mesh)) == backend
@@ -73,21 +67,17 @@ function KernelAbstractions.get_backend(mesh::FEMesh)
     backend
 end
 
-# IGAMesh
 KernelAbstractions.get_backend(mesh::IGAMesh) = get_backend(mesh.controlpoints)
 
-# QuadraturePoints
 Adapt.adapt_structure(to, points::QuadraturePoints) = QuadraturePoints(adapt(to, parent(points)), quadrature_rule(points))
 KernelAbstractions.get_backend(points::QuadraturePoints) = get_backend(parent(points))
 
-# BasisWeightArray
 Adapt.adapt_structure(to, A::CellSupportMatrix) = CellSupportMatrix(adapt(to, cellsupports(A)), size(A)...)
 KernelAbstractions.get_backend(A::CellSupportMatrix) = get_backend(cellsupports(A))
 
-# A device transfer gives the copy its own flag, cleared, so `update!` can set it
-# on the returned object; the choice is not carried across the move, because the
-# values are not either. Any other `to` -- notably the adapt a kernel launch does
-# -- drops the flag entirely, since `select_weights` has already read it.
+# The copy gets its own cleared flag: the choice is not carried across the move
+# because the values are not either. Any other `to` -- notably a kernel launch --
+# drops the flag, `select_weights` having already read it.
 function Adapt.adapt_structure(to::AbstractDevice, weights::BasisWeightArray)
     b = basis(weights)
     vals = map(a -> adapt(to, a), getfield(weights, :vals))
@@ -103,7 +93,7 @@ function Adapt.adapt_structure(to, weights::BasisWeightArray)
     BasisWeightArray(b, vals, indices, derivative_order(weights), adapt(to, deferring_state(weights)))
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
-    # Deferred value arrays report `nothing`; the stored arrays and the support
+    # Deferred value arrays report `nothing`, so the stored arrays and the support
     # indices decide, and any that do report must agree.
     backends = filter(!isnothing, map(get_backend, values(getfield(weights, :vals))))
     backend = get_backend(getfield(weights, :indices))
@@ -111,7 +101,6 @@ function KernelAbstractions.get_backend(weights::BasisWeightArray)
     backend
 end
 
-# SpIndices
 function Adapt.adapt_structure(to::AbstractDevice, A::SpIndices{dim, L}) where {dim, L}
     numbers = adapt(to, blocknumbering(A))
     workspace = BlockSparsityWorkspace(numbers)
@@ -144,7 +133,6 @@ function KernelAbstractions.get_backend(A::SpIndices)
     get_backend(blocknumbering(A))
 end
 
-# SpArray
 function Adapt.adapt_structure(to, A::SpArray)
     SpArray(adapt(to, get_data(A)), adapt(to, get_spinds(A)), A.shared_spinds)
 end
@@ -154,7 +142,6 @@ function KernelAbstractions.get_backend(A::SpArray)
     backend
 end
 
-# HybridArray
 function Adapt.adapt_structure(to::AbstractDevice, A::HybridArray)
     parent′ = adapt(to, parent(A))
     HybridArray(parent′, flatten(parent′), get_device(parent′))

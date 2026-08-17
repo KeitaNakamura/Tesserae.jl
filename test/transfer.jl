@@ -497,11 +497,8 @@
     end
 
     @testset "@P2G hands its assigned fields down to the transfer" begin
-        # The fields are passed into `P2G` rather than zeroed ahead of it, which
-        # is what lets the threaded path zero them inside the parallel region it
-        # already opens instead of paying a fork-join of its own. Zeroing them
-        # before the call would still be correct, so this looks at the emitted
-        # call rather than at the result.
+        # Zeroing before the call would still be correct, so this looks at the
+        # emitted call rather than at the result.
         function collect_calls(ex, callee, found=Any[])
             Meta.isexpr(ex, :call) && ex.args[1] == callee && push!(found, ex)
             ex isa Expr && foreach(arg -> collect_calls(arg, callee, found), ex.args)
@@ -533,10 +530,8 @@
 
     @testset "a threaded transfer zeroes every byte of a grid its particles do not cover" begin
         # The grid is zeroed whole while only the occupied part is scattered
-        # into, so a byte the split misses is a byte no later write covers. The
-        # other transfer tests use a 3x3 grid, which one worker's chunk covers
-        # entirely; this one is big enough for the chunks to have boundaries,
-        # with the particles left in a corner so only the zeroing pays for it.
+        # into, so a byte the split misses is a byte no later write covers. Big
+        # enough for the chunks to have boundaries, unlike the 3x3 grids above.
         mesh = CartesianMesh(1.0, (0,400), (0,400))
         GridProp = @NamedTuple begin
             x  :: Vec{2, Float64}
@@ -690,11 +685,9 @@
             end)
 
         reference = deepcopy(grid); run!(reference, :nothing)
-        # The blocks the partition holds are only those carrying particles,
-        # while `update_sparsity!` also activated their neighbours. Splitting the
-        # node walk over the partition instead of over `spinds` would skip those
-        # halo nodes, and comparing two runs that both skip them would not show
-        # it, so assert the count directly.
+        # The partition holds only blocks carrying particles, while
+        # `update_sparsity!` also activated their neighbours. Two runs that both
+        # skip those halo nodes would agree, so assert the count directly.
         active = Tesserae.get_data(reference.m⁻¹)
         @test count(!iszero, active) > sum(length, Tesserae.threadsafe_groups(Tesserae.strategy(partition)))
         @test any(!iszero, Tesserae.get_data(reference.v))
@@ -767,10 +760,9 @@
         @test_throws ErrorException macroexpand(@__MODULE__, ex)
     end
 
-    # The block-scheduled GPU @P2G accumulates a whole grid block in one
-    # shared-memory tile, so every particle assigned to a block must have its
-    # entire support window inside that block's tile. The kernel writes those
-    # slots unchecked, so a basis violating this would corrupt shared memory.
+    # Every particle assigned to a block must have its entire support window
+    # inside that block's tile: the kernel writes those slots unchecked, so a
+    # basis violating this would corrupt shared memory.
     @testset "block tile contains every support window" begin
         for basis in (BSpline(Constant()), BSpline(Linear()), BSpline(Quadratic()),
                       BSpline(Cubic()), uGIMP(),

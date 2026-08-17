@@ -364,11 +364,9 @@
     end
 
     @testset "Slice index mapping" begin
-        # The CPU walks `CartesianIndices(slice.ranges)` directly, while the GPU
-        # launches over a 1-based ndrange and maps each index back through
-        # `foreach_slice_index`. The two agreeing is what lets the CPU skip the
-        # mapping, and no CI runner has a GPU, so this is the only thing that
-        # checks the mapping at all.
+        # The GPU launches over a 1-based ndrange and maps each index back
+        # through `foreach_slice_index`, which the CPU skips. No CI runner has a
+        # GPU, so this is the only thing checking that mapping.
         mesh = CartesianMesh(1.0, (0,8), (0,8), (0,8))
         nx, ny, nz = size(generate_grid(@NamedTuple{x::Vec{3,Float64}}, mesh))
 

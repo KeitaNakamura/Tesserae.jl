@@ -1,3 +1,9 @@
+# -----------------------------------------------------------------------------
+#  Foreach
+# -----------------------------------------------------------------------------
+
+# ---- @foreach ----
+
 """
     @foreach collection=>i begin
         statements...
@@ -123,12 +129,14 @@ end
     @inbounds spinds[I]
 end
 
+# ---- loops and kernels ----
+
 # `@foreach` and `@P2G`'s grid half (`P2G_nosum` in transfer.jl) run per-node
 # bodies over the same index spaces, so they share the loops and kernels here.
 #
 # Threading splits the index space rather than handing single indices to
-# `tforeach`: a worker iterating `CartesianIndices` by linear index pays an
-# integer division per dimension per node and gives up `@simd`.
+# `tforeach`: a worker iterating `CartesianIndices` by linear index would pay an
+# integer division per dimension per node and give up `@simd`.
 function foreach_loop(f::F, ::CPUDevice, schedule::Val, collection) where {F}
     cpu_foreach(schedule, eachindex(collection)) do i
         @inline f(collection, i)
@@ -159,8 +167,6 @@ function foreach_loop(f::F, ::CPUDevice, schedule::Val, collection::SpGrid, slic
     end
 end
 
-# Dense index spaces: `eachindex` gives a `CartesianIndices` or, for particles, a
-# unit range, and a slice gives the `CartesianIndices` of its own ranges.
 function cpu_foreach(g::G, ::Val{scheduler}, inds) where {G, scheduler}
     scheduler === :nothing && return foreach_subspace_loop(g, inds)
     d, nchunks = foreach_split(inds, Threads.nthreads())
@@ -215,8 +221,8 @@ function foreach_worker_loop(f::F, ::CPUDevice, collection::SpGrid, nworkers::In
 end
 
 # Split along the trailing axis, which keeps each chunk's nodes closest together
-# in memory, and fall back to an earlier one only when it is too short to give
-# every worker a piece: a slice can pin trailing axes to a single index.
+# in memory, falling back to an earlier one only when it is too short to give
+# every worker a piece -- a slice can pin trailing axes to a single index.
 function foreach_split(inds, nworkers::Int)
     d = ndims(inds)
     while d > 1 && size(inds, d) < nworkers
@@ -235,11 +241,9 @@ end
 
 # An `SpGrid` walks blocks directly, in the order `ActiveSpIndices` yields them.
 # Iterating that iterator instead carries its `(block, slot)` state through every
-# node, and threading it used to mean collecting every active index into a
-# `Vector{SpIndex}` first, since it is `SizeUnknown` and `tforeach` cannot index
-# it -- an allocation proportional to the active nodes, on every call. Walking
-# the blocks needs no such collection and is faster both sequentially and
-# threaded.
+# node, and threading it needs every active index collected into a
+# `Vector{SpIndex}` first -- it is `SizeUnknown`, so `tforeach` cannot index it --
+# an allocation proportional to the active nodes, on every call.
 function cpu_foreach_blocks(g::G, ::Val{scheduler}, spinds::SpIndices) where {G, scheduler}
     nblks = length(blocknumbering(spinds))
     nchunks = min(Threads.nthreads(), nblks)
@@ -260,9 +264,8 @@ function foreach_blocks_loop(g::G, spinds::SpIndices, blks) where {G}
         @inbounds blocknumber = numbering[b]
         iszero(blocknumber) && continue
         @inbounds block = blocks[b]
-        # `l` is the slot's linear position in the block: it indexes both
-        # `localindices` and `SpArray.data`. `eachindex` would hand out
-        # `CartesianIndex`es instead.
+        # `l` indexes both `localindices` and `SpArray.data`, where `eachindex`
+        # would hand out `CartesianIndex`es instead.
         for l in Base.OneTo(length(localindices))
             active, i = _active_spindex(spinds, blocknumber, block, l, localindices)
             active && @inline g(i)

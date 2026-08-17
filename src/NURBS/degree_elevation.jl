@@ -101,12 +101,11 @@ function elevate_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new:
     end
 
     map_fibers(values, direction, n_new) do columns_new, columns_old
-        # P[:, d] holds the (d-1)-th scaled divided differences of one fiber's
-        # old control points; Q is the same table for the elevated fiber.
-        # Nothing is ever read across fibers, so both are scratch reused for
-        # each one -- and both must therefore be re-zeroed per fiber: the
-        # `continue` guards below leave skipped entries untouched, and the
-        # boundary loops write only part of Q.
+        # `P[:, d]` holds the (d-1)-th scaled divided differences of one fiber's
+        # old control points, `Q` the same for the elevated fiber. Both are
+        # scratch reused per fiber and must be re-zeroed: the `continue` guards
+        # leave skipped entries untouched and the boundary loops write only part
+        # of `Q`.
         P = Array{S}(undef, n_old, order)
         Q = Array{S}(undef, n_new, order)
 

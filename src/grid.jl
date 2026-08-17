@@ -1,14 +1,12 @@
-########
-# Grid #
-########
+# -----------------------------------------------------------------------------
+#  Grid
+# -----------------------------------------------------------------------------
 
 const Grid{dim, T, N, NT <: NamedTuple{<: Any, <: Tuple{AbstractMesh{dim}, Vararg{AbstractArray}}}, I} = StructArray{T, N, NT, I}
 
 get_mesh(grid::Grid) = getx(grid)
 
-##########
-# SpGrid #
-##########
+# ---- SpGrid ----
 
 # `hybrid(spgrid)` keeps the grid as a StructArray while wrapping SpArray
 # components for GPU atomics, so SpGrid accepts either representation.
@@ -79,7 +77,7 @@ function generate_grid(::Type{Array}, ::Type{GridProp}, mesh::AbstractMesh) wher
     fillzero!(StructArray{GridProp}(tuple(mesh, arrays...)))
 end
 
-# SpArray is designed for Cartesian mesh
+# `SpArray`'s block sparsity only makes sense on a Cartesian mesh.
 function generate_grid(::Type{SpArray}, ::Type{GridProp}, mesh::CartesianMesh) where {GridProp}
     check_gridproperty(GridProp, eltype(mesh))
     spinds = SpIndices(mesh)

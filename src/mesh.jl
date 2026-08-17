@@ -1,11 +1,9 @@
 abstract type AbstractMesh{dim, T, N} <: AbstractArray{Vec{dim, T}, N} end
 
 # Meshes made of explicit cells with node connectivity, as opposed to
-# `CartesianMesh`, whose cells are implied by the grid. `FEMesh` and `IGAMesh`
-# share the quadrature, sparsity-pattern and cell-scheduling code written
-# against this; a new one must also supply the interpolation and export methods
-# those paths call, so this is a shorthand for the two, not a declared
-# extension point.
+# `CartesianMesh`, whose cells are implied by the grid. A shorthand for `FEMesh`
+# and `IGAMesh`, not a declared extension point: a new one would also have to
+# supply the interpolation and export methods those paths call.
 abstract type AbstractCellMesh{dim, T, N} <: AbstractMesh{dim, T, N} end
 
 fillzero!(x::AbstractMesh) = x
@@ -145,7 +143,6 @@ end
 
 Base.copy(mesh::CartesianMesh) = CartesianMesh(copy(get_axisarray(mesh)), spacing(mesh), spacing_inv(mesh); block_size_log2=Val(block_size_log2(mesh)))
 
-# normalize `x` by `mesh`
 @inline function Tensorial.normalize(x::Vec{dim}, mesh::CartesianMesh{dim}) where {dim}
     xmin = get_xmin(mesh)
     h⁻¹ = spacing_inv(mesh)

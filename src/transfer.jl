@@ -1,4 +1,10 @@
+# -----------------------------------------------------------------------------
+#  Transfer macros
+# -----------------------------------------------------------------------------
+
 using MacroTools
+
+# ---- equations ----
 
 struct TransferEquation
     kind::Symbol
@@ -23,18 +29,13 @@ function split_sum_equations(program::TransferProgram, macroname::String)
     equations[issum], equations[.!issum]
 end
 
-# A weight reference like `w[ip]` resolves against the parent weights array:
-# through a per-particle column view bound once outside the support loop when
-# the scope caches replacements, as `weights.w[ip, p]` inline otherwise. The
-# per-particle `BasisWeight` this used to build kept enough live SubArray state
-# across the loop to spill GPU registers into local memory, and that spill
-# traffic -- not the interpolation -- dominated the transfer kernels.
+# ---- weight references ----
 
-# The per-particle weight columns, bound once and shared as
-# `SupportWindowBinding` shares the window. For `@G2P2G` this is correctness, not
-# economy: the P2G half runs after the G2P half may have written `x[p]`, so
-# rebinding there would evaluate the basis at the new position against the window
-# taken at the old one. The names are the union over both halves.
+# Weight references resolve through per-particle columns rather than a
+# per-particle `BasisWeight`, whose live SubArray state spilled GPU registers.
+# `@G2P2G` shares one binding across both halves: the P2G half runs after the G2P
+# half may have written `x[p]`, so rebinding would evaluate the basis at the new
+# position against the window taken at the old one.
 struct WeightColumnsBinding
     names::Any
     cols::Symbol
@@ -44,15 +45,15 @@ WeightColumnsBinding(names) = WeightColumnsBinding(Tuple(names), gensym(:wcols),
 WeightColumnsBinding(binding::WeightColumnsBinding; load::Bool) = WeightColumnsBinding(binding.names, binding.cols, load)
 
 struct TrailingIndexed
-    parent::Any     # the weights array
-    trailing::Any   # the particle index
-    particles::Any  # particle container, for the position a deferred value needs
-    grid::Any       # grid, for its mesh
-    window::Any     # support window symbol, mapping a support index to a node
-    names::Any      # every weight property the equations reference
-    cols::Any       # symbol bound once per particle
-    vals::Any       # symbol bound once per support node
-    loadcols::Bool  # whether this scope emits the per-particle binding
+    parent::Any
+    trailing::Any   # particle index
+    particles::Any
+    grid::Any
+    window::Any     # support index -> node
+    names::Any      # referenced weight properties
+    cols::Any       # bound once per particle
+    vals::Any       # bound once per support node
+    loadcols::Bool
 end
 TrailingIndexed(parent, trailing) = TrailingIndexed(parent, trailing, nothing, nothing, nothing, nothing, nothing, nothing, false)
 function TrailingIndexed(parent, trailing, particles, grid, window, binding::WeightColumnsBinding)
@@ -105,10 +106,8 @@ function push_unique!(xs::Vector, x)
     xs
 end
 
-# `@G2P2G` fuses a G2P and a P2G loop into a single pass over the particles, so
-# the support window must be bound once and shared by both halves. The symbol
-# travels with a `load` flag: whichever half holds `load=true` emits the
-# binding statement, the other just uses it.
+# `@G2P2G` fuses both loops into one pass, so the window is bound once and shared:
+# whichever half holds `load=true` emits the binding statement.
 struct SupportWindowBinding
     window::Symbol
     load::Bool
@@ -121,11 +120,8 @@ function support_window_exprs(binding::SupportWindowBinding, weights, particles,
     (:($(binding.window) = Tesserae.transfer_support_window($weights, $particles, $p, Tesserae.get_mesh($grid))),)
 end
 
-# The per-particle support window: read from the weights storage when there is
-# any, derived from the particle position when there is not. A plain
-# array of `BasisWeight`s -- the macros accept any container whose `weights[p]`
-# is a `BasisWeight` -- goes through the element instead. `BasisWeightArray` is
-# itself such an array, so its methods must be the more specific ones.
+# `BasisWeightArray` is itself an `AbstractArray{<: BasisWeight}`, so its methods
+# must be the more specific ones.
 @inline function transfer_support_window(weights::BasisWeightArray, particles, p, mesh)
     @_propagate_inbounds_meta
     _transfer_support_window(Val(storageless(weights)), weights, particles, p, mesh)
@@ -139,16 +135,15 @@ end
     supportnodes_storage(weights)[p]
 end
 # Deferred weights store nothing, not even which nodes they cover, so the window
-# is derived from the particle position the same way `update!` would have.
+# is derived from the position the same way `update!` would have.
 @inline function _transfer_support_window(::Val{true}, weights, particles, p, mesh)
     @_propagate_inbounds_meta
     supportnodes(basis(weights), LazyRow(particles, p), mesh)
 end
 
-# Which basis values a transfer reads is resolved from the type of the weights
-# it is handed, so the per-step choice made by `update!(...; deferred=true)` is
-# applied here: once per transfer, on the host, before the launch. Both arms are
-# fully specialized, and for weights that cannot defer the second never exists.
+# The per-step choice of `update!(...; deferred=true)` is applied once per
+# transfer, on the host, before the launch: both arms are fully specialized, and
+# for weights that cannot defer the second never exists.
 @inline function select_weights(f::F, weights::W) where {F, W}
     if can_defer(W)
         isdeferred(weights) ? f(as_deferred(weights)) : f(weights)
@@ -157,10 +152,8 @@ end
     end
 end
 
-# One weight property's column for particle `p`: the whole leading (support)
-# block, with the particle indices fixed. `p` may be a linear index into a
-# multi-dimensional particle space (FEM weights are quadrature point x cell),
-# so the support-window storage supplies the particle dimensionality.
+# `p` may be a linear index into a multi-dimensional particle space (FEM weights
+# are quadrature point x cell), so the window storage supplies its shape.
 @inline function weight_prop_view(weights::BasisWeightArray, ::Val{name}, p) where {name}
     @_propagate_inbounds_meta
     storage = supportnodes_storage(weights)
@@ -174,24 +167,20 @@ end
 @inline particle_cartesian(storage, p::Integer) = (@_propagate_inbounds_meta; CartesianIndices(storage)[p])
 @inline particle_cartesian(storage, p::CartesianIndex) = p
 
-# Weight references resolve in three steps so one basis evaluation serves every
-# referenced property: `weight_columns` per particle, `weight_node_values` per
-# support node, each reference reading a field out of the result. Deferred
-# properties share one jet, evaluated to the highest order the equations
-# reference rather than the order the weights were declared with -- which is what
-# keeps a transfer using only `w[ip]` cheap on `Order(2)` weights.
+# Deferred properties share one jet, evaluated to the highest order the equations
+# reference rather than the order the weights were declared with, which keeps a
+# transfer using only `w[ip]` cheap on `Order(2)` weights.
 struct DeferredWeights{K, B, P, M, W, S, F}
     basis::B
-    pt::P      # the particle row: a basis may need more than the position
+    pt::P      # particle row: a basis may need more than the position
     mesh::M
     window::W
-    state::S   # whatever the basis needs computed once for this particle
-    filter::F  # the boundary filter `update!` was given, `nothing` for none
+    state::S   # computed once per particle
+    filter::F  # boundary filter, `nothing` for none
 end
-# The row is taken by value, not as a `LazyRow`. The basis is evaluated in the
-# support loop, which in a `@G2P2G` runs after the G2P half may have written
-# `x[p]`; a live row would then be read at the new position against the window
-# taken at the old one. Fields the basis does not read are dead and drop out.
+# The row is taken by value, not as a `LazyRow`: in a `@G2P2G` the support loop
+# runs after the G2P half may have written `x[p]`, and a live row would then be
+# read at the new position against the window taken at the old one.
 DeferredWeights{K}(basis::B, pt::P, mesh::M, window::W, filter::F) where {K, B, P, M, W, F} =
     _deferred_weights(Order(K), basis, pt, mesh, window, filter)
 @inline function _deferred_weights(::Order{K}, basis::B, pt::P, mesh::M, window::W, filter::F) where {K, B, P, M, W, F}
@@ -208,9 +197,8 @@ end
     deferred_node_jet(Order(K), d.basis, d.state, d.pt, d.mesh, d.window, d.filter, ip)
 end
 
-# Derivative order of a deferred property, `nothing` when it is stored, and
-# `missing` when the weights have no such property. A plain function on types so
-# the generators below can call it -- a generated function may not call another.
+# Derivative order of a deferred property, `nothing` when it is stored, `missing`
+# when absent. A plain function on types: a generated function may not call another.
 function deferred_order(W::Type, name::Symbol)
     W <: BasisWeightArray || return nothing
     Vals = W.parameters[2]
@@ -259,8 +247,7 @@ end
     end
 end
 
-# One support node of the window, resolved against the grid: an `SpIndex`
-# carrying the storage slot for an `SpGrid`, the plain index otherwise.
+# For an `SpGrid` the node index carries its storage slot as an `SpIndex`.
 @inline function transfer_nodeindex(grid::SpGrid, window, ip)
     @_propagate_inbounds_meta
     spinds = get_spinds(grid)
@@ -273,10 +260,11 @@ end
     window[ip]
 end
 
-# How far a block's shared-memory tile reaches past the block, in nodes. A support
-# window starts at most one node before the particle's cell, so it reaches one node
-# past the block even at width 1: `BSpline(Constant())` on a particle in the last
-# cell picks the next block's first node. `p2g_tile_contains` states the invariant.
+# ---- shared-memory tiles ----
+
+# A support window starts at most one node before the particle's cell, so the tile
+# reaches one node past the block even at width 1: `BSpline(Constant())` on a
+# particle in the last cell picks the next block's first node.
 @inline p2g_tile_halo(support_width::Integer) = max(support_width - 1, 1)
 
 function p2g_tile_contains(basis, mesh::CartesianMesh{dim}, window::CartesianIndices{dim}, block::CartesianIndex{dim}) where {dim}
@@ -288,10 +276,8 @@ function p2g_tile_contains(basis, mesh::CartesianMesh{dim}, window::CartesianInd
     end)
 end
 
-# The two lowerings of one @P2G scatter: `particle` writes straight to the
-# grid (particle-parallel paths), `tile` accumulates into a shared-memory tile
-# whose per-field layout the block-scheduled GPU kernel owns. `names` are the
-# scattered grid properties, in equation order.
+# The two lowerings of one `@P2G` scatter: `particle` writes straight to the grid,
+# `tile` accumulates into the block-scheduled GPU kernel's shared-memory tile.
 struct P2GBodies{names, F, FT}
     particle::F
     tile::FT
@@ -299,19 +285,17 @@ end
 P2GBodies(particle::F, tile::FT, ::Val{names}) where {names, F, FT} = P2GBodies{names, F, FT}(particle, tile)
 scattered_names(::P2GBodies{names}) where {names} = names
 
-# Scalar components of one grid value, matching the layout `HybridArray`'s
-# flatten/add! use.
+# Matches the layout `HybridArray`'s flatten/add! use.
 @inline tile_components(v::Number) = (v,)
 @inline tile_components(v::Union{Tensor, StaticArray}) = Tuple(v)
-# Structural, so the generators below can call it: a generator must not call
-# other generated functions, which rules out anything touching `zero(T)` for
-# Tensorial types.
+# Structural, so the generators below can call it: a generated function may not
+# call another, which rules out anything touching `zero(T)` for Tensorial types.
 @inline tile_ncomps(::Type{T}) where {T <: Number} = 1
 @inline tile_ncomps(::Type{Tensor{S, T, N, L}}) where {S, T, N, L} = L
 @inline tile_ncomps(::Type{SV}) where {SV <: StaticArray} = prod(size(SV))
 
-# A tile stores `SIDE^dim` nodes per scalar component, component-major by
-# field. `origin` sits one node before the tile's first node in every axis.
+# A tile stores `SIDE^dim` nodes per scalar component, component-major by field.
+# `origin` sits one node before the tile's first node in every axis.
 @inline function tile_slot(node::CartesianIndex{dim}, origin::CartesianIndex{dim}, ::Val{SIDE}) where {dim, SIDE}
     slot = node[dim] - origin[dim]
     for d in dim-1:-1:1
@@ -331,8 +315,7 @@ end
     end
 end
 
-# Where each scattered field starts in the tile: the component counts of the
-# fields before it. The scatter and the merge must agree on this, so it is
+# The scatter and the merge must agree on where each field starts, so it is
 # derived once here. Structural, so the generators below can call it.
 function tile_field_offsets(::Type{G}, names::Tuple) where {G}
     offsets = Int[]
@@ -343,19 +326,15 @@ function tile_field_offsets(::Type{G}, names::Tuple) where {G}
     end
     Tuple(offsets)
 end
-# The macro-emitted body has no types to lay the tile out with, so it reads the
-# offsets through this rather than rebuilding the rule in emitted code.
+# The macro-emitted body has no types to lay the tile out with.
 @generated tile_offsets(grid, ::Val{names}) where {names} =
     Expr(:tuple, tile_field_offsets(grid, names)...)
 
 @inline tile_rebuild(::Type{T}, comps) where {T <: Number} = comps[1]
 @inline tile_rebuild(::Type{T}, comps) where {T <: Union{Tensor, StaticArray}} = T(comps...)
 
-# Merge one tile node into the grid, fully unrolled over the scattered fields
-# at compile time: the GPU compiler must see every field eltype as a constant,
-# and recursion over the name tuple is too fragile for that. Each field's
-# component tuple is spelled out here too, because a generated body may not
-# contain closures, which rules out `ntuple` with a lambda.
+# Fully unrolled: the GPU compiler must see every field eltype as a constant, and
+# a generated body may not contain closures, which rules out `ntuple` with a lambda.
 @generated function merge_tile_node!(grid, tile, ::Val{names}, ::Val{TILELEN}, slot, node) where {names, TILELEN}
     exprs = Any[]
     for (name, offset) in zip(names, tile_field_offsets(grid, names))
@@ -375,8 +354,7 @@ end
     end
 end
 
-# Total scalar components scattered per node, and the tile's scalar type. One
-# tile holds every scattered field, so their scalar types must agree.
+# One tile holds every scattered field, so their scalar types must agree.
 @generated tile_total_comps(grid, ::Val{names}) where {names} =
     sum(name -> tile_ncomps(fieldtype(eltype(grid), name)), names)
 @generated function tile_scalartype(grid, ::Val{names}) where {names}
@@ -385,10 +363,10 @@ end
     first(types)
 end
 
-# Grid properties referenced with the node index, straight from the equation
-# syntax. The kernels are handed a grid narrowed to these, because every extra
-# `SpArray` field in the argument -- referenced or not -- measurably slows a
-# GPU transfer kernel down.
+# ---- macro front end ----
+
+# The kernels are handed a grid narrowed to the referenced properties: every extra
+# `SpArray` field in the argument -- referenced or not -- slows a GPU kernel down.
 function collect_transfer_refs(equations, index)
     names = Symbol[]
     for eq in equations
@@ -405,9 +383,8 @@ end
 narrowed_grid_expr(grid, equations, index) =
     :(Tesserae.narrow_transfer_grid($grid, Val($(Expr(:tuple, map(QuoteNode, collect_transfer_refs(equations, index))...)))))
 
-# Keep the mesh (always the first property) so the result stays a grid, and at
-# least one array component so an `SpGrid` stays an `SpGrid` for dispatch and
-# `get_spinds`. Non-StructArray grids pass through untouched.
+# Keep the mesh so the result stays a grid, and at least one array component so an
+# `SpGrid` stays an `SpGrid` for dispatch and `get_spinds`.
 narrow_transfer_grid(grid, ::Val) = grid
 @generated function narrow_transfer_grid(grid::StructArray{<: Any, <: Any, <: NamedTuple{names}}, ::Val{refs}) where {names, refs}
     keep = Symbol[first(names)]
@@ -420,10 +397,8 @@ narrow_transfer_grid(grid, ::Val) = grid
     :(StructArray(NamedTuple{$(Tuple(keep))}(($(fields...),))))
 end
 
-# All four transfer macros take the same shape: an optional `:schedule`
-# QuoteNode, three `parent => index` pairs, an optional partition, and the
-# equation block. Parsing it once keeps them from drifting, and lets a wrong
-# call say what the right one looks like instead of listing `::Any` candidates.
+# Parsing the shape the four transfer macros share keeps them from drifting, and
+# lets a wrong call say what the right one looks like instead of listing `::Any`.
 function parse_transfer_macro_args(macroname, args, allow_partition::Bool)
     args = collect(args)
     schedule = QuoteNode(:nothing)
@@ -446,6 +421,8 @@ function transfer_macro_usage(macroname, allow_partition)
     part = allow_partition ? " [partition]" : ""
     "$macroname: expected `$macroname [:schedule] $indices$part begin ... end`"
 end
+
+# ---- @P2G ----
 
 """
     @P2G grid=>i particles=>p weights=>ip [partition] begin
@@ -529,9 +506,8 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
             body = :(@inbounds $body)
         end
         particle_body = :(($grid, $particles, $weights, $p) -> $body)
-        # Only the block-scheduled GPU path runs the tile lowering, and it is
-        # reached through a partition. Without one the call below passes a
-        # literal `nothing`, so no method that could use a tile body applies.
+        # The tile lowering is reached only through a partition; without one the
+        # call below passes a literal `nothing`, so no tile-taking method applies.
         bodies = if partition === nothing
             particle_body
         else
@@ -544,9 +520,8 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
                                  ($(tile_args...), $grid, $particles, $weights, $p) -> $tile_body,
                                  $names_val))
         end
-        # The node body is bound before the `do w` block, not inside it: `w` is
-        # that block's parameter and would shadow a user variable of the same
-        # name that a non-`@∑` equation reads.
+        # Bound before the `do w` block: `w` is that block's parameter and would
+        # shadow a user variable of the same name that a non-`@∑` equation reads.
         args = [bodies, :(Tesserae.get_device($grid)), :(Val($schedule)),
                 narrowed_grid_expr(grid, sum_equations, i), particles, :w, partition, zeroed]
         bind = nothing
@@ -576,10 +551,8 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     esc(prettify(code; lines=true, alias=false))
 end
 
-# The two `@P2G` lowerings scatter the same equations and so must resolve them
-# identically: same weight columns, same scope, same per-particle and
-# per-support-node replacements. Only what they do with the resolved RHS
-# differs, so the resolution lives here and they share it.
+# The two `@P2G` lowerings must resolve the same equations identically and differ
+# only in what they do with the resolved RHS, so they share the resolution here.
 function p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations::Vector, window,
                        cols::Union{WeightColumnsBinding,Nothing})
     cols = something(cols, WeightColumnsBinding(collect_transfer_refs(sum_equations, ip)))
@@ -626,10 +599,8 @@ function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     Expr(:tuple, fillzero_targets...), body
 end
 
-# The tile lowering of the same scatter equations: writes go through
-# `tile_add!` into the workgroup's shared tile at the node's local slot, while
-# every read (particles, weights, grid values on the RHS) stays as in the
-# particle-parallel body.
+# The tile lowering of the same equations: writes go through `tile_add!` at the
+# node's local slot, every read stays as in the particle-parallel body.
 function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
     @gensym tile origin sideval tilelenval tileslot offsets
     binding = SupportWindowBinding()
@@ -651,9 +622,8 @@ function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations:
         push!(sum_exprs, :(Tesserae.tile_add!($tile, $tilelenval, $offsets[$slot], $tileslot, $rhs)))
     end
 
-    # The node index is only needed when an equation mentions `i` -- as a grid
-    # reference or bare; the tile writes address the shared tile through the
-    # local slot alone.
+    # The tile writes address the shared tile through the local slot alone, so the
+    # node index is only needed when an equation mentions `i`.
     uses_i = !isempty(scope.replacements[i]) || any(ex -> expr_contains_symbol(ex, i), sum_exprs)
     node_exprs = uses_i ? (:($i = Tesserae.transfer_nodeindex($grid, $window, $ip)),) : ()
     names_val = :(Val($(Expr(:tuple, map(QuoteNode, fieldnames)...))))
@@ -683,8 +653,8 @@ function expr_contains_symbol(ex, sym::Symbol)
     found
 end
 
-# `resolve_sum_equations` has already checked the LHS is `name[i]` on the grid
-# index and rewritten it, so `<grid>.<name>[i]` is the only shape reaching here.
+# `resolve_sum_equations` has already rewritten the LHS, so `<grid>.<name>[i]` is
+# the only shape reaching here.
 function tile_field_name(lhs)
     @capture(lhs, x_.name_[i_]) || error("@P2G: cannot derive the scattered field from `$(lhs)`")
     name
@@ -771,15 +741,11 @@ end
 Base.@propagate_inbounds p2g_write_index(grid, i) = i
 Base.@propagate_inbounds p2g_write_index(grid::Grid, i::CartesianIndex) = LinearIndices(grid)[i]
 Base.@propagate_inbounds p2g_write_index(grid::SpGrid, i::CartesianIndex) = p2g_write_index(grid, get_spinds(grid)[Tuple(i)...])
-# `@boundscheck` means debug mode only here: the transfer macros wrap the
-# generated body in `@inbounds` outside `debug_mode`, which elides the check.
-# Calling `update_sparsity!` first is the caller's obligation.
-#
-# Do not promote this to an unconditional check without re-measuring. Making it
-# fire in release costs a noticeable fraction of an `SpGrid` transfer, and so
-# does accumulating a flag branchlessly to raise once per particle. The only
-# way back to zero cost is to give `SpArray.data` a leading scrap slot so an
-# inactive node lands there instead of out of bounds.
+# `@boundscheck` means debug mode only: the macros wrap the generated body in
+# `@inbounds` outside `debug_mode`, and calling `update_sparsity!` first is the
+# caller's obligation. Do not promote it to an unconditional check without
+# re-measuring; making it fire in release costs a noticeable fraction of an
+# `SpGrid` transfer, as does accumulating a flag to raise once per particle.
 @inline function p2g_write_index(::SpGrid, i::SpIndex)
     si = storageindex(i)
     @boundscheck iszero(si) && error("@P2G: inactive SpGrid support node. Call update_sparsity! before @P2G.")
@@ -795,16 +761,9 @@ end
 
 @inline _atomic_index(A::HybridArray{<:Any, <:Any, <:SpArray}, i::P2GSpGridStorageIndex) = i.i
 
-# `zeroed` are the grid fields the transfer assigns rather than accumulates
-# into, which have to hold zero before the first particle scatters. They are
-# passed down instead of being zeroed by the caller so that the threaded path
-# can fold them into the parallel region it already opens; every other path
-# zeroes them here, on this thread, before anything reads the grid.
-#
-# It defaults to `()` so that callers with nothing to zero -- `@P2G_Matrix`,
-# which zeroes its own matrix targets -- need not say so.
-
-# CPU: sequential
+# `zeroed` are the grid fields the transfer assigns rather than accumulates into.
+# They are passed down instead of being zeroed by the caller so that the threaded
+# path can fold them into the parallel region it already opens.
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "@P2G: `ThreadPartition` must be given for threaded computation" maxlog=1
 
@@ -814,7 +773,6 @@ function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothi
     end
 end
 
-# CPU: multi-threading
 function P2G(f, device::CPUDevice, schedule::Val, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=())
     p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, nothing)
 end
@@ -835,8 +793,8 @@ function p2g_region(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights,
 end
 
 # Only the threaded CPU path fuses the two halves. Keeping the rest as separate
-# calls is what makes the GPU tile fallback safe: the node half is discharged
-# here, not inside a method that may return early.
+# calls makes the GPU tile fallback safe: the node half is discharged here, not
+# inside a method that may return early.
 function P2G_halves(f, device, schedule, grid, particles, weights, partition, zeroed,
                     nodebody::N, nodegrid) where {N}
     P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
@@ -854,22 +812,15 @@ P2G_halves(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles,
            partition::ThreadPartition, zeroed::Tuple, nodebody, nodegrid) =
     P2G_halves(bodies.particle, device, schedule, grid, particles, weights, partition, zeroed, nodebody, nodegrid)
 
-# GPU. One particle per thread with the body handed in: `@P2G`, `@G2P` and
-# `@G2P2G` all walk the same four arguments, so one kernel serves all three.
-# Each call site still compiles its own copy, `f` being a different closure type.
+# `@P2G`, `@G2P` and `@G2P2G` all walk the same four arguments, so one kernel
+# serves all three, each call site compiling its own copy of `f`.
 #
-# `@Const` is deliberately absent from the container arguments. It is free
-# on a plain device array and stays on those elsewhere, but KernelAbstractions
+# `@Const` is deliberately absent from the container arguments: KernelAbstractions
 # rewrites the argument's type, and indexing a `StructArray`, `BasisWeightArray`
 # or mesh whose arrays became `Const` wrappers costs far more than the read-only
-# cache hint wins -- measured 3.4x on `@G2P`, 1.9x on `@P2G`, same results.
-#
-# Passing the arrays unpacked and annotating each one is not worth it either:
-# the same `@G2P` body over unpacked arrays runs at 0.0648 ms with `@Const` and
-# 0.0655 without, against 0.0677 for the container form here. There is nothing
-# for the read-only cache to win, because a particle's weights are read by that
-# particle alone and the grid reads are already absorbed by L2 -- removing them
-# from the kernel entirely does not change its time.
+# cache hint wins. Unpacking the arrays to annotate each one gains nothing either,
+# a particle's weights being read by that particle alone and the grid reads being
+# absorbed by L2 already.
 @kernel function gpukernel_transfer(f, grid, particles, weights)
     p = @index(Global)
     @inline f(grid, particles, weights, p)
@@ -884,8 +835,8 @@ function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, :
 end
 
 # Bodies fall back to the particle-parallel lowering everywhere except the
-# block-scheduled GPU path below. One method per particle-parallel signature,
-# so each is strictly more specific than its `f`-taking sibling.
+# block-scheduled GPU path below. One method per signature, so each is strictly
+# more specific than its `f`-taking sibling.
 P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) =
     P2G(bodies.particle, device, schedule, grid, particles, weights, nothing, zeroed)
 P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=()) =
@@ -893,21 +844,18 @@ P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weight
 P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) =
     P2G(bodies.particle, device, schedule, grid, particles, weights, nothing, zeroed)
 
-# `@G2P2G` walks the same loop over the same arguments as `@P2G` on either
-# device; only the body differs. The block-scheduled path is not reachable from
-# here, `check_partition_for_transfer` rejecting a device partition from every
-# macro but `@P2G`. `f` is only handed on, so it takes a type parameter to be
-# specialized on.
+# `@G2P2G` walks the same loop as `@P2G` on either device; only the body differs.
+# `check_partition_for_transfer` rejects a device partition from every macro but
+# `@P2G`, so the block-scheduled path is not reachable from here. `f` is only
+# handed on, so it takes a type parameter to be specialized on.
 G2P2G(f::F, device::AbstractDevice, schedule, grid, particles, weights, partition, zeroed::Tuple=()) where {F} =
     P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
 
-# GPU with a device partition: one workgroup per nonempty grid block. The
-# workgroup zeroes a shared tile, its threads accumulate their block's
-# particles into it, and the merged tile is added to the grid with a handful of
-# global atomics per node instead of one per particle-node pair. Within one
-# block the accumulation order follows the partition's particle order, so the
-# result is not bitwise reproducible between runs, exactly like the atomic
-# particle-parallel path.
+# GPU with a device partition: one workgroup per nonempty grid block, merging a
+# shared tile into the grid with a handful of global atomics per node instead of
+# one per particle-node pair. Accumulation order within a block follows the
+# partition, so the result is not bitwise reproducible between runs, exactly like
+# the atomic particle-parallel path.
 const P2G_BLOCK_GROUPSIZE = 128
 
 @kernel function gpukernel_P2G_blocks(tilebody, grid, particles, weights,
@@ -995,9 +943,8 @@ function P2G_nosum_expr((grid,i), nosum_equations::Vector)
     Expr(:block, nosum_exprs...)
 end
 
-# The grid-only part of `@P2G`. Every equation here reads and writes only its
-# own node, which makes it the same walk `@foreach` runs over the same grid, so
-# it shares the CPU loops and the GPU kernels in foreach.jl.
+# Every equation in the grid-only part reads and writes only its own node, which
+# is the same walk `@foreach` runs, so it shares the loops and kernels in foreach.jl.
 P2G_nosum(f::F, device::CPUDevice, schedule::Val, grid) where {F} =
     foreach_loop(f, device, schedule, grid)
 
@@ -1024,7 +971,6 @@ function check_transfer_arguments(macroname, grid, particles, weights, partition
         end
     end
     @assert length(particles) ≤ length(weights)
-    # check device
     device = get_device(grid)
     @assert get_device(particles) == get_device(weights) == device
     check_partition_for_transfer(macroname, device, grid, weights, partition)
@@ -1068,6 +1014,8 @@ function check_partition_support(macroname, b, strat)
         error("$macroname: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
     end
 end
+
+# ---- @G2P ----
 
 """
     @G2P grid=>i particles=>p weights=>ip begin
@@ -1168,15 +1116,13 @@ function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pr
     esc(prettify(code; lines=true, alias=false))
 end
 
-# CPU: sequential & multi-threading
 function G2P(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights) where {scheduler}
     tforeach(eachindex(particles), scheduler) do p
         @inline f(grid, particles, weights, p)
     end
 end
 
-# GPU. Shares `gpukernel_transfer` with `@P2G`; the grid goes in unwrapped here,
-# since nothing in a `@G2P` body scatters and so none of it needs atomics.
+# The grid goes in unwrapped: nothing in a `@G2P` body scatters, so it needs no atomics.
 function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
     particles = particles isa QuadraturePoints ? parent(particles) : particles
@@ -1233,6 +1179,8 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
 
     code
 end
+
+# ---- @G2P2G ----
 
 """
     @G2P2G grid=>i particles=>p weights=>ip [partition] begin
@@ -1316,11 +1264,9 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     end
     body = Expr(:block)
     binding = SupportWindowBinding()
-    # Both halves resolve against one set of per-particle weight columns, holding
-    # every property either references. The P2G half must not rebind them: it
-    # runs after the G2P half's non-`@∑` equations, which is where an explicit
-    # step writes `x[p]`, and deferred columns read the particle row when the
-    # support loop evaluates the basis.
+    # Both halves resolve against one set of per-particle weight columns. The P2G
+    # half must not rebind them: it runs after the G2P half's non-`@∑` equations,
+    # which is where an explicit step writes `x[p]`.
     colsbinding = WeightColumnsBinding(union(
         collect_transfer_refs(vcat(stages.g2p_sum, stages.g2p_nosum), ip),
         collect_transfer_refs(stages.p2g_sum, ip)))
@@ -1372,9 +1318,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     esc(prettify(code; lines=true, alias=false))
 end
 
-####################
-# Helper functions #
-####################
+# ---- helpers ----
 
 function unpair(ex)
     if @capture(ex, lhs_Symbol => rhs_Symbol)
@@ -1454,9 +1398,8 @@ function resolve_refs(expr, scope::TransferScope)
                 if scope.replacements === nothing
                     return :($(parent.parent).$x[$i, $(parent.trailing)])
                 end
-                # One binding per particle and one per node, both identical across
-                # every weight reference, so `push_unique!` emits each once and
-                # the properties share a single basis evaluation.
+                # `push_unique!` emits each binding once, so the referenced
+                # properties share a single basis evaluation.
                 parent.loadcols && push_unique!(scope.replacements[parent.trailing],
                              :($(parent.cols) = Tesserae.weight_columns($(parent.parent), Val($(parent.names)), $(parent.particles), $(parent.trailing), Tesserae.get_mesh($(parent.grid)), $(parent.window))))
                 push_unique!(scope.replacements[i],

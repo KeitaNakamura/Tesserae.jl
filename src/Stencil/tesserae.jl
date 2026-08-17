@@ -1,9 +1,11 @@
+# -----------------------------------------------------------------------------
+#  Tesserae integration
+# -----------------------------------------------------------------------------
+
 import ..Tesserae
 using ..Tesserae: CartesianMesh, block_size_log2, generate_grid, spacing, spacing_inv
 
-#################
-# StaggeredGrid #
-#################
+# ---- StaggeredGrid ----
 
 function Tesserae.generate_grid(::Type{Arr}, loc::Cell, ::Type{CellProp}, mesh::CartesianMesh{dim}) where {Arr, CellProp, dim}
     h = spacing(mesh)
@@ -29,9 +31,7 @@ function Tesserae.generate_grid(::Type{Arr}, loc::Face, ::Type{FaceProp}, mesh::
 end
 Tesserae.generate_grid(loc::Face, ::Type{FaceProp}, mesh::CartesianMesh) where {FaceProp} = generate_grid(Array, loc, FaceProp, mesh)
 
-#########
-# utils #
-#########
+# ---- utils ----
 
 function inner(mesh::CartesianMesh; pad::Int)
     h = spacing(mesh)

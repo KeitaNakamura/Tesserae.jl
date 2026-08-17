@@ -1,15 +1,10 @@
-###############
-# HybridArray #
-###############
-
-# HybridArray is used to handle atomic operations on the GPU.
-# Since atomic operations do not support custom bitstypes such as `Tensor`,
-# the data is flattened into a HybridArray.
+# GPU atomics do not support custom bitstypes such as `Tensor`, so the data is
+# flattened into a `HybridArray` first.
 
 struct HybridArray{T, N, A <: AbstractArray{T, N}, B <: AbstractArray, D <: AbstractDevice} <: AbstractArray{T, N}
     parent::A
     flat::B
-    device::D # stored in advance to avoid the overhead of calling `get_device` in a loop.
+    device::D # stored in advance, `get_device` being too costly to call in a loop
 end
 
 Base.parent(A::HybridArray) = A.parent

@@ -8,7 +8,6 @@ Diff(axis::Int) = Diff{1,1}(axis)
 Diff{order}(axis::Int) where {order} = Diff{order,1}(axis)
 getaxis(x::Diff) = x.axis
 
-# generate_offsets
 generate_offsets(op::Diff, dest::Cell, src::Cell) = _generate_offsets(op, dest, src)
 generate_offsets(op::Diff, dest::Cell, src::Face) = _generate_offsets(op, dest, src)
 generate_offsets(op::Diff, dest::Face, src::Cell) = (@assert getaxis(op) == getaxis(dest); _generate_offsets(op, dest, src))
@@ -32,7 +31,6 @@ _generate_offsets(::Diff{2, 1}, ::Face, ::Face) = (-1, 0, 1)
 _generate_offsets(::Diff{2, 2}, ::Face, ::Face) = (-2, -1, 0, 1, 2)
 _generate_offsets(::Diff{2, 3}, ::Face, ::Face) = (-3, -2, -1, 0, 1, 2, 3)
 
-# generate_weights
 generate_weights(op::Diff, dest::Cell, src::Cell) = _generate_weights(op, dest, src)
 generate_weights(op::Diff, dest::Cell, src::Face) = _generate_weights(op, dest, src)
 generate_weights(op::Diff, dest::Face, src::Cell) = (@assert getaxis(op) == getaxis(dest); _generate_weights(op, dest, src))
@@ -151,11 +149,10 @@ function stencil(op::Gradient, src::StencilArray{Cell, T, dim}; pad::Int, spacin
 end
 
 # Gradient: Face → Cell
-# NOTE: this method is still unreachable and untested. `fillzero!` below is not
-# bound in this module -- `tesserae.jl` only adds a method to `Tesserae.fillzero!`,
-# which does not bring the bare name into scope -- so it throws `UndefVarError`
-# before doing any work. Import `fillzero!`, or zero the destination the way the
-# `Divergence` method below does, before relying on this.
+# NOTE: unreachable and untested. `fillzero!` is not bound in this module --
+# `tesserae.jl` only adds a method to `Tesserae.fillzero!` -- so this throws
+# `UndefVarError` before doing any work. Import it, or zero the destination the
+# way the `Divergence` method below does, before relying on this.
 function stencil!(::Gradient{r}, dest::StencilArray{Cell, <: Any, dim}, srcs::NTuple{dim, <: StencilArray{Face, <: Any, dim}}; pad::Int, spacing::Real) where {r, dim}
     fillzero!(inner(dest; pad))
     for i in 1:dim

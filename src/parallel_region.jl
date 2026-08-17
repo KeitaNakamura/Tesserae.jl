@@ -1,10 +1,12 @@
+# -----------------------------------------------------------------------------
+#  Parallel regions
+# -----------------------------------------------------------------------------
+
 # Two regions of the same color never share a grid node; regions of different
 # colors do. That is why groups run one after another, and why no result depends
 # on which worker takes which region.
 
-######################
-# phased worker pool #
-######################
+# ---- phased worker pool ----
 
 mutable struct PhaseGate
     @atomic arrived::Int
@@ -82,9 +84,7 @@ function run_worker_phases(phase::F, barrier::PhaseBarrier, nphases::Int) where 
     nothing
 end
 
-###########################
-# splitting a color group #
-###########################
+# ---- splitting a color group ----
 
 equal_count_bounds(nregions::Int, nworkers::Int) =
     [(nregions * w) ÷ nworkers for w in 0:nworkers]

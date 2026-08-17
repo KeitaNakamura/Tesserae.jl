@@ -4,7 +4,6 @@
     ylims = (0,4)
     mesh = CartesianMesh(h, xlims, ylims)
 
-    # constructors
     ## with Array
     for grid in ((@inferred generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)),
                  (@inferred generate_grid(Array, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)),)
@@ -58,7 +57,6 @@
     geometry[1] = Vec(-1.0, -1.0)
     @test field_grid.x[1] == geometry[1]
 
-    # broadcast for SpArray
     grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)
     spinds = Tesserae.get_spinds(grid)
     blkspy = rand(Bool, Tesserae.nblocks(spinds))
@@ -74,10 +72,9 @@
     array_x = Array(grid.x)
     array_m = Array(grid.m)
     array_v = Array(grid.v)
-    # broadcast `SpArray`s having identical `SpIndices`
     @. grid.v = grid.v - grid.v / grid.m
     @test grid.v == (@. array_v = array_v - array_v / array_m * !iszero(array_m))
-    # broadcast `SpArray`s and `AbstractArray`
+    # A mixed broadcast leaves the sparse fast path.
     @. grid.v = grid.v - grid.x / grid.m
     @test grid.v == (@. array_v = array_v - array_x / array_m * !iszero(array_m))
 end

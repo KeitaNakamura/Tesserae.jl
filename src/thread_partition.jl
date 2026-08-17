@@ -1,3 +1,9 @@
+# -----------------------------------------------------------------------------
+#  Thread partitioning
+# -----------------------------------------------------------------------------
+
+# ---- BlockStrategy ----
+
 abstract type PartitionStrategy end
 
 struct ParticleReorderBuffers
@@ -96,12 +102,8 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
 
     count_particles_by_block!(bs, xₚ, chunksize, blocklin)
 
-    # Accumulate dense block histograms, then scan blocks in linear order to
-    # cache the nonempty color groups used by threaded P2G.
     accumulate_chunk_counts!(bs)
     update_threadsafe_groups!(bs)
-
-    # Assign active block ranges in P2G color-group order.
     assign_block_ranges!(bs)
 
     scatter_particle_indices!(bs, nₚ, chunksize)
@@ -196,9 +198,9 @@ function check_packed_block_number_limits!(bs::BlockStrategy, nₚ::Integer)
     nothing
 end
 
-# packed_particle_blocks[p] holds the linear block id in the upper 32 bits and
-# the 1-based number within that particle's chunk/block in the lower 32. The
-# chunk id is not stored; count and scatter walk the same index ranges.
+# The linear block id rides in the upper 32 bits, the 1-based number within the
+# particle's chunk/block in the lower 32. The chunk id is not stored: count and
+# scatter walk the same index ranges.
 @inline pack_block_number(block::Integer, number::Integer) =
     (UInt64(block) << PACKED_BLOCK_NUMBER_BITS) | UInt64(number)
 @inline packed_block(packed::UInt64) = Int(packed >> PACKED_BLOCK_NUMBER_BITS)
@@ -320,13 +322,11 @@ function _permute_particles!(particles::StructVector, perm, buffers::ParticleReo
     particles
 end
 
-# _reorder_particles! passes a full-length valid permutation; the buffer has
-# the same length as the component, so the gather loop can skip bounds checks.
-# Sequential on purpose: threading costs two fork-joins per component and
-# measured slower across every size tried.
-#
-# The copy back has to stay a separate pass: the gather still reads elements
-# that copying would overwrite.
+# `_reorder_particles!` passes a full-length valid permutation and the buffer
+# matches the component, so the gather can skip bounds checks. Sequential on
+# purpose: threading costs two fork-joins per component and measured slower at
+# every size tried. The copy back stays a separate pass, the gather still reading
+# elements that copying would overwrite.
 function _permute_component!(component, perm, buffer)
     n = length(component)
     @inbounds for k in 1:n
@@ -381,9 +381,7 @@ function _reorder_particles!(particles::StructVector, particleindices::AbstractV
     perm
 end
 
-####################
-# block operations #
-####################
+# ---- block operations ----
 
 blockwidth(::Val{L}) where {L} = 1 << L
 blockwidth(mesh::CartesianMesh) = blockwidth(Val(block_size_log2(mesh)))
@@ -422,9 +420,8 @@ CartesianIndex(3, 1)
     _findblock(x, get_xmin(mesh), spacing_inv(mesh), size(mesh), Val(L))
 end
 
-# Same boundary rule as findcell, but return the block index directly.
-# cell0_d is the 0-based cell index in direction d. It is converted to a
-# 1-based block index by shifting by block_size_log2 and adding 1.
+# Same boundary rule as `findcell`, but returning the block index directly: the
+# 0-based cell index shifted by `block_size_log2`, plus one.
 @generated function _findblock(x::Vec{dim}, xmin::Vec{dim}, h_inv, dims::Dims{dim}, ::Val{L}) where {dim, L}
     quote
         @_inline_meta
@@ -435,12 +432,12 @@ end
     end
 end
 
-# GPU sibling of `BlockStrategy`: the same block-contiguous particle index
-# list, maintained on the device by a counting sort so no host synchronization
-# happens beyond one scalar readback for the active-block count. Within one
-# block the particle order is whatever the atomic scatter produced; the
-# block-scheduled transfers only ever sum over a whole block, so this permutes
-# a floating-point sum that particle motion reorders anyway.
+# GPU sibling of `BlockStrategy`, maintained on the device by a counting sort so
+# no host synchronization happens beyond one readback of the active-block count.
+# Particle order within a block is whatever the atomic scatter produced, which
+# permutes a floating-point sum that particle motion reorders anyway.
+# ---- GPUBlockStrategy ----
+
 struct GPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}, Vi <: AbstractVector{Int32}, Vl <: AbstractVector{Int64}} <: PartitionStrategy
     mesh::Mesh
     particleindices::Vi  # block-contiguous particle ids
@@ -454,9 +451,8 @@ struct GPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}, Vi <: AbstractVector{In
     nactive::Base.RefValue{Int}
 end
 
-# One workgroup's worth of the fused scan. The count prefix and the
-# nonempty-block prefix ride in one Int64 (counts in the low half, block flags
-# in the high half); both totals stay below 2^31, so the halves never carry.
+# Count prefix and nonempty-block prefix ride in one Int64, counts in the low
+# half and flags in the high; both totals stay below 2^31, so neither carries.
 const PARTITION_SCAN_GROUP = 256
 @inline pack_partition_sums(count::Int32) = Int64(count) | (Int64(!iszero(count)) << 32)
 @inline packed_count(x::Int64) = x & Int64(0xffffffff)
@@ -486,11 +482,9 @@ nactive(bs::GPUBlockStrategy) = bs.nactive[]
     end
 end
 
-# Fused two-level scan over the block counts. Both prefixes the update needs
-# (particle counts for the ranges, nonempty flags for the compacted block list)
-# ride in one packed Int64, and the per-block outputs are written by the final
-# rescan pass directly. The generic `cumsum!` this replaces cost more in kernel
-# launches than the whole particle work.
+# Fused two-level scan: both prefixes the update needs ride in one packed Int64
+# and the final rescan writes the per-block outputs directly. The generic
+# `cumsum!` this replaces cost more in kernel launches than the particle work.
 @kernel function gpukernel_partition_reduce!(partials, @Const(counts))
     g = @index(Group)
     l = @index(Local)
@@ -533,9 +527,7 @@ end
     end
 end
 
-# Rescan each group on top of its spine offset and write every per-block
-# output: exclusive range starts, scatter cursors, the compacted list of
-# nonempty blocks, and the totals.
+# Every per-block output is written in this one rescan pass.
 @kernel function gpukernel_partition_finalize!(offsets, cursors, blocklist, nactive_buf, @Const(counts), @Const(partials))
     g = @index(Group)
     l = @index(Local)
@@ -600,6 +592,8 @@ function update!(bs::GPUBlockStrategy, xₚ::AbstractVector{<: Vec})
     bs
 end
 
+# ---- CellStrategy ----
+
 struct CellStrategy <: PartitionStrategy
     threadsafe_groups::Vector{Vector{Int}}
 end
@@ -643,6 +637,8 @@ function _cell_conflict_graph(mesh::AbstractCellMesh)
 
     graph
 end
+
+# ---- ThreadPartition ----
 
 """
     ThreadPartition(::CartesianMesh)

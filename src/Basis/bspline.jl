@@ -40,14 +40,12 @@ end
 end
 
 @inline fract(x) = x - floor(x)
-# Fast calculations for value, gradient and hessian
-# `x` must be normalized by `h`
 
+# `x` must be normalized by `h` throughout the fast paths below.
 function _bspline_local_coeffs(degree::Int)
     scale = 1 // factorial(degree)
-    # A degree-n B-spline has n + 1 local support nodes.
     map(0:degree) do node
-        # Coefficients are stored in ascending powers for evalpoly.
+        # Ascending powers, as `evalpoly` expects.
         map(0:degree) do power
             binomial(degree, power) * scale * sum(0:(degree - node)) do shift
                 (-1)^shift * binomial(degree + 1, shift) *
@@ -112,7 +110,6 @@ end
 
 _bspline_var(r, d) = Symbol(:v, r, :_, d)
 
-# Build the scalar product for one tensor-product component.
 function _bspline_product_expr(terms)
     @assert !isempty(terms)
     length(terms) == 1 && return only(terms)
@@ -133,7 +130,6 @@ function _bspline_component_indices(::Val{k}, dim) where {k}
     Array(CartesianIndices(size(TT))[Tensorial.independent_to_component_map(TT)])
 end
 
-# Generate one value to write into the BasisWeight property arrays.
 function _bspline_value_expr(::Val{0}, dim)
     _bspline_product_expr(map(d -> _bspline_var(0, d), 1:dim))
 end
@@ -150,9 +146,7 @@ end
 @generated function update_bspline_full_support!(bw::BasisWeight, order::Order{k}, spline::BSpline{Degree{n}}, x, mesh::CartesianMesh{dim}) where {k, n, dim}
     dims = ntuple(_ -> n + 1, dim)
     node_assignments = map(enumerate(CartesianIndices(dims))) do (i, I)
-        # Load all 1D basis values needed at this support node.
         loads = [:($(_bspline_var(r, d)) = vals1d[$d][$(r + 1)][$(I[d])]) for d in 1:dim for r in 0:k]
-        # Write value, gradient, Hessian, ... directly into each stored array.
         assignments = [:($(Symbol(:vals_, r))[$i] = $(_bspline_value_expr(Val(r), dim))) for r in 0:k]
         quote
             $(loads...)
@@ -247,9 +241,6 @@ end
     true
 end
 
-# Steffen, M., Kirby, R. M., & Berzins, M. (2008).
-# Analysis and reduction of quadrature errors in the material point method (MPM).
-# International journal for numerical methods in engineering, 76(6), 922-948.
 function value(::SteffenBSpline{Constant}, ξ::Real, pos::Int)
     value(BSpline(Constant()), ξ)
 end

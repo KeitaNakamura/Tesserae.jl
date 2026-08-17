@@ -1,3 +1,7 @@
+# -----------------------------------------------------------------------------
+#  Utilities
+# -----------------------------------------------------------------------------
+
 const DEBUG = Preferences.@load_preference("debug_mode", false)
 
 @static if DEBUG
@@ -10,9 +14,7 @@ else
     end
 end
 
-################
-# Order/Degree #
-################
+# ---- Order/Degree ----
 
 struct Order{n}
     Order{n}() where {n} = new{n::Int}()
@@ -30,13 +32,10 @@ const Cubic     = Degree{3}
 const Quartic   = Degree{4}
 const Quintic   = Degree{5}
 
-#############
-# Utilities #
-#############
+# ---- helpers ----
 
 nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
 
-# zero_recursive
 @generated function zero_recursive(::Type{T}) where {T}
     isbitstype(T) || return :(throw(ArgumentError("`zero_recursive` supports only `isbitstype`, got $T")))
     :(@_inline_meta; zero(T))
@@ -47,24 +46,19 @@ end
 end
 zero_recursive(x) = zero_recursive(typeof(x))
 
-# fillzero!
 function fillzero!(x::AbstractArray)
     fill!(x, zero_recursive(eltype(x)))
     x
 end
 
-# `fill!` stores a composite element such as `Vec{2,Float64}` one field at a
-# time, which is slower than a memset over the same bytes, and grid fields are
-# mostly composite. Zeroing a dense array can go through memset instead whenever
-# a zero of the element type is all-zero bytes.
+# `fill!` stores a composite element one field at a time, slower than a memset
+# over the same bytes, and grid fields are mostly composite.
 #
-# The test is structural -- every leaf field is a number or a `Bool`, whose zero
-# is all-zero bytes -- rather than an inspection of a zero value, since reading
-# the bytes of one would also read padding, which is undefined. A type built
-# only from numbers but with a `zero` that is not zero would take this path
-# wrongly; `zero_recursive` reaches leaves the same way, so such a type is
-# already outside what `fillzero!` promises. Padding itself is fine: memset
-# zeroes it and nothing reads it.
+# The test is structural rather than an inspection of a zero value, since reading
+# the bytes of one would also read padding, which is undefined. A type built only
+# from numbers but with a nonzero `zero` would take this path wrongly, but
+# `zero_recursive` reaches leaves the same way, so it is already outside what
+# `fillzero!` promises. Padding is fine: memset zeroes it and nothing reads it.
 Base.@assume_effects :foldable function zeroed_by_memset(::Type{T}) where {T}
     isbitstype(T) && sizeof(T) > 0 || return false
     T <: Union{Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64,
@@ -87,21 +81,19 @@ function fillzero!(x::StructArray)
     x
 end
 
-# The buffer a `fillzero!` would memset, or `nothing` when it would not reach
-# one: a byte range is the only thing that can be split across threads.
+# A byte range is the only thing that can be split across threads, so a target
+# without one reports `nothing` and the caller zeroes it itself.
 memset_buffer(x) = nothing
 memset_buffer(x::Array{T}) where {T} = zeroed_by_memset(T) ? x : nothing
 
-# `nothing` unless every target has a buffer. Dispatch rather than a test over
-# the mapped tuple, so that falling back is a matter of which method is called
-# and not of the compiler folding an `any`.
+# Dispatch rather than a test over the mapped tuple, so falling back is a matter
+# of which method is called and not of the compiler folding an `any`.
 memset_buffers(targets::Tuple) = _memset_buffers(map(memset_buffer, targets))
 _memset_buffers(buffers::Tuple{Vararg{Array}}) = buffers
 _memset_buffers(::Tuple) = nothing
 
-# Chunk boundaries are aligned so that workers do not share the line they write
-# and no memset begins partway into one. 64 is the common line width; a machine
-# with wider lines still gets correct results, just some sharing at the seams.
+# Chunk boundaries are aligned so workers do not share the line they write. A
+# machine with wider lines still gets correct results, just sharing at the seams.
 const FILLZERO_CHUNK_ALIGN = 64
 
 # Unrolled rather than a `foreach`, so zeroing on one thread stays a run of
@@ -131,9 +123,8 @@ function fillzero_chunk!(buffers::Tuple, nbytes::Int, nchunks::Int, chunk_id::In
     fillzero_byte_range!(buffers, chunk_range(chunk_id, chunksize, nbytes), 0)
 end
 
-# `range` indexes the buffers laid end to end, and `offset` counts the bytes
-# the buffers ahead of this one take up. A buffer the range misses entirely
-# gives an empty overlap and is skipped.
+# `range` indexes the buffers laid end to end, `offset` counting the bytes the
+# buffers ahead of this one take up.
 @inline fillzero_byte_range!(::Tuple{}, range::UnitRange{Int}, offset::Int) = nothing
 @inline function fillzero_byte_range!(buffers::Tuple, range::UnitRange{Int}, offset::Int)
     buffer = first(buffers)
@@ -178,7 +169,6 @@ function _fillzero_sparse_matrix_view!(matrix::SparseMatrixCSC, selected_rows, s
     matrix
 end
 
-# fastsum
 @inline function fastsum(f, iter)
     ret = zero(Base._return_type(f, Tuple{eltype(iter)}))
     @simd for x in iter
@@ -187,15 +177,12 @@ end
     ret
 end
 
-# commas
 commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")
 
-# getx
 getx(x) = getproperty(x, first(propertynames(x)))
 getx(x::Vec) = x
 getx(x::Vector{<: Vec}) = x
 
-# dropat
 @generated function dropat(entries::Tuple{Vararg{Any, N}}, index::Int) where {N}
     branches = map(1:N) do i
         kept = map(j -> :(entries[$j]), filter(!=(i), 1:N))
@@ -206,10 +193,6 @@ getx(x::Vector{<: Vec}) = x
         throw(ArgumentError("index must be between 1 and tuple length"))
     end
 end
-
-############
-# MapArray #
-############
 
 struct MapArray{T, N, F, Args <: Tuple} <: AbstractArray{T, N}
     f::F
@@ -235,10 +218,6 @@ Base.IndexStyle(::Type{<: MapArray}) = IndexCartesian()
     @inbounds A.f(getindex.(A.args, i...)...)
 end
 
-#########
-# Trues #
-#########
-
 struct Trues{N} <: AbstractArray{Bool, N}
     dims::Dims{N}
 end
@@ -249,9 +228,7 @@ Base.IndexStyle(::Type{<: Trues}) = IndexLinear()
     true
 end
 
-##################
-# threaded macro #
-##################
+# ---- threaded macro ----
 
 abstract type Scheduler end
 struct StaticScheduler     <: Scheduler end
@@ -266,8 +243,7 @@ get_scheduler(::Val{:dynamic}) = DynamicScheduler()
 get_scheduler(::Val{:greedy})  = GreedyScheduler()
 get_scheduler(::Val{:nothing}) = SequentialScheduler()
 
-# Chunk `chunk_id` of `n` items split into pieces of `chunksize`. Chunks past
-# the last piece are empty.
+# Chunks past the last piece come out empty.
 @inline chunk_range(chunk_id::Int, chunksize::Int, n::Int) =
     ((chunk_id - 1) * chunksize + 1) : min(chunk_id * chunksize, n)
 
@@ -282,7 +258,7 @@ function tforeach(f::F, iter, scheduler=DynamicScheduler(); kwargs...) where {F}
     end
 end
 
-# Modify the following funcitons for custom multi-threading. For now, just use Threads.@threads.
+# The single point to change for a custom threading backend.
 function _tforeach(f, iter, ::StaticScheduler)
     Threads.@threads :static for i in iter
         @inline f(i)
@@ -371,11 +347,7 @@ function threaded_expr(schedule::QuoteNode, expr::Expr)
     end
 end
 
-#########
-# tmul! #
-#########
-
-# multithreading C = Aᵀ B α + C β
+# C = Aᵀ B α + C β
 function tmul!(C::StridedVecOrMat{T}, A::SparseMatrixCSC{T}, B::StridedVecOrMat{T}, α, β) where {T <: Real}
     rows = rowvals(A)
     vals = nonzeros(A)
