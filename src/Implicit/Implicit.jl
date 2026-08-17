@@ -1,3 +1,5 @@
+include("sparse.jl")
+
 include("dofmap.jl")
 include("blocks.jl")
 include("sparsity.jl")

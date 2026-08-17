@@ -127,8 +127,7 @@ export
     gpu,
     gpu_preserve
 
-include("devices.jl")
-include("utils.jl")
+include("Core/Core.jl")
 include("progress.jl")
 import .Progress: @showprogress
 
