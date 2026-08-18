@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 # GPU sibling of `CPUBlockStrategy`, maintained on the device by a counting sort so
-# no host synchronization happens beyond one readback of the active-block count.
+# no host synchronization happens beyond one readback of the block and particle totals.
 # Particle order within a block is whatever the atomic scatter produced, which
 # permutes a floating-point sum that particle motion reorders anyway.
 
@@ -16,8 +16,13 @@ struct GPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}, Vi <: AbstractVector{In
     cursors::Vi          # per-block scatter cursors
     partials::Vl         # per-workgroup partial sums for the fused scan
     blocklist::Vi        # nonempty block ids; the first `nactive` entries are valid
-    nactive_buf::Vi      # device-side active-block count
+    totals_buf::Vi       # device-side [active-block count, assigned-particle count]
     nactive::Base.RefValue{Int}
+    nassigned::Base.RefValue{Int}
+    # Occupancy-derived workgroup size per block-scheduled `@P2G` kernel
+    # specialization: each call site compiles its own kernel with its own
+    # register budget, so one shared size could exceed a heavier kernel's limit.
+    p2g_groupsize::Dict{DataType, Int}
 end
 
 # Count prefix and nonempty-block prefix ride in one Int64, counts in the low
@@ -33,7 +38,8 @@ function GPUBlockStrategy(mesh::CartesianMesh)
     alloc(::Type{T}, n) where {T} = fillzero!(KernelAbstractions.allocate(backend, T, n))
     GPUBlockStrategy(
         mesh, alloc(Int32, 0), alloc(Int32, 0), alloc(Int32, nb), alloc(Int32, nb + 1), alloc(Int32, nb),
-        alloc(Int64, cld(nb, PARTITION_SCAN_GROUP)), alloc(Int32, nb), alloc(Int32, 1), Ref(0),
+        alloc(Int64, cld(nb, PARTITION_SCAN_GROUP)), alloc(Int32, nb), alloc(Int32, 2), Ref(0), Ref(0),
+        Dict{DataType, Int}(),
     )
 end
 
@@ -97,7 +103,7 @@ end
 end
 
 # Every per-block output is written in this one rescan pass.
-@kernel function gpukernel_partition_finalize!(offsets, cursors, blocklist, nactive_buf, @Const(counts), @Const(partials))
+@kernel function gpukernel_partition_finalize!(offsets, cursors, blocklist, totals_buf, @Const(counts), @Const(partials))
     g = @index(Group)
     l = @index(Local)
     b = @index(Global)
@@ -123,7 +129,8 @@ end
         iszero(c) || (blocklist[packed_flags(incl)] = Int32(b))
         if b == nb
             offsets[nb+1] = Int32(packed_count(incl))
-            nactive_buf[1] = Int32(packed_flags(incl))
+            totals_buf[1] = Int32(packed_flags(incl))
+            totals_buf[2] = Int32(packed_count(incl))
         end
     end
 end
@@ -153,10 +160,81 @@ function update!(bs::GPUBlockStrategy, xₚ::AbstractVector{<: Vec})
     scan_ndrange = ngroups * PARTITION_SCAN_GROUP
     gpukernel_partition_reduce!(backend, PARTITION_SCAN_GROUP)(bs.partials, bs.counts; ndrange=scan_ndrange)
     gpukernel_partition_spine!(backend, PARTITION_SCAN_GROUP)(bs.partials; ndrange=PARTITION_SCAN_GROUP)
-    gpukernel_partition_finalize!(backend, PARTITION_SCAN_GROUP)(bs.offsets, bs.cursors, bs.blocklist, bs.nactive_buf, bs.counts, bs.partials; ndrange=scan_ndrange)
+    gpukernel_partition_finalize!(backend, PARTITION_SCAN_GROUP)(bs.offsets, bs.cursors, bs.blocklist, bs.totals_buf, bs.counts, bs.partials; ndrange=scan_ndrange)
     iszero(nₚ) || gpukernel_partition_scatter!(backend)(bs.particleindices, bs.cursors, bs.blockids; ndrange=nₚ)
 
     KernelAbstractions.synchronize(backend)
-    bs.nactive[] = Int(only(Array(bs.nactive_buf)))
+    totals = Array(bs.totals_buf)
+    bs.nactive[] = Int(totals[1])
+    bs.nassigned[] = Int(totals[2])
     bs
 end
+
+# The scatter above fills slots 1:nassigned contiguously; the total rides home
+# in the same readback that fetches `nactive`, so reading it here costs no
+# device round-trip on the adaptive reorder path.
+nassigned(bs::GPUBlockStrategy) = bs.nassigned[]
+
+# The device scatter randomizes order within a block, so the CPU pairwise
+# metric reads as disorder even right after a reorder. Count instead the
+# neighboring particles that share a block, which that shuffle cannot
+# disturb: 1 after a reorder, decreasing as particles change blocks.
+function block_ordered_particle_contiguity(bs::GPUBlockStrategy)
+    nₚ = length(bs.blockids)
+    nₚ ≤ 1 && return 1.0
+    blockids = bs.blockids
+    # Block slot ranges shift globally whenever any upstream block changes its
+    # count, so judging particles against them would misreport still-grouped
+    # particles as disordered; only the assigned total comes from `offsets`.
+    same = mapreduce((a, b) -> Int(!iszero(a) & (a == b)), +,
+                     view(blockids, 1:nₚ-1), view(blockids, 2:nₚ); init=0)
+    maxsame = nassigned(bs) - nactive(bs)
+    maxsame ≤ 0 && return 1.0
+    same / maxsame
+end
+
+function reorder_particles!(particles::StructVector, bs::GPUBlockStrategy; threshold=1)
+    0 ≤ threshold ≤ 1 || throw(ArgumentError("threshold must be in [0, 1]."))
+    iszero(threshold) && return false
+    if threshold == 1 || block_ordered_particle_contiguity(bs) < threshold
+        _reorder_partition_particles!(particles, bs)
+        return true
+    end
+    return false
+end
+
+function _reorder_partition_particles!(particles::StructVector, bs::GPUBlockStrategy)
+    nₚ = length(particles)
+    # Before the buffer-length guard: Metal keeps a stale nonzero buffer when
+    # resized to empty, which would misreport a followed contract as a missing
+    # `update!`.
+    iszero(nₚ) && return particles
+    length(bs.particleindices) == nₚ ||
+        error("reorder_particles!: `update!(partition, particles.x)` must run with these particles before reordering")
+    # Unlike the CPU path there is no append fallback: collecting the unassigned
+    # ids needs a host-side pass over every particle, so stray particles error.
+    nassigned(bs) == nₚ ||
+        error("reorder_particles!: some particles are outside the mesh and were not assigned to any block; filter them out before reordering on GPU")
+    perm = bs.particleindices
+    for component in StructArrays.components(particles)
+        permute_through_temporary!(component, perm)
+    end
+    # `blockids` follows the same permutation so the contiguity metric stays
+    # truthful until the next `update!` recomputes it.
+    permute_through_temporary!(bs.blockids, perm)
+    perm .= 1:nₚ
+    particles
+end
+
+# Freeing each gather temporary eagerly lets the device pool hand the same
+# blocks to the next component instead of growing until the GC catches up.
+# Backends with an eager free (the CUDA and Metal extensions) override the
+# hook; elsewhere the temporary is left to the GC.
+function permute_through_temporary!(a::AbstractVector, perm)
+    tmp = a[perm]
+    copyto!(a, tmp)
+    free_temporary!(tmp)
+    a
+end
+
+free_temporary!(::AbstractArray) = nothing

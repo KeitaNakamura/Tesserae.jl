@@ -50,11 +50,7 @@ Partition(mesh::CartesianMesh) = Partition(CPUBlockStrategy(mesh))
 Partition(mesh::AbstractCellMesh) = Partition(CellStrategy(mesh))
 update!(partition::Partition, args...) = update!(strategy(partition), args...)
 
-reorder_particles!(particles::StructVector, partition::Partition{<: CPUBlockStrategy}; kwargs...) =
+reorder_particles!(particles::StructVector, partition::Partition{<: Union{CPUBlockStrategy, GPUBlockStrategy}}; kwargs...) =
     reorder_particles!(particles, strategy(partition); kwargs...)
-block_ordered_particle_contiguity(partition::Partition{<: CPUBlockStrategy}) =
+block_ordered_particle_contiguity(partition::Partition{<: Union{CPUBlockStrategy, GPUBlockStrategy}}) =
     block_ordered_particle_contiguity(strategy(partition))
-reorder_particles!(particles, ::Partition{<: GPUBlockStrategy}; kwargs...) =
-    error("reorder_particles! does not support GPU partitions yet")
-block_ordered_particle_contiguity(::Partition{<: GPUBlockStrategy}) =
-    error("block_ordered_particle_contiguity does not support GPU partitions yet")

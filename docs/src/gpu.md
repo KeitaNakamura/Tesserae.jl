@@ -205,7 +205,7 @@ This section rewrites the [Taylor impact tutorial](@ref taylor_impact_tutorial) 
 The transfer equations and the von Mises material model are unchanged; only the execution pattern is adjusted.
 The main changes are:
 
-- Remove CPU threading utilities such as `@threaded` and `reorder_particles!`, which have no GPU form. A [`Partition`](@ref) may be kept, but must be moved with `gpu` and updated after the move.
+- Remove `@threaded`, which has no GPU form. A [`Partition`](@ref) may be kept, but must be moved with `gpu` and updated after the move; `reorder_particles!` works on the moved partition as it does on CPU.
 - Move the simulation objects to GPU with `gpu_preserve` after CPU-side setup.
 - Keep grid and particle calculations inside GPU operations, using `@P2G`, `@G2P`, and `@foreach`.
 - Rewrite the slip floor boundary condition with a boundary-slice `@foreach` loop to avoid scalar indexing on GPU arrays.

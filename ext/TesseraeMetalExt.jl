@@ -24,4 +24,6 @@ function Adapt.adapt_storage(::MetalDevice{CastFloat32}, A::AbstractArray{<: Ten
     adapt(MtlArray{Tensor{S,Float32,N,L}}, A) # DefaultStorageMode
 end
 
+Tesserae.free_temporary!(a::MtlArray) = Metal.unsafe_free!(a)
+
 end

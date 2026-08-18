@@ -229,6 +229,11 @@ move across blocks.
 The score is the fraction of neighboring entries in the current block-ordered
 particle index array that are also consecutive in memory. For example, a
 block-ordered list `[1, 2, 3, 8]` has two consecutive pairs out of three.
+
+On a GPU partition, whose scatter randomizes the order within each block, the
+score instead counts the neighboring particles in memory that share a block,
+rescaled so that fully block-grouped storage scores `1`; its endpoints and
+meaning are unchanged.
 """
 function block_ordered_particle_contiguity(bs::CPUBlockStrategy)
     n_assigned = nassigned(bs)
@@ -254,6 +259,10 @@ In a step loop, call this every step but pass a `threshold` below `1`, such as
 `0.85`, and let it decide which steps to act on. Reordering moves about as many
 bytes as the transfer it speeds up, so reordering on every step usually costs
 more than it saves.
+
+On a partition moved with `gpu`, the reorder runs on the device through the
+partition's block-sorted permutation. Unlike the CPU path, particles outside
+the mesh are an error there rather than being kept at the end of the array.
 
 !!! warning
     This permutes `particles` and nothing else, so anything already computed per
