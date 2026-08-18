@@ -2,7 +2,7 @@
 #  GPUBlockStrategy
 # -----------------------------------------------------------------------------
 
-# GPU sibling of `BlockStrategy`, maintained on the device by a counting sort so
+# GPU sibling of `CPUBlockStrategy`, maintained on the device by a counting sort so
 # no host synchronization happens beyond one readback of the active-block count.
 # Particle order within a block is whatever the atomic scatter produced, which
 # permutes a floating-point sum that particle motion reorders anyway.
@@ -142,8 +142,8 @@ function update!(bs::GPUBlockStrategy, xₚ::AbstractVector{<: Vec})
     get_backend(xₚ) == backend || throw(ArgumentError("particle positions must live on the partition's backend"))
     nₚ = length(xₚ)
     # Int32 particle ids, and both packed scan halves must stay below 2^31.
-    nₚ <= typemax(Int32) || throw(ArgumentError("ThreadPartition: particle count exceeds the GPU partition's Int32 capacity"))
-    length(bs.counts) <= typemax(Int32) || throw(ArgumentError("ThreadPartition: block count exceeds the GPU partition's Int32 capacity"))
+    nₚ <= typemax(Int32) || throw(ArgumentError("Partition: particle count exceeds the GPU partition's Int32 capacity"))
+    length(bs.counts) <= typemax(Int32) || throw(ArgumentError("Partition: block count exceeds the GPU partition's Int32 capacity"))
     ngroups = length(bs.partials)
     length(bs.blockids) == nₚ || resize_fillzero!(bs.blockids, nₚ)
     length(bs.particleindices) == nₚ || resize_fillzero!(bs.particleindices, nₚ)

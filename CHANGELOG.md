@@ -2,6 +2,15 @@
 
 All notable changes to Tesserae.jl will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Renamed `ThreadPartition` to `Partition`: the same type schedules GPU
+  workgroups through the block-scheduled `@P2G`, so the name no longer implies
+  CPU threads. `ThreadPartition` remains as a deprecated alias, and the
+  `ColorPartition` deprecation now points at `Partition`.
+
 ## v0.7.5
 
 ### Added
@@ -76,7 +85,7 @@ All notable changes to Tesserae.jl will be documented in this file.
 ### Added
 
 - Added threaded CPU transfers and matrix assembly for `IGAMesh` through
-  `ThreadPartition(mesh)`.
+  `Partition(mesh)`.
 
 ## v0.7.0
 
@@ -89,7 +98,7 @@ macros.
 
 - Sparse-grid workflows now run on GPU: `SpArray` sparsity can be updated from
   particle positions, and sparse-grid transfers dispatch to GPU kernels. (#112)
-- CPU scattering now uses `ThreadPartition`, a clearer replacement for
+- CPU scattering now uses `Partition`, a clearer replacement for
   `ColorPartition`, with faster updates and adaptive particle reordering.
   (#122, #134, #135, #136, #137, #138)
 - `PoissonDiskSampling(spacing=...)` now matches the intended particles-per-cell
@@ -116,7 +125,7 @@ macros.
   `threaded`. The old keyword is no longer accepted. (#113)
 - `reorder_particles!` now returns a `Bool` indicating whether particles were
   reordered, and the legacy overload accepting block-to-particle index lists
-  was removed. Pass a `ThreadPartition` instead. (#137)
+  was removed. Pass a `Partition` instead. (#137)
 - `CPDI` on `SpGrid` is now rejected explicitly; use a dense grid for CPDI.
   (#130)
 - `feupdate!` has been removed. Use
@@ -145,8 +154,8 @@ macros.
 
 ### Deprecations
 
-- `ThreadPartition` replaces `ColorPartition`. The old name remains available
-  as a deprecated alias, but new code should use `ThreadPartition(mesh)`. (#122)
+- `Partition` replaces `ColorPartition`. The old name remains available
+  as a deprecated alias, but new code should use `Partition(mesh)`. (#122)
 - Prefer `supportnodes` over `neighboringnodes` for mesh and basis-weight
   support queries. `neighboringnodes` remains available as a deprecated name.
   (#155)
@@ -168,7 +177,7 @@ macros.
   transfer loops. (#118)
 - Added `@P2G_Matrix` support for `SpGrid`. (#127)
 - Added `block_size_log2` configuration to `CartesianMesh` for controlling the
-  block decomposition used by `ThreadPartition` and `SpArray`. (#111)
+  block decomposition used by `Partition` and `SpArray`. (#111)
 - Added support for suppressing CartesianMesh domain-covering warnings with
   `warn=false`. (#123)
 

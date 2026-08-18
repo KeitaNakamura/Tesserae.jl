@@ -35,7 +35,7 @@ The explicit loop is built from five parts.
 [Export](export.md) writes grid and particle fields for visualization.
 
 Larger simulations keep the same objects while changing execution or storage.
-[Multi-threading](multithreading.md) adds CPU thread parallelism.
+[Parallel execution](parallel.md) adds CPU thread parallelism and the transfer partition.
 [GPU computing](gpu.md) uses GPU-backed arrays and transfer kernels.
 [SpArray](sparray.md) stores grid fields sparsely on Cartesian meshes.
 Implicit formulations use a different update structure; [Utilities for implicit methods](implicit_utils.md) provides the degree-of-freedom maps, sparse matrices, matrix assembly tools, and nonlinear solvers used by those methods.

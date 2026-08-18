@@ -161,7 +161,7 @@
 
         threaded = create_block_sparse_matrix(basis, mesh; ndofs=(2, 1))
         fillzero!(threaded)
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         update!(partition, particles.x)
         @threaded :static @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
             threaded[1,1][i,j] = @∑ ∇w[ip] ⊗ ∇w[jp]
@@ -212,7 +212,7 @@
             reference[i,j] = @∑ ∇w[ip] * w[jp]
         end
 
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         update!(partition, particles.x)
         @threaded :static @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
             threaded[i,j] = @∑ ∇w[ip] * w[jp]
@@ -255,7 +255,7 @@
         @test A ≈ B'
     end
     @testset "block partition" begin
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         update!(partition, particles.x)
 
         reference = create_sparse_matrix(basis, mesh; ndofs=(2, 1))

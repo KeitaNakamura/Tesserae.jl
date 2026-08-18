@@ -129,7 +129,7 @@
         grid_threaded_ref = deepcopy(grid)
         grid_threaded_display = deepcopy(grid)
         grid_threaded_macro = deepcopy(grid)
-        partition = ThreadPartition(Tesserae.get_mesh(grid))
+        partition = Partition(Tesserae.get_mesh(grid))
         update!(partition, particles.x)
 
         ex = @explain @P2G grid=>i particles=>p weights=>ip begin
@@ -279,7 +279,7 @@
         particles_threaded_ref = deepcopy(particles)
         particles_threaded_display = deepcopy(particles)
         particles_threaded_macro = deepcopy(particles)
-        partition = ThreadPartition(Tesserae.get_mesh(grid))
+        partition = Partition(Tesserae.get_mesh(grid))
         update!(partition, particles.x)
 
         ex = @explain @G2P2G grid=>i particles=>p weights=>ip begin
@@ -456,7 +456,7 @@
         test_grid_equal(grid_display, grid_macro)
 
         grid, particles, weights = spgrid_explain_setup()
-        partition = ThreadPartition(Tesserae.get_mesh(grid))
+        partition = Partition(Tesserae.get_mesh(grid))
         update!(partition, particles.x)
         grid_threaded_display = deepcopy(grid)
         grid_threaded_macro = deepcopy(grid)
@@ -531,7 +531,7 @@
         test_particles_equal(particles_display, particles_macro)
 
         grid, particles, weights = spgrid_explain_setup()
-        partition = ThreadPartition(Tesserae.get_mesh(grid))
+        partition = Partition(Tesserae.get_mesh(grid))
         update!(partition, particles.x)
         grid_threaded_display = deepcopy(grid)
         grid_threaded_macro = deepcopy(grid)
@@ -569,7 +569,7 @@
         @test A_display ≈ A_macro
 
         grid, particles, weights = spgrid_explain_setup()
-        partition = ThreadPartition(Tesserae.get_mesh(grid))
+        partition = Partition(Tesserae.get_mesh(grid))
         update!(partition, particles.x)
         A_threaded_display = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
         A_threaded_macro = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
@@ -598,7 +598,7 @@
         A_threaded_ref = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
         A_threaded_display = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
         A_threaded_macro = create_sparse_matrix(basis, mesh; ndofs=(2, 2))
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         update!(partition, particles.x)
 
         ex = @explain @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin

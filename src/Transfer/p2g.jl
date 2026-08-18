@@ -316,7 +316,7 @@ end
 # They are passed down instead of being zeroed by the caller so that the threaded
 # path can fold them into the parallel region it already opens.
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
-    scheduler == :nothing || @warn "@P2G: `ThreadPartition` must be given for threaded computation" maxlog=1
+    scheduler == :nothing || @warn "@P2G: `Partition` must be given for threaded computation" maxlog=1
 
     fillzero_each!(zeroed)
     for p in eachindex(particles)
@@ -324,14 +324,14 @@ function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothi
     end
 end
 
-function P2G(f, device::CPUDevice, schedule::Val, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=())
+function P2G(f, device::CPUDevice, schedule::Val, grid, particles, weights, partition::Partition, zeroed::Tuple=())
     p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, nothing)
 end
 
 # `epilogue` is how `@P2G`'s grid-node half rides this region instead of forking
 # one of its own; see `P2G_halves`.
 function p2g_region(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights,
-                    partition::ThreadPartition, zeroed::Tuple, epilogue::E) where {scheduler, E}
+                    partition::Partition, zeroed::Tuple, epilogue::E) where {scheduler, E}
     # `partitioned_foreach` runs the prologue on its sequential paths too, so
     # the only case left here is targets no memset can reach.
     prologue = fillzero_prologue(zeroed)
@@ -353,14 +353,14 @@ function P2G_halves(f, device, schedule, grid, particles, weights, partition, ze
 end
 
 function P2G_halves(f, device::CPUDevice, schedule::Val, grid, particles, weights,
-                    partition::ThreadPartition, zeroed::Tuple, nodebody::N, nodegrid) where {N}
+                    partition::Partition, zeroed::Tuple, nodebody::N, nodegrid) where {N}
     epilogue = (nworkers, w) -> foreach_worker_loop(nodebody, device, nodegrid, nworkers, w)
     p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, epilogue)
 end
 
 # Only the block-scheduled GPU path uses the tile body.
 P2G_halves(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights,
-           partition::ThreadPartition, zeroed::Tuple, nodebody, nodegrid) =
+           partition::Partition, zeroed::Tuple, nodebody, nodegrid) =
     P2G_halves(bodies.particle, device, schedule, grid, particles, weights, partition, zeroed, nodebody, nodegrid)
 
 # Bodies fall back to the particle-parallel lowering everywhere except the
@@ -368,7 +368,7 @@ P2G_halves(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles,
 # more specific than its `f`-taking sibling.
 P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) =
     P2G(bodies.particle, device, schedule, grid, particles, weights, nothing, zeroed)
-P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, partition::ThreadPartition, zeroed::Tuple=()) =
+P2G(bodies::P2GBodies, device::CPUDevice, schedule::Val, grid, particles, weights, partition::Partition, zeroed::Tuple=()) =
     P2G(bodies.particle, device, schedule, grid, particles, weights, partition, zeroed)
 P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) =
     P2G(bodies.particle, device, schedule, grid, particles, weights, nothing, zeroed)

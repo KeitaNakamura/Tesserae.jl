@@ -76,7 +76,7 @@ For threaded transfers, place [`@explain`](@ref) before [`@threaded`](@ref):
 end
 ```
 
-For scattering transfers such as [`@P2G`](@ref), [`@G2P2G`](@ref), and [`@P2G_Matrix`](@ref), the threaded reference code follows the same [`ThreadPartition`](@ref) structure as the actual CPU transfer:
+For scattering transfers such as [`@P2G`](@ref), [`@G2P2G`](@ref), and [`@P2G_Matrix`](@ref), the threaded reference code follows the same [`Partition`](@ref) structure as the actual CPU transfer:
 it loops over `threadsafe_groups(partition)` and then over the particle indices assigned to each thread-safe region.
 Without a partition, the reference code shows the sequential fallback.
 

@@ -114,7 +114,7 @@ function partitioned_particle_loop((particles,p), partition, body, threading)
     sequential = sequential_particle_loop((particles,p), body)
     if partition === nothing
         !threading.enabled && return sequential
-        return expr_block(:(@warn "@P2G: `ThreadPartition` must be given for threaded computation" maxlog=1), sequential)
+        return expr_block(:(@warn "@P2G: `Partition` must be given for threaded computation" maxlog=1), sequential)
     end
 
     group = :group

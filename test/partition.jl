@@ -17,7 +17,7 @@
     end
     before = (x=copy(particles.x), v=copy(particles.v), m=copy(particles.m), V=copy(particles.V))
 
-    bs = Tesserae.BlockStrategy(mesh)
+    bs = Tesserae.CPUBlockStrategy(mesh)
     Random.seed!(1234)
     shuffle!(particles)
     update!(bs, particles.x)
@@ -50,8 +50,8 @@ end
     end
 end
 
-@testset "ThreadPartition" begin
-    @testset "BlockStrategy" begin
+@testset "Partition" begin
+    @testset "CPUBlockStrategy" begin
         mesh = CartesianMesh(0.25, (0,4), (0,4))
         particles = generate_particles(@NamedTuple{x::Vec{2, Float64}}, mesh)
         filter!(particles) do particle
@@ -63,9 +63,9 @@ end
         shuffle!(particles)
         xₚ = particles.x
 
-        bs = (@inferred Tesserae.BlockStrategy(mesh))
-        partition = (@inferred ThreadPartition(mesh))
-        @test Tesserae.strategy(partition) isa Tesserae.BlockStrategy
+        bs = (@inferred Tesserae.CPUBlockStrategy(mesh))
+        partition = (@inferred Partition(mesh))
+        @test Tesserae.strategy(partition) isa Tesserae.CPUBlockStrategy
         @test Tesserae.nblocks(bs) === Tesserae.nblocks(mesh)
         @test Tesserae.block_size_log2(bs) === Tesserae.block_size_log2(mesh)
         @test Tesserae.blockwidth(bs) === Tesserae.blockwidth(mesh)
@@ -126,7 +126,7 @@ end
 
         check_particle_blocks(bs, mesh, xₚ)
 
-        moving_bs = Tesserae.BlockStrategy(mesh)
+        moving_bs = Tesserae.CPUBlockStrategy(mesh)
         moving_xₚ = [Vec(0.125, 0.125), Vec(0.375, 0.375), Vec(3.625, 3.625), Vec(3.875, 3.875)]
         update!(moving_bs, moving_xₚ)
         check_group_order(moving_bs)
@@ -158,7 +158,7 @@ end
     end
     @testset "CellStrategy" begin
         mesh = FEMesh(CartesianMesh(0.5, (0,2), (0,2)))
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         strat = Tesserae.strategy(partition)
         groups = Tesserae.threadsafe_groups(strat)
         @test all(!isempty, groups)
@@ -177,7 +177,7 @@ end
               [CartesianIndex(p, first(first(groups))) for p in 1:3]
 
         iga_mesh = IGAMesh(CartesianMesh(0.25, (0,2), (0,2)); degree=Quadratic())
-        iga_partition = @inferred ThreadPartition(iga_mesh)
+        iga_partition = @inferred Partition(iga_mesh)
         iga_groups = Tesserae.threadsafe_groups(iga_partition)
         iga_cells = collect(cells(iga_mesh))
         @test all(!isempty, iga_groups)

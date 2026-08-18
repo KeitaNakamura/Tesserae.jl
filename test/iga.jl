@@ -451,7 +451,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) begin
             K_sequential[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
         end
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         @threaded @P2G_Matrix grid=>(i,j) points=>p weights=>(ip,jp) partition begin
             K_threaded[i,j] = @∑ ∇N[ip] ⋅ ∇N[jp] * V[p]
         end

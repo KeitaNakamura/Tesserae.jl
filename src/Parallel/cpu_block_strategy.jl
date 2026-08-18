@@ -1,8 +1,8 @@
 # -----------------------------------------------------------------------------
-#  BlockStrategy
+#  CPUBlockStrategy
 # -----------------------------------------------------------------------------
 
-struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: PartitionStrategy
+struct CPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: PartitionStrategy
     mesh::Mesh
     particleindices::Vector{Int}
     starts::Array{Int, dim}
@@ -15,7 +15,7 @@ struct BlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: PartitionStrategy
     region_scratch::RegionScratch{Vector{CartesianIndex{dim}}}
 end
 
-function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
+function CPUBlockStrategy(mesh::CartesianMesh{dim}) where {dim}
     blkdims = nblocks(mesh)
     particleindices = Int[]
     starts = zeros(Int, blkdims)
@@ -25,7 +25,7 @@ function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
     for blk in CartesianIndices(blkdims)
         blockcolors[blk] = block_color(blk)
     end
-    BlockStrategy{dim, typeof(mesh)}(
+    CPUBlockStrategy{dim, typeof(mesh)}(
         mesh,
         particleindices,
         starts,
@@ -39,10 +39,10 @@ function BlockStrategy(mesh::CartesianMesh{dim}) where {dim}
     )
 end
 
-nblocks(bs::BlockStrategy) = size(bs.stops)
-block_size_log2(bs::BlockStrategy) = block_size_log2(bs.mesh)
-blockwidth(bs::BlockStrategy) = blockwidth(bs.mesh)
-nassigned(bs::BlockStrategy) = bs.nassigned[]
+nblocks(bs::CPUBlockStrategy) = size(bs.stops)
+block_size_log2(bs::CPUBlockStrategy) = block_size_log2(bs.mesh)
+blockwidth(bs::CPUBlockStrategy) = blockwidth(bs.mesh)
+nassigned(bs::CPUBlockStrategy) = bs.nassigned[]
 
 @inline function _particle_indices(particleindices, starts, stops, blk::Integer)
     @_propagate_inbounds_meta
@@ -51,15 +51,15 @@ nassigned(bs::BlockStrategy) = bs.nassigned[]
     (iszero(start) || stop < start) && return view(particleindices, 1:0)
     view(particleindices, start:stop)
 end
-@inline function particle_indices(bs::BlockStrategy, blk::Integer)
+@inline function particle_indices(bs::CPUBlockStrategy, blk::Integer)
     @boundscheck checkbounds(LinearIndices(nblocks(bs)), blk)
     @inbounds _particle_indices(bs.particleindices, bs.starts, bs.stops, blk)
 end
-@inline function particle_indices(bs::BlockStrategy, blk::CartesianIndex)
+@inline function particle_indices(bs::CPUBlockStrategy, blk::CartesianIndex)
     @boundscheck checkbounds(CartesianIndices(nblocks(bs)), blk)
     @inbounds particle_indices(bs, LinearIndices(nblocks(bs))[blk])
 end
-function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
+function update!(bs::CPUBlockStrategy, xₚ::AbstractVector{<: Vec})
     nₚ = length(xₚ)
     chunksize = prepare_partition_update!(bs, nₚ)
     blocklin = LinearIndices(nblocks(bs))
@@ -74,7 +74,7 @@ function update!(bs::BlockStrategy, xₚ::AbstractVector{<: Vec})
     bs
 end
 
-function prepare_partition_update!(bs::BlockStrategy, nₚ::Integer)
+function prepare_partition_update!(bs::CPUBlockStrategy, nₚ::Integer)
     ws = bs.update_workspace
     resize!(bs.particleindices, nₚ)
     resize!(ws.packed_particle_blocks, nₚ)
@@ -86,7 +86,7 @@ function prepare_partition_update!(bs::BlockStrategy, nₚ::Integer)
     max(1, cld(nₚ, nchunks))
 end
 
-function count_particles_by_block!(bs::BlockStrategy, xₚ, chunksize, blocklin)
+function count_particles_by_block!(bs::CPUBlockStrategy, xₚ, chunksize, blocklin)
     ws = bs.update_workspace
     nₚ = length(xₚ)
     xmin = get_xmin(bs.mesh)
@@ -116,7 +116,7 @@ end
 
 # Accumulate chunk by chunk so each pass adds two contiguous arrays; a sweep
 # carrying one block's running total through the chunks is strided instead.
-function accumulate_chunk_counts!(bs::BlockStrategy)
+function accumulate_chunk_counts!(bs::CPUBlockStrategy)
     ws = bs.update_workspace
     nchunks = length(ws.chunk_counts)
 
@@ -129,7 +129,7 @@ function accumulate_chunk_counts!(bs::BlockStrategy)
     bs
 end
 
-function assign_block_ranges!(bs::BlockStrategy)
+function assign_block_ranges!(bs::CPUBlockStrategy)
     ws = bs.update_workspace
     blocklin = LinearIndices(nblocks(bs))
     last_counts = ws.chunk_counts[end]
@@ -154,12 +154,12 @@ end
 const PACKED_BLOCK_NUMBER_BITS = 32
 const PACKED_BLOCK_NUMBER_MASK = (UInt64(1) << PACKED_BLOCK_NUMBER_BITS) - UInt64(1)
 
-function check_packed_block_number_limits!(bs::BlockStrategy, nₚ::Integer)
+function check_packed_block_number_limits!(bs::CPUBlockStrategy, nₚ::Integer)
     block_count = foldl((count, n) -> count * UInt64(n), nblocks(bs); init = UInt64(1))
     block_count <= PACKED_BLOCK_NUMBER_MASK ||
-        throw(ArgumentError("ThreadPartition block count exceeds packed block id capacity."))
+        throw(ArgumentError("Partition block count exceeds packed block id capacity."))
     UInt64(nₚ) <= PACKED_BLOCK_NUMBER_MASK ||
-        throw(ArgumentError("ThreadPartition particle count exceeds packed per-block number capacity."))
+        throw(ArgumentError("Partition particle count exceeds packed per-block number capacity."))
     nothing
 end
 
@@ -171,7 +171,7 @@ end
 @inline packed_block(packed::UInt64) = Int(packed >> PACKED_BLOCK_NUMBER_BITS)
 @inline packed_number(packed::UInt64) = Int(packed & PACKED_BLOCK_NUMBER_MASK)
 
-function scatter_particle_indices!(bs::BlockStrategy, nₚ::Integer, chunksize)
+function scatter_particle_indices!(bs::CPUBlockStrategy, nₚ::Integer, chunksize)
     ws = bs.update_workspace
 
     @threaded for chunk_id in eachindex(ws.chunk_counts)
@@ -202,7 +202,7 @@ end
     color
 end
 
-function update_threadsafe_groups!(bs::BlockStrategy)
+function update_threadsafe_groups!(bs::CPUBlockStrategy)
     for active in bs.activegroups
         empty!(active)
     end
@@ -217,7 +217,7 @@ function update_threadsafe_groups!(bs::BlockStrategy)
     end
     bs.activegroups
 end
-threadsafe_groups(bs::BlockStrategy) = bs.activegroups
+threadsafe_groups(bs::CPUBlockStrategy) = bs.activegroups
 
 """
     Tesserae.block_ordered_particle_contiguity(partition)
@@ -230,7 +230,7 @@ The score is the fraction of neighboring entries in the current block-ordered
 particle index array that are also consecutive in memory. For example, a
 block-ordered list `[1, 2, 3, 8]` has two consecutive pairs out of three.
 """
-function block_ordered_particle_contiguity(bs::BlockStrategy)
+function block_ordered_particle_contiguity(bs::CPUBlockStrategy)
     n_assigned = nassigned(bs)
     n_assigned ≤ 1 && return 1.0
 
@@ -260,7 +260,7 @@ more than it saves.
     particle -- basis weights above all -- is stale afterwards. Call it before
     `update!(weights, particles, mesh)`, not between that and the transfer.
 """
-function reorder_particles!(particles::StructVector, bs::BlockStrategy; threshold=1)
+function reorder_particles!(particles::StructVector, bs::CPUBlockStrategy; threshold=1)
     0 ≤ threshold ≤ 1 || throw(ArgumentError("threshold must be in [0, 1]."))
     iszero(threshold) && return false
     if threshold == 1 || block_ordered_particle_contiguity(bs) < threshold
@@ -270,7 +270,7 @@ function reorder_particles!(particles::StructVector, bs::BlockStrategy; threshol
     return false
 end
 
-function _reorder_partition_particles!(particles::StructVector, bs::BlockStrategy)
+function _reorder_partition_particles!(particles::StructVector, bs::CPUBlockStrategy)
     n_assigned = nassigned(bs)
     _reorder_particles!(particles, bs.particleindices, n_assigned, bs.update_workspace.particle_reorder_buffers)
     copyto!(bs.particleindices, 1:n_assigned)
