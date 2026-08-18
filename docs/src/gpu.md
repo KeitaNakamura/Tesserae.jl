@@ -205,8 +205,9 @@ This section rewrites the [Taylor impact tutorial](@ref taylor_impact_tutorial) 
 The transfer equations and the von Mises material model are unchanged; only the execution pattern is adjusted.
 The main changes are:
 
-- Remove `@threaded`, which has no GPU form. A [`Partition`](@ref) may be kept, but must be moved with `gpu` and updated after the move; `reorder_particles!` works on the moved partition as it does on CPU.
+- Remove `@threaded`, which has no GPU form. A [`Partition`](@ref) may be kept, but must be moved with `gpu` and updated after the move; `reorder_particles!` works on the moved partition too, though particles outside the mesh are an error there instead of being kept at the end of the array.
 - Move the simulation objects to GPU with `gpu_preserve` after CPU-side setup.
+- Generate the basis weights with `deferred=true` (see [Deferred basis weights](@ref)): evaluating the values inside the transfers outruns reading stored ones on GPU, and the weights then occupy no memory.
 - Keep grid and particle calculations inside GPU operations, using `@P2G`, `@G2P`, and `@foreach`.
 - Rewrite the slip floor boundary condition with a boundary-slice `@foreach` loop to avoid scalar indexing on GPU arrays.
 - Copy data back with `cpu` only when writing VTK output.
@@ -215,8 +216,8 @@ For reference, the compute-only runtime on an NVIDIA GeForce RTX 5090, excluding
 
 | Precision | # Particles | # Iterations | Execution time (w/o output) |
 | --------- | ----------- | ------------ | ---------------------------- |
-| Float64   | 1.48M       | 1.8k         | 1 min 01 sec                 |
-| Float32   | 1.48M       | 1.8k         | 37 sec                       |
+| Float64   | 1.48M       | 1.8k         | 41 sec                       |
+| Float32   | 1.48M       | 1.8k         | 19 sec                       |
 
 The VTK output is written to `output/taylor_impact_gpu`.
 
@@ -278,8 +279,8 @@ function main()
     @. particles.Cᵖ⁻¹ = one(particles.Cᵖ⁻¹)
     particles.v .= Ref(Vec(T(0), T(0), T(-227))) # Set initial velocity
 
-    ## Basis weights
-    weights = generate_basis_weights(T, KernelCorrection(BSpline(Quadratic())), grid.x, length(particles))
+    ## Basis weights, evaluated inside the transfers instead of being stored
+    weights = generate_basis_weights(T, KernelCorrection(BSpline(Quadratic())), grid.x, length(particles); deferred=true)
 
     ## Paraview output setup
     outdir = mkpath(joinpath("output", "taylor_impact_gpu"))
