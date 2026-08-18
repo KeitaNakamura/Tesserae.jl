@@ -198,4 +198,25 @@ end
         mesh = CartesianMesh(1, (0, 20), (0, 20); block_size_log2=Val(3))
         @test Tesserae.nblocks(mesh) === (3, 3)
     end
+    # The device tags dispatch without a GPU, so the contract errors on the
+    # device/partition boundary are testable on CPU.
+    @testset "device and partition mismatch errors" begin
+        mesh = CartesianMesh(1.0, (0,8), (0,8))
+        cpu_partition = Partition(mesh)
+        gpu_partition = Tesserae.Partition(Tesserae.GPUBlockStrategy(mesh))
+        gpu_device = Tesserae.CUDADevice{Tesserae.CastFloat32}()
+        grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
+        particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
+        weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))
+
+        @test_throws "does not support GPU partitions" reorder_particles!(particles, gpu_partition)
+        @test_throws "does not support GPU partitions" Tesserae.block_ordered_particle_contiguity(gpu_partition)
+        @test_throws "CPU-only" update_sparsity!(Tesserae.SpIndices(mesh), gpu_partition)
+
+        @test_throws "lives on the GPU" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, weights, gpu_partition)
+        @test_throws "lives on the CPU" Tesserae.check_partition_for_transfer("@P2G", gpu_device, grid, weights, cpu_partition)
+        @test_throws "only supports @P2G" Tesserae.check_partition_for_transfer("@G2P2G", gpu_device, grid, weights, gpu_partition)
+        @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", gpu_device, grid, weights, gpu_partition)
+        @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, weights, cpu_partition)
+    end
 end
