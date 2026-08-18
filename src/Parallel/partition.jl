@@ -1,13 +1,13 @@
 # -----------------------------------------------------------------------------
-#  ThreadPartition
+#  Partition
 # -----------------------------------------------------------------------------
 
 """
-    ThreadPartition(::CartesianMesh)
-    ThreadPartition(::FEMesh)
-    ThreadPartition(::IGAMesh)
+    Partition(::CartesianMesh)
+    Partition(::FEMesh)
+    Partition(::IGAMesh)
 
-`ThreadPartition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
+`Partition` stores partitioning information used by the [`@P2G`](@ref), [`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) macros
 to avoid write conflicts during threaded particle-to-grid transfers.
 
 On GPU the same type schedules workgroups instead of threads: `gpu(partition)`
@@ -21,8 +21,8 @@ take a device partition yet.
 
 # Examples
 ```julia
-# Construct ThreadPartition
-partition = ThreadPartition(mesh)
+# Construct Partition
+partition = Partition(mesh)
 
 # Update partition using current particle positions
 update!(partition, particles.x) # Required only for `CartesianMesh`.
@@ -34,27 +34,27 @@ update!(partition, particles.x) # Required only for `CartesianMesh`.
 end
 ```
 """
-struct ThreadPartition{Strategy <: PartitionStrategy}
+struct Partition{Strategy <: PartitionStrategy}
     strategy::Strategy
 end
 
-strategy(partition::ThreadPartition) = partition.strategy
-threadsafe_groups(partition::ThreadPartition) = threadsafe_groups(strategy(partition))
+strategy(partition::Partition) = partition.strategy
+threadsafe_groups(partition::Partition) = threadsafe_groups(strategy(partition))
 
-particle_indices(partition::ThreadPartition, particles, region) =
+particle_indices(partition::Partition, particles, region) =
     particle_indices(strategy(partition), region)
-particle_indices(partition::ThreadPartition{<: CellStrategy}, particles, cell) =
+particle_indices(partition::Partition{<: CellStrategy}, particles, cell) =
     (CartesianIndex(p, cell) for p in 1:size(particles, 1))
 
-ThreadPartition(mesh::CartesianMesh) = ThreadPartition(BlockStrategy(mesh))
-ThreadPartition(mesh::AbstractCellMesh) = ThreadPartition(CellStrategy(mesh))
-update!(partition::ThreadPartition, args...) = update!(strategy(partition), args...)
+Partition(mesh::CartesianMesh) = Partition(CPUBlockStrategy(mesh))
+Partition(mesh::AbstractCellMesh) = Partition(CellStrategy(mesh))
+update!(partition::Partition, args...) = update!(strategy(partition), args...)
 
-reorder_particles!(particles::StructVector, partition::ThreadPartition{<: BlockStrategy}; kwargs...) =
+reorder_particles!(particles::StructVector, partition::Partition{<: CPUBlockStrategy}; kwargs...) =
     reorder_particles!(particles, strategy(partition); kwargs...)
-block_ordered_particle_contiguity(partition::ThreadPartition{<: BlockStrategy}) =
+block_ordered_particle_contiguity(partition::Partition{<: CPUBlockStrategy}) =
     block_ordered_particle_contiguity(strategy(partition))
-reorder_particles!(particles, ::ThreadPartition{<: GPUBlockStrategy}; kwargs...) =
+reorder_particles!(particles, ::Partition{<: GPUBlockStrategy}; kwargs...) =
     error("reorder_particles! does not support GPU partitions yet")
-block_ordered_particle_contiguity(::ThreadPartition{<: GPUBlockStrategy}) =
+block_ordered_particle_contiguity(::Partition{<: GPUBlockStrategy}) =
     error("block_ordered_particle_contiguity does not support GPU partitions yet")

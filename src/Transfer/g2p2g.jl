@@ -18,7 +18,7 @@ function G2P2G_halves(f::F, device, schedule, grid, particles, weights, partitio
 end
 
 function G2P2G_halves(f::F, device::CPUDevice, schedule::Val, grid, particles, weights,
-                      partition::ThreadPartition, zeroed::Tuple, nodebody::N, nodegrid) where {F, N}
+                      partition::Partition, zeroed::Tuple, nodebody::N, nodegrid) where {F, N}
     epilogue = (nworkers, w) -> foreach_worker_loop(nodebody, device, nodegrid, nworkers, w)
     p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, epilogue)
 end

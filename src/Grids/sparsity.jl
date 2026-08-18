@@ -214,7 +214,7 @@ end
 end
 
 # GPU particle-driven updates expand occupied blocks here instead of relying on
-# CPU ThreadPartition scheduling. Multiple threads may write the same `true`;
+# CPU Partition scheduling. Multiple threads may write the same `true`;
 # only the final boolean state matters.
 @kernel function gpukernel_expand_occupied_blocks!(active_blocks, @Const(occupied_blocks))
     b = @index(Global)
@@ -237,9 +237,9 @@ function _activate_neighbor_blocks!(active, occupied, backend::GPU)
     active
 end
 
-update_sparsity!(::SpIndices, ::ThreadPartition{<: GPUBlockStrategy}) =
+update_sparsity!(::SpIndices, ::Partition{<: GPUBlockStrategy}) =
     error("update_sparsity! from a partition is CPU-only; on GPU update the sparsity from particle positions")
-function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, partition::ThreadPartition{<: BlockStrategy}) where {dim}
+function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, partition::Partition{<: CPUBlockStrategy}) where {dim}
     bs = strategy(partition)
     nblocks(spinds) == nblocks(bs) || throw(ArgumentError("blocks per dimension $(nblocks(spinds)) must match"))
     block_size_log2(spinds) == block_size_log2(bs) ||

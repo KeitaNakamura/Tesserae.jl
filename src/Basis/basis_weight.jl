@@ -69,7 +69,7 @@ A basis whose support is not a fixed Cartesian block overrides
 `allocate_basis_values`, or defines `update_basis_weight!` for its own
 `BasisWeight` as `CPDI` does, updating `supportnodes(bw)` and
 `nodal_basis_values(bw, order)` with matching local indices. It then forfeits
-every feature needing a fixed support width: `ThreadPartition` block sizing in
+every feature needing a fixed support width: `Partition` block sizing in
 `@P2G`, and the sparsity radius used by
 `create_sparse_matrix`/`create_block_sparse_matrix`.
 =#
@@ -77,7 +77,7 @@ every feature needing a fixed support width: `ThreadPartition` block sizing in
 # Reported here rather than as a bare `MethodError`, `support_width` also being
 # read outside `Basis/` by the block-size check and the sparsity radius.
 function support_width(basis::Basis)
-    error("$(nameof(typeof(basis))) does not define `Tesserae.support_width`. It sizes the default `BasisWeight` storage, and is also needed by `ThreadPartition` in `@P2G` and by `create_sparse_matrix`/`create_block_sparse_matrix`. Define `Tesserae.support_width` for it, or, if its support is not a fixed Cartesian block, override `Tesserae.allocate_basis_values` as `CPDI` does.")
+    error("$(nameof(typeof(basis))) does not define `Tesserae.support_width`. It sizes the default `BasisWeight` storage, and is also needed by `Partition` in `@P2G` and by `create_sparse_matrix`/`create_block_sparse_matrix`. Define `Tesserae.support_width` for it, or, if its support is not a fixed Cartesian block, override `Tesserae.allocate_basis_values` as `CPDI` does.")
 end
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))

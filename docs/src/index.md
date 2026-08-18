@@ -33,7 +33,7 @@ If you are new to Tesserae, start with the [Getting started](@ref) tutorial. It 
 
 After that, the [Transfer schemes](@ref) tutorial is a good next step for comparing FLIP, APIC, TPIC, and XPIC.
 The [Manual overview](@ref manual_overview) connects the tutorial workflow to the individual API pages.
-For larger simulations, see [Multi-threading](@ref) and [GPU computing](@ref).
+For larger simulations, see [Parallel execution](@ref) and [GPU computing](@ref).
 
 ## Installation
 

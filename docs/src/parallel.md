@@ -1,4 +1,4 @@
-# Multi-threading
+# Parallel execution
 
 Multi-threading in Tesserae parallelizes CPU work over particles, grid nodes, and particle-grid transfers.
 The [`@threaded`](@ref) macro adds this parallelism while keeping transfer expressions close to their sequential form.
@@ -10,7 +10,7 @@ Particle-grid transfers have two directions: gathering and scattering.
 In a gathering transfer, each particle reads values from nearby grid nodes, so the operation can be threaded directly.
 In a scattering transfer, particles write contributions to grid nodes.
 If multiple threads update the same grid node at the same time, this is a data race; see Julia's discussion of [data races between threads](https://docs.julialang.org/en/v1/manual/multi-threading/#Communication-and-data-races-between-threads).
-Threaded scattering therefore uses a [`ThreadPartition`](@ref).
+Threaded scattering therefore uses a [`Partition`](@ref).
 
 ### Gathering (`@G2P`)
 
@@ -24,10 +24,10 @@ end
 
 ### Scattering (`@P2G`, `@G2P2G` and `@P2G_Matrix`)
 
-For scattering operations, prefix `@P2G` with `@threaded` and use [`ThreadPartition`](@ref) to avoid data races on the grid.
+For scattering operations, prefix `@P2G` with `@threaded` and use [`Partition`](@ref) to avoid data races on the grid.
 
 ```julia
-partition = ThreadPartition(mesh)
+partition = Partition(mesh)
 update!(partition, particles.x) # CartesianMesh only
 @threaded @P2G grid=>i particles=>p weights=>ip partition begin
     # your code here
@@ -50,10 +50,10 @@ end
 
 ### Reordering particles
 
-For `@P2G` and related scattering operations, using `reorder_particles!` together with `ThreadPartition` can significantly improve cache efficiency and thread scaling:
+For `@P2G` and related scattering operations, using `reorder_particles!` together with `Partition` can significantly improve cache efficiency and thread scaling:
 
 ```julia
-partition = ThreadPartition(mesh)
+partition = Partition(mesh)
 update!(partition, particles.x)
 reorder_particles!(particles, partition)
 ```
@@ -79,7 +79,7 @@ For `0 ≤ threshold ≤ 1`, larger values reorder more often. Particles are reo
 
 ```@docs
 @threaded
-ThreadPartition
+Partition
 reorder_particles!
 Tesserae.block_ordered_particle_contiguity
 ```

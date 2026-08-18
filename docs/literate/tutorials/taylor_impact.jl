@@ -87,7 +87,7 @@ function main()
     if Threads.nthreads() == 1
         partition = nothing
     else
-        partition = ThreadPartition(grid.x)
+        partition = Partition(grid.x)
     end
 
     ## Paraview output setup

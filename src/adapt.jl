@@ -109,13 +109,13 @@ end
 # A partition transfers by rebuilding its strategy for the target device; the
 # CPU-side assignment state is not carried over, so `update!` must run after
 # the transfer, exactly as after construction.
-function Adapt.adapt_structure(to::GPUDevice, partition::ThreadPartition{<: BlockStrategy})
-    ThreadPartition(GPUBlockStrategy(adapt(to, strategy(partition).mesh)))
+function Adapt.adapt_structure(to::GPUDevice, partition::Partition{<: CPUBlockStrategy})
+    Partition(GPUBlockStrategy(adapt(to, strategy(partition).mesh)))
 end
-Adapt.adapt_structure(::GPUDevice, partition::ThreadPartition{<: GPUBlockStrategy}) = partition
-Adapt.adapt_structure(::GPUDevice, ::ThreadPartition{<: CellStrategy}) = error("ThreadPartition: FEM/IGA cell partitions are CPU-only")
-function Adapt.adapt_structure(to::CPUDevice, partition::ThreadPartition{<: GPUBlockStrategy})
-    ThreadPartition(BlockStrategy(adapt(to, strategy(partition).mesh)))
+Adapt.adapt_structure(::GPUDevice, partition::Partition{<: GPUBlockStrategy}) = partition
+Adapt.adapt_structure(::GPUDevice, ::Partition{<: CellStrategy}) = error("Partition: FEM/IGA cell partitions are CPU-only")
+function Adapt.adapt_structure(to::CPUDevice, partition::Partition{<: GPUBlockStrategy})
+    Partition(CPUBlockStrategy(adapt(to, strategy(partition).mesh)))
 end
 
 function Adapt.adapt_structure(to, tracker::ParticleBlockTracker)

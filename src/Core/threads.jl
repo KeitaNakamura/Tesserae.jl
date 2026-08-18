@@ -57,8 +57,9 @@ end
     @threaded [scheduler] @P2G ...
     @threaded @P2G ...
 
-A macro similar to `Threads.@threads`, but also works with
-[`@P2G`](@ref), [`@G2P`](@ref), [`@G2P2G`](@ref), and [`@P2G_Matrix`](@ref) macros for particle-grid transfers.
+A macro similar to `Threads.@threads`, but also works with the
+[`@P2G`](@ref), [`@G2P`](@ref), [`@G2P2G`](@ref), [`@P2G_Matrix`](@ref), and
+[`@foreach`](@ref) macros.
 
 The optional `scheduler` can be `:static`, `:dynamic`, `:greedy`, or `:nothing`
 (sequential execution). The default is `:dynamic`.
@@ -66,13 +67,13 @@ The optional `scheduler` can be `:static`, `:dynamic`, `:greedy`, or `:nothing`
 What the three parallel schedulers select depends on what is being threaded. On
 a plain loop, and on [`@G2P`](@ref), they pick the corresponding
 `Threads.@threads` variant. On a partitioned transfer -- [`@P2G`](@ref),
-[`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) given a [`ThreadPartition`](@ref) --
+[`@G2P2G`](@ref) and [`@P2G_Matrix`](@ref) given a [`Partition`](@ref) --
 they instead pick how each color group is divided among the workers: `:static`
 by region count, `:dynamic` by particle count, and `:greedy` one region at a
 time on demand, which balances best and is several times slower because it
 scatters each worker's grid writes.
 
-See also [`ThreadPartition`](@ref).
+See also [`Partition`](@ref).
 
 !!! note
     If multi-threading is disabled or only one thread is available,

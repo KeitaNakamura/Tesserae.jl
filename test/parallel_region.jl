@@ -1,7 +1,7 @@
 @testset "partitioned_foreach" begin
     mesh = CartesianMesh(0.05, (0,1), (0,1))
     particles = generate_particles(@NamedTuple{x::Vec{2, Float64}}, mesh)
-    bs = Tesserae.BlockStrategy(mesh)
+    bs = Tesserae.CPUBlockStrategy(mesh)
     update!(bs, particles.x)
 
     groups = Tesserae.threadsafe_groups(bs)
@@ -22,7 +22,7 @@
     # the sequential ones included, since those are what a user hits with no
     # `@threaded` at all.
     @testset "the prologue runs on every path ($schedule)" for schedule in (:nothing, :static, :dynamic, :greedy)
-        empty_bs = Tesserae.BlockStrategy(mesh)
+        empty_bs = Tesserae.CPUBlockStrategy(mesh)
         update!(empty_bs, Vec{2,Float64}[])
         @test all(isempty, Tesserae.threadsafe_groups(empty_bs))
 
@@ -46,7 +46,7 @@
     # wrote. Missing it on one path leaves those equations unevaluated; running
     # it early reads half-scattered values. Both are silent.
     @testset "the epilogue runs on every path, after every region ($schedule)" for schedule in (:nothing, :static, :dynamic, :greedy)
-        empty_bs = Tesserae.BlockStrategy(mesh)
+        empty_bs = Tesserae.CPUBlockStrategy(mesh)
         update!(empty_bs, Vec{2,Float64}[])
 
         for (label, strat) in (("with regions", bs), ("no regions at all", empty_bs))

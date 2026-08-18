@@ -399,7 +399,7 @@
         Δt = 0.01
         gravity = Vec(0.0, -9.81)
         grid, particles, weights = transfer_fixture()
-        partition = ThreadPartition(grid.x)
+        partition = Partition(grid.x)
         update!(partition, particles.x)
 
         sequential_grid = deepcopy(grid)
@@ -456,7 +456,7 @@
 
     @testset "every scheduler matches the sequential partitioned transfer" begin
         grid, particles, weights = transfer_fixture()
-        partition = ThreadPartition(grid.x)
+        partition = Partition(grid.x)
         update!(partition, particles.x)
 
         transfers = (
@@ -556,7 +556,7 @@
         particles.σ .= [rand(SecondOrderTensor{2}) for _ in 1:length(particles)]
         weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))
         update!(weights, particles, mesh)
-        partition = ThreadPartition(grid.x)
+        partition = Partition(grid.x)
         update!(partition, particles.x)
 
         # Dirty the fields first, so a byte the zeroing misses shows up as a
@@ -586,7 +586,7 @@
 
     @testset "a failing threaded transfer throws instead of hanging" begin
         grid, particles, weights = transfer_fixture()
-        partition = ThreadPartition(grid.x)
+        partition = Partition(grid.x)
         update!(partition, particles.x)
 
         # A throw from one worker has to release the workers waiting on the
@@ -619,7 +619,7 @@
         for p in eachindex(particles); particles.v[p] = Vec(0.1, 0.2); end
         weights = generate_basis_weights(BSpline(Quadratic()), grid.x, length(particles))
         update!(weights, particles, grid.x)
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         update!(partition, particles.x)
 
         run!(out, schedule) = schedule === :nothing ?
@@ -667,7 +667,7 @@
         update_sparsity!(grid, trues(Tesserae.nblocks(mesh)))
         weights = generate_basis_weights(BSpline(Quadratic()), grid.x, length(particles))
         update!(weights, particles, grid.x)
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         update!(partition, particles.x)
 
         run!(out, schedule) = schedule === :nothing ?
@@ -707,7 +707,7 @@
     @testset "threaded @G2P2G with a grid-only half matches sequential" begin
         Δt = 0.01
         grid, particles, weights = transfer_fixture()
-        partition = ThreadPartition(grid.x)
+        partition = Partition(grid.x)
         update!(partition, particles.x)
 
         transfers = (
@@ -800,7 +800,7 @@
         end
         weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(particles))
         update!(weights, particles, mesh)
-        partition = ThreadPartition(mesh)
+        partition = Partition(mesh)
         update!(partition, particles.x)
 
         groups = Tesserae.threadsafe_groups(Tesserae.strategy(partition))
@@ -892,13 +892,13 @@
 
     @testset "threaded P2G requires updated Cartesian partition" begin
         grid, particles, weights = transfer_fixture()
-        partition = ThreadPartition(grid.x)
+        partition = Partition(grid.x)
         err = error_message() do
             @threaded :static @P2G grid=>i particles=>p weights=>ip partition begin
                 m[i] = @∑ w[ip] * m[p]
             end
         end
-        @test occursin("@P2G: No particles assigned to any block in ThreadPartition", err)
+        @test occursin("@P2G: No particles assigned to any block in Partition", err)
 
         # Each macro must report its own name; @G2P2G and @P2G_Matrix used to
         # borrow @G2P's and @P2G's because they delegated to those checks.

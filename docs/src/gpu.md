@@ -147,13 +147,13 @@ This matters on Metal, where `Float64` cannot be used in GPU kernels.
 ## Transfers
 
 By default GPU `@P2G` uses particle-parallel kernels with atomic updates.
-Passing a [`ThreadPartition`](@ref) that has been moved to the device with `gpu` selects a block-scheduled path instead, which accumulates each grid block into shared memory before touching the grid.
+Passing a [`Partition`](@ref) that has been moved to the device with `gpu` selects a block-scheduled path instead, which accumulates each grid block into shared memory before touching the grid.
 Only `@P2G` has that path; `@G2P` and `@G2P2G` take no partition on GPU.
 
 CPU threaded scattering:
 
 ```julia
-partition = ThreadPartition(grid.x)
+partition = Partition(grid.x)
 update!(partition, particles.x)
 
 @threaded @P2G grid=>i particles=>p weights=>ip partition begin
@@ -205,7 +205,7 @@ This section rewrites the [Taylor impact tutorial](@ref taylor_impact_tutorial) 
 The transfer equations and the von Mises material model are unchanged; only the execution pattern is adjusted.
 The main changes are:
 
-- Remove CPU threading utilities such as `@threaded` and `reorder_particles!`, which have no GPU form. A [`ThreadPartition`](@ref) may be kept, but must be moved with `gpu` and updated after the move.
+- Remove CPU threading utilities such as `@threaded` and `reorder_particles!`, which have no GPU form. A [`Partition`](@ref) may be kept, but must be moved with `gpu` and updated after the move.
 - Move the simulation objects to GPU with `gpu_preserve` after CPU-side setup.
 - Keep grid and particle calculations inside GPU operations, using `@P2G`, `@G2P`, and `@foreach`.
 - Rewrite the slip floor boundary condition with a boundary-slice `@foreach` loop to avoid scalar indexing on GPU arrays.

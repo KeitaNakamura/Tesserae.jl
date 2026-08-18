@@ -189,42 +189,42 @@ function check_transfer_arguments(macroname, grid, particles, weights, partition
     check_partition_for_transfer(macroname, device, grid, weights, partition)
 end
 
-# A partition must live where the transfer runs: `BlockStrategy` schedules CPU
+# A partition must live where the transfer runs: `CPUBlockStrategy` schedules CPU
 # threads, `GPUBlockStrategy` schedules GPU workgroups.
 check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::Nothing) = nothing
 check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, ::Nothing) = nothing
-function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition::ThreadPartition{<: GPUBlockStrategy})
+function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition::Partition{<: GPUBlockStrategy})
     macroname == "@P2G" || error("$macroname: the block-scheduled GPU transfer only supports @P2G so far. Use partitionless $macroname on GPU.")
     weights isa BasisWeightArray || error("$macroname: the block-scheduled GPU transfer requires weights from `generate_basis_weights`")
     check_partition_for_transfer(macroname, grid, weights, strategy(partition))
 end
 function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition)
-    error("$macroname: this ThreadPartition lives on the CPU. Transfer it with `gpu(partition)` and `update!` it on the device.")
+    error("$macroname: this Partition lives on the CPU. Transfer it with `gpu(partition)` and `update!` it on the device.")
 end
-function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::ThreadPartition{<: GPUBlockStrategy})
-    error("$macroname: this ThreadPartition lives on the GPU. Construct a CPU one with `ThreadPartition(mesh)`.")
+function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::Partition{<: GPUBlockStrategy})
+    error("$macroname: this Partition lives on the GPU. Construct a CPU one with `Partition(mesh)`.")
 end
-function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, partition::ThreadPartition)
+function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, partition::Partition)
     check_partition_for_transfer(macroname, grid, weights, strategy(partition))
 end
 check_partition_for_transfer(macroname, grid, weights, strat) = nothing
-function check_partition_for_transfer(macroname, grid, weights, strat::BlockStrategy)
+function check_partition_for_transfer(macroname, grid, weights, strat::CPUBlockStrategy)
     @assert nblocks(get_mesh(grid)) == nblocks(strat)
     if nassigned(strat) == 0
-        error("$macroname: No particles assigned to any block in ThreadPartition")
+        error("$macroname: No particles assigned to any block in Partition")
     end
     check_partition_support(macroname, transfer_basis(weights), strat)
 end
 function check_partition_for_transfer(macroname, grid, weights, strat::GPUBlockStrategy)
     @assert nblocks(get_mesh(grid)) == nblocks(strat)
     if nactive(strat) == 0
-        error("$macroname: No particles assigned to any block in ThreadPartition")
+        error("$macroname: No particles assigned to any block in Partition")
     end
     check_partition_support(macroname, basis(weights), strat)
 end
 function check_partition_support(macroname, b, strat)
     if support_width(b) > blockwidth(strat)
-        error("$macroname: Block size for `ThreadPartition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
+        error("$macroname: Block size for `Partition` is too small for basis $b. Increase `block_size_log2=Val(...)` on the `CartesianMesh` to ensure block size is ≥ kernel support.")
     end
 end
 

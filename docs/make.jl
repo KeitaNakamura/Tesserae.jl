@@ -46,7 +46,7 @@ makedocs(;
                 "export.md"
             ]
             "Scaling simulations" => [
-                "multithreading.md"
+                "parallel.md"
                 "gpu.md"
                 "sparray.md"
             ]

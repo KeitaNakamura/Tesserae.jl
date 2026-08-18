@@ -172,7 +172,7 @@ const P2G_BLOCK_GROUPSIZE = 128
     end
 end
 
-function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::ThreadPartition{<: GPUBlockStrategy}, zeroed::Tuple=()) where {scheduler}
+function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::Partition{<: GPUBlockStrategy}, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
     fillzero_each!(device, zeroed)
     particles = particles isa QuadraturePoints ? parent(particles) : particles

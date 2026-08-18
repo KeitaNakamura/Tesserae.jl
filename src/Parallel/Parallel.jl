@@ -1,6 +1,6 @@
 include("core.jl")
-include("block_strategy.jl")
-include("gpu_partition.jl")
+include("cpu_block_strategy.jl")
+include("gpu_block_strategy.jl")
 include("cell_strategy.jl")
 include("partition.jl")
 include("region.jl")

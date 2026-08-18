@@ -38,7 +38,8 @@ export
     @threaded,
     @foreach,
     @showprogress,
-# ThreadPartition
+# Partition
+    Partition,
     ThreadPartition,
     ColorPartition,
     threadsafe_groups,
@@ -133,7 +134,7 @@ import .Progress: @showprogress
 
 include("NURBS/NURBS.jl")
 include("Mesh/Mesh.jl")
-include("Threading/Threading.jl")
+include("Parallel/Parallel.jl")
 include("Grids/Grids.jl")
 include("particles.jl")
 include("Basis/Basis.jl")

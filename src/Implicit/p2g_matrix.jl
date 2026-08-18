@@ -50,7 +50,7 @@ function P2G_Matrix(f, device::CPUDevice, schedule::Val, grids, particles, weigh
     P2G((grids, particles, weights, p) -> (@inline f(grids, particles, weights, (p,), ParticleAssembly())), device, schedule, grids, particles, weights, partition)
 end
 
-function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles, weights, partition::ThreadPartition{<:BlockStrategy}) where {scheduler}
+function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles, weights, partition::Partition{<:CPUBlockStrategy}) where {scheduler}
     matrix_buffer_pool = strategy(partition).matrix_buffer_pool
     partitioned_foreach(strategy(partition), Val(scheduler)) do block
         block_particle_indices = particle_indices(partition, particles, block)
@@ -65,7 +65,7 @@ end
 function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::QuadraturePoints,
                     weights::Tuple{<:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, <:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}},
                     ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "@P2G_Matrix: `ThreadPartition` must be given for threaded computation" maxlog=1
+    scheduler == :nothing || @warn "@P2G_Matrix: `Partition` must be given for threaded computation" maxlog=1
 
     for cell in axes(particles, 2)
         particle_indices = (CartesianIndex(q, cell) for q in axes(particles, 1))
@@ -75,7 +75,7 @@ end
 
 function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::QuadraturePoints,
                     weights::Tuple{<:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, <:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}},
-                    partition::ThreadPartition{<:CellStrategy}) where {scheduler}
+                    partition::Partition{<:CellStrategy}) where {scheduler}
     partitioned_foreach(strategy(partition), Val(scheduler)) do cell
         @inline f(grids, particles, weights, particle_indices(partition, particles, cell), CellAssembly())
     end
