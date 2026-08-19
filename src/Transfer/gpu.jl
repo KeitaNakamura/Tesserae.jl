@@ -175,9 +175,23 @@ end
 
 # The workgroup size is not tuned by hand: backends with an occupancy API pick
 # it per compiled kernel (the CUDA extension), everything else keeps this
-# conservative default. The choice is cached on the strategy per kernel
-# specialization, since call sites compile kernels with different limits.
+# conservative default. One size exists per compiled kernel specialization --
+# call sites compile kernels with different limits -- so the cache is keyed by
+# the argument types and lives here, not on the partition, which is data.
 optimal_workgroupsize(backend, kernel, args::Tuple) = P2G_BLOCK_GROUPSIZE
+
+const P2G_BLOCK_GROUPSIZES = Dict{DataType, Int}()
+const P2G_BLOCK_GROUPSIZES_LOCK = ReentrantLock()
+
+function block_p2g_groupsize(backend, kernel, kargs::Tuple)
+    key = typeof(kargs)
+    gs = lock(() -> get(P2G_BLOCK_GROUPSIZES, key, 0), P2G_BLOCK_GROUPSIZES_LOCK)
+    if iszero(gs)
+        gs = optimal_workgroupsize(backend, kernel, kargs)
+        lock(() -> P2G_BLOCK_GROUPSIZES[key] = gs, P2G_BLOCK_GROUPSIZES_LOCK)
+    end
+    gs
+end
 
 function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::Partition{<: GPUBlockStrategy}, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
@@ -204,11 +218,7 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
     kargs = (bodies.tile, hybrid(grid, device), particles, weights,
              bs.particleindices, bs.offsets, bs.blocklist,
              Tt, names, Val(side), Val(tilelen), Val(total), Val(BW), Val(halo), nblocks(bs))
-    gs = get(bs.p2g_groupsize, typeof(kargs), 0)
-    if iszero(gs)
-        gs = optimal_workgroupsize(backend, kernel, kargs)
-        bs.p2g_groupsize[typeof(kargs)] = gs
-    end
+    gs = block_p2g_groupsize(backend, kernel, kargs)
     kernel(kargs...; ndrange=gs * nactive(bs), workgroupsize=(gs,))
 end
 

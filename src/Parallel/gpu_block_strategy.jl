@@ -19,10 +19,6 @@ struct GPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}, Vi <: AbstractVector{In
     totals_buf::Vi       # device-side [active-block count, assigned-particle count]
     nactive::Base.RefValue{Int}
     nassigned::Base.RefValue{Int}
-    # Occupancy-derived workgroup size per block-scheduled `@P2G` kernel
-    # specialization: each call site compiles its own kernel with its own
-    # register budget, so one shared size could exceed a heavier kernel's limit.
-    p2g_groupsize::Dict{DataType, Int}
 end
 
 # Count prefix and nonempty-block prefix ride in one Int64, counts in the low
@@ -39,7 +35,6 @@ function GPUBlockStrategy(mesh::CartesianMesh)
     GPUBlockStrategy(
         mesh, alloc(Int32, 0), alloc(Int32, 0), alloc(Int32, nb), alloc(Int32, nb + 1), alloc(Int32, nb),
         alloc(Int64, cld(nb, PARTITION_SCAN_GROUP)), alloc(Int32, nb), alloc(Int32, 2), Ref(0), Ref(0),
-        Dict{DataType, Int}(),
     )
 end
 
@@ -175,11 +170,14 @@ end
 # device round-trip on the adaptive reorder path.
 nassigned(bs::GPUBlockStrategy) = bs.nassigned[]
 
-# The device scatter randomizes order within a block, so the CPU pairwise
-# metric reads as disorder even right after a reorder. Count instead the
+block_ordered_particle_contiguity(bs::GPUBlockStrategy) = same_block_neighbor_fraction(bs)
+
+# The estimator behind the public score on GPU: the device scatter randomizes
+# order within a block, so the CPU estimator (adjacency of the block-ordered
+# indices) reads as disorder even right after a reorder. Count instead the
 # neighboring particles that share a block, which that shuffle cannot
 # disturb: 1 after a reorder, decreasing as particles change blocks.
-function block_ordered_particle_contiguity(bs::GPUBlockStrategy)
+function same_block_neighbor_fraction(bs::GPUBlockStrategy)
     nₚ = length(bs.blockids)
     nₚ ≤ 1 && return 1.0
     blockids = bs.blockids
