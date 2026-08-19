@@ -4,6 +4,17 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
+  work on GPU partitions, reordering through the partition's block-sorted
+  permutation on the device.
+
+### Performance
+
+- The block-scheduled GPU `@P2G` now sizes its workgroups from the CUDA
+  occupancy API per compiled kernel instead of a fixed constant.
+
 ### Changed
 
 - Renamed `ThreadPartition` to `Partition`: the same type schedules GPU

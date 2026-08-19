@@ -209,8 +209,6 @@ end
         particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
         weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles))
 
-        @test_throws "does not support GPU partitions" reorder_particles!(particles, gpu_partition)
-        @test_throws "does not support GPU partitions" Tesserae.block_ordered_particle_contiguity(gpu_partition)
         @test_throws "CPU-only" update_sparsity!(Tesserae.SpIndices(mesh), gpu_partition)
 
         @test_throws "lives on the GPU" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, weights, gpu_partition)
@@ -218,5 +216,60 @@ end
         @test_throws "only supports @P2G" Tesserae.check_partition_for_transfer("@G2P2G", gpu_device, grid, weights, gpu_partition)
         @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", gpu_device, grid, weights, gpu_partition)
         @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, weights, cpu_partition)
+    end
+    @testset "reorder_particles! on a GPU partition" begin
+        mesh = CartesianMesh(1.0, (0,16), (0,16))
+        bs = Tesserae.GPUBlockStrategy(mesh)
+        gpu_partition = Tesserae.Partition(bs)
+        particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
+        particles.m .= 1:length(particles)
+        shuffled = particles[shuffle(Xoshiro(0), 1:length(particles))]
+        nₚ = length(shuffled)
+
+        # The device counting sort's scan kernels carry `@synchronize` inside
+        # loops, which the KernelAbstractions CPU backend cannot execute, so
+        # the block-sorted state is built directly here; the sort itself is
+        # exercised on real GPU backends.
+        LI = LinearIndices(Tesserae.nblocks(mesh))
+        blkof(x) = LI[Tesserae.findblock(x, mesh)]
+        counts = zeros(Int32, length(LI))
+        foreach(x -> counts[blkof(x)] += 1, shuffled.x)
+        resize!(bs.particleindices, nₚ)
+        resize!(bs.blockids, nₚ)
+        bs.offsets .= [Int32(0); cumsum(counts)]
+        bs.nactive[] = count(!iszero, counts)
+        bs.nassigned[] = nₚ
+        bs.particleindices .= Int32.(sortperm(map(blkof, shuffled.x)))
+        bs.blockids .= Int32.(map(blkof, shuffled.x))
+
+        c₀ = Tesserae.block_ordered_particle_contiguity(gpu_partition)
+        @test 0 ≤ c₀ < 0.5
+        @test reorder_particles!(shuffled, gpu_partition)
+        @test Tesserae.block_ordered_particle_contiguity(gpu_partition) == 1.0
+
+        @test issorted(map(blkof, shuffled.x))
+        @test collect(bs.particleindices) == 1:nₚ
+        # Components were permuted together: every row still pairs its original x and m.
+        @test all(i -> shuffled.x[i] == particles.x[Int(shuffled.m[i])], eachindex(shuffled))
+        @test sort(shuffled.m) == 1.0:nₚ
+
+        # Offsets shift globally whenever an upstream block changes its count;
+        # the grouping score must not decay from that alone.
+        bs.offsets[2:end-1] .+= Int32(1)
+        @test Tesserae.block_ordered_particle_contiguity(gpu_partition) == 1.0
+        bs.offsets[2:end-1] .-= Int32(1)
+
+        @test !reorder_particles!(shuffled, gpu_partition; threshold=0)
+        @test !reorder_particles!(shuffled, gpu_partition; threshold=0.5)
+        @test_throws ArgumentError reorder_particles!(shuffled, gpu_partition; threshold=1.5)
+
+        # Empty particles reorder as a no-op even against stale nonzero buffers
+        # (Metal keeps the old buffer length when resized to empty).
+        @test reorder_particles!(shuffled[1:0], gpu_partition)
+
+        bs.offsets .= Int32(0)
+        bs.offsets[end] = Int32(nₚ - 1)
+        bs.nassigned[] = nₚ - 1
+        @test_throws "outside the mesh" reorder_particles!(shuffled, gpu_partition)
     end
 end

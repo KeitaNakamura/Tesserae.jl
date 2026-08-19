@@ -142,11 +142,12 @@ const P2G_BLOCK_GROUPSIZE = 128
                                       ::Val{BW}, ::Val{HALO}, blkdims::Dims{dim}) where {Tt, names, SIDE, TILELEN, TOTAL, BW, HALO, dim}
     grp = @index(Group, Linear)
     l = Int(@index(Local, Linear))
+    GS = prod(@groupsize())
     tile = @localmem Tt (TOTAL,)
     k = l
     while k <= TOTAL
         @inbounds tile[k] = zero(Tt)
-        k += P2G_BLOCK_GROUPSIZE
+        k += GS
     end
     @synchronize
     @inbounds b = Int(blocklist[grp])
@@ -158,7 +159,7 @@ const P2G_BLOCK_GROUPSIZE = 128
     while k <= pstop - pstart
         @inbounds p = Int(particleindices[pstart + k])
         @inline tilebody(tile, origin, Val(SIDE), Val(TILELEN), grid, particles, weights, p)
-        k += P2G_BLOCK_GROUPSIZE
+        k += GS
     end
     @synchronize
     gridsize = size(grid)
@@ -168,9 +169,15 @@ const P2G_BLOCK_GROUPSIZE = 128
         if all(ntuple(d -> 1 <= node[d] <= gridsize[d], Val(dim)))
             @inline merge_tile_node!(grid, tile, Val(names), Val(TILELEN), k, node)
         end
-        k += P2G_BLOCK_GROUPSIZE
+        k += GS
     end
 end
+
+# The workgroup size is not tuned by hand: backends with an occupancy API pick
+# it per compiled kernel (the CUDA extension), everything else keeps this
+# conservative default. The choice is cached on the strategy per kernel
+# specialization, since call sites compile kernels with different limits.
+optimal_workgroupsize(backend, kernel, args::Tuple) = P2G_BLOCK_GROUPSIZE
 
 function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::Partition{<: GPUBlockStrategy}, zeroed::Tuple=()) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
@@ -193,11 +200,16 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
         @warn "@P2G: shared-memory tile ($(total * sizeof(Tt)) B) exceeds the block-scheduled budget; falling back to the particle-parallel path" maxlog=1
         return P2G(bodies.particle, device, Val(scheduler), grid, particles, weights, nothing)
     end
-    kernel = gpukernel_P2G_blocks(backend, (P2G_BLOCK_GROUPSIZE,))
-    kernel(bodies.tile, hybrid(grid, device), particles, weights,
-           bs.particleindices, bs.offsets, bs.blocklist,
-           Tt, names, Val(side), Val(tilelen), Val(total), Val(BW), Val(halo), nblocks(bs);
-           ndrange=P2G_BLOCK_GROUPSIZE * nactive(bs))
+    kernel = gpukernel_P2G_blocks(backend)
+    kargs = (bodies.tile, hybrid(grid, device), particles, weights,
+             bs.particleindices, bs.offsets, bs.blocklist,
+             Tt, names, Val(side), Val(tilelen), Val(total), Val(BW), Val(halo), nblocks(bs))
+    gs = get(bs.p2g_groupsize, typeof(kargs), 0)
+    if iszero(gs)
+        gs = optimal_workgroupsize(backend, kernel, kargs)
+        bs.p2g_groupsize[typeof(kargs)] = gs
+    end
+    kernel(kargs...; ndrange=gs * nactive(bs), workgroupsize=(gs,))
 end
 
 # The grid goes in unwrapped: nothing in a `@G2P` body scatters, so it needs no atomics.
