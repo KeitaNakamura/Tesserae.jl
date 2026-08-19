@@ -212,12 +212,12 @@ The main changes are:
 - Rewrite the slip floor boundary condition with a boundary-slice `@foreach` loop to avoid scalar indexing on GPU arrays.
 - Copy data back with `cpu` only when writing VTK output.
 
-For reference, the compute-only runtime on an NVIDIA GeForce RTX 5090, excluding VTK output, is:
+For reference, the compute-only runtime on an NVIDIA GeForce RTX 5090, excluding VTK output and the first-call kernel compilation, is:
 
 | Precision | # Particles | # Iterations | Execution time (w/o output) |
 | --------- | ----------- | ------------ | ---------------------------- |
-| Float64   | 1.48M       | 1.8k         | 41 sec                       |
-| Float32   | 1.48M       | 1.8k         | 19 sec                       |
+| Float64   | 1.48M       | 1.8k         | 31 sec                       |
+| Float32   | 1.48M       | 1.8k         | 8 sec                        |
 
 The VTK output is written to `output/taylor_impact_gpu`.
 
