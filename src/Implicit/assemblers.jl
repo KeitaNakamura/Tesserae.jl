@@ -100,7 +100,7 @@ function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, mesh_size::Dims, spa
         row_dofs_per_node,
         sparsity_radius,
     )
-    has_cartesian_sparse_pattern(assembler) || throw(ArgumentError("Cartesian sparse matrix must use the canonical sparsity pattern"))
+    check_cartesian_sparse_pattern(assembler)
     assembler
 end
 
@@ -127,6 +127,34 @@ function cartesian_slot_offset(node, neighboring_nodes, slots_per_node)
     # Assembly checks establish that `node` belongs to `neighboring_nodes`.
     local_node = node - first(neighboring_nodes) + oneunit(node)
     @inbounds (LinearIndices(neighboring_nodes)[local_node] - 1) * slots_per_node
+end
+
+@noinline invalid_cartesian_sparse_pattern() =
+    throw(ArgumentError("Cartesian sparse matrix must use the canonical sparsity pattern"))
+
+# Reached from the constructor, so it runs on every `@P2G_Matrix` call, where the
+# row-by-row comparison is `O(nnz)`. The stored count per column is a closed form
+# of the mesh size, the sparsity radius and the row DoF count, which is what a
+# matrix built for a different basis, mesh or DoF count fails. A pattern holding
+# those counts but placing the rows elsewhere is left to debug mode.
+function check_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixCSC})
+    has_cartesian_column_counts(assembler) || invalid_cartesian_sparse_pattern()
+    @debug has_cartesian_sparse_pattern(assembler) || invalid_cartesian_sparse_pattern()
+    nothing
+end
+
+function has_cartesian_column_counts(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixCSC})
+    (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
+    mesh_size = Base.tail(size(row_dof_table))
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    for col_node in CartesianIndices(mesh_size)
+        stored = row_ndofs * length(cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius))
+        for b in 1:col_ndofs
+            length(nzrange(matrix, col_dof_table[b,col_node])) == stored || return false
+        end
+    end
+    true
 end
 
 function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler)

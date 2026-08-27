@@ -346,6 +346,18 @@
         invalid = Tesserae.SparseArrays.dropzeros!(copy(A))
         @test_throws ArgumentError Tesserae.matrix_assembler(invalid, mesh, mesh, basis, basis)
 
+        @test Tesserae.local_matrix_cache(A, table_i, weights, table_j, weights) === nothing
+
+        @test Tesserae.get_device(A) isa Tesserae.CPUDevice
+        @test cpu(A) === A
+
+        filled = copy(A)
+        Tesserae.SparseArrays.nonzeros(filled) .= 1
+        @test fillzero!(filled) === filled
+        @test iszero(Tesserae.SparseArrays.nonzeros(filled))
+        @test Tesserae.SparseArrays.nnz(filled) == Tesserae.SparseArrays.nnz(A)
+        @test Tesserae.SparseArrays.rowvals(filled) == Tesserae.SparseArrays.rowvals(A)
+
         @test size(table_i) == (2, size(grid)...)
         @test size(table_j) == (1, size(grid)...)
         @test size(A) == (length(table_i), length(table_j))

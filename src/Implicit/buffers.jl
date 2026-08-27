@@ -12,7 +12,12 @@ struct LocalMatrixBuffer{M <: Matrix, I, J}
     col_nodes::J
 end
 
-function local_matrix_cache(matrix, dof_table_i, weights_i, dof_table_j, weights_j)
+# Only the cell path reads the cache, but the macro binds it in every expansion
+# and the transfer closure captures it either way. A `TaskLocalValue` there makes
+# the closure non-isbits, which a GPU launch rejects.
+local_matrix_cache(matrix, dof_table_i, weights_i, dof_table_j, weights_j) = nothing
+
+function local_matrix_cache(matrix, dof_table_i, weights_i::BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, dof_table_j, weights_j::BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix})
     T = eltype(matrix)
     TaskLocalValue{Matrix{T}}() do
         row_size = size(dof_table_i, 1) * nsupportnodes(basis(weights_i))

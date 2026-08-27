@@ -14,6 +14,18 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 - The block-scheduled GPU `@P2G` now sizes its workgroups from the CUDA
   occupancy API per compiled kernel instead of a fixed constant.
+- `@P2G_Matrix` checks the canonical Cartesian sparsity pattern from the stored
+  entry count of each column instead of comparing every stored row, which it was
+  doing on every call. The row-by-row comparison remains under `debug_mode`.
+- `@P2G_Matrix` no longer allocates a `TaskLocalValue` element-matrix cache on
+  the MPM path, which never reads it.
+- `fillzero!` on a sparse matrix now zeroes `nonzeros` directly.
+
+### Fixed
+
+- `cpu` on a GPU sparse matrix returned a dense matrix; it now returns a
+  `SparseMatrixCSC`. `KernelAbstractions.get_backend` also answers for sparse
+  matrices instead of throwing.
 
 ### Changed
 

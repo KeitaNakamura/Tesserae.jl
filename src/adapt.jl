@@ -10,6 +10,12 @@ function Adapt.adapt_storage(::CPUDevice, A::AbstractArray)
     get_device(A) isa CPUDevice ? A : Array(A)
 end
 
+# `Array` of a device sparse matrix densifies it, which is never what moving one
+# back to the host means.
+function Adapt.adapt_storage(::CPUDevice, A::AbstractSparseMatrix)
+    get_device(A) isa CPUDevice ? A : SparseMatrixCSC(A)
+end
+
 # A method specialized on `to::AbstractDevice` is an explicit Tesserae transfer,
 # while an unspecialized `adapt_structure(to, ...)` may serve other Adapt callers.
 cpu(A) = A |> CPUDevice()
@@ -49,6 +55,7 @@ end
 # ---- GPU compatibility ----
 
 KernelAbstractions.get_backend(::BitArray) = CPU() # should be implemented in KernelAbstractions.jl
+KernelAbstractions.get_backend(A::AbstractSparseMatrix) = get_backend(nonzeros(A)) # should be implemented in KernelAbstractions.jl
 
 function Adapt.adapt_structure(to, mesh::CartesianMesh)
     axes = map(a -> adapt(to, a), mesh.axes)
