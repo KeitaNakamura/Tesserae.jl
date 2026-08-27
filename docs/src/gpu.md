@@ -391,3 +391,228 @@ function vonmises_model(Cᵖⁿ⁻¹, ε̄ᵖⁿ, F; λ, μ, H, τ̄y⁰)
     σ, Cᵖ⁻¹, ε̄ᵖ
 end
 ```
+
+## Implicit MPM on GPU
+
+This section rewrites the [Jacobian-free Newton--Krylov tutorial](@ref implicit_jacobian_free_tutorial) as a GPU simulation.
+The residual and the Jacobian-vector product are unchanged; what changes is how the free degrees of freedom are selected.
+The main changes are:
+
+- Allocate the DoF mask on the device with `similar` and write it from `@foreach`, instead of building a host `BitArray` in a scalar loop. [`DofMap`](@ref) takes it unchanged, so `free(grid.u)` returns a device view and the whole Newton loop stays on GPU.
+- Rewrite the boundary conditions as boundary-slice `@foreach` loops to avoid scalar indexing on GPU arrays.
+- Move the simulation objects with `gpu_preserve`. A Jacobian-free Krylov solve converges on the residual norm, and `Float32` limits how far that can be driven.
+- Give `LinearOperator` the device vector type through its `S` keyword, so that `Krylov.gmres` allocates its workspace on the device.
+- Copy data back with `cpu` only when writing VTK output.
+
+For reference, the runtime on an NVIDIA GeForce RTX 5090, excluding VTK output and the first-call kernel compilation, is:
+
+| Precision | # Particles | # Iterations | Execution time (w/o output) |
+| --------- | ----------- | ------------ | ---------------------------- |
+| Float64   | 26k         | 300          | 12 sec                       |
+
+The VTK output is written to `output/implicit_jacobian_free_gpu`.
+
+```julia
+using Tesserae
+using CUDA
+
+using Krylov: gmres
+using LinearOperators: LinearOperator
+
+function main()
+    T = Float64
+
+    ## Simulation parameters
+    h  = T(0.05)   # Grid spacing
+    t_stop = T(3)  # Final time
+    Δt = T(0.01)   # Time step
+
+    ## Material constants
+    E  = T(100e3)               # Young's modulus
+    ν  = T(0.3)                 # Poisson's ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
+    μ  = E / 2(1 + ν)           # Shear modulus
+    ρ⁰ = T(1000)                # Initial density
+
+    ## Newmark-beta integration
+    β = T(1/4)
+    γ = T(1/2)
+
+    GridProp = @NamedTuple begin
+        X    :: Vec{3, T}
+        m    :: T
+        m⁻¹  :: T
+        v    :: Vec{3, T}
+        vⁿ   :: Vec{3, T}
+        mv   :: Vec{3, T}
+        a    :: Vec{3, T}
+        aⁿ   :: Vec{3, T}
+        ma   :: Vec{3, T}
+        u    :: Vec{3, T}
+        f    :: Vec{3, T}
+        δu   :: Vec{3, T}
+    end
+    ParticleProp = @NamedTuple begin
+        x    :: Vec{3, T}
+        m    :: T
+        V⁰   :: T
+        v    :: Vec{3, T}
+        a    :: Vec{3, T}
+        ∇u   :: SecondOrderTensor{3, T, 9}
+        F    :: SecondOrderTensor{3, T, 9}
+        ΔF⁻¹ :: SecondOrderTensor{3, T, 9}
+        τ    :: SecondOrderTensor{3, T, 9}
+        ℂ    :: FourthOrderTensor{3, T, 81}
+    end
+
+    ## Background grid
+    grid = generate_grid(GridProp, CartesianMesh(T, h, (0,1.5), (-0.6,0.6), (-0.6,0.6)))
+
+    ## Particles
+    beam = extract(grid.X, (0,1.5), (-0.3,0.3), (-0.3,0.3))
+    particles = generate_particles(ParticleProp, beam; alg=GridSampling(spacing=1/6))
+    particles.V⁰ .= volume(beam) / length(particles)
+    filter!(particles) do pt
+        x, y, z = pt.x
+        (-0.3<y<-0.25 || 0.25<y<0.3) && (-0.3<z<-0.25 || 0.25<z<0.3)
+    end
+    @. particles.m = ρ⁰ * particles.V⁰
+    @. particles.F = one(particles.F)
+    @show length(particles)
+
+    ## Basis weights
+    weights = generate_basis_weights(T, KernelCorrection(BSpline(Quadratic())), grid.X, length(particles))
+
+    ## Neo-Hookean model
+    function kirchhoff_stress(F)
+        J = det(F)
+        b = symmetric(F * F')
+        μ*(b-I) + λ*log(J)*I
+    end
+
+    ## Paraview output setup
+    outdir = mkpath(joinpath("output", "implicit_jacobian_free_gpu"))
+    pvdfile = joinpath(outdir, "paraview")
+    closepvd(openpvd(pvdfile)) # create file
+
+    t = zero(T)
+    step = 0
+    fps = 60
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
+
+    ## Move the simulation state to the GPU after CPU-side setup; the time loop below stays on GPU.
+    let (grid, particles, weights) = (grid, particles, weights) .|> gpu_preserve
+
+        dofmask = similar(grid.m, Bool, 3, size(grid)...)
+
+        Tesserae.@showprogress while t < t_stop
+
+            update!(weights, particles, grid.X)
+
+            @P2G grid=>i particles=>p weights=>ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                ma[i] = @∑ w[ip] * m[p] * a[p]
+            end
+
+            ## Compute the grid velocity and acceleration at t = tⁿ
+            @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
+            @. grid.vⁿ = grid.mv * grid.m⁻¹
+            @. grid.aⁿ = grid.ma * grid.m⁻¹
+
+            ## Mark the free DoFs and update the boundary conditions on the device
+            @foreach grid=>i begin
+                u[i] = zero(u[i])
+                movable = !iszero(m[i])
+                for d in 1:3
+                    $(dofmask)[d,i] = movable
+                end
+            end
+            @foreach grid[begin,:,:]=>i begin
+                for d in 1:3
+                    $(dofmask)[d,i] = false
+                end
+            end
+            @foreach grid[end,:,:]=>i begin
+                for d in 1:3
+                    $(dofmask)[d,i] = false
+                end
+                u[i] = $(rotmat(2π*Δt, Vec(T(1),T(0),T(0))) - I) * X[i]
+            end
+            free = DofMap(dofmask)
+
+            ## Solve the nonlinear equation
+            state = (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt)
+            U = copy(free(grid.u)) # Convert grid data to plain vector data
+            compute_residual(U) = residual(U, state)
+            compute_jacobian(U) = jacobian(U, state)
+            Tesserae.newton!(U, compute_residual, compute_jacobian;
+                             linsolve = (x,A,b)->copy!(x,gmres(A,b)[1]))
+
+            @G2P grid=>i particles=>p weights=>ip begin
+                v[p] += @∑ w[ip] * ((1-γ)*a[p] + γ*a[i]) * Δt
+                a[p]  = @∑ w[ip] * a[i]
+                x[p]  = @∑ w[ip] * (X[i] + u[i])
+                ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
+                F[p]  = (I + ∇u[p]) * F[p]
+            end
+
+            t += Δt
+            step += 1
+
+            if t > first(savepoints)
+                popfirst!(savepoints)
+                openpvd(pvdfile; append=true) do pvd
+                    openvtk(string(pvdfile, step), cpu(particles.x)) do vtk
+                        τ, F = cpu(particles.τ), cpu(particles.F)
+                        vtk["Velocity (m/s)"] = cpu(particles.v)
+                        vtk["von Mises stress (kPa)"] = @. 1e-3 * vonmises(τ / det(F))
+                        pvd[t] = vtk
+                    end
+                end
+            end
+        end
+    end
+end
+
+function residual(U::AbstractVector, state)
+    (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt) = state
+
+    free(grid.u) .= U
+    @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
+    @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
+
+    geometric(τ) = @einsum (i,j,k,l) -> τ[i,l] * one(τ)[j,k]
+    @G2P2G grid=>i particles=>p weights=>ip begin
+        ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
+        ΔF⁻¹[p] = inv(I + ∇u[p])
+        F = (I + ∇u[p]) * F[p]
+        ∂τ∂F, τ = gradient(kirchhoff_stress, F, :all)
+        τ[p] = τ
+        ℂ[p] = ∂τ∂F ⊡ F' - geometric(τ)
+        f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
+    end
+
+    @. β*Δt^2 * ($free(grid.a) + $free(grid.f) * $free(grid.m⁻¹))
+end
+
+function jacobian(U::AbstractVector, state)
+    (; grid, particles, weights, β, free, Δt) = state
+
+    fillzero!(grid.δu)
+    function mul!(JδU, δU)
+        free(grid.δu) .= δU
+
+        @G2P2G grid=>i particles=>p weights=>ip begin
+            ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⊡ ΔF⁻¹[p])
+            τ[p] = ℂ[p] ⊡₂ ∇u[p]
+            f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
+        end
+
+        @. JδU = δU + β*Δt^2 * $free(grid.f) * $free(grid.m⁻¹)
+    end
+
+    U = free(grid.u)
+    LinearOperator(eltype(U), ndofs(free), ndofs(free), false, false, mul!; S = typeof(similar(U, 0)))
+end
+```

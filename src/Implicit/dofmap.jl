@@ -136,7 +136,12 @@ Base.getindex(dofmap::BlockDofMap, i::Int) = dofmap.maps[i]
 
 ndofs(dofmap::DofMap) = length(dofmap.indices)
 ndofs(dofmap::BlockDofMap) = length(dofmap.indices)
-dofs(dofmap::DofMap) = LinearIndices(dofmap.masksize)[dofmap.indices]
+# Indexing `LinearIndices` with a device array walks it elementwise on the host;
+# the same lookup mapped over the indices stays where they live.
+function dofs(dofmap::DofMap)
+    linear = LinearIndices(dofmap.masksize)
+    map(i -> linear[i], dofmap.indices)
+end
 dofs(dofmap::BlockDofMap) = dofmap.indices
 
 full_ndofs(dofmap::DofMap) = prod(dofmap.masksize)

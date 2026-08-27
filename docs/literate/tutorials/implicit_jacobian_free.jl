@@ -1,4 +1,4 @@
-# # Jacobian-free Newton--Krylov method
+# # [Jacobian-free Newton--Krylov method](@id implicit_jacobian_free_tutorial)
 #
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/9d9dbb86-87d5-4818-bbbf-ae0983cd3f04" width="800"/>

@@ -9,6 +9,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.
+- The GPU manual has a new section running the Jacobian-free Newton--Krylov
+  tutorial on GPU, with the DoF mask allocated and written on the device.
 
 ### Performance
 
@@ -26,6 +28,7 @@ All notable changes to Tesserae.jl will be documented in this file.
 - `cpu` on a GPU sparse matrix returned a dense matrix; it now returns a
   `SparseMatrixCSC`. `KernelAbstractions.get_backend` also answers for sparse
   matrices instead of throwing.
+- `Tesserae.dofs` scalar-indexed a `DofMap` whose indices live on a device.
 
 ### Changed
 
