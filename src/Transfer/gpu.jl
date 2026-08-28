@@ -107,8 +107,8 @@ end
 
 # ---- kernels and dispatch ----
 
-# `@P2G`, `@G2P` and `@G2P2G` all walk the same four arguments, so one kernel
-# serves all three, each call site compiling its own copy of `f`.
+# `@P2G`, `@G2P`, `@G2P2G` and `@P2G_Matrix` all walk the same four arguments,
+# so one kernel serves them all, each call site compiling its own copy of `f`.
 #
 # `@Const` is deliberately absent from the container arguments: KernelAbstractions
 # rewrites the argument's type, and indexing a `StructArray`, `BasisWeightArray`

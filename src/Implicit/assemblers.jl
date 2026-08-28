@@ -117,7 +117,7 @@ function cartesian_matrix_assembler(A, mesh_size::Dims, sparsity_radius::Int)
     )
 end
 
-function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, mesh_size::Dims, sparsity_radius::Int)
+function CartesianSparseMatrixAssembler(A::AbstractSparseMatrix, mesh_size::Dims, sparsity_radius::Int)
     assembler = cartesian_matrix_assembler(A, mesh_size, sparsity_radius)
     check_cartesian_sparse_pattern(assembler)
     assembler
@@ -130,16 +130,8 @@ function cartesian_sparsity_radius(row_mesh, col_mesh, row_basis, col_basis)
     sparsity_radius
 end
 
-function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
-    sparsity_radius = cartesian_sparsity_radius(row_mesh, col_mesh, row_basis, col_basis)
-    CartesianSparseMatrixAssembler(A, size(row_mesh), sparsity_radius)
-end
-
 function CartesianSparseMatrixAssembler(A::AbstractSparseMatrix, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
-    sparsity_radius = cartesian_sparsity_radius(row_mesh, col_mesh, row_basis, col_basis)
-    assembler = cartesian_matrix_assembler(A, size(row_mesh), sparsity_radius)
-    check_cartesian_pattern_nnz(assembler)
-    assembler
+    CartesianSparseMatrixAssembler(A, size(row_mesh), cartesian_sparsity_radius(row_mesh, col_mesh, row_basis, col_basis))
 end
 
 # -- sparsity pattern --
@@ -169,14 +161,16 @@ function check_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssemble
     nothing
 end
 
+check_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler) = check_cartesian_pattern_nnz(assembler)
+
 function cartesian_axis_entries(n::Int, sparsity_radius::Int)
     sum(j -> min(n, j + sparsity_radius) - max(1, j - sparsity_radius) + 1, 1:n; init=0)
 end
 
 # A device matrix cannot be walked without a kernel and a readback on every call,
 # so its pattern is judged by the total the closed form predicts. `nnz` is a
-# host-side field, which makes this free; it does not see rows moved within a
-# column, and the docs say the target must come from `create_sparse_matrix`.
+# host-side field, which makes this free. Rows moved within a column go unseen,
+# which a matrix from `create_sparse_matrix` cannot have.
 function check_cartesian_pattern_nnz(assembler::CartesianSparseMatrixAssembler)
     (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
     mesh_size = Base.tail(size(row_dof_table))
@@ -389,22 +383,18 @@ function matrix_assembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
     GenericMatrixAssembler(matrix, row_dof_table, col_dof_table)
 end
-function matrix_assembler(matrix::Union{SparseMatrixCSC, SparseMatrixCSCView, SparseMatrixBlockView}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
+function matrix_assembler(matrix::Union{AbstractSparseMatrix, SparseMatrixCSCView, SparseMatrixBlockView}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
     check_matrix_device(matrix, row_mesh)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 end
-function matrix_assembler(matrix::AbstractSparseMatrix, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
-    check_matrix_device(matrix, row_mesh)
-    CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
+function matrix_assembler(::SparseMatrixBlocks, row_mesh, col_mesh, row_basis, col_basis)
+    throw(ArgumentError("@P2G_Matrix requires an individual matrix block; pass blocks[row, col] instead of blocks"))
 end
 
 @noinline function check_matrix_device(matrix, mesh)
     get_device(matrix) === get_device(mesh) ||
         throw(ArgumentError("@P2G_Matrix: the matrix is on $(get_device(matrix)) and the grid on $(get_device(mesh)); move both with `gpu` or `cpu`"))
     nothing
-end
-function matrix_assembler(::SparseMatrixBlocks, row_mesh, col_mesh, row_basis, col_basis)
-    throw(ArgumentError("@P2G_Matrix requires an individual matrix block; pass blocks[row, col] instead of blocks"))
 end
 
 function matrix_dof_tables(gmat, row_grid, col_grid)

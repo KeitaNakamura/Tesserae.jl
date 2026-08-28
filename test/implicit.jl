@@ -358,16 +358,6 @@
 
         @test Tesserae.local_matrix_cache(A, table_i, weights, table_j, weights) === nothing
 
-        @test Tesserae.get_device(A) isa Tesserae.CPUDevice
-        @test cpu(A) === A
-
-        filled = copy(A)
-        Tesserae.SparseArrays.nonzeros(filled) .= 1
-        @test fillzero!(filled) === filled
-        @test iszero(Tesserae.SparseArrays.nonzeros(filled))
-        @test Tesserae.SparseArrays.nnz(filled) == Tesserae.SparseArrays.nnz(A)
-        @test Tesserae.SparseArrays.rowvals(filled) == Tesserae.SparseArrays.rowvals(A)
-
         @test size(table_i) == (2, size(grid)...)
         @test size(table_j) == (1, size(grid)...)
         @test size(A) == (length(table_i), length(table_j))
@@ -444,26 +434,23 @@
                 col_size = 3length(col_nodes)
                 local_matrix = reshape(collect(1.0:row_size*col_size), row_size, col_size)
 
+                foreach_entry(add_entry) = foreach(Iterators.product(enumerate(row_nodes), enumerate(col_nodes))) do ((ip, row_node), (jp, col_node))
+                    I = (2ip-1):2ip
+                    J = (3jp-2):3jp
+                    add_entry(row_node, col_node, @view(local_matrix[I,J]))
+                end
+
                 assembler = Tesserae.matrix_assembler(direct, scatter_mesh, scatter_mesh, basis, basis)
                 buffer = Tesserae.BlockMatrixBuffer(Tesserae.BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
-                for (jp, col_node) in enumerate(col_nodes), (ip, row_node) in enumerate(row_nodes)
-                    I = (2ip-1):2ip
-                    J = (3jp-2):3jp
-                    Tesserae.add_entry!(buffer, row_nodes, col_nodes, row_node, col_node, @view(local_matrix[I,J]))
-                end
+                foreach_entry((row_node, col_node, value) ->
+                    Tesserae.add_entry!(buffer, row_nodes, col_nodes, row_node, col_node, value))
                 block_assembler = Tesserae.matrix_assembler(block_matrix, scatter_mesh, scatter_mesh, basis, basis)
                 @test Tesserae.scatter!(block_assembler, buffer, row_nodes, col_nodes) === block_matrix
-                for (jp, col_node) in enumerate(col_nodes), (ip, row_node) in enumerate(row_nodes)
-                    I = (2ip-1):2ip
-                    J = (3jp-2):3jp
-                    Tesserae.add_entry!(assembler, Tesserae.SerialScatter(), row_node, col_node, @view(local_matrix[I,J]))
-                end
+                foreach_entry((row_node, col_node, value) ->
+                    Tesserae.add_entry!(assembler, Tesserae.SerialScatter(), row_node, col_node, value))
                 atomic_assembler = Tesserae.matrix_assembler(atomic, scatter_mesh, scatter_mesh, basis, basis)
-                for (jp, col_node) in enumerate(col_nodes), (ip, row_node) in enumerate(row_nodes)
-                    I = (2ip-1):2ip
-                    J = (3jp-2):3jp
-                    Tesserae.add_entry!(atomic_assembler, Tesserae.AtomicScatter(), row_node, col_node, @view(local_matrix[I,J]))
-                end
+                foreach_entry((row_node, col_node, value) ->
+                    Tesserae.add_entry!(atomic_assembler, Tesserae.AtomicScatter(), row_node, col_node, value))
                 Tesserae.add!(merge, vec(row_dofs[:, row_nodes]), vec(col_dofs[:, col_nodes]), local_matrix)
                 @test direct == merge
                 @test block_matrix == merge
@@ -549,6 +536,19 @@ end
     end
 end
 
+@testset "Sparse matrices on devices" begin
+    A = create_sparse_matrix(BSpline(Quadratic()), CartesianMesh(1, (0,4), (0,5)); ndofs=2)
+    @test Tesserae.get_device(A) isa Tesserae.CPUDevice
+    @test cpu(A) === A
+
+    filled = copy(A)
+    Tesserae.SparseArrays.nonzeros(filled) .= 1
+    @test fillzero!(filled) === filled
+    @test iszero(Tesserae.SparseArrays.nonzeros(filled))
+    @test Tesserae.SparseArrays.nnz(filled) == Tesserae.SparseArrays.nnz(A)
+    @test Tesserae.SparseArrays.rowvals(filled) == Tesserae.SparseArrays.rowvals(A)
+end
+
 @testset "DofMap and sparse extraction" begin
     mesh = CartesianMesh(1, (0,2), (0,1))
     grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, u::Float64, s::Vec{1,Float64}, v::Vec{2,Float64}}, mesh)
@@ -581,7 +581,7 @@ end
     @test collect(DofMap(vfield)(grid.v)) == collect(vmap(grid.v))
 
     sfield = map(i -> Vec(smask[1,i]), CartesianIndices(grid))
-    @test Tesserae.dofs(DofMap(sfield)) == Tesserae.dofs(smap)
+    @test Tesserae.dofs(@inferred(DofMap(sfield))) == Tesserae.dofs(smap)
     @test collect(DofMap(sfield)(grid.s)) == collect(smap(grid.s))
 
     A = reshape(1.0:36.0, 6, 6)
@@ -597,13 +597,14 @@ end
             values .= eachindex(values)
             reference = extract(S, mi, mj)
             dest = fillzero!(copy(reference))
-            @test extract!(dest, S, mi, mj) === dest
+            @test @inferred(extract!(dest, S, mi, mj)) === dest
             @test dest == reference
             values .*= -3
             extract!(dest, S, mi, mj)
             @test dest == extract(S, mi, mj)
             @test_throws DimensionMismatch extract!(similar(dest, size(dest, 1) + 1, size(dest, 2)), S, mi, mj)
         end
+
     end
     @testset "block DoF map" begin
         @test Tesserae.dofs(@inferred(dofmap(vmask))) == Tesserae.dofs(vmap)
@@ -625,7 +626,7 @@ end
         @test Tesserae.SparseArrays.issparse(extracted)
         @test extracted == parent(blocks)[expected_dofs, expected_dofs]
         refilled = fillzero!(copy(extracted))
-        @test extract!(refilled, blocks, blockmap) === refilled
+        @test @inferred(extract!(refilled, blocks, blockmap)) === refilled
         @test refilled == extracted
         @test extract(view, blocks, blockmap) == view(parent(blocks), expected_dofs, expected_dofs)
 

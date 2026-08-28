@@ -68,19 +68,16 @@ end
 
 # -- GPU --
 
-@kernel function gpukernel_P2G_Matrix(f, grids, particles, weights)
-    p = @index(Global)
-    @inline f(grids, particles, weights, (p,), ParticleAssembly{AtomicScatter}())
-end
-
+# The shared particle-parallel kernel serves this transfer too; only the scatter
+# mode differs from the CPU wrapping above.
 function P2G_Matrix(f, device::GPUDevice, ::Val{scheduler}, grids, particles, weights, ::Nothing) where {scheduler}
     scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
     particles = particles isa QuadraturePoints ? parent(particles) : particles
     backend = get_backend(device)
-    kernel = gpukernel_P2G_Matrix(backend)
-    kernel(f, grids, particles, weights; ndrange=length(particles))
+    kernel = gpukernel_transfer(backend)
+    kernel((grids, particles, weights, p) -> (@inline f(grids, particles, weights, (p,), ParticleAssembly{AtomicScatter}())),
+           grids, particles, weights; ndrange=length(particles))
 end
-
 
 # -- FEM and IGA --
 

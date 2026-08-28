@@ -73,11 +73,15 @@ function Base.setindex!(block::SparseMatrixBlockView, value, i::Int, j::Int)
     block
 end
 
-@kernel function gpukernel_fillzero_block!(values, column_slots, zero_value)
-    col = @index(Global)
+@inline function fillzero_block_column!(values, column_slots, zero_value, col)
     @inbounds for slot in column_slots[col]
         values[slot] = zero_value
     end
+end
+
+@kernel function gpukernel_fillzero_block!(values, @Const(column_slots), zero_value)
+    col = @index(Global)
+    fillzero_block_column!(values, column_slots, zero_value, col)
 end
 
 function fillzero!(block::SparseMatrixBlockView)
@@ -88,8 +92,8 @@ end
 function _fillzero_block!(::CPUDevice, block::SparseMatrixBlockView)
     values = nonzeros(parent(block))
     zero_value = zero_recursive(eltype(values))
-    for slots in block.column_slots, slot in slots
-        @inbounds values[slot] = zero_value
+    for col in eachindex(block.column_slots)
+        fillzero_block_column!(values, block.column_slots, zero_value, col)
     end
     nothing
 end
