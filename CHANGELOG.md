@@ -25,7 +25,8 @@ All notable changes to Tesserae.jl will be documented in this file.
   sparsity pattern, so a Newton loop reduces the assembled system once per
   iteration without reallocating it. `extract` itself now works on a device
   matrix, reducing it through the `DofMap`'s Boolean mask. A `BlockDofMap` works
-  the same way, so a monolithic block system reduces on the device too.
+  the same way, so a monolithic block system reduces on the device too, and a
+  single block view reduces through the per-field maps.
 
 ### Performance
 

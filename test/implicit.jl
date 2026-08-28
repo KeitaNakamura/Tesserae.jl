@@ -605,6 +605,15 @@ end
             @test_throws DimensionMismatch extract!(similar(dest, size(dest, 1) + 1, size(dest, 2)), S, mi, mj)
         end
 
+        blocks = create_block_sparse_matrix(quadratic, mesh; ndofs=(2, 1))
+        block_values = Tesserae.SparseArrays.nonzeros(parent(blocks))
+        block_values .= eachindex(block_values)
+        for (block, mi, mj) in ((blocks[1,1], vmap, vmap), (blocks[1,2], vmap, smap), (blocks[2,1], smap, vmap))
+            reference = extract(block, mi, mj)
+            refilled = fillzero!(copy(reference))
+            @test @inferred(extract!(refilled, block, mi, mj)) === refilled
+            @test refilled == reference
+        end
     end
     @testset "block DoF map" begin
         @test Tesserae.dofs(@inferred(dofmap(vmask))) == Tesserae.dofs(vmap)
