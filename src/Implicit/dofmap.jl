@@ -50,11 +50,15 @@ julia> free(grid.v)
  12.0
 ```
 """
-struct DofMap{N, I <: AbstractVector{<: CartesianIndex}, J <: AbstractVector{<: CartesianIndex}} <: AbstractDofMap
-    masksize::Dims{N}
+struct DofMap{N, M <: AbstractArray{Bool, N}, I <: AbstractVector{<: CartesianIndex}, J <: AbstractVector{<: CartesianIndex}} <: AbstractDofMap
+    # Kept, not just its size: `extract` reduces a device matrix through it, those
+    # matrices having no `getindex` for a vector of DoF numbers.
+    mask::M
     indices::I # (dof, x, y, z)
     indices4scalar::J # (dof, x, y, z)
 end
+
+masksize(dofmap::DofMap) = size(dofmap.mask)
 
 # ---- BlockDofMap ----
 
@@ -79,10 +83,9 @@ end
 # ---- construction ----
 
 function DofMap(mask::AbstractArray{Bool})
-    masksize = size(mask)
     I = findall(mask)
     J = map(i -> CartesianIndex(1, Base.tail(Tuple(i))...), I)
-    DofMap(masksize, I, J)
+    DofMap(mask, I, J)
 end
 
 DofMap(mask::AbstractArray{<: Vec{<: Any, Bool}}) = DofMap(dof_components(mask))
@@ -94,7 +97,7 @@ function BlockDofMap(masks::Tuple{Vararg{AbstractArray{Bool}}})
     sizehint!(indices, sum(ndofs, maps))
     offset = 0
     for dofmap in maps
-        linear_indices = LinearIndices(dofmap.masksize)
+        linear_indices = LinearIndices(masksize(dofmap))
         for index in dofmap.indices
             push!(indices, offset + linear_indices[index])
         end
@@ -146,12 +149,12 @@ ndofs(dofmap::BlockDofMap) = length(dofmap.indices)
 # Indexing `LinearIndices` with a device array walks it elementwise on the host;
 # the same lookup mapped over the indices stays where they live.
 function dofs(dofmap::DofMap)
-    linear = LinearIndices(dofmap.masksize)
+    linear = LinearIndices(masksize(dofmap))
     map(i -> linear[i], dofmap.indices)
 end
 dofs(dofmap::BlockDofMap) = dofmap.indices
 
-full_ndofs(dofmap::DofMap) = prod(dofmap.masksize)
+full_ndofs(dofmap::DofMap) = length(dofmap.mask)
 full_ndofs(dofmap::BlockDofMap) = sum(full_ndofs, dofmap.maps)
 dofs(colon::Colon) = colon
 

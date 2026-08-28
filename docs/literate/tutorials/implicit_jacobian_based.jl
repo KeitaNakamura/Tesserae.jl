@@ -1,4 +1,4 @@
-# # Jacobian-based implicit method
+# # [Jacobian-based implicit method](@id implicit_jacobian_based_tutorial)
 #
 # ```@raw html
 # <img src="https://github.com/user-attachments/assets/81697408-0975-49aa-959e-f885ccea98b2" width="300"/>

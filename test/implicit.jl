@@ -588,6 +588,23 @@ end
     @test extract(A, smap) == A[Tesserae.dofs(smap), Tesserae.dofs(smap)]
     @test extract(A, :, smap) == A[:, Tesserae.dofs(smap)]
     @test extract(view, A, smap, :) == view(A, Tesserae.dofs(smap), :)
+
+    @testset "extract!" begin
+        quadratic = BSpline(Quadratic())
+        for (S, mi, mj) in ((create_sparse_matrix(quadratic, mesh; ndofs=2), vmap, vmap),
+                            (create_sparse_matrix(quadratic, mesh; ndofs=(2,1)), vmap, smap))
+            values = Tesserae.SparseArrays.nonzeros(S)
+            values .= eachindex(values)
+            reference = extract(S, mi, mj)
+            dest = fillzero!(copy(reference))
+            @test extract!(dest, S, mi, mj) === dest
+            @test dest == reference
+            values .*= -3
+            extract!(dest, S, mi, mj)
+            @test dest == extract(S, mi, mj)
+            @test_throws DimensionMismatch extract!(similar(dest, size(dest, 1) + 1, size(dest, 2)), S, mi, mj)
+        end
+    end
     @testset "block DoF map" begin
         @test Tesserae.dofs(@inferred(dofmap(vmask))) == Tesserae.dofs(vmap)
 

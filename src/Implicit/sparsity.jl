@@ -239,13 +239,38 @@ end
 function _indices_for_extract(matrix::AbstractMatrix, dofmap_i::Union{AbstractDofMap, Colon}, dofmap_j::Union{AbstractDofMap, Colon})
     check_dofmap_size(size(matrix, 1), dofmap_i)
     check_dofmap_size(size(matrix, 2), dofmap_j)
-    dofs(dofmap_i), dofs(dofmap_j)
+    extract_dofs(matrix, dofmap_i), extract_dofs(matrix, dofmap_j)
 end
 
 function _indices_for_extract(blocks::SparseMatrixBlocks, dofmap_i::Union{AbstractDofMap, Colon}, dofmap_j::Union{AbstractDofMap, Colon})
     check_block_dofmap(blocks, dofmap_i)
     check_block_dofmap(blocks, dofmap_j)
-    dofs(dofmap_i), dofs(dofmap_j)
+    extract_dofs(blocks, dofmap_i), extract_dofs(blocks, dofmap_j)
+end
+
+# A device sparse matrix has no `getindex` for a vector of DoF numbers, so the
+# reduction goes through the Boolean mask the map was built from. That mask spans
+# the whole matrix, which is why a view of one is not a valid target there.
+# Nothing else needs the distinction, and asking a generic `AbstractMatrix` where
+# its values live is not answerable.
+dof_index_device(matrix) = _dof_index_device(matrix_parent(matrix))
+_dof_index_device(parent_matrix) = CPUDevice()
+_dof_index_device(parent_matrix::AbstractSparseMatrix) = get_device(parent_matrix)
+
+extract_dofs(matrix, ::Colon) = Colon()
+extract_dofs(matrix, dofmap::AbstractDofMap) = extract_dofs(dof_index_device(matrix), matrix, dofmap)
+extract_dofs(::CPUDevice, matrix, dofmap::AbstractDofMap) = dofs(dofmap)
+function extract_dofs(::GPUDevice, matrix, dofmap::DofMap)
+    check_whole_matrix_target(matrix)
+    vec(dofmap.mask)
+end
+extract_dofs(::GPUDevice, matrix, ::BlockDofMap) =
+    throw(ArgumentError("extract: a block DoF map is CPU-only; move the blocks with `cpu` first"))
+
+@noinline function check_whole_matrix_target(matrix)
+    all(indices -> indices isa Base.OneTo, matrix_parent_indices(matrix)) ||
+        throw(ArgumentError("extract: on GPU the target must be a whole matrix, not a view or a block of one"))
+    nothing
 end
 
 function check_dofmap_size(matrix_size::Integer, dofmap::AbstractDofMap)
@@ -266,6 +291,69 @@ function check_block_dofmap(::SparseMatrixBlocks, ::DofMap)
     throw(ArgumentError("extracting a block matrix requires one DoF map per block"))
 end
 check_block_dofmap(::SparseMatrixBlocks, ::Colon) = nothing
+
+# ---- value-only extraction ----
+
+"""
+    extract!(dest, matrix, dofmap_row, dofmap_col = dofmap_row)
+
+Refill `dest` with the active entries of `matrix`, leaving its sparsity pattern
+untouched. `dest` must come from [`extract`](@ref) with the same DoF maps, whose
+masks must not have changed since.
+
+Assembling into `matrix` and reducing it once per Newton iteration is what this
+is for: [`extract`](@ref) allocates a matrix and derives its pattern, while this
+walks the stored values only.
+"""
+function extract!(dest::AbstractSparseMatrix, matrix::AbstractMatrix, dofmap_i::DofMap, dofmap_j::DofMap = dofmap_i)
+    check_dofmap_size(size(matrix, 1), dofmap_i)
+    check_dofmap_size(size(matrix, 2), dofmap_j)
+    device = dof_index_device(matrix)
+    device isa GPUDevice && check_whole_matrix_target(matrix)
+    size(dest) == (ndofs(dofmap_i), ndofs(dofmap_j)) ||
+        throw(DimensionMismatch("`dest` and the active degrees of freedom must have the same size"))
+    get_device(dest) === device || throw(ArgumentError("`dest` and the matrix must be on the same device"))
+    columns = dofs(dofmap_j)
+    rowmask = vec(dofmap_i.mask)
+    parent_matrix = matrix_parent(matrix)
+    _extract_values!(device, nonzeros(dest), SparseArrays.getcolptr(dest), columns, rowmask,
+                     SparseArrays.getcolptr(parent_matrix), rowvals(parent_matrix), nonzeros(parent_matrix))
+    dest
+end
+
+# Both destination and source keep their rows sorted within a column, so the kept
+# entries of one parent column arrive in the destination's own order and only the
+# membership test is needed.
+@inline function extract_column_values!(dest_values, dest_colptr, columns, rowmask, src_colptr, src_rows, src_values, col)
+    @inbounds begin
+        slot = dest_colptr[col]
+        src_col = columns[col]
+        for src_slot in src_colptr[src_col]:(src_colptr[src_col+1]-1)
+            if rowmask[src_rows[src_slot]]
+                dest_values[slot] = src_values[src_slot]
+                slot += 1
+            end
+        end
+    end
+end
+
+@kernel function gpukernel_extract_values!(dest_values, dest_colptr, columns, rowmask, src_colptr, src_rows, src_values)
+    col = @index(Global)
+    extract_column_values!(dest_values, dest_colptr, columns, rowmask, src_colptr, src_rows, src_values, col)
+end
+
+function _extract_values!(::CPUDevice, dest_values, dest_colptr, columns, rowmask, src_colptr, src_rows, src_values)
+    for col in eachindex(columns)
+        extract_column_values!(dest_values, dest_colptr, columns, rowmask, src_colptr, src_rows, src_values, col)
+    end
+    nothing
+end
+
+function _extract_values!(device::GPUDevice, dest_values, dest_colptr, columns, rowmask, src_colptr, src_rows, src_values)
+    kernel = gpukernel_extract_values!(get_backend(device))
+    kernel(dest_values, dest_colptr, columns, rowmask, src_colptr, src_rows, src_values; ndrange=length(columns))
+    nothing
+end
 
 # ---- sparse addition ----
 

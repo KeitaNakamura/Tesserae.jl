@@ -18,9 +18,13 @@ All notable changes to Tesserae.jl will be documented in this file.
 - `@P2G_Matrix` runs on GPU, assembling into a device sparse matrix over a
   Cartesian mesh with a particle-parallel kernel that accumulates atomically.
   The block views from `create_block_sparse_matrix` move to the device and
-  assemble there too. Views taken with `view` and `Partition` remain CPU-only,
-  and `extract` does not yet work on a device matrix. See the new GPU manual
+  assemble there too. Views taken with `view` and `Partition` remain CPU-only.
+  See the new GPU manual
   section.
+- `extract!` refills a matrix `extract` already produced without touching its
+  sparsity pattern, so a Newton loop reduces the assembled system once per
+  iteration without reallocating it. `extract` itself now works on a device
+  matrix, reducing it through the `DofMap`'s Boolean mask.
 
 ### Performance
 

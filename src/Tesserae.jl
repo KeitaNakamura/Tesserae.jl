@@ -53,6 +53,7 @@ export
     isinside,
     findcell,
     extract,
+    extract!,
     FEMesh,
     generate_field_meshes,
     cells,

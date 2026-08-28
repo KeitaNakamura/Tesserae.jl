@@ -235,10 +235,36 @@ A block view carries the pattern it was created with, so its check is the same o
 Views taken with `view` are CPU-only.
 `@P2G_Matrix` reads the stored basis weights, so weights generated with `deferred=true` are rejected on GPU as they are on the CPU.
 
-Two things are still missing before an assembled GPU system can be solved end to end:
+### Reducing and solving
 
-- [`extract`](@ref) reduces the matrix to the active DoFs by indexing it with a vector of DoF numbers, which CUDA's sparse matrices do not support; it raises a scalar-indexing error on a device matrix.
-- `\` is not defined for CUDA's sparse matrices, so `Tesserae.newton!` needs an explicit `linsolve` on GPU, using a solver package such as CUDSS.jl or Krylov.jl.
+[`extract`](@ref) reduces the assembled matrix to the active DoFs on the device too.
+It indexes the matrix with the Boolean mask the [`DofMap`](@ref) was built from, because CUDA's sparse matrices have no `getindex` for a vector of DoF numbers, and that mask spans the whole matrix -- so a view of one, or a block DoF map, is CPU-only.
+
+The reduced pattern only changes when the mask does, which is once per time step, while the values change on every Newton iteration.
+[`extract!`](@ref) refills a matrix `extract` already produced, walking the stored values and nothing else:
+
+```julia
+free = DofMap(grid.free)
+Afree = extract(A, free)          # once per step: this fixes the reduced pattern
+
+function jacobian(U, state)
+    @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+        A[i,j] = @∑ dotdot(∇w[ip] ⊡ ΔF⁻¹[p], ℂ[p], ∇w[jp] ⊡ ΔF⁻¹[p]) * V⁰[p]
+    end
+    extract!(Afree, A, free)      # once per Newton iteration: values only
+    Afree + Diagonal(inv(β*Δt^2) * free(grid.m))
+end
+```
+
+`\` is not defined for CUDA's sparse matrices, so `Tesserae.newton!` needs an explicit `linsolve` on GPU:
+
+```julia
+using Krylov: cg
+Tesserae.newton!(U, compute_residual, compute_jacobian;
+                 linsolve = (x,A,b) -> copyto!(x, cg(A, b; rtol=1e-10)[1]))
+```
+
+Everything else in the [Jacobian-based tutorial](@ref implicit_jacobian_based_tutorial) carries over unchanged, with the DoF mask written on the grid as in the section below.
 
 ## Taylor impact on GPU
 
