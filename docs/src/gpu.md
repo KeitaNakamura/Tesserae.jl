@@ -489,7 +489,7 @@ This section rewrites the [Jacobian-free Newton--Krylov tutorial](@ref implicit_
 The residual and the Jacobian-vector product are unchanged; what changes is how the free degrees of freedom are selected.
 The main changes are:
 
-- Carry the DoF mask as a `Vec{ndofs, Bool}` grid field and write it with `@foreach`, instead of building a host `BitArray` in a scalar loop. [`DofMap`](@ref) reads such a field directly, so `free(grid.u)` returns a device view and the whole Newton loop stays on GPU. A device Boolean array of size `(ndofs, size(grid)...)` works just as well when the mask should not live on the grid.
+- Write the DoF mask on the device with `@foreach`, instead of building a host `BitArray` in a scalar loop, so `free(grid.u)` returns a device view and the whole Newton loop stays on GPU. The mask is either a device Boolean array of size `(ndofs, size(grid)...)` written as `dofmask[d,i]`, or a `Vec{ndofs, Bool}` grid field written as `free[i]` like the other fields; [`DofMap`](@ref) takes both, and this section uses the grid field.
 - Rewrite the boundary conditions as boundary-slice `@foreach` loops to avoid scalar indexing on GPU arrays.
 - Move the simulation objects with `gpu_preserve`. A Jacobian-free Krylov solve converges on the residual norm, and `Float32` limits how far that can be driven.
 - Give `LinearOperator` the device vector type through its `S` keyword, so that `Krylov.gmres` allocates its workspace on the device.
