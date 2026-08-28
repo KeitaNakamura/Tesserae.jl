@@ -12,7 +12,12 @@ struct LocalMatrixBuffer{M <: Matrix, I, J}
     col_nodes::J
 end
 
-function local_matrix_cache(matrix, dof_table_i, weights_i, dof_table_j, weights_j)
+# Only the cell path reads the cache, but the macro binds it in every expansion
+# and the transfer closure captures it either way. A `TaskLocalValue` there makes
+# the closure non-isbits, which a GPU launch rejects.
+local_matrix_cache(matrix, dof_table_i, weights_i, dof_table_j, weights_j) = nothing
+
+function local_matrix_cache(matrix, dof_table_i, weights_i::BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, dof_table_j, weights_j::BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix})
     T = eltype(matrix)
     TaskLocalValue{Matrix{T}}() do
         row_size = size(dof_table_i, 1) * nsupportnodes(basis(weights_i))
@@ -67,7 +72,7 @@ end
 function assemble_first!(assembler, ::Nothing, assembly, orientation, row_node, col_node, ip, jp, value)
     @_propagate_inbounds_meta
     row_node, col_node = orientation((row_node, col_node))
-    add_entry!(assembler, row_node, col_node, orient_matrix_entry(orientation, value))
+    add_entry!(assembler, scatter_mode(assembly), row_node, col_node, orient_matrix_entry(orientation, value))
 end
 
 function assemble_add!(assembler, buffer::Nothing, assembly, orientation, row_node, col_node, ip, jp, value)
@@ -176,7 +181,7 @@ function add_entry!(buffer::BlockMatrixBuffer{T, N}, row_nodes::CartesianIndices
     local_col = LinearIndices(col_size)[local_col_node]
 
     slot = node_colstarts[local_col] + cartesian_slot_offset(local_row_node, neighboring_rows, row_ndofs * col_ndofs)
-    add_entry_values!(values, slot, value)
+    add_entry_values!(SerialScatter(), values, slot, value)
 
     buffer
 end
@@ -223,7 +228,7 @@ function scatter!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrix
                 local_slot = node_colstarts[local_col] + ((local_row - 1) * col_ndofs + b - 1) * row_ndofs
                 row_node = local_row_node + first_row_node - oneunit(first_row_node)
                 matrix_slot = matrix_col_start + cartesian_slot_offset(row_node, matrix_neighboring_rows, row_slots_per_node)
-                add_entry_values!(matrix_values, matrix_slot, values, local_slot, row_components, row_ndofs)
+                add_entry_values!(SerialScatter(), matrix_values, matrix_slot, values, local_slot, row_components, row_ndofs)
             end
         end
     end

@@ -8,9 +8,12 @@ abstract type AbstractDofMap end
 
 """
     DofMap(mask::AbstractArray{Bool})
+    DofMap(mask::AbstractArray{<: Vec{ndofs, Bool}})
 
 Create a degree of freedom (DoF) map from a `mask` of size `(ndofs, size(grid)...)`.
 `ndofs` represents the number of DoFs stored at each grid location.
+A mask whose elements are `Vec{ndofs, Bool}` describes the same layout, so a grid
+field can carry it and be written with [`@foreach`](@ref).
 
 ```jldoctest
 julia> mesh = CartesianMesh(1, (0,2), (0,1));
@@ -47,8 +50,10 @@ julia> free(grid.v)
  12.0
 ```
 """
-struct DofMap{N, I <: AbstractVector{<: CartesianIndex}, J <: AbstractVector{<: CartesianIndex}} <: AbstractDofMap
-    masksize::Dims{N}
+struct DofMap{M <: AbstractArray{Bool}, I <: AbstractVector{<: CartesianIndex}, J <: AbstractVector{<: CartesianIndex}} <: AbstractDofMap
+    # Kept, not just its size: `extract` reduces a device matrix through it, those
+    # matrices having no `getindex` for a vector of DoF numbers.
+    mask::M
     indices::I # (dof, x, y, z)
     indices4scalar::J # (dof, x, y, z)
 end
@@ -68,42 +73,40 @@ A = extract(blocks, free)
 Aup = extract(blocks[1,2], free[1], free[2])
 ```
 """
-struct BlockDofMap{M <: Tuple{Vararg{DofMap}}} <: AbstractDofMap
+struct BlockDofMap{M <: Tuple{Vararg{DofMap}}, I <: AbstractVector{Int}, B <: AbstractVector{Bool}} <: AbstractDofMap
     maps::M
-    indices::Vector{Int}
+    indices::I
+    # The block masks laid end to end, for the same reason `DofMap` keeps its own.
+    mask::B
 end
 
 # ---- construction ----
 
 function DofMap(mask::AbstractArray{Bool})
-    masksize = size(mask)
     I = findall(mask)
     J = map(i -> CartesianIndex(1, Base.tail(Tuple(i))...), I)
-    DofMap(masksize, I, J)
+    DofMap(mask, I, J)
 end
+
+DofMap(mask::AbstractArray{<: Vec{<: Any, Bool}}) = DofMap(dof_components(mask))
 
 function BlockDofMap(masks::Tuple{Vararg{AbstractArray{Bool}}})
     isempty(masks) && throw(ArgumentError("at least one block mask is required"))
     maps = map(DofMap, masks)
-    indices = Int[]
-    sizehint!(indices, sum(ndofs, maps))
-    offset = 0
-    for dofmap in maps
-        linear_indices = LinearIndices(dofmap.masksize)
-        for index in dofmap.indices
-            push!(indices, offset + linear_indices[index])
-        end
-        offset += length(linear_indices)
-    end
-    BlockDofMap(maps, indices)
+    offsets = Base.front(cumsum((0, map(full_ndofs, maps)...)))
+    BlockDofMap(maps,
+                reduce(vcat, map((dofmap, offset) -> dofs(dofmap) .+ offset, maps, offsets)),
+                reduce(vcat, map(dof_mask, maps)))
 end
 
 """
     dofmap(mask::AbstractArray{Bool})
+    dofmap(mask::AbstractArray{<: Vec{ndofs, Bool}})
 
 Create a `DofMap` from one Boolean mask.
 """
 dofmap(mask::AbstractArray{Bool}) = DofMap(mask)
+dofmap(mask::AbstractArray{<: Vec{<: Any, Bool}}) = DofMap(mask)
 
 """
     dofmap(masks::Tuple)
@@ -114,13 +117,13 @@ dofmap(masks::Tuple{Vararg{AbstractArray{Bool}}}) = BlockDofMap(masks)
 
 # ---- indexing ----
 
-function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Vec{1}}
-    A′ = reshape(reinterpret(eltype(T), A), 1, size(A)...)
-    @boundscheck checkbounds(A′, dofmap.indices)
-    @inbounds view(A′, dofmap.indices)
-end
-function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Vec}
-    A′ = reinterpret(reshape, eltype(T), A)
+# A one-component `Vec` is the size of its scalar, so the reshaping reinterpret
+# gives back the array's own shape instead of prefixing the DoF axis.
+dof_components(A::AbstractArray{T}) where {T <: Vec{1}} = reshape(reinterpret(eltype(T), A), 1, size(A)...)
+dof_components(A::AbstractArray{T}) where {T <: Vec} = reinterpret(reshape, eltype(T), A)
+
+function (dofmap::DofMap)(A::AbstractArray{<: Vec})
+    A′ = dof_components(A)
     @boundscheck checkbounds(A′, dofmap.indices)
     @inbounds view(A′, dofmap.indices)
 end
@@ -134,12 +137,19 @@ end
 Base.length(dofmap::BlockDofMap) = length(dofmap.maps)
 Base.getindex(dofmap::BlockDofMap, i::Int) = dofmap.maps[i]
 
+dof_mask(dofmap::DofMap) = vec(dofmap.mask)
+dof_mask(dofmap::BlockDofMap) = dofmap.mask
+
 ndofs(dofmap::DofMap) = length(dofmap.indices)
 ndofs(dofmap::BlockDofMap) = length(dofmap.indices)
-dofs(dofmap::DofMap) = LinearIndices(dofmap.masksize)[dofmap.indices]
+# Indexing `LinearIndices` with a device array walks it elementwise on the host;
+# the same lookup mapped over the indices stays where they live.
+function dofs(dofmap::DofMap)
+    linear = LinearIndices(size(dofmap.mask))
+    map(i -> linear[i], dofmap.indices)
+end
 dofs(dofmap::BlockDofMap) = dofmap.indices
 
-full_ndofs(dofmap::DofMap) = prod(dofmap.masksize)
+full_ndofs(dofmap::DofMap) = length(dofmap.mask)
 full_ndofs(dofmap::BlockDofMap) = sum(full_ndofs, dofmap.maps)
-dofs(colon::Colon) = colon
 

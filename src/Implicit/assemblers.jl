@@ -2,6 +2,23 @@
 #  Matrix assemblers
 # -----------------------------------------------------------------------------
 
+# ---- scatter modes ----
+
+# The particle-parallel GPU path has several particles writing the same stored
+# entry at once. Every other path either owns its destination or is handed
+# disjoint nodes, so it pays nothing for the distinction.
+struct SerialScatter end
+struct AtomicScatter end
+
+@inline function scatter_add!(::SerialScatter, values, slot, v)
+    @_propagate_inbounds_meta
+    values[slot] += v
+end
+@inline function scatter_add!(::AtomicScatter, values, slot, v)
+    @_propagate_inbounds_meta
+    Atomix.@atomic values[slot] += v
+end
+
 # ---- matrix entries ----
 
 orient_matrix_entry(::typeof(identity), value) = value
@@ -19,17 +36,17 @@ end
     size(value) == (row_ndofs, col_ndofs) || throw(DimensionMismatch("matrix value is incompatible with matrix entry dimensions"))
 end
 
-function add_entry_values!(destination, destination_slot, source, source_slot, row_components, count)
+function add_entry_values!(scatter, destination, destination_slot, source, source_slot, row_components, count)
     @_propagate_inbounds_meta
     for index in 1:count
-        destination[destination_slot + mapped_index(row_components, index) - 1] += source[source_slot]
+        scatter_add!(scatter, destination, destination_slot + mapped_index(row_components, index) - 1, source[source_slot])
         source_slot += 1
     end
     nothing
 end
-function add_entry_values!(destination, destination_slot, source)
+function add_entry_values!(scatter, destination, destination_slot, source)
     @_propagate_inbounds_meta
-    add_entry_values!(destination, destination_slot, source, firstindex(source), Base.OneTo(length(source)), length(source))
+    add_entry_values!(scatter, destination, destination_slot, source, firstindex(source), Base.OneTo(length(source)), length(source))
 end
 
 # ---- CartesianSparseMatrixAssembler ----
@@ -83,7 +100,7 @@ end
 
 # -- construction --
 
-function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, mesh_size::Dims, sparsity_radius::Int)
+function cartesian_matrix_assembler(A, mesh_size::Dims, sparsity_radius::Int)
     node_count = prod(mesh_size)
     node_count > 0 || throw(ArgumentError("mesh must contain at least one node"))
     row_dofs_per_node, row_remainder = divrem(size(A, 1), node_count)
@@ -91,16 +108,18 @@ function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, mesh_size::Dims, spa
     iszero(row_remainder) && iszero(col_remainder) || throw(DimensionMismatch("matrix dimensions must be multiples of the number of mesh nodes"))
     row_dofs_per_node > 0 && col_dofs_per_node > 0 || throw(DimensionMismatch("matrix must have at least one row and column DoF per node"))
     sparsity_radius ≥ 0 || throw(ArgumentError("sparsity radius must be nonnegative"))
-    row_dof_table = LinearIndices((row_dofs_per_node, mesh_size...))
-    col_dof_table = LinearIndices((col_dofs_per_node, mesh_size...))
-    assembler = CartesianSparseMatrixAssembler(
+    CartesianSparseMatrixAssembler(
         A,
-        row_dof_table,
-        col_dof_table,
+        LinearIndices((row_dofs_per_node, mesh_size...)),
+        LinearIndices((col_dofs_per_node, mesh_size...)),
         row_dofs_per_node,
         sparsity_radius,
     )
-    has_cartesian_sparse_pattern(assembler) || throw(ArgumentError("Cartesian sparse matrix must use the canonical sparsity pattern"))
+end
+
+function CartesianSparseMatrixAssembler(A::AbstractSparseMatrix, mesh_size::Dims, sparsity_radius::Int)
+    assembler = cartesian_matrix_assembler(A, mesh_size, sparsity_radius)
+    check_cartesian_sparse_pattern(assembler)
     assembler
 end
 
@@ -111,9 +130,8 @@ function cartesian_sparsity_radius(row_mesh, col_mesh, row_basis, col_basis)
     sparsity_radius
 end
 
-function CartesianSparseMatrixAssembler(A::SparseMatrixCSC, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
-    sparsity_radius = cartesian_sparsity_radius(row_mesh, col_mesh, row_basis, col_basis)
-    CartesianSparseMatrixAssembler(A, size(row_mesh), sparsity_radius)
+function CartesianSparseMatrixAssembler(A::AbstractSparseMatrix, row_mesh::CartesianMesh{N}, col_mesh::CartesianMesh{N}, row_basis::Basis, col_basis::Basis) where {N}
+    CartesianSparseMatrixAssembler(A, size(row_mesh), cartesian_sparsity_radius(row_mesh, col_mesh, row_basis, col_basis))
 end
 
 # -- sparsity pattern --
@@ -127,6 +145,53 @@ function cartesian_slot_offset(node, neighboring_nodes, slots_per_node)
     # Assembly checks establish that `node` belongs to `neighboring_nodes`.
     local_node = node - first(neighboring_nodes) + oneunit(node)
     @inbounds (LinearIndices(neighboring_nodes)[local_node] - 1) * slots_per_node
+end
+
+@noinline invalid_cartesian_sparse_pattern() =
+    throw(ArgumentError("Cartesian sparse matrix must use the canonical sparsity pattern"))
+
+# Reached from the constructor, so it runs on every `@P2G_Matrix` call, where the
+# row-by-row comparison is `O(nnz)`. The stored count per column is a closed form
+# of the mesh size, the sparsity radius and the row DoF count, which is what a
+# matrix built for a different basis, mesh or DoF count fails. A pattern holding
+# those counts but placing the rows elsewhere is left to debug mode.
+function check_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixCSC})
+    has_cartesian_column_counts(assembler) || invalid_cartesian_sparse_pattern()
+    @debug has_cartesian_sparse_pattern(assembler) || invalid_cartesian_sparse_pattern()
+    nothing
+end
+
+check_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler) = check_cartesian_pattern_nnz(assembler)
+
+function cartesian_axis_entries(n::Int, sparsity_radius::Int)
+    sum(j -> min(n, j + sparsity_radius) - max(1, j - sparsity_radius) + 1, 1:n; init=0)
+end
+
+# A device matrix cannot be walked without a kernel and a readback on every call,
+# so its pattern is judged by the total the closed form predicts. `nnz` is a
+# host-side field, which makes this free. Rows moved within a column go unseen,
+# which a matrix from `create_sparse_matrix` cannot have.
+function check_cartesian_pattern_nnz(assembler::CartesianSparseMatrixAssembler)
+    (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
+    mesh_size = Base.tail(size(row_dof_table))
+    expected = size(row_dof_table, 1) * size(col_dof_table, 1) *
+               prod(n -> cartesian_axis_entries(n, sparsity_radius), mesh_size)
+    nnz(matrix) == expected || invalid_cartesian_sparse_pattern()
+    nothing
+end
+
+function has_cartesian_column_counts(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixCSC})
+    (; matrix, row_dof_table, col_dof_table, sparsity_radius) = assembler
+    mesh_size = Base.tail(size(row_dof_table))
+    row_ndofs = size(row_dof_table, 1)
+    col_ndofs = size(col_dof_table, 1)
+    for col_node in CartesianIndices(mesh_size)
+        stored = row_ndofs * length(cartesian_neighbor_nodes(col_node, mesh_size, sparsity_radius))
+        for b in 1:col_ndofs
+            length(nzrange(matrix, col_dof_table[b,col_node])) == stored || return false
+        end
+    end
+    true
 end
 
 function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler)
@@ -169,7 +234,7 @@ end
 # -- assembly --
 
 # The canonical Cartesian CSC pattern allows its destination slots to be computed directly.
-@inline function add_entry!(assembler::CartesianSparseMatrixAssembler, row_node::CartesianIndex, col_node::CartesianIndex, value)
+@inline function add_entry!(assembler::CartesianSparseMatrixAssembler, scatter, row_node::CartesianIndex, col_node::CartesianIndex, value)
     @boundscheck check_cartesian_matrix_entry(assembler, row_node, col_node, value)
 
     (; matrix, row_dof_table, col_dof_table, row_slots_per_node, sparsity_radius) = assembler
@@ -185,7 +250,7 @@ end
 
     @inbounds for b in 1:col_ndofs
         slot = first(cartesian_matrix_column_slots(assembler, b, col_node)) + row_offset
-        add_entry_values!(values, slot, value, (b - 1) * row_ndofs + 1, row_components, row_ndofs)
+        add_entry_values!(scatter, values, slot, value, (b - 1) * row_ndofs + 1, row_components, row_ndofs)
     end
 
     matrix
@@ -284,7 +349,7 @@ function add!(assembler::GenericMatrixAssembler, row_nodes, col_nodes, local_mat
 end
 
 # GenericMatrixAssembler writes entries through ordinary `setindex!` on the parent.
-@inline function add_entry!(assembler::GenericMatrixAssembler, row_node, col_node, value)
+@inline function add_entry!(assembler::GenericMatrixAssembler, ::SerialScatter, row_node, col_node, value)
     (; matrix, row_dof_table, col_dof_table) = assembler
     parent_matrix = matrix_parent(matrix)
     row_parent_indices, col_parent_indices = matrix_parent_indices(matrix)
@@ -312,14 +377,24 @@ end
 # ---- assembler construction ----
 
 function matrix_assembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
+    check_matrix_device(matrix, row_mesh)
+    get_device(matrix) isa CPUDevice ||
+        throw(ArgumentError("@P2G_Matrix: on GPU the target must be a sparse matrix over a Cartesian mesh"))
     row_dof_table, col_dof_table = matrix_dof_tables(matrix, row_mesh, col_mesh)
     GenericMatrixAssembler(matrix, row_dof_table, col_dof_table)
 end
-function matrix_assembler(matrix::Union{SparseMatrixCSC, SparseMatrixCSCView, SparseMatrixBlockView}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
+function matrix_assembler(matrix::Union{AbstractSparseMatrix, SparseMatrixCSCView, SparseMatrixBlockView}, row_mesh::CartesianMesh, col_mesh::CartesianMesh, row_basis::Basis, col_basis::Basis)
+    check_matrix_device(matrix, row_mesh)
     CartesianSparseMatrixAssembler(matrix, row_mesh, col_mesh, row_basis, col_basis)
 end
 function matrix_assembler(::SparseMatrixBlocks, row_mesh, col_mesh, row_basis, col_basis)
     throw(ArgumentError("@P2G_Matrix requires an individual matrix block; pass blocks[row, col] instead of blocks"))
+end
+
+@noinline function check_matrix_device(matrix, mesh)
+    get_device(matrix) === get_device(mesh) ||
+        throw(ArgumentError("@P2G_Matrix: the matrix is on $(get_device(matrix)) and the grid on $(get_device(mesh)); move both with `gpu` or `cpu`"))
+    nothing
 end
 
 function matrix_dof_tables(gmat, row_grid, col_grid)

@@ -4,6 +4,13 @@
 
 const SparseMatrixCSCView{T, P <: SparseMatrixCSC} = SubArray{T, 2, P}
 
+# `nonzeros` holds everything a fixed pattern can store, and zeroing it as a flat
+# vector takes the memset path that `fill!` on the wrapper does not.
+function fillzero!(matrix::AbstractSparseMatrix)
+    fillzero!(nonzeros(matrix))
+    matrix
+end
+
 function fillzero!(matrix::SparseMatrixCSCView)
     selected_rows, selected_cols = parentindices(matrix)
     sorted_rows = issorted(selected_rows) ? selected_rows : sort(selected_rows)

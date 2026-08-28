@@ -10,6 +10,12 @@ function Adapt.adapt_storage(::CPUDevice, A::AbstractArray)
     get_device(A) isa CPUDevice ? A : Array(A)
 end
 
+# `Array` of a device sparse matrix densifies it, which is never what moving one
+# back to the host means.
+function Adapt.adapt_storage(::CPUDevice, A::AbstractSparseMatrix)
+    get_device(A) isa CPUDevice ? A : SparseMatrixCSC(A)
+end
+
 # A method specialized on `to::AbstractDevice` is an explicit Tesserae transfer,
 # while an unspecialized `adapt_structure(to, ...)` may serve other Adapt callers.
 cpu(A) = A |> CPUDevice()
@@ -49,6 +55,7 @@ end
 # ---- GPU compatibility ----
 
 KernelAbstractions.get_backend(::BitArray) = CPU() # should be implemented in KernelAbstractions.jl
+KernelAbstractions.get_backend(A::AbstractSparseMatrix) = get_backend(nonzeros(A)) # should be implemented in KernelAbstractions.jl
 
 function Adapt.adapt_structure(to, mesh::CartesianMesh)
     axes = map(a -> adapt(to, a), mesh.axes)
@@ -132,6 +139,23 @@ function Adapt.adapt_structure(to, A::SpIndices{dim, L}) where {dim, L}
 end
 function KernelAbstractions.get_backend(A::SpIndices)
     get_backend(blocknumbering(A))
+end
+
+# `field_offsets` and `block_nnz` stay where they are: the block views are built
+# on the host, and only the slots a kernel reads have to follow the matrix.
+function Adapt.adapt_structure(to, blocks::SparseMatrixBlocks)
+    SparseMatrixBlocks(adapt(to, parent(blocks)), blocks.field_offsets,
+                       map(slots -> adapt(to, slots), blocks.column_slots), blocks.block_nnz, blocks.pattern)
+end
+function Adapt.adapt_structure(to, block::SparseMatrixBlockView)
+    SparseMatrixBlockView(adapt(to, parent(block)), block.rows, block.cols,
+                          adapt(to, block.column_slots), block.nnz, block.pattern)
+end
+
+# Both DoF tables are `LinearIndices`, so only the matrix travels.
+function Adapt.adapt_structure(to, assembler::CartesianSparseMatrixAssembler)
+    CartesianSparseMatrixAssembler(adapt(to, assembler.matrix), assembler.row_dof_table, assembler.col_dof_table,
+                                   assembler.row_slots_per_node, assembler.sparsity_radius)
 end
 
 function Adapt.adapt_structure(to, A::SpArray)

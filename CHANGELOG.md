@@ -9,11 +9,42 @@ All notable changes to Tesserae.jl will be documented in this file.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.
+- `DofMap` and `dofmap` accept a mask whose elements are `Vec{ndofs, Bool}`, so
+  the DoF mask can be a grid field written with `@foreach` rather than a
+  separately allocated array. A plain `(ndofs, size(grid)...)` Boolean array
+  still works and is still the documented layout.
+- The GPU manual has a new section running the Jacobian-free Newton--Krylov
+  tutorial on GPU.
+- `@P2G_Matrix` runs on GPU, assembling into a device sparse matrix over a
+  Cartesian mesh with a particle-parallel kernel that accumulates atomically.
+  The block views from `create_block_sparse_matrix` move to the device and
+  assemble there too. Views taken with `view` and `Partition` remain CPU-only.
+  See the new GPU manual
+  section.
+- `extract!` refills a matrix `extract` already produced without touching its
+  sparsity pattern, so a Newton loop reduces the assembled system once per
+  iteration without reallocating it. `extract` itself now works on a device
+  matrix, reducing it through the `DofMap`'s Boolean mask. A `BlockDofMap` works
+  the same way, so a monolithic block system reduces on the device too, and a
+  single block view reduces through the per-field maps.
 
 ### Performance
 
 - The block-scheduled GPU `@P2G` now sizes its workgroups from the CUDA
   occupancy API per compiled kernel instead of a fixed constant.
+- `@P2G_Matrix` checks the canonical Cartesian sparsity pattern from the stored
+  entry count of each column instead of comparing every stored row, which it was
+  doing on every call. The row-by-row comparison remains under `debug_mode`.
+- `@P2G_Matrix` no longer allocates a `TaskLocalValue` element-matrix cache on
+  the MPM path, which never reads it.
+- `fillzero!` on a sparse matrix now zeroes `nonzeros` directly.
+
+### Fixed
+
+- `cpu` on a GPU sparse matrix returned a dense matrix; it now returns a
+  `SparseMatrixCSC`. `KernelAbstractions.get_backend` also answers for sparse
+  matrices instead of throwing.
+- `Tesserae.dofs` scalar-indexed a `DofMap` whose indices live on a device.
 
 ### Changed
 

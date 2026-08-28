@@ -17,6 +17,7 @@ dofmap
 create_sparse_matrix
 create_block_sparse_matrix
 extract(::AbstractMatrix, ::Any)
+extract!
 ```
 
 ## Assembly of global matrix

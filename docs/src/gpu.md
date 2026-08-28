@@ -199,6 +199,97 @@ This keeps the active blocks large enough for the particle support nodes.
 On GPU, `SpArray` mainly reduces grid-field storage and grid-wide operations over inactive regions.
 It should not be expected to remove the main cost of `@P2G`, which is still proportional to the number of particles times the number of support nodes.
 
+## Assembled matrices on GPU
+
+`@P2G_Matrix` assembles into a sparse matrix that lives on the device.
+Build the matrix on the CPU with [`create_sparse_matrix`](@ref) and move it with the same call as everything else:
+
+```julia
+A = create_sparse_matrix(T, basis, mesh; ndofs=2)
+grid, particles, weights, A = (grid, particles, weights, A) .|> gpu_preserve
+
+@P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+    A[i,j] = @∑ ∇w[ip] ⊡ c[p] ⊡ ∇w[jp] * V[p]
+end
+```
+
+The transfer is particle-parallel and accumulates with atomics, so the summation order within a stored entry is not reproducible between runs, exactly as for GPU `@P2G`.
+A [`Partition`](@ref) selects a block-scheduled path for `@P2G`, but there is no such path for `@P2G_Matrix`; pass no partition.
+
+The target must come from [`create_sparse_matrix`](@ref) or [`create_block_sparse_matrix`](@ref) over a Cartesian mesh.
+Block views work the same way, so a coupled system assembles block by block:
+
+```julia
+blocks = create_block_sparse_matrix(T, basis, mesh; ndofs=(2, 1))
+grid, particles, weights, blocks = (grid, particles, weights, blocks) .|> gpu_preserve
+Kuu, Kup = blocks[1,1], blocks[1,2]
+
+@P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+    Kuu[i,j] = @∑ ∇w[ip] ⊡ c[p] ⊡ ∇w[jp] * V[p]
+    Kup[i,j] = @∑ ∇w[ip] * w[jp] * V[p]
+end
+```
+
+For a plain sparse matrix the canonical sparsity pattern is checked on the CPU from the stored entry count of every column, while on the device only the total is checked, because walking the stored rows would cost a kernel launch and a readback on every call.
+A block view carries the pattern it was created with, so its check is the same on both.
+Views taken with `view` are CPU-only.
+`@P2G_Matrix` reads the stored basis weights, so weights generated with `deferred=true` are rejected on GPU as they are on the CPU.
+
+### Reducing and solving
+
+[`extract`](@ref) reduces the assembled matrix to the active DoFs on the device too.
+It indexes the matrix with the Boolean mask the [`DofMap`](@ref) was built from, because CUDA's sparse matrices have no `getindex` for a vector of DoF numbers.
+A monolithic block system reduces through its [`BlockDofMap`](@ref), and a single block reduces through the per-field maps, the block's mask being embedded into its parent's axes:
+
+```julia
+Kup_free = extract(blocks[1,2], ufree, pfree)
+extract!(Kup_free, blocks[1,2], ufree, pfree)
+```
+
+Only a target whose rows and columns are contiguous ranges of its parent can be reduced this way; a `view` taken with scattered DoF numbers is CPU-only.
+
+The reduced pattern only changes when the mask does, which is once per time step, while the values change on every Newton iteration.
+[`extract!`](@ref) refills a matrix `extract` already produced, walking the stored values and nothing else:
+
+```julia
+free = DofMap(grid.free)
+Afree = extract(A, free)          # once per step: this fixes the reduced pattern
+
+function jacobian(U, state)
+    @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+        A[i,j] = @∑ dotdot(∇w[ip] ⊡ ΔF⁻¹[p], ℂ[p], ∇w[jp] ⊡ ΔF⁻¹[p]) * V⁰[p]
+    end
+    extract!(Afree, A, free)      # once per Newton iteration: values only
+    Afree + Diagonal(inv(β*Δt^2) * free(grid.m))
+end
+```
+
+`\` is not defined for CUDA's sparse matrices, so `Tesserae.newton!` needs an explicit `linsolve` on GPU:
+
+```julia
+using Krylov: cg
+Tesserae.newton!(U, compute_residual, compute_jacobian;
+                 linsolve = (x,A,b) -> copyto!(x, cg(A, b; rtol=1e-10)[1]))
+```
+
+Everything else in the [Jacobian-based tutorial](@ref implicit_jacobian_based_tutorial) carries over unchanged, with the DoF mask written on the grid as in the section below.
+
+### When assembling pays
+
+Assembling the tangent competes with a matrix-free Jacobian-vector product built from `@G2P2G`, which is what the [Jacobian-free tutorial](@ref implicit_jacobian_free_tutorial) does.
+Running the Jacobian-based tutorial both ways on an NVIDIA GeForce RTX 5090 -- same residual, same `cg`, same tolerance, so both take the same number of Krylov iterations -- gives the wall time for 50 steps:
+
+| Grid spacing | # Particles | Matrix-free | Assembled |
+| ------------ | ----------- | ----------- | --------- |
+| 0.25         | 576         | 8.0 sec     | 3.5 sec   |
+| 0.125        | 2304        | 38.4 sec    | 14.4 sec  |
+| 0.0625       | 9216        | 976 sec     | 86 sec    |
+
+The assembly itself is under 1% of the step time; what it buys is the operator apply.
+One `@P2G_Matrix` costs about as much as five matrix-free applies, while each Krylov iteration then costs an SpMV instead of two transfers and a fourth-order tensor contraction per particle.
+So the assembled path pays whenever a Newton step needs more than a handful of Krylov iterations, which an unpreconditioned elasticity operator always does, and it pays more as the mesh is refined and the operator conditions worse.
+Prefer the matrix-free path when memory is the constraint: the assembled tangent has `ndofs^2 * (2 * support_width - 1)^dim` stored entries per node, which in 3D outgrows the particle and grid state quickly.
+
 ## Taylor impact on GPU
 
 This section rewrites the [Taylor impact tutorial](@ref taylor_impact_tutorial) as a GPU simulation.
@@ -389,5 +480,223 @@ function vonmises_model(Cᵖⁿ⁻¹, ε̄ᵖⁿ, F; λ, μ, H, τ̄y⁰)
     ε̄ᵖ = ε̄ᵖⁿ + Δγ                     # Update equivalent plastic strain
 
     σ, Cᵖ⁻¹, ε̄ᵖ
+end
+```
+
+## Implicit MPM on GPU
+
+This section rewrites the [Jacobian-free Newton--Krylov tutorial](@ref implicit_jacobian_free_tutorial) as a GPU simulation.
+The residual and the Jacobian-vector product are unchanged; what changes is how the free degrees of freedom are selected.
+The main changes are:
+
+- Write the DoF mask on the device with `@foreach`, instead of building a host `BitArray` in a scalar loop, so `free(grid.u)` returns a device view and the whole Newton loop stays on GPU. The mask is either a device Boolean array of size `(ndofs, size(grid)...)` written as `dofmask[d,i]`, or a `Vec{ndofs, Bool}` grid field written as `free[i]` like the other fields; [`DofMap`](@ref) takes both, and this section uses the grid field.
+- Rewrite the boundary conditions as boundary-slice `@foreach` loops to avoid scalar indexing on GPU arrays.
+- Move the simulation objects with `gpu_preserve`. A Jacobian-free Krylov solve converges on the residual norm, and `Float32` limits how far that can be driven.
+- Give `LinearOperator` the device vector type through its `S` keyword, so that `Krylov.gmres` allocates its workspace on the device.
+- Copy data back with `cpu` only when writing VTK output.
+
+For reference, the runtime on an NVIDIA GeForce RTX 5090, excluding VTK output and the first-call kernel compilation, is:
+
+| Precision | # Particles | # Iterations | Execution time (w/o output) |
+| --------- | ----------- | ------------ | ---------------------------- |
+| Float64   | 26k         | 300          | 12 sec                       |
+
+The VTK output is written to `output/implicit_jacobian_free_gpu`.
+
+```julia
+using Tesserae
+using CUDA
+
+using Krylov: gmres
+using LinearOperators: LinearOperator
+
+function main()
+    T = Float64
+
+    ## Simulation parameters
+    h  = T(0.05)   # Grid spacing
+    t_stop = T(3)  # Final time
+    Δt = T(0.01)   # Time step
+
+    ## Material constants
+    E  = T(100e3)               # Young's modulus
+    ν  = T(0.3)                 # Poisson's ratio
+    λ  = (E*ν) / ((1+ν)*(1-2ν)) # Lame's first parameter
+    μ  = E / 2(1 + ν)           # Shear modulus
+    ρ⁰ = T(1000)                # Initial density
+
+    ## Newmark-beta integration
+    β = T(1/4)
+    γ = T(1/2)
+
+    GridProp = @NamedTuple begin
+        X    :: Vec{3, T}
+        m    :: T
+        m⁻¹  :: T
+        v    :: Vec{3, T}
+        vⁿ   :: Vec{3, T}
+        mv   :: Vec{3, T}
+        a    :: Vec{3, T}
+        aⁿ   :: Vec{3, T}
+        ma   :: Vec{3, T}
+        u    :: Vec{3, T}
+        f    :: Vec{3, T}
+        δu   :: Vec{3, T}
+        free :: Vec{3, Bool}
+    end
+    ParticleProp = @NamedTuple begin
+        x    :: Vec{3, T}
+        m    :: T
+        V⁰   :: T
+        v    :: Vec{3, T}
+        a    :: Vec{3, T}
+        ∇u   :: SecondOrderTensor{3, T, 9}
+        F    :: SecondOrderTensor{3, T, 9}
+        ΔF⁻¹ :: SecondOrderTensor{3, T, 9}
+        τ    :: SecondOrderTensor{3, T, 9}
+        ℂ    :: FourthOrderTensor{3, T, 81}
+    end
+
+    ## Background grid
+    grid = generate_grid(GridProp, CartesianMesh(T, h, (0,1.5), (-0.6,0.6), (-0.6,0.6)))
+
+    ## Particles
+    beam = extract(grid.X, (0,1.5), (-0.3,0.3), (-0.3,0.3))
+    particles = generate_particles(ParticleProp, beam; alg=GridSampling(spacing=1/6))
+    particles.V⁰ .= volume(beam) / length(particles)
+    filter!(particles) do pt
+        x, y, z = pt.x
+        (-0.3<y<-0.25 || 0.25<y<0.3) && (-0.3<z<-0.25 || 0.25<z<0.3)
+    end
+    @. particles.m = ρ⁰ * particles.V⁰
+    @. particles.F = one(particles.F)
+    @show length(particles)
+
+    ## Basis weights
+    weights = generate_basis_weights(T, KernelCorrection(BSpline(Quadratic())), grid.X, length(particles))
+
+    ## Neo-Hookean model
+    function kirchhoff_stress(F)
+        J = det(F)
+        b = symmetric(F * F')
+        μ*(b-I) + λ*log(J)*I
+    end
+
+    ## Paraview output setup
+    outdir = mkpath(joinpath("output", "implicit_jacobian_free_gpu"))
+    pvdfile = joinpath(outdir, "paraview")
+    closepvd(openpvd(pvdfile)) # create file
+
+    t = zero(T)
+    step = 0
+    fps = 60
+    savepoints = collect(LinRange(t, t_stop, round(Int, t_stop*fps)+1))
+
+    ## Move the simulation state to the GPU after CPU-side setup; the time loop below stays on GPU.
+    let (grid, particles, weights) = (grid, particles, weights) .|> gpu_preserve
+
+        Tesserae.@showprogress while t < t_stop
+
+            update!(weights, particles, grid.X)
+
+            @P2G grid=>i particles=>p weights=>ip begin
+                m[i]  = @∑ w[ip] * m[p]
+                mv[i] = @∑ w[ip] * m[p] * v[p]
+                ma[i] = @∑ w[ip] * m[p] * a[p]
+            end
+
+            ## Compute the grid velocity and acceleration at t = tⁿ
+            @. grid.m⁻¹ = inv(grid.m) * !iszero(grid.m)
+            @. grid.vⁿ = grid.mv * grid.m⁻¹
+            @. grid.aⁿ = grid.ma * grid.m⁻¹
+
+            ## Mark the free DoFs and update the boundary conditions on the device
+            @foreach grid=>i begin
+                u[i] = zero(u[i])
+                movable = !iszero(m[i])
+                free[i] = Vec(movable, movable, movable)
+            end
+            @foreach grid[begin,:,:]=>i begin
+                free[i] = zero(free[i])
+            end
+            @foreach grid[end,:,:]=>i begin
+                free[i] = zero(free[i])
+                u[i] = $(rotmat(2π*Δt, Vec(T(1),T(0),T(0))) - I) * X[i]
+            end
+            free = DofMap(grid.free)
+
+            ## Solve the nonlinear equation
+            state = (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt)
+            U = copy(free(grid.u)) # Convert grid data to plain vector data
+            compute_residual(U) = residual(U, state)
+            compute_jacobian(U) = jacobian(U, state)
+            Tesserae.newton!(U, compute_residual, compute_jacobian;
+                             linsolve = (x,A,b)->copy!(x,gmres(A,b)[1]))
+
+            @G2P grid=>i particles=>p weights=>ip begin
+                v[p] += @∑ w[ip] * ((1-γ)*a[p] + γ*a[i]) * Δt
+                a[p]  = @∑ w[ip] * a[i]
+                x[p]  = @∑ w[ip] * (X[i] + u[i])
+                ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
+                F[p]  = (I + ∇u[p]) * F[p]
+            end
+
+            t += Δt
+            step += 1
+
+            if t > first(savepoints)
+                popfirst!(savepoints)
+                openpvd(pvdfile; append=true) do pvd
+                    openvtk(string(pvdfile, step), cpu(particles.x)) do vtk
+                        τ, F = cpu(particles.τ), cpu(particles.F)
+                        vtk["Velocity (m/s)"] = cpu(particles.v)
+                        vtk["von Mises stress (kPa)"] = @. 1e-3 * vonmises(τ / det(F))
+                        pvd[t] = vtk
+                    end
+                end
+            end
+        end
+    end
+end
+
+function residual(U::AbstractVector, state)
+    (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt) = state
+
+    free(grid.u) .= U
+    @. grid.a = (1/(β*Δt^2))*grid.u - (1/(β*Δt))*grid.vⁿ - (1/2β-1)*grid.aⁿ
+    @. grid.v = grid.vⁿ + ((1-γ)*grid.aⁿ + γ*grid.a) * Δt
+
+    geometric(τ) = @einsum (i,j,k,l) -> τ[i,l] * one(τ)[j,k]
+    @G2P2G grid=>i particles=>p weights=>ip begin
+        ∇u[p] = @∑ u[i] ⊗ ∇w[ip]
+        ΔF⁻¹[p] = inv(I + ∇u[p])
+        F = (I + ∇u[p]) * F[p]
+        ∂τ∂F, τ = gradient(kirchhoff_stress, F, :all)
+        τ[p] = τ
+        ℂ[p] = ∂τ∂F ⊡ F' - geometric(τ)
+        f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
+    end
+
+    @. β*Δt^2 * ($free(grid.a) + $free(grid.f) * $free(grid.m⁻¹))
+end
+
+function jacobian(U::AbstractVector, state)
+    (; grid, particles, weights, β, free, Δt) = state
+
+    fillzero!(grid.δu)
+    function mul!(JδU, δU)
+        free(grid.δu) .= δU
+
+        @G2P2G grid=>i particles=>p weights=>ip begin
+            ∇u[p] = @∑ δu[i] ⊗ (∇w[ip] ⊡ ΔF⁻¹[p])
+            τ[p] = ℂ[p] ⊡₂ ∇u[p]
+            f[i] = @∑ V⁰[p] * τ[p] * (∇w[ip] ⊡ ΔF⁻¹[p])
+        end
+
+        @. JδU = δU + β*Δt^2 * $free(grid.f) * $free(grid.m⁻¹)
+    end
+
+    U = free(grid.u)
+    LinearOperator(eltype(U), ndofs(free), ndofs(free), false, false, mul!; S = typeof(similar(U, 0)))
 end
 ```
