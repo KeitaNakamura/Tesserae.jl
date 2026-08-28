@@ -267,6 +267,22 @@ Tesserae.newton!(U, compute_residual, compute_jacobian;
 
 Everything else in the [Jacobian-based tutorial](@ref implicit_jacobian_based_tutorial) carries over unchanged, with the DoF mask written on the grid as in the section below.
 
+### When assembling pays
+
+Assembling the tangent competes with a matrix-free Jacobian-vector product built from `@G2P2G`, which is what the [Jacobian-free tutorial](@ref implicit_jacobian_free_tutorial) does.
+Running the Jacobian-based tutorial both ways on an NVIDIA GeForce RTX 5090 -- same residual, same `cg`, same tolerance, so both take the same number of Krylov iterations -- gives the wall time for 50 steps:
+
+| Grid spacing | # Particles | Matrix-free | Assembled |
+| ------------ | ----------- | ----------- | --------- |
+| 0.25         | 576         | 8.0 sec     | 3.5 sec   |
+| 0.125        | 2304        | 38.4 sec    | 14.4 sec  |
+| 0.0625       | 9216        | 976 sec     | 86 sec    |
+
+The assembly itself is under 1% of the step time; what it buys is the operator apply.
+One `@P2G_Matrix` costs about as much as five matrix-free applies, while each Krylov iteration then costs an SpMV instead of two transfers and a fourth-order tensor contraction per particle.
+So the assembled path pays whenever a Newton step needs more than a handful of Krylov iterations, which an unpreconditioned elasticity operator always does, and it pays more as the mesh is refined and the operator conditions worse.
+Prefer the matrix-free path when memory is the constraint: the assembled tangent has `ndofs^2 * (2 * support_width - 1)^dim` stored entries per node, which in 3D outgrows the particle and grid state quickly.
+
 ## Taylor impact on GPU
 
 This section rewrites the [Taylor impact tutorial](@ref taylor_impact_tutorial) as a GPU simulation.
