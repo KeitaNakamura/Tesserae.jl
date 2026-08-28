@@ -398,7 +398,7 @@ This section rewrites the [Jacobian-free Newton--Krylov tutorial](@ref implicit_
 The residual and the Jacobian-vector product are unchanged; what changes is how the free degrees of freedom are selected.
 The main changes are:
 
-- Allocate the DoF mask on the device with `similar` and write it from `@foreach`, instead of building a host `BitArray` in a scalar loop. [`DofMap`](@ref) takes it unchanged, so `free(grid.u)` returns a device view and the whole Newton loop stays on GPU.
+- Carry the DoF mask as a `Vec{ndofs, Bool}` grid field and write it with `@foreach`, instead of building a host `BitArray` in a scalar loop. [`DofMap`](@ref) reads such a field directly, so `free(grid.u)` returns a device view and the whole Newton loop stays on GPU. A device Boolean array of size `(ndofs, size(grid)...)` works just as well when the mask should not live on the grid.
 - Rewrite the boundary conditions as boundary-slice `@foreach` loops to avoid scalar indexing on GPU arrays.
 - Move the simulation objects with `gpu_preserve`. A Jacobian-free Krylov solve converges on the residual norm, and `Float32` limits how far that can be driven.
 - Give `LinearOperator` the device vector type through its `S` keyword, so that `Krylov.gmres` allocates its workspace on the device.
@@ -451,6 +451,7 @@ function main()
         u    :: Vec{3, T}
         f    :: Vec{3, T}
         δu   :: Vec{3, T}
+        free :: Vec{3, Bool}
     end
     ParticleProp = @NamedTuple begin
         x    :: Vec{3, T}
@@ -503,8 +504,6 @@ function main()
     ## Move the simulation state to the GPU after CPU-side setup; the time loop below stays on GPU.
     let (grid, particles, weights) = (grid, particles, weights) .|> gpu_preserve
 
-        dofmask = similar(grid.m, Bool, 3, size(grid)...)
-
         Tesserae.@showprogress while t < t_stop
 
             update!(weights, particles, grid.X)
@@ -524,22 +523,16 @@ function main()
             @foreach grid=>i begin
                 u[i] = zero(u[i])
                 movable = !iszero(m[i])
-                for d in 1:3
-                    $(dofmask)[d,i] = movable
-                end
+                free[i] = Vec(movable, movable, movable)
             end
             @foreach grid[begin,:,:]=>i begin
-                for d in 1:3
-                    $(dofmask)[d,i] = false
-                end
+                free[i] = zero(free[i])
             end
             @foreach grid[end,:,:]=>i begin
-                for d in 1:3
-                    $(dofmask)[d,i] = false
-                end
+                free[i] = zero(free[i])
                 u[i] = $(rotmat(2π*Δt, Vec(T(1),T(0),T(0))) - I) * X[i]
             end
-            free = DofMap(dofmask)
+            free = DofMap(grid.free)
 
             ## Solve the nonlinear equation
             state = (; grid, particles, weights, kirchhoff_stress, β, γ, free, Δt)

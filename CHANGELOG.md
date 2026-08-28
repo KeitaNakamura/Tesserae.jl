@@ -9,8 +9,12 @@ All notable changes to Tesserae.jl will be documented in this file.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.
+- `DofMap` and `dofmap` accept a mask whose elements are `Vec{ndofs, Bool}`, so
+  the DoF mask can be a grid field written with `@foreach` rather than a
+  separately allocated array. A plain `(ndofs, size(grid)...)` Boolean array
+  still works and is still the documented layout.
 - The GPU manual has a new section running the Jacobian-free Newton--Krylov
-  tutorial on GPU, with the DoF mask allocated and written on the device.
+  tutorial on GPU.
 
 ### Performance
 

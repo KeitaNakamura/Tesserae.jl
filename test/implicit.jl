@@ -557,6 +557,15 @@ end
     @test collect(smap(grid.u)) == [1.0, 6.0]
     @test collect(smap(grid.s)) == [1.0, 6.0]
 
+    vfield = map(i -> Vec(vmask[1,i], vmask[2,i]), CartesianIndices(grid))
+    @test Tesserae.dofs(@inferred(DofMap(vfield))) == Tesserae.dofs(vmap)
+    @test Tesserae.dofs(dofmap(vfield)) == Tesserae.dofs(vmap)
+    @test collect(DofMap(vfield)(grid.v)) == collect(vmap(grid.v))
+
+    sfield = map(i -> Vec(smask[1,i]), CartesianIndices(grid))
+    @test Tesserae.dofs(DofMap(sfield)) == Tesserae.dofs(smap)
+    @test collect(DofMap(sfield)(grid.s)) == collect(smap(grid.s))
+
     A = reshape(1.0:36.0, 6, 6)
     @test extract(A, smap) == A[Tesserae.dofs(smap), Tesserae.dofs(smap)]
     @test extract(A, :, smap) == A[:, Tesserae.dofs(smap)]
