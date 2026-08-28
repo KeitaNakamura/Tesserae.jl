@@ -17,11 +17,14 @@ struct CellSparseMatrixPattern <: SparseMatrixPattern end
 
 # ---- SparseMatrixBlockView ----
 
-struct SparseMatrixBlockView{T, Ti, P <: SparseMatrixPattern} <: AbstractMatrix{T}
-    matrix::SparseMatrixCSC{T, Ti}
+# `nnz` is stored rather than summed from `column_slots`: the sum is a device
+# reduction and a host synchronization once the slots live on a device.
+struct SparseMatrixBlockView{T, Ti, P <: SparseMatrixPattern, M <: AbstractSparseMatrix{T, Ti}, S <: AbstractVector{UnitRange{Int}}} <: AbstractMatrix{T}
+    matrix::M
     rows::UnitRange{Int}
     cols::UnitRange{Int}
-    column_slots::Vector{UnitRange{Int}}
+    column_slots::S
+    nnz::Int
     pattern::P
 end
 
@@ -70,24 +73,44 @@ function Base.setindex!(block::SparseMatrixBlockView, value, i::Int, j::Int)
     block
 end
 
+@kernel function gpukernel_fillzero_block!(values, column_slots, zero_value)
+    col = @index(Global)
+    @inbounds for slot in column_slots[col]
+        values[slot] = zero_value
+    end
+end
+
 function fillzero!(block::SparseMatrixBlockView)
+    _fillzero_block!(get_device(block), block)
+    block
+end
+
+function _fillzero_block!(::CPUDevice, block::SparseMatrixBlockView)
     values = nonzeros(parent(block))
     zero_value = zero_recursive(eltype(values))
     for slots in block.column_slots, slot in slots
         @inbounds values[slot] = zero_value
     end
-    block
+    nothing
 end
 
-SparseArrays.nnz(block::SparseMatrixBlockView) = sum(length, block.column_slots)
+function _fillzero_block!(device::GPUDevice, block::SparseMatrixBlockView)
+    values = nonzeros(parent(block))
+    kernel = gpukernel_fillzero_block!(get_backend(device))
+    kernel(values, block.column_slots, zero_recursive(eltype(values)); ndrange=length(block.column_slots))
+    nothing
+end
+
+SparseArrays.nnz(block::SparseMatrixBlockView) = block.nnz
 
 # ---- SparseMatrixBlocks ----
 
 # Owns the parent CSC and creates block views from shared offsets and slot tables.
-struct SparseMatrixBlocks{T, Ti, P <: SparseMatrixPattern} <: AbstractMatrix{SparseMatrixBlockView{T, Ti, P}}
-    matrix::SparseMatrixCSC{T, Ti}
+struct SparseMatrixBlocks{T, Ti, P <: SparseMatrixPattern, M <: AbstractSparseMatrix{T, Ti}, S <: AbstractVector{UnitRange{Int}}} <: AbstractMatrix{SparseMatrixBlockView{T, Ti, P, M, S}}
+    matrix::M
     field_offsets::Vector{Int}
-    column_slots::Matrix{Vector{UnitRange{Int}}}
+    column_slots::Matrix{S}
+    block_nnz::Matrix{Int}
     pattern::P
 end
 
@@ -101,6 +124,7 @@ function Base.getindex(blocks::SparseMatrixBlocks, i::Int, j::Int)
         (blocks.field_offsets[i] + 1):blocks.field_offsets[i + 1],
         (blocks.field_offsets[j] + 1):blocks.field_offsets[j + 1],
         blocks.column_slots[i,j],
+        blocks.block_nnz[i,j],
         blocks.pattern,
     )
 end
@@ -179,7 +203,7 @@ function _create_sparse_matrix_blocks(::Type{T}, I, J, field_offsets, pattern::S
         end
     end
 
-    SparseMatrixBlocks(matrix, field_offsets, column_slots, pattern)
+    SparseMatrixBlocks(matrix, field_offsets, column_slots, map(slots -> sum(length, slots), column_slots), pattern)
 end
 
 # -- MPM --

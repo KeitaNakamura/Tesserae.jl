@@ -216,9 +216,23 @@ end
 The transfer is particle-parallel and accumulates with atomics, so the summation order within a stored entry is not reproducible between runs, exactly as for GPU `@P2G`.
 A [`Partition`](@ref) selects a block-scheduled path for `@P2G`, but there is no such path for `@P2G_Matrix`; pass no partition.
 
-The target must be a plain sparse matrix over a Cartesian mesh, and it must come from `create_sparse_matrix`.
-On the CPU the canonical sparsity pattern is checked from the stored entry count of every column; on the device only the total is checked, because walking the stored rows would cost a kernel launch and a readback on every call.
-Views taken with `view` and the block views from [`create_block_sparse_matrix`](@ref) are CPU-only.
+The target must come from [`create_sparse_matrix`](@ref) or [`create_block_sparse_matrix`](@ref) over a Cartesian mesh.
+Block views work the same way, so a coupled system assembles block by block:
+
+```julia
+blocks = create_block_sparse_matrix(T, basis, mesh; ndofs=(2, 1))
+grid, particles, weights, blocks = (grid, particles, weights, blocks) .|> gpu_preserve
+Kuu, Kup = blocks[1,1], blocks[1,2]
+
+@P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+    Kuu[i,j] = @∑ ∇w[ip] ⊡ c[p] ⊡ ∇w[jp] * V[p]
+    Kup[i,j] = @∑ ∇w[ip] * w[jp] * V[p]
+end
+```
+
+For a plain sparse matrix the canonical sparsity pattern is checked on the CPU from the stored entry count of every column, while on the device only the total is checked, because walking the stored rows would cost a kernel launch and a readback on every call.
+A block view carries the pattern it was created with, so its check is the same on both.
+Views taken with `view` are CPU-only.
 `@P2G_Matrix` reads the stored basis weights, so weights generated with `deferred=true` are rejected on GPU as they are on the CPU.
 
 Two things are still missing before an assembled GPU system can be solved end to end:

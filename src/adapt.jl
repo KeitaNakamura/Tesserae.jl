@@ -141,6 +141,17 @@ function KernelAbstractions.get_backend(A::SpIndices)
     get_backend(blocknumbering(A))
 end
 
+# `field_offsets` and `block_nnz` stay where they are: the block views are built
+# on the host, and only the slots a kernel reads have to follow the matrix.
+function Adapt.adapt_structure(to, blocks::SparseMatrixBlocks)
+    SparseMatrixBlocks(adapt(to, parent(blocks)), blocks.field_offsets,
+                       map(slots -> adapt(to, slots), blocks.column_slots), blocks.block_nnz, blocks.pattern)
+end
+function Adapt.adapt_structure(to, block::SparseMatrixBlockView)
+    SparseMatrixBlockView(adapt(to, parent(block)), block.rows, block.cols,
+                          adapt(to, block.column_slots), block.nnz, block.pattern)
+end
+
 # Both DoF tables are `LinearIndices`, so only the matrix travels.
 function Adapt.adapt_structure(to, assembler::CartesianSparseMatrixAssembler)
     CartesianSparseMatrixAssembler(adapt(to, assembler.matrix), assembler.row_dof_table, assembler.col_dof_table,

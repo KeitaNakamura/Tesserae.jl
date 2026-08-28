@@ -139,6 +139,10 @@
         fillzero!(blocks[1,1])
         @test all(iszero, blocks[1,1])
         @test blocks[2,1] == unchanged_block
+        for i in axes(blocks, 1), j in axes(blocks, 2)
+            @test Tesserae.SparseArrays.nnz(blocks[i,j]) == sum(length, blocks.column_slots[i,j])
+        end
+        @test sum(Tesserae.SparseArrays.nnz, blocks) == Tesserae.SparseArrays.nnz(parent(blocks))
         fill!(Tesserae.SparseArrays.nonzeros(parent(blocks)), 7)
 
         @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin

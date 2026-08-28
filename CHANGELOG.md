@@ -17,8 +17,10 @@ All notable changes to Tesserae.jl will be documented in this file.
   tutorial on GPU.
 - `@P2G_Matrix` runs on GPU, assembling into a device sparse matrix over a
   Cartesian mesh with a particle-parallel kernel that accumulates atomically.
-  Matrix views, block views and `Partition` remain CPU-only, and `extract` does
-  not yet work on a device matrix. See the new GPU manual section.
+  The block views from `create_block_sparse_matrix` move to the device and
+  assemble there too. Views taken with `view` and `Partition` remain CPU-only,
+  and `extract` does not yet work on a device matrix. See the new GPU manual
+  section.
 
 ### Performance
 
