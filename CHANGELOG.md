@@ -15,6 +15,10 @@ All notable changes to Tesserae.jl will be documented in this file.
   still works and is still the documented layout.
 - The GPU manual has a new section running the Jacobian-free Newton--Krylov
   tutorial on GPU.
+- `@P2G_Matrix` runs on GPU, assembling into a device sparse matrix over a
+  Cartesian mesh with a particle-parallel kernel that accumulates atomically.
+  Matrix views, block views and `Partition` remain CPU-only, and `extract` does
+  not yet work on a device matrix. See the new GPU manual section.
 
 ### Performance
 

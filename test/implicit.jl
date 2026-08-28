@@ -346,6 +346,12 @@
         invalid = Tesserae.SparseArrays.dropzeros!(copy(A))
         @test_throws ArgumentError Tesserae.matrix_assembler(invalid, mesh, mesh, basis, basis)
 
+        radius = Tesserae.support_width(basis) - 1
+        @test 2 * prod(n -> Tesserae.cartesian_axis_entries(n, radius), size(mesh)) == Tesserae.SparseArrays.nnz(A)
+        @test Tesserae.check_cartesian_pattern_nnz(assembler) === nothing
+        @test_throws ArgumentError Tesserae.check_cartesian_pattern_nnz(
+            Tesserae.cartesian_matrix_assembler(invalid, size(mesh), radius))
+
         @test Tesserae.local_matrix_cache(A, table_i, weights, table_j, weights) === nothing
 
         @test Tesserae.get_device(A) isa Tesserae.CPUDevice
@@ -429,6 +435,7 @@
                 direct = create_sparse_matrix(basis, scatter_mesh; ndofs=(2, 3))
                 merge = copy(direct)
                 block_matrix = copy(direct)
+                atomic = copy(direct)
                 row_size = 2length(row_nodes)
                 col_size = 3length(col_nodes)
                 local_matrix = reshape(collect(1.0:row_size*col_size), row_size, col_size)
@@ -445,11 +452,18 @@
                 for (jp, col_node) in enumerate(col_nodes), (ip, row_node) in enumerate(row_nodes)
                     I = (2ip-1):2ip
                     J = (3jp-2):3jp
-                    Tesserae.add_entry!(assembler, row_node, col_node, @view(local_matrix[I,J]))
+                    Tesserae.add_entry!(assembler, Tesserae.SerialScatter(), row_node, col_node, @view(local_matrix[I,J]))
+                end
+                atomic_assembler = Tesserae.matrix_assembler(atomic, scatter_mesh, scatter_mesh, basis, basis)
+                for (jp, col_node) in enumerate(col_nodes), (ip, row_node) in enumerate(row_nodes)
+                    I = (2ip-1):2ip
+                    J = (3jp-2):3jp
+                    Tesserae.add_entry!(atomic_assembler, Tesserae.AtomicScatter(), row_node, col_node, @view(local_matrix[I,J]))
                 end
                 Tesserae.add!(merge, vec(row_dofs[:, row_nodes]), vec(col_dofs[:, col_nodes]), local_matrix)
                 @test direct == merge
                 @test block_matrix == merge
+                @test atomic == merge
             end
         end
     end

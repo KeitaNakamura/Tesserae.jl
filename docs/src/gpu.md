@@ -199,6 +199,33 @@ This keeps the active blocks large enough for the particle support nodes.
 On GPU, `SpArray` mainly reduces grid-field storage and grid-wide operations over inactive regions.
 It should not be expected to remove the main cost of `@P2G`, which is still proportional to the number of particles times the number of support nodes.
 
+## Assembled matrices on GPU
+
+`@P2G_Matrix` assembles into a sparse matrix that lives on the device.
+Build the matrix on the CPU with [`create_sparse_matrix`](@ref) and move it with the same call as everything else:
+
+```julia
+A = create_sparse_matrix(T, basis, mesh; ndofs=2)
+grid, particles, weights, A = (grid, particles, weights, A) .|> gpu_preserve
+
+@P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) begin
+    A[i,j] = @∑ ∇w[ip] ⊡ c[p] ⊡ ∇w[jp] * V[p]
+end
+```
+
+The transfer is particle-parallel and accumulates with atomics, so the summation order within a stored entry is not reproducible between runs, exactly as for GPU `@P2G`.
+A [`Partition`](@ref) selects a block-scheduled path for `@P2G`, but there is no such path for `@P2G_Matrix`; pass no partition.
+
+The target must be a plain sparse matrix over a Cartesian mesh, and it must come from `create_sparse_matrix`.
+On the CPU the canonical sparsity pattern is checked from the stored entry count of every column; on the device only the total is checked, because walking the stored rows would cost a kernel launch and a readback on every call.
+Views taken with `view` and the block views from [`create_block_sparse_matrix`](@ref) are CPU-only.
+`@P2G_Matrix` reads the stored basis weights, so weights generated with `deferred=true` are rejected on GPU as they are on the CPU.
+
+Two things are still missing before an assembled GPU system can be solved end to end:
+
+- [`extract`](@ref) reduces the matrix to the active DoFs by indexing it with a vector of DoF numbers, which CUDA's sparse matrices do not support; it raises a scalar-indexing error on a device matrix.
+- `\` is not defined for CUDA's sparse matrices, so `Tesserae.newton!` needs an explicit `linsolve` on GPU, using a solver package such as CUDSS.jl or Krylov.jl.
+
 ## Taylor impact on GPU
 
 This section rewrites the [Taylor impact tutorial](@ref taylor_impact_tutorial) as a GPU simulation.

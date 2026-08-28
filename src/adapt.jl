@@ -141,6 +141,12 @@ function KernelAbstractions.get_backend(A::SpIndices)
     get_backend(blocknumbering(A))
 end
 
+# Both DoF tables are `LinearIndices`, so only the matrix travels.
+function Adapt.adapt_structure(to, assembler::CartesianSparseMatrixAssembler)
+    CartesianSparseMatrixAssembler(adapt(to, assembler.matrix), assembler.row_dof_table, assembler.col_dof_table,
+                                   assembler.row_slots_per_node, assembler.sparsity_radius)
+end
+
 function Adapt.adapt_structure(to, A::SpArray)
     SpArray(adapt(to, get_data(A)), adapt(to, get_spinds(A)), A.shared_spinds)
 end

@@ -41,8 +41,14 @@ end
 
 # ---- assembly scheduling ----
 
-struct ParticleAssembly end
+# The scatter mode rides on the assembly mode: only the particle-parallel path
+# can have two writers on one stored entry, and only on GPU.
+struct ParticleAssembly{S} end
+ParticleAssembly() = ParticleAssembly{SerialScatter}()
 struct CellAssembly end
+
+scatter_mode(::ParticleAssembly{S}) where {S} = S()
+scatter_mode(::BlockAssembly) = SerialScatter()
 
 # -- MPM --
 
@@ -59,6 +65,22 @@ function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles, weights,
         @inline f(grids, particles, weights, block_particle_indices, BlockAssembly(nodes_i, nodes_j, matrix_buffer_pool))
     end
 end
+
+# -- GPU --
+
+@kernel function gpukernel_P2G_Matrix(f, grids, particles, weights)
+    p = @index(Global)
+    @inline f(grids, particles, weights, (p,), ParticleAssembly{AtomicScatter}())
+end
+
+function P2G_Matrix(f, device::GPUDevice, ::Val{scheduler}, grids, particles, weights, ::Nothing) where {scheduler}
+    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    particles = particles isa QuadraturePoints ? parent(particles) : particles
+    backend = get_backend(device)
+    kernel = gpukernel_P2G_Matrix(backend)
+    kernel(f, grids, particles, weights; ndrange=length(particles))
+end
+
 
 # -- FEM and IGA --
 
@@ -83,7 +105,6 @@ end
 
 function check_arguments_for_P2G_Matrix(grid, particles, weights, partition)
     check_transfer_arguments("@P2G_Matrix", grid, particles, weights, partition)
-    @assert get_device(grid) isa CPUDevice
     # This macro reads the stored values directly, so deferred weights would
     # assemble from storage left unfilled -- a zero matrix, silently.
     _reject_deferred_matrix(weights)
