@@ -24,7 +24,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 - `extract!` refills a matrix `extract` already produced without touching its
   sparsity pattern, so a Newton loop reduces the assembled system once per
   iteration without reallocating it. `extract` itself now works on a device
-  matrix, reducing it through the `DofMap`'s Boolean mask.
+  matrix, reducing it through the `DofMap`'s Boolean mask. A `BlockDofMap` works
+  the same way, so a monolithic block system reduces on the device too.
 
 ### Performance
 

@@ -615,6 +615,8 @@ end
         @test Tesserae.dofs(blockmap) == expected_dofs
         @test Tesserae.dofs(blockmap[1]) == Tesserae.dofs(vmap)
         @test Tesserae.dofs(blockmap[2]) == Tesserae.dofs(smap)
+        @test Tesserae.dof_mask(blockmap) == vcat(vec(vmask), vec(smask))
+        @test count(Tesserae.dof_mask(blockmap)) == ndofs(blockmap)
 
         blocks = create_block_sparse_matrix(BSpline(Quadratic()), mesh; ndofs=(2, 1))
         values = Tesserae.SparseArrays.nonzeros(parent(blocks))
@@ -622,6 +624,9 @@ end
         extracted = @inferred extract(blocks, blockmap)
         @test Tesserae.SparseArrays.issparse(extracted)
         @test extracted == parent(blocks)[expected_dofs, expected_dofs]
+        refilled = fillzero!(copy(extracted))
+        @test extract!(refilled, blocks, blockmap) === refilled
+        @test refilled == extracted
         @test extract(view, blocks, blockmap) == view(parent(blocks), expected_dofs, expected_dofs)
 
         up = blocks[1,2]

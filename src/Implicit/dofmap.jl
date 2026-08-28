@@ -75,9 +75,11 @@ A = extract(blocks, free)
 Aup = extract(blocks[1,2], free[1], free[2])
 ```
 """
-struct BlockDofMap{M <: Tuple{Vararg{DofMap}}} <: AbstractDofMap
+struct BlockDofMap{M <: Tuple{Vararg{DofMap}}, I <: AbstractVector{Int}, B <: AbstractVector{Bool}} <: AbstractDofMap
     maps::M
-    indices::Vector{Int}
+    indices::I
+    # The block masks laid end to end, for the same reason `DofMap` keeps its own.
+    mask::B
 end
 
 # ---- construction ----
@@ -93,17 +95,10 @@ DofMap(mask::AbstractArray{<: Vec{<: Any, Bool}}) = DofMap(dof_components(mask))
 function BlockDofMap(masks::Tuple{Vararg{AbstractArray{Bool}}})
     isempty(masks) && throw(ArgumentError("at least one block mask is required"))
     maps = map(DofMap, masks)
-    indices = Int[]
-    sizehint!(indices, sum(ndofs, maps))
-    offset = 0
-    for dofmap in maps
-        linear_indices = LinearIndices(masksize(dofmap))
-        for index in dofmap.indices
-            push!(indices, offset + linear_indices[index])
-        end
-        offset += length(linear_indices)
-    end
-    BlockDofMap(maps, indices)
+    offsets = Base.front(cumsum((0, map(full_ndofs, maps)...)))
+    BlockDofMap(maps,
+                reduce(vcat, map((dofmap, offset) -> dofs(dofmap) .+ offset, maps, offsets)),
+                reduce(vcat, map(dof_mask, maps)))
 end
 
 """
@@ -143,6 +138,9 @@ end
 
 Base.length(dofmap::BlockDofMap) = length(dofmap.maps)
 Base.getindex(dofmap::BlockDofMap, i::Int) = dofmap.maps[i]
+
+dof_mask(dofmap::DofMap) = vec(dofmap.mask)
+dof_mask(dofmap::BlockDofMap) = dofmap.mask
 
 ndofs(dofmap::DofMap) = length(dofmap.indices)
 ndofs(dofmap::BlockDofMap) = length(dofmap.indices)

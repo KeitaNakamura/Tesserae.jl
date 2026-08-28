@@ -237,15 +237,18 @@ function extract(::typeof(view), matrix::AbstractMatrix, dofmap_i, dofmap_j = do
 end
 
 function _indices_for_extract(matrix::AbstractMatrix, dofmap_i::Union{AbstractDofMap, Colon}, dofmap_j::Union{AbstractDofMap, Colon})
-    check_dofmap_size(size(matrix, 1), dofmap_i)
-    check_dofmap_size(size(matrix, 2), dofmap_j)
+    check_for_extract(matrix, dofmap_i, dofmap_j)
     extract_dofs(matrix, dofmap_i), extract_dofs(matrix, dofmap_j)
 end
 
-function _indices_for_extract(blocks::SparseMatrixBlocks, dofmap_i::Union{AbstractDofMap, Colon}, dofmap_j::Union{AbstractDofMap, Colon})
+function check_for_extract(matrix::AbstractMatrix, dofmap_i, dofmap_j)
+    check_dofmap_size(size(matrix, 1), dofmap_i)
+    check_dofmap_size(size(matrix, 2), dofmap_j)
+end
+
+function check_for_extract(blocks::SparseMatrixBlocks, dofmap_i, dofmap_j)
     check_block_dofmap(blocks, dofmap_i)
     check_block_dofmap(blocks, dofmap_j)
-    extract_dofs(blocks, dofmap_i), extract_dofs(blocks, dofmap_j)
 end
 
 # A device sparse matrix has no `getindex` for a vector of DoF numbers, so the
@@ -260,12 +263,10 @@ _dof_index_device(parent_matrix::AbstractSparseMatrix) = get_device(parent_matri
 extract_dofs(matrix, ::Colon) = Colon()
 extract_dofs(matrix, dofmap::AbstractDofMap) = extract_dofs(dof_index_device(matrix), matrix, dofmap)
 extract_dofs(::CPUDevice, matrix, dofmap::AbstractDofMap) = dofs(dofmap)
-function extract_dofs(::GPUDevice, matrix, dofmap::DofMap)
+function extract_dofs(::GPUDevice, matrix, dofmap::AbstractDofMap)
     check_whole_matrix_target(matrix)
-    vec(dofmap.mask)
+    dof_mask(dofmap)
 end
-extract_dofs(::GPUDevice, matrix, ::BlockDofMap) =
-    throw(ArgumentError("extract: a block DoF map is CPU-only; move the blocks with `cpu` first"))
 
 @noinline function check_whole_matrix_target(matrix)
     all(indices -> indices isa Base.OneTo, matrix_parent_indices(matrix)) ||
@@ -305,16 +306,15 @@ Assembling into `matrix` and reducing it once per Newton iteration is what this
 is for: [`extract`](@ref) allocates a matrix and derives its pattern, while this
 walks the stored values only.
 """
-function extract!(dest::AbstractSparseMatrix, matrix::AbstractMatrix, dofmap_i::DofMap, dofmap_j::DofMap = dofmap_i)
-    check_dofmap_size(size(matrix, 1), dofmap_i)
-    check_dofmap_size(size(matrix, 2), dofmap_j)
+function extract!(dest::AbstractSparseMatrix, matrix::AbstractMatrix, dofmap_i::AbstractDofMap, dofmap_j::AbstractDofMap = dofmap_i)
+    check_for_extract(matrix, dofmap_i, dofmap_j)
     device = dof_index_device(matrix)
     device isa GPUDevice && check_whole_matrix_target(matrix)
     size(dest) == (ndofs(dofmap_i), ndofs(dofmap_j)) ||
         throw(DimensionMismatch("`dest` and the active degrees of freedom must have the same size"))
     get_device(dest) === device || throw(ArgumentError("`dest` and the matrix must be on the same device"))
     columns = dofs(dofmap_j)
-    rowmask = vec(dofmap_i.mask)
+    rowmask = dof_mask(dofmap_i)
     parent_matrix = matrix_parent(matrix)
     _extract_values!(device, nonzeros(dest), SparseArrays.getcolptr(dest), columns, rowmask,
                      SparseArrays.getcolptr(parent_matrix), rowvals(parent_matrix), nonzeros(parent_matrix))

@@ -238,7 +238,8 @@ Views taken with `view` are CPU-only.
 ### Reducing and solving
 
 [`extract`](@ref) reduces the assembled matrix to the active DoFs on the device too.
-It indexes the matrix with the Boolean mask the [`DofMap`](@ref) was built from, because CUDA's sparse matrices have no `getindex` for a vector of DoF numbers, and that mask spans the whole matrix -- so a view of one, or a block DoF map, is CPU-only.
+It indexes the matrix with the Boolean mask the [`DofMap`](@ref) was built from, because CUDA's sparse matrices have no `getindex` for a vector of DoF numbers.
+That mask spans the whole matrix, so the target must be one: a monolithic block system reduces through its [`BlockDofMap`](@ref), while reducing one block on its own is CPU-only.
 
 The reduced pattern only changes when the mask does, which is once per time step, while the values change on every Newton iteration.
 [`extract!`](@ref) refills a matrix `extract` already produced, walking the stored values and nothing else:
