@@ -39,10 +39,7 @@ end
 
 # ---- DoF indexing ----
 
-function local_dofs(ndofs::Int, index::Integer)
-    @_propagate_inbounds_meta
-    vec(view(LinearIndices((ndofs, index)), :, index))
-end
+local_dofs(ndofs::Int, index::Integer) = node_dofs(index, ndofs)
 
 # ---- assembly ----
 

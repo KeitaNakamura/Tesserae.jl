@@ -15,7 +15,7 @@ function CellStrategy(mesh::AbstractCellMesh)
     coloring = Graphs.degree_greedy_color(g)
 
     groups = [Int[] for _ in 1:coloring.num_colors]
-    @inbounds for (cellid, cell) in enumerate(cells(mesh))
+    for cellid in 1:ncells(mesh)
         push!(groups[coloring.colors[cellid]], cellid)
     end
 

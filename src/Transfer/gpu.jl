@@ -9,13 +9,11 @@
 # particle in the last cell picks the next block's first node.
 @inline p2g_tile_halo(support_width::Integer) = max(support_width - 1, 1)
 
-function p2g_tile_contains(basis, mesh::CartesianMesh{dim}, window::CartesianIndices{dim}, block::CartesianIndex{dim}) where {dim}
-    bw = blockwidth(mesh)
-    halo = p2g_tile_halo(support_width(basis))
-    all(ntuple(Val(dim)) do d
-        lo = (block[d] - 1) * bw - halo + 1
-        lo <= first(window.indices[d]) && last(window.indices[d]) <= lo + bw + 2*halo - 1
-    end)
+# Every GPU launch ignores the scheduler and indexes a `QuadraturePoints` set
+# through its parent, so the shared preamble lives here.
+@inline function gpu_launch_collection(collection, ::Val{scheduler}) where {scheduler}
+    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+    collection isa QuadraturePoints ? parent(collection) : collection
 end
 
 # The two lowerings of one `@P2G` scatter: `particle` writes straight to the grid,
@@ -120,10 +118,9 @@ end
     p = @index(Global)
     @inline f(grid, particles, weights, p)
 end
-function P2G(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
-    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+function P2G(f::F, device::GPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {F}
     fillzero_each!(device, zeroed)
-    particles = particles isa QuadraturePoints ? parent(particles) : particles
+    particles = gpu_launch_collection(particles, schedule)
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
     kernel(f, hybrid(grid, device), particles, weights; ndrange=length(particles))
@@ -193,14 +190,11 @@ function block_p2g_groupsize(backend, kernel, kargs::Tuple)
     gs
 end
 
-function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, particles, weights, partition::Partition{<: GPUBlockStrategy}, zeroed::Tuple=()) where {scheduler}
-    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
+function P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particles, weights, partition::Partition{<: GPUBlockStrategy}, zeroed::Tuple=())
     fillzero_each!(device, zeroed)
-    particles = particles isa QuadraturePoints ? parent(particles) : particles
+    particles = gpu_launch_collection(particles, schedule)
     bs = strategy(partition)
     names = Val(scattered_names(bodies))
-    length(bs.particleindices) == length(particles) ||
-        error("@P2G: `update!(partition, particles.x)` must run with these particles before the transfer")
     backend = get_backend(device)
     Tt = tile_scalartype(grid, names)
     sw = support_width(basis(weights))
@@ -212,7 +206,7 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
     total = tilelen * tile_total_comps(grid, names)
     if total * sizeof(Tt) > 32768
         @warn "@P2G: shared-memory tile ($(total * sizeof(Tt)) B) exceeds the block-scheduled budget; falling back to the particle-parallel path" maxlog=1
-        return P2G(bodies.particle, device, Val(scheduler), grid, particles, weights, nothing)
+        return P2G(bodies.particle, device, schedule, grid, particles, weights, nothing)
     end
     kernel = gpukernel_P2G_blocks(backend)
     kargs = (bodies.tile, hybrid(grid, device), particles, weights,
@@ -223,9 +217,8 @@ function P2G(bodies::P2GBodies, device::GPUDevice, ::Val{scheduler}, grid, parti
 end
 
 # The grid goes in unwrapped: nothing in a `@G2P` body scatters, so it needs no atomics.
-function G2P(f, device::GPUDevice, ::Val{scheduler}, grid, particles, weights) where {scheduler}
-    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
-    particles = particles isa QuadraturePoints ? parent(particles) : particles
+function G2P(f::F, device::GPUDevice, schedule::Val, grid, particles, weights) where {F}
+    particles = gpu_launch_collection(particles, schedule)
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
     kernel(f, grid, particles, weights; ndrange=length(particles))

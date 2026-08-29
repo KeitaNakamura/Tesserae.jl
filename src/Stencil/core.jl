@@ -1,7 +1,6 @@
 using ..Tesserae: get_device, CPUDevice, GPUDevice
 
 shift(d::Int, s::Int, ::Val{dim}) where {dim} = CartesianIndex(ntuple(i -> i==d ? s : 0, Val(dim)))
-shift1(d::Int, ::Val{dim}) where {dim} = shift(d, 1, Val(dim))
 
 function shift_radius(offsets::AbstractArray{CartesianIndex{dim}}) where {dim}
     ntuple(d -> maximum(abs(off[d]) for off in offsets), Val(dim))
@@ -38,7 +37,7 @@ function _stencil!(::GPUDevice, combine, dest, src, offsets, weights, baseshift,
     kernel(combine, dest, src, offsets, weights, baseshift, first(indices); ndrange=size(indices))
 end
 
-function stencil!(combine, dest::StencilArray, src::StencilArray, offsets::AbstractArray{CartesianIndex{dim}}, weights::AbstractArray{<: Number}; pad::Int) where {dim}
+function stencil!(combine, dest::StencilArray, src::StencilArray, offsets::SVector{N, CartesianIndex{dim}}, weights::SVector{N, <: Number}; pad::Int) where {N, dim}
     @assert get_device(dest) == get_device(src)
     @assert ndims(dest) == ndims(src) == dim
     @assert length(offsets) == length(weights)
@@ -60,43 +59,6 @@ function stencil!(combine, dest::StencilArray, src::StencilArray, offsets::Abstr
 end
 
 @inline _replace(old, new) = new
-function stencil!(dest::StencilArray, src::StencilArray, offsets::AbstractArray{CartesianIndex{dim}}, weights::AbstractArray{<: Number}; pad::Int) where {dim}
+function stencil!(dest::StencilArray, src::StencilArray, offsets::SVector{N, CartesianIndex{dim}}, weights::SVector{N, <: Number}; pad::Int) where {N, dim}
     stencil!(_replace, dest, src, offsets, weights; pad)
-end
-
-function stencil_sparse(destloc::Location, src::StencilArray, offsets::AbstractVector{CartesianIndex{dim}}, weights::AbstractVector{<:Number}; pad::Int) where {dim}
-    rad = shift_radius(offsets)
-    all(d -> pad ≥ rad[d], 1:dim) || throw(ArgumentError("pad=$pad is too small for this stencil; required ≥ $(maximum(rad))"))
-
-    srcdims = size(src)
-    destdims = infersize(destloc, getlocation(src), srcdims)
-
-    # assemble only interior as `stencil!`
-    interior = interior_indices(destloc, Base.OneTo.(destdims); pad)
-
-    nrows = prod(destdims)
-    ncols = prod(srcdims)
-
-    LIdest = LinearIndices(destdims)
-    LIsrc  = LinearIndices(srcdims)
-
-    T = promote_type(eltype(src), eltype(weights))
-    nnz = length(interior) * length(weights)
-
-    I = Vector{Int}(undef, nnz)
-    J = Vector{Int}(undef, nnz)
-    V = Vector{T}(undef, nnz)
-
-    count = 1
-    @inbounds for i in interior
-        row = LIdest[i]
-        for j in eachindex(weights, offsets)
-            I[count] = row
-            J[count] = LIsrc[i + offsets[j]]
-            V[count] = weights[j]
-            count += 1
-        end
-    end
-
-    return sparse(I, J, V, nrows, ncols)
 end

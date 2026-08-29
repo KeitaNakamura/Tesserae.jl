@@ -83,8 +83,8 @@ end
 # when absent. A plain function on types: a generated function may not call another.
 function deferred_order(W::Type, name::Symbol)
     W <: BasisWeightArray || return nothing
-    Vals = W.parameters[2]
-    njets = W.parameters[6].parameters[1] + 1
+    Vals = fieldtype(W, :vals)
+    njets = _order_value(fieldtype(W, :order)) + 1
     pos = findfirst(==(name), fieldnames(Vals))
     pos === nothing && return missing
     pos <= njets && fieldtype(Vals, pos) <: DeferredBasisValues ? pos - 1 : nothing
@@ -183,44 +183,41 @@ function check_transfer_arguments(macroname, grid, particles, weights, partition
             isempty(get_data(getproperty(grid, 2))) && error("$macroname: SpGrid indices not activated")
         end
     end
-    @assert length(particles) ≤ length(weights)
+    length(particles) ≤ length(weights) ||
+        error("$macroname: `weights` must cover the particles: got $(length(weights)) weights for $(length(particles)) particles")
     device = get_device(grid)
-    @assert get_device(particles) == get_device(weights) == device
-    check_partition_for_transfer(macroname, device, grid, weights, partition)
+    get_device(particles) == get_device(weights) == device ||
+        error("$macroname: grid, particles, and weights must be on the same device: got $device, $(get_device(particles)), $(get_device(weights))")
+    check_partition_for_transfer(macroname, device, grid, particles, weights, partition)
 end
 
 # A partition must live where the transfer runs: `CPUBlockStrategy` schedules CPU
 # threads, `GPUBlockStrategy` schedules GPU workgroups.
-check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::Nothing) = nothing
-check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, ::Nothing) = nothing
-function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition::Partition{<: GPUBlockStrategy})
+check_partition_for_transfer(macroname, ::CPUDevice, grid, particles, weights, ::Nothing) = nothing
+check_partition_for_transfer(macroname, ::GPUDevice, grid, particles, weights, ::Nothing) = nothing
+function check_partition_for_transfer(macroname, ::GPUDevice, grid, particles, weights, partition::Partition{<: GPUBlockStrategy})
     macroname == "@P2G" || error("$macroname: the block-scheduled GPU transfer only supports @P2G so far. Use partitionless $macroname on GPU.")
     weights isa BasisWeightArray || error("$macroname: the block-scheduled GPU transfer requires weights from `generate_basis_weights`")
-    check_partition_for_transfer(macroname, grid, weights, strategy(partition))
+    check_partition_for_transfer(macroname, grid, particles, weights, strategy(partition))
 end
-function check_partition_for_transfer(macroname, ::GPUDevice, grid, weights, partition)
+function check_partition_for_transfer(macroname, ::GPUDevice, grid, particles, weights, partition)
     error("$macroname: this Partition lives on the CPU. Transfer it with `gpu(partition)` and `update!` it on the device.")
 end
-function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, ::Partition{<: GPUBlockStrategy})
+function check_partition_for_transfer(macroname, ::CPUDevice, grid, particles, weights, ::Partition{<: GPUBlockStrategy})
     error("$macroname: this Partition lives on the GPU. Construct a CPU one with `Partition(mesh)`.")
 end
-function check_partition_for_transfer(macroname, ::CPUDevice, grid, weights, partition::Partition)
-    check_partition_for_transfer(macroname, grid, weights, strategy(partition))
+function check_partition_for_transfer(macroname, ::CPUDevice, grid, particles, weights, partition::Partition)
+    check_partition_for_transfer(macroname, grid, particles, weights, strategy(partition))
 end
-check_partition_for_transfer(macroname, grid, weights, strat) = nothing
-function check_partition_for_transfer(macroname, grid, weights, strat::CPUBlockStrategy)
+check_partition_for_transfer(macroname, grid, particles, weights, strat) = nothing
+function check_partition_for_transfer(macroname, grid, particles, weights, strat::BlockStrategy)
     @assert nblocks(get_mesh(grid)) == nblocks(strat)
     if nassigned(strat) == 0
         error("$macroname: No particles assigned to any block in Partition")
     end
+    length(strat.particleindices) == length(particles) ||
+        error("$macroname: `update!(partition, particles.x)` must run with these particles before the transfer")
     check_partition_support(macroname, transfer_basis(weights), strat)
-end
-function check_partition_for_transfer(macroname, grid, weights, strat::GPUBlockStrategy)
-    @assert nblocks(get_mesh(grid)) == nblocks(strat)
-    if nactive(strat) == 0
-        error("$macroname: No particles assigned to any block in Partition")
-    end
-    check_partition_support(macroname, basis(weights), strat)
 end
 function check_partition_support(macroname, b, strat)
     if support_width(b) > blockwidth(strat)

@@ -79,6 +79,7 @@ end
 
 function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), program::TransferProgram)
     sum_equations, nosum_equations = split_sum_equations(program, "@G2P")
+    check_nosum_refs("@G2P", nosum_equations, p, i, ip)
 
     code = quote
         Tesserae.check_transfer_arguments("@G2P", $grid, $particles, $weights, nothing)
@@ -112,7 +113,7 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     (; window) = binding
 
     code = Expr(:block)
-    cols = something(cols, WeightColumnsBinding(collect_transfer_refs(vcat(sum_equations, nosum_equations), ip)))
+    cols = something(cols, WeightColumnsBinding(collect_transfer_refs(sum_equations, ip)))
     scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, cols)=>ip]; cache=true)
 
     if !isempty(sum_equations)
@@ -145,7 +146,7 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
     end
 
     if !isempty(nosum_equations)
-        nosum_scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p)=>ip])
+        nosum_scope = TransferScope([particles=>p])
         nosum_equations = map(eq -> Expr(eq.op, resolve_refs(eq.lhs, nosum_scope), resolve_refs(eq.rhs, nosum_scope)), nosum_equations)
         code = quote
             $code

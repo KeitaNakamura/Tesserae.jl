@@ -1,9 +1,3 @@
-function padded(A::AbstractArray; pad::Int)
-    B = similar(A, size(A) .+ 2*pad)
-    inner(B; pad) .= A
-    return B
-end
-
 struct CatDimView{T, N, TA <: AbstractArray{T, N}} <: AbstractArray{T, N}
     first::TA
     last::TA

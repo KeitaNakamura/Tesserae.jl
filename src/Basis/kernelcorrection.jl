@@ -53,7 +53,7 @@ can_defer_basis(::Type{<: KernelCorrection}) = true
 const SeparableKernelCorrection = KernelCorrection{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}
 
 @inline function deferred_particle_state(order::Order, kc::SeparableKernelCorrection, pt, mesh::CartesianMesh, window, ::Nothing)
-    (all(size(window) .== support_width(kc.kernel)), wls_axis_jets(order, kc.kernel, pt, mesh, window))
+    (all(size(window) .== support_width(kc.kernel)), wls_axis_jets(eltype(getx(pt)), order, kc.kernel, pt, mesh, window))
 end
 
 @inline function deferred_node_jet(order::Order, kc::SeparableKernelCorrection, state::Tuple, pt, mesh::CartesianMesh, window, ::Nothing, ip)

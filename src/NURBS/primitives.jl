@@ -6,7 +6,7 @@ Create a linear curve from `p₀` to `p₁`.
 function line(p0::Vec{dim}, p1::Vec{dim}) where {dim}
     points = [p0, p1]
     axis = open_bspline_axis(eltype(eltype(points)), linear, 1)
-    ControlNet((axis,), [p0, p1])
+    ControlNet((axis,), points)
 end
 
 """

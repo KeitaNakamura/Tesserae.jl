@@ -11,8 +11,6 @@ degrees(basis::IGABasis) = basis.degrees
 basis(mesh::IGAMesh) = IGABasis(degrees(first(patches(mesh))))
 nsupportnodes(basis::IGABasis) = prod(degree -> _degree(degree) + 1, degrees(basis))
 
-initial_supportnodes(basis::IGABasis, mesh::IGAMesh) = zero(SVector{nsupportnodes(basis), Int})
-
 _generate_supportnodes(::IGABasis, mesh::IGAMesh, dims::Dims{2}) = _generate_cell_supportnodes(mesh, dims)
 _generate_supportnodes(::IGABasis, ::IGAMesh, ::Dims) = throw(DimensionMismatch("IGA basis weights must have dimensions (quadrature points, cells)"))
 
@@ -121,12 +119,6 @@ contribute zero.
     :(SVector{$(p+1)}($(vals...)))
 end
 
-# Same ordering as cox_de_boor_values, but returning dN/dξ.
-@generated function cox_de_boor_derivatives(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real) where {p}
-    vals = (:( cox_de_boor_derivative(degree, knot_vector, span - $p + $(a - 1), ξ) ) for a in 1:(p+1))
-    :(SVector{$(p+1)}($(vals...)))
-end
-
 """
     cox_de_boor_values_and_derivatives(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real)
 
@@ -191,14 +183,6 @@ end
     left = _cox_de_boor_term(ξ - knot_vector[i], knot_vector[i+p] - knot_vector[i], cox_de_boor_value(degree, knot_vector, i, ξ))
     right = _cox_de_boor_term(knot_vector[i+p+1] - ξ, knot_vector[i+p+1] - knot_vector[i+1], cox_de_boor_value(degree, knot_vector, i+1, ξ))
     left + right
-end
-
-@inline cox_de_boor_derivative(::Degree{0}, knot_vector::AbstractVector, i::Int, ξ::Real) = zero(ξ)
-@inline function cox_de_boor_derivative(::Degree{p}, knot_vector::AbstractVector, i::Int, ξ::Real) where {p}
-    degree = Degree{p-1}()
-    left = _cox_de_boor_term(p, knot_vector[i+p] - knot_vector[i], cox_de_boor_value(degree, knot_vector, i, ξ))
-    right = _cox_de_boor_term(p, knot_vector[i+p+1] - knot_vector[i+1], cox_de_boor_value(degree, knot_vector, i+1, ξ))
-    left - right
 end
 
 @inline _cox_de_boor_term(a, b, c) = iszero(b) ? zero(c) : a * c / b

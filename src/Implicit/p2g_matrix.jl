@@ -70,9 +70,8 @@ end
 
 # The shared particle-parallel kernel serves this transfer too; only the scatter
 # mode differs from the CPU wrapping above.
-function P2G_Matrix(f, device::GPUDevice, ::Val{scheduler}, grids, particles, weights, ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
-    particles = particles isa QuadraturePoints ? parent(particles) : particles
+function P2G_Matrix(f::F, device::GPUDevice, schedule::Val, grids, particles, weights, ::Nothing) where {F}
+    particles = gpu_launch_collection(particles, schedule)
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
     kernel((grids, particles, weights, p) -> (@inline f(grids, particles, weights, (p,), ParticleAssembly{AtomicScatter}())),
@@ -87,8 +86,7 @@ function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::Quadratu
     scheduler == :nothing || @warn "@P2G_Matrix: `Partition` must be given for threaded computation" maxlog=1
 
     for cell in axes(particles, 2)
-        particle_indices = (CartesianIndex(q, cell) for q in axes(particles, 1))
-        @inline f(grids, particles, weights, particle_indices, CellAssembly())
+        @inline f(grids, particles, weights, cell_quadrature_indices(particles, cell), CellAssembly())
     end
 end
 

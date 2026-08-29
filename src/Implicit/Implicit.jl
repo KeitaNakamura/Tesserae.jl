@@ -7,5 +7,6 @@ include("sparsity.jl")
 include("assemblers.jl")
 include("buffers.jl")
 include("p2g_matrix.jl")
+include("explain.jl")
 
 include("newton.jl")

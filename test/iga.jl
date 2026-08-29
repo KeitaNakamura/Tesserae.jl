@@ -1,13 +1,6 @@
-iga_test_axes(degrees, knot_vectors) = map(Tesserae.NURBS.BSplineAxis, degrees, knot_vectors)
-iga_test_control_net(degrees, knot_vectors, points, weights...) = Tesserae.NURBS.ControlNet(iga_test_axes(degrees, knot_vectors), points, weights...)
-iga_test_degrees(net::Tesserae.NURBS.ControlNet) = map(axis -> axis.degree, net.axes)
-iga_test_degrees(x) = Tesserae.degrees(x)
-iga_test_knot_vectors(net::Tesserae.NURBS.ControlNet) = map(axis -> axis.knot_vector, net.axes)
-iga_test_knot_vectors(patch::IGAPatch) = patch.knot_vectors
-
-const nurbs_linear = Tesserae.NURBS.linear
-const nurbs_quadratic = Tesserae.NURBS.quadratic
-const nurbs_cubic = Tesserae.NURBS.cubic
+# The shared nurbs_test_* helpers live in test/nurbs.jl, included first.
+nurbs_test_degrees(x) = Tesserae.degrees(x)
+nurbs_test_knot_vectors(patch::IGAPatch) = patch.knot_vectors
 
 @testset "IGA" begin
     # Shared Cartesian patch used by the basis, quadrature, assembly, and
@@ -29,9 +22,9 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test length(meshcells) == 16
         @test meshcells[1] == IGACell(1, 1, CartesianIndex(3,3))
         @test meshcells[end] == IGACell(16, 1, CartesianIndex(6,6))
-        @test iga_test_degrees(patch) == (Quadratic(), Quadratic())
+        @test nurbs_test_degrees(patch) == (Quadratic(), Quadratic())
         @test typeof(mesh_basis) === IGABasis{2, Tuple{Quadratic, Quadratic}}
-        @test iga_test_degrees(mesh_basis) == (Quadratic(), Quadratic())
+        @test nurbs_test_degrees(mesh_basis) == (Quadratic(), Quadratic())
         @test (@inferred Tesserae.nsupportnodes(mesh_basis)) === 9
         @test supportnodes(mesh) === mesh.used_controlpoint_ids
         @test supportnodes(mesh) == collect(eachindex(mesh))
@@ -42,22 +35,22 @@ const nurbs_cubic = Tesserae.NURBS.cubic
     @testset "Mesh conversion" begin
         # A single NURBS curve should become one IGA patch with identical
         # degree, knot vector, control points, and weights.
-        curve_degrees = (nurbs_quadratic,)
+        curve_degrees = (nurbs_test_quadratic,)
         curve_knots = ([0.0,0.0,0.0,0.5,1.0,1.0,1.0],)
         curve_controlpoints = [Vec(Float64(i-1), 0.0) for i in 1:4]
         curve_weights = collect(1.0:4.0)
-        curve_control = iga_test_control_net(curve_degrees, curve_knots, curve_controlpoints, curve_weights)
+        curve_control = nurbs_test_control_net(curve_degrees, curve_knots, curve_controlpoints, curve_weights)
         curve_mesh = IGAMesh(curve_control)
         curve_patch = Tesserae.patches(curve_mesh, 1)
-        @test iga_test_degrees(curve_patch) == (Quadratic(),)
-        @test iga_test_knot_vectors(curve_patch) == curve_knots
+        @test nurbs_test_degrees(curve_patch) == (Quadratic(),)
+        @test nurbs_test_knot_vectors(curve_patch) == curve_knots
         @test curve_patch.controlpoint_ids == [1, 2, 3, 4]
         @test curve_mesh.controlpoints == curve_controlpoints
         @test curve_mesh.weights == curve_weights
 
         # merge=true shares a global control-point id only when both the point
         # coordinate and rational weight match.
-        duplicate_axis = Tesserae.NURBS.BSplineAxis(nurbs_linear, [0.0,0.0,1.0,1.0])
+        duplicate_axis = Tesserae.NURBS.BSplineAxis(nurbs_test_linear, [0.0,0.0,1.0,1.0])
         duplicate_points = [Vec(0.0, 0.0), Vec(0.0, 0.0)]
         duplicate_control = Tesserae.NURBS.ControlNet((duplicate_axis,), duplicate_points, [1.0, 1.0])
         duplicate_mesh = IGAMesh(duplicate_control; merge=true)
@@ -103,12 +96,12 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
         # Surface conversion flattens tensor-product control points into the
         # global mesh storage while keeping tensor-product patch ids.
-        degrees = (nurbs_quadratic, nurbs_quadratic)
+        degrees = (nurbs_test_quadratic, nurbs_test_quadratic)
         knots = ([0.0,0.0,0.0,0.5,1.0,1.0,1.0], [0.0,0.0,0.0,1/3,2/3,1.0,1.0,1.0])
         quad_controlpoints = map(CartesianIndices((4, 5))) do I
             Vec(Float64(I[1]-1), Float64(I[2]-1))
         end
-        quad_control = iga_test_control_net(degrees, knots, quad_controlpoints)
+        quad_control = nurbs_test_control_net(degrees, knots, quad_controlpoints)
         @test quad_control isa Tesserae.NURBS.ControlNet
         @test size(quad_control.points) == (4, 5)
         @test all(isone, quad_control.weights)
@@ -118,8 +111,8 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test quad_control.points[1,end] ≈ Vec(0.0, 4.0)
         quad_mesh = IGAMesh(quad_control)
         quad_patch = Tesserae.patches(quad_mesh, 1)
-        @test iga_test_degrees(quad_patch) == (Quadratic(), Quadratic())
-        @test iga_test_knot_vectors(quad_patch) == knots
+        @test nurbs_test_degrees(quad_patch) == (Quadratic(), Quadratic())
+        @test nurbs_test_knot_vectors(quad_patch) == knots
         @test quad_patch.controlpoint_ids == Array(LinearIndices(quad_control.points))
         @test quad_mesh.controlpoints == vec(quad_control.points)
         @test quad_mesh.weights == vec(quad_control.weights)
@@ -147,12 +140,24 @@ const nurbs_cubic = Tesserae.NURBS.cubic
     end
 
     @testset "B-spline basis" begin
-        knot_vector = iga_test_knot_vectors(patch)[1]
+        # Reference oracle for the fused `cox_de_boor_values_and_derivatives`,
+        # re-deriving each derivative independently from the recursion.
+        cox_de_boor_derivative(::Tesserae.Degree{0}, knot_vector::AbstractVector, i::Int, ξ::Real) = zero(ξ)
+        function cox_de_boor_derivative(::Tesserae.Degree{p}, knot_vector::AbstractVector, i::Int, ξ::Real) where {p}
+            degree = Tesserae.Degree{p-1}()
+            left = Tesserae._cox_de_boor_term(p, knot_vector[i+p] - knot_vector[i], Tesserae.cox_de_boor_value(degree, knot_vector, i, ξ))
+            right = Tesserae._cox_de_boor_term(p, knot_vector[i+p+1] - knot_vector[i+1], Tesserae.cox_de_boor_value(degree, knot_vector, i+1, ξ))
+            left - right
+        end
+        cox_de_boor_derivatives(degree::Tesserae.Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real) where {p} =
+            Tesserae.SVector{p+1}(ntuple(a -> cox_de_boor_derivative(degree, knot_vector, span - p + a - 1, ξ), p+1))
+
+        knot_vector = nurbs_test_knot_vectors(patch)[1]
         x = ξ[1]
 
         # Active 1D B-splines form a partition of unity on the span.
         @test sum(Tesserae.cox_de_boor_values(Quadratic(), knot_vector, span[1], x)) ≈ 1
-        @test sum(Tesserae.cox_de_boor_derivatives(Quadratic(), knot_vector, span[1], x)) ≈ 0
+        @test sum(cox_de_boor_derivatives(Quadratic(), knot_vector, span[1], x)) ≈ 0
 
         # Degree-zero B-splines have one active value and zero derivative.
         N0, dN0 = @inferred Tesserae.cox_de_boor_values_and_derivatives(Constant(), [0.0, 1.0], 1, 0.5)
@@ -161,12 +166,12 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
         N, dN = @inferred Tesserae.cox_de_boor_values_and_derivatives(Quadratic(), knot_vector, span[1], x)
         @test N ≈ Tesserae.cox_de_boor_values(Quadratic(), knot_vector, span[1], x)
-        @test dN ≈ Tesserae.cox_de_boor_derivatives(Quadratic(), knot_vector, span[1], x)
+        @test dN ≈ cox_de_boor_derivatives(Quadratic(), knot_vector, span[1], x)
 
         cubic_knot_vector = [0.0,0.0,0.0,0.0,0.25,0.5,0.75,1.0,1.0,1.0,1.0]
         N3, dN3 = @inferred Tesserae.cox_de_boor_values_and_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
         @test N3 ≈ Tesserae.cox_de_boor_values(Cubic(), cubic_knot_vector, 5, 0.375)
-        @test dN3 ≈ Tesserae.cox_de_boor_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
+        @test dN3 ≈ cox_de_boor_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
 
         # `cox_de_boor_values` evaluates the half-open span `knots[span] ≤ ξ <
         # knots[span+1]`, so it vanishes at the closed upper end of the domain.
@@ -192,7 +197,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
     end
 
     @testset "Tensor product basis" begin
-        knot_vector = iga_test_knot_vectors(patch)[1]
+        knot_vector = nurbs_test_knot_vectors(patch)[1]
         N̂, dNdξ = @inferred Tesserae.iga_basis_values_and_gradients(patch, span, ξ)
         N1, dN1 = Tesserae.cox_de_boor_values_and_derivatives(Quadratic(), knot_vector, span[1], ξ[1])
         N2, dN2 = Tesserae.cox_de_boor_values_and_derivatives(Quadratic(), knot_vector, span[2], ξ[2])
@@ -307,15 +312,15 @@ const nurbs_cubic = Tesserae.NURBS.cubic
             @test mixed_measure[q,geometry_cell] ≈ Tesserae.span_weight(geometry_patch, geometry_cell.span, qrule.weights[q]) * sqrt(det(J'J))
         end
 
-        reversed_patch = IGAPatch(iga_test_degrees(patch), map(copy, iga_test_knot_vectors(patch)), reverse(patch.controlpoint_ids))
+        reversed_patch = IGAPatch(nurbs_test_degrees(patch), map(copy, nurbs_test_knot_vectors(patch)), reverse(patch.controlpoint_ids))
         reversed_mesh = IGAMesh([reversed_patch], mesh.controlpoints)
         reversed_weights = generate_basis_weights(mesh, size(points))
         @test update!(reversed_weights, points, reversed_mesh; geometry=mesh) === reversed_weights
         @test supportnodes(reversed_weights[1,first(meshcells)]) == supportnodes(reversed_mesh, first(cells(reversed_mesh)))
 
-        mismatched_knots = map(copy, iga_test_knot_vectors(patch))
+        mismatched_knots = map(copy, nurbs_test_knot_vectors(patch))
         mismatched_knots[1][4] = 0.2
-        mismatched_patch = IGAPatch(iga_test_degrees(patch), mismatched_knots, copy(patch.controlpoint_ids))
+        mismatched_patch = IGAPatch(nurbs_test_degrees(patch), mismatched_knots, copy(patch.controlpoint_ids))
         mismatched_field = IGAMesh([mismatched_patch], mesh.controlpoints)
         mismatched_weights = generate_basis_weights(mismatched_field, size(points))
         @test_throws ArgumentError update!(mismatched_weights, points, mismatched_field; geometry=mesh)
@@ -340,7 +345,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
 
         # Boundary IGA meshes are lower-dimensional patches that still assemble
         # into the original global control-point ids.
-        boundary_patch = IGAPatch((Quadratic(),), (copy(iga_test_knot_vectors(patch)[1]),), Array(patch.controlpoint_ids[:,1]))
+        boundary_patch = IGAPatch((Quadratic(),), (copy(nurbs_test_knot_vectors(patch)[1]),), Array(patch.controlpoint_ids[:,1]))
         boundary_mesh = IGAMesh([boundary_patch], mesh.controlpoints)
         @test supportnodes(boundary_mesh) == collect(patch.controlpoint_ids[:,1])
         boundary_rule = generate_quadrature_rule(basis(boundary_mesh))
@@ -402,7 +407,7 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         # Distinct row and column spaces use their own support nodes in each corresponding span.
         linear_mesh = IGAMesh(cmesh; degree=Linear())
         linear_patch = Tesserae.patches(linear_mesh, 1)
-        reversed_patch = IGAPatch(iga_test_degrees(linear_patch), map(copy, iga_test_knot_vectors(linear_patch)), reverse(linear_patch.controlpoint_ids))
+        reversed_patch = IGAPatch(nurbs_test_degrees(linear_patch), map(copy, nurbs_test_knot_vectors(linear_patch)), reverse(linear_patch.controlpoint_ids))
         column_mesh = IGAMesh([reversed_patch], linear_mesh.controlpoints)
         rectangular_pattern = Set{Tuple{Int,Int}}()
         column_dofs = LinearIndices((1, length(column_mesh)))
@@ -431,9 +436,9 @@ const nurbs_cubic = Tesserae.NURBS.cubic
         @test blocks32[1,2] == C
 
         # Equal cell counts are insufficient when the span endpoints differ.
-        mismatched_knots = map(copy, iga_test_knot_vectors(patch))
+        mismatched_knots = map(copy, nurbs_test_knot_vectors(patch))
         mismatched_knots[1][4] = 0.2
-        mismatched_patch = IGAPatch(iga_test_degrees(patch), mismatched_knots, copy(patch.controlpoint_ids))
+        mismatched_patch = IGAPatch(nurbs_test_degrees(patch), mismatched_knots, copy(patch.controlpoint_ids))
         mismatched_mesh = IGAMesh([mismatched_patch], mesh.controlpoints)
         @test_throws ArgumentError create_sparse_matrix((mesh, mismatched_mesh); ndofs=(2, 1))
 

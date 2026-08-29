@@ -126,7 +126,7 @@ If you find Tesserae.jl useful in your work, I kindly request that you cite it a
    author = {Nakamura, Keita},
       doi = {10.5281/zenodo.13956709},
      year = {2024},
-      url = {https://github.com/KeitaNakamura/Tesserae.jl}
+      url = {https://github.com/KeitaNakamura/Tesserae.jl},
   licence = {MIT},
 }
 ```

@@ -92,9 +92,6 @@ function equal_count_bounds!(bounds::Vector{Int}, nregions::Int, nworkers::Int)
     end
     bounds
 end
-equal_count_bounds(nregions::Int, nworkers::Int) =
-    equal_count_bounds!(Vector{Int}(undef, nworkers + 1), nregions, nworkers)
-
 # `assign_block_ranges!` laid this group out contiguously and in order inside
 # `particleindices`, so `stops` is already the running particle count.
 function particle_count_bounds!(bounds::Vector{Int}, bs::CPUBlockStrategy, group, nworkers::Int)
@@ -118,9 +115,6 @@ function particle_count_bounds!(bounds::Vector{Int}, bs::CPUBlockStrategy, group
     end
     bounds
 end
-particle_count_bounds(bs::CPUBlockStrategy, group, nworkers::Int) =
-    particle_count_bounds!(Vector{Int}(undef, nworkers + 1), bs, group, nworkers)
-
 # A `CellStrategy`'s regions carry one quadrature column each, so both splits
 # coincide.
 weighted_bounds!(bounds::Vector{Int}, strat::PartitionStrategy, group, nworkers::Int) =
@@ -133,7 +127,6 @@ group_plan!(bounds::Vector{Int}, ::StaticScheduler, strat, group, nworkers::Int)
 group_plan!(bounds::Vector{Int}, ::Scheduler, strat, group, nworkers::Int) =
     weighted_bounds!(bounds, strat, group, nworkers)
 
-region_scratch(strat::PartitionStrategy) = RegionScratch{eltype(threadsafe_groups(strat))}()
 region_scratch(strat::Union{CPUBlockStrategy, CellStrategy}) = strat.region_scratch
 
 function group_plans!(scratch::RegionScratch, ::GreedyScheduler, strat, active, nworkers::Int)

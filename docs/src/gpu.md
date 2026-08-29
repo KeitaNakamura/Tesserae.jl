@@ -700,3 +700,11 @@ function jacobian(U::AbstractVector, state)
     LinearOperator(eltype(U), ndofs(free), ndofs(free), false, false, mul!; S = typeof(similar(U, 0)))
 end
 ```
+
+## API
+
+```@docs
+gpu
+gpu_preserve
+cpu
+```

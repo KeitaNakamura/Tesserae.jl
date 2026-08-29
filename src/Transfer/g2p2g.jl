@@ -9,19 +9,7 @@
 G2P2G(f::F, device::AbstractDevice, schedule, grid, particles, weights, partition, zeroed::Tuple=()) where {F} =
     P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
 
-# The `@G2P2G` twin of `P2G_halves`: the grid-node half rides the threaded CPU
-# region as its epilogue and is discharged as a separate call everywhere else.
-function G2P2G_halves(f::F, device, schedule, grid, particles, weights, partition, zeroed,
-                      nodebody::N, nodegrid) where {F, N}
-    G2P2G(f, device, schedule, grid, particles, weights, partition, zeroed)
-    P2G_nosum(nodebody, device, schedule, nodegrid)
-end
-
-function G2P2G_halves(f::F, device::CPUDevice, schedule::Val, grid, particles, weights,
-                      partition::Partition, zeroed::Tuple, nodebody::N, nodegrid) where {F, N}
-    epilogue = (nworkers, w) -> foreach_worker_loop(nodebody, device, nodegrid, nworkers, w)
-    p2g_region(f, device, schedule, grid, particles, weights, partition, zeroed, epilogue)
-end
+G2P2G_halves(f::F, args...) where {F} = P2G_halves(f, args...)
 
 """
     @G2P2G grid=>i particles=>p weights=>ip [partition] begin
@@ -99,6 +87,8 @@ end
 
 function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, program::TransferProgram)
     stages = split_g2p2g_stages(program, i, p)
+    check_nosum_refs("@G2P2G", stages.g2p_nosum, p, i, ip)
+    check_nosum_refs("@G2P2G", stages.p2g_nosum, i, p, ip)
 
     code = quote
         Tesserae.check_transfer_arguments("@G2P2G", $grid, $particles, $weights, $partition)
@@ -109,7 +99,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     # half must not rebind them: it runs after the G2P half's non-`@∑` equations,
     # which is where an explicit step writes `x[p]`.
     colsbinding = WeightColumnsBinding(union(
-        collect_transfer_refs(vcat(stages.g2p_sum, stages.g2p_nosum), ip),
+        collect_transfer_refs(stages.g2p_sum, ip),
         collect_transfer_refs(stages.p2g_sum, ip)))
 
     if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
@@ -122,10 +112,11 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
 
     zeroed = Expr(:tuple)
     if !isempty(stages.p2g_sum)
-        # `G2P_sum_expr` binds the basis weight only when it has `@∑` equations,
-        # so this half must load it itself otherwise.
+        # `G2P_sum_expr` binds the window only when it has `@∑` equations, and the
+        # weight columns only when those equations actually reference a weight
+        # property, so this half must load whatever the G2P half did not emit.
         p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
-        p2g_cols = isempty(stages.g2p_sum) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
+        p2g_cols = isempty(collect_transfer_refs(stages.g2p_sum, ip)) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
         zeroed, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
         body = quote
             $body

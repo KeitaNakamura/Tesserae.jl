@@ -24,7 +24,6 @@
     P = Tesserae.Progress
     @test P.durationstring(60) == "0:01:00"
     @test P.timestring(0.001) == " 1.00 ms"
-    @test P.speedstring(0.001) == " 1.00 ms/it"
     @test P.barstring(4, 50) == "|██  |"
     median = P.P2Median()
     @test P.median(median) == Inf

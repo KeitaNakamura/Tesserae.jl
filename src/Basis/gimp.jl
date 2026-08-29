@@ -36,5 +36,5 @@ end
 @inline axis_jet_args(::uGIMP, pt, mesh::CartesianMesh{dim}, i) where {dim} =
     nfill((_normalized_particle_length(pt, mesh),), Val(dim))
 
-@inline nodal_basis_jet(order::Order, spline::uGIMP, pt, mesh::CartesianMesh, i) =
-    separable_nodal_basis_jet(order, spline, pt, mesh, i)
+@inline nodal_basis_jet(order::Order, kernel::uGIMP, pt, mesh::CartesianMesh, i) =
+    separable_nodal_basis_jet(order, kernel, pt, mesh, i)

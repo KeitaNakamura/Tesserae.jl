@@ -5,17 +5,8 @@ Insert `ξ` one or more times in a parametric direction without changing the
 represented geometry.
 """
 function insert_knot(net::ControlNet{dim, pdim, T}, ξ::T; direction::Int, ntimes::Int=1) where {dim, pdim, T}
-    check_parametric_direction(direction, pdim)
     ntimes ≥ 0 || throw(ArgumentError("number of knot insertions must be non-negative"))
-
-    axis_new = net.axes[direction]
-    points = homogeneous_points(net)
-    for _ in 1:ntimes
-        axis = axis_new
-        axis_new = insert_knot(axis, ξ)
-        points = insert_knot_values(points, axis, ξ, direction)
-    end
-    rational_control_net(Base.setindex(net.axes, axis_new, direction), points)
+    insert_knot(net, fill(ξ, ntimes); direction)
 end
 
 """

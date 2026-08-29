@@ -138,6 +138,17 @@ end
 narrowed_grid_expr(grid, equations, index) =
     :(Tesserae.narrow_transfer_grid($grid, Val($(Expr(:tuple, map(QuoteNode, collect_transfer_refs(equations, index))...)))))
 
+# Non-`@∑` equations run outside the support loop, where only their own stage's
+# index is bound; anything else must fail at macro time, not as a runtime
+# `UndefVarError` from the expansion.
+function check_nosum_refs(macroname, equations, allowed, banned...)
+    for index in banned
+        for name in collect_transfer_refs(equations, index)
+            error("$macroname: `$name[$index]` cannot be used in a non-`@∑` equation; only `[$allowed]`-indexed properties are available there")
+        end
+    end
+end
+
 # Keep the mesh so the result stays a grid, and at least one array component so an
 # `SpGrid` stays an `SpGrid` for dispatch and `get_spinds`.
 narrow_transfer_grid(grid, ::Val) = grid

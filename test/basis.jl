@@ -229,7 +229,7 @@ end # BasisWeight
     boundary_point(::Val{dim}) where {dim} = Vec{dim}(i -> i == 1 ? 0.02 : 0.45 + 0.01i)
     is_support_truncated(bw) = size(bw.w) != size(supportnodes(bw))
 
-    function check_partition_of_unity(bw, x; atol=sqrt(eps(eltype(bw.w))))
+    function check_partition_of_unity(bw)
         indices = supportnodes(bw)
         CI = CartesianIndices(indices) # local indices
         isapprox(sum(bw.w[CI]), 1) && isapproxzero(sum(bw.∇w[CI]))
@@ -246,7 +246,7 @@ end # BasisWeight
         if truncated !== nothing
             @test is_support_truncated(bw) === truncated
         end
-        PU = check_partition_of_unity(bw, x)
+        PU = check_partition_of_unity(bw)
         LFR = check_linear_field_reproduction(bw, x, mesh)
         @test (partition ? PU : !PU)
         @test (reproduces_linear ? LFR : !LFR)
@@ -403,7 +403,7 @@ end # BasisWeight
             @test collect(supportnodes(weights[p])) == collect(supportnodes(scalar))
             @test weights[p].w ≈ scalar.w
             @test weights[p].∇w ≈ scalar.∇w
-            @test check_partition_of_unity(weights[p], particles.x[p])
+            @test check_partition_of_unity(weights[p])
             @test check_linear_field_reproduction(weights[p], particles.x[p], mesh)
         end
 
@@ -506,7 +506,7 @@ end # BasisWeight
             scalar = BasisWeight(basis, mesh)
             update!(scalar, x, mesh)
             update!(scalar, x, mesh, filter)
-            @test check_partition_of_unity(scalar, x)
+            @test check_partition_of_unity(scalar)
             @test check_linear_field_reproduction(scalar, x, mesh)
             masked_local_index = findfirst(==(masked_node), supportnodes(scalar))
             @test !isnothing(masked_local_index)
@@ -733,6 +733,12 @@ end
             check_polynomial(poly, Val(2), Float32, Val(dim); check_values=false)
         end
     end
+end
+
+@testset "show of an empty BasisWeightArray" begin
+    mesh = CartesianMesh(0.5, (0,1), (0,1))
+    weights = generate_basis_weights(BSpline(Linear()), mesh, 0)
+    @test occursin("Basis values", sprint(show, MIME"text/plain"(), weights))
 end
 
 end # "Basis functions"

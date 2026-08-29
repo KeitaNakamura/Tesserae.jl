@@ -6,6 +6,9 @@
     @test mesh[1] === Vec(0.0,1.0,0.0)
     @test mesh[end] === Vec(3.0,4.0,2.0)
     @test mesh == map(Vec, (Iterators.product(range(0,3,step=1), range(1,4,step=1), range(0,2,step=1))))
+    mesh′ = copy(mesh)
+    @test mesh′ isa typeof(mesh)
+    @test mesh′ == mesh
     covered_mesh = @test_logs (:warn, r"not divisible by spacing") CartesianMesh(0.3, (0,1))
     @test size(covered_mesh) === (5,)
     @test covered_mesh[1] === Vec(0.0)

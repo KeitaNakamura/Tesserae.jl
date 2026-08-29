@@ -7,7 +7,7 @@
 # Particle order within a block is whatever the atomic scatter produced, which
 # permutes a floating-point sum that particle motion reorders anyway.
 
-struct GPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}, Vi <: AbstractVector{Int32}, Vl <: AbstractVector{Int64}} <: PartitionStrategy
+struct GPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}, Vi <: AbstractVector{Int32}, Vl <: AbstractVector{Int64}} <: BlockStrategy
     mesh::Mesh
     particleindices::Vi  # block-contiguous particle ids
     blockids::Vi         # per-particle linear block id, 0 while outside the mesh
@@ -38,9 +38,6 @@ function GPUBlockStrategy(mesh::CartesianMesh)
     )
 end
 
-nblocks(bs::GPUBlockStrategy) = nblocks(bs.mesh)
-block_size_log2(bs::GPUBlockStrategy) = block_size_log2(bs.mesh)
-blockwidth(bs::GPUBlockStrategy) = blockwidth(bs.mesh)
 nactive(bs::GPUBlockStrategy) = bs.nactive[]
 
 @kernel function gpukernel_partition_count!(blockids, counts, @Const(xₚ), @Const(mesh))
@@ -159,16 +156,14 @@ function update!(bs::GPUBlockStrategy, xₚ::AbstractVector{<: Vec})
     iszero(nₚ) || gpukernel_partition_scatter!(backend)(bs.particleindices, bs.cursors, bs.blockids; ndrange=nₚ)
 
     KernelAbstractions.synchronize(backend)
+    # The scatter fills slots 1:nassigned contiguously; the assigned total rides
+    # home in the same readback that fetches `nactive`, so `nassigned` costs no
+    # device round-trip on the adaptive reorder path.
     totals = Array(bs.totals_buf)
     bs.nactive[] = Int(totals[1])
     bs.nassigned[] = Int(totals[2])
     bs
 end
-
-# The scatter above fills slots 1:nassigned contiguously; the total rides home
-# in the same readback that fetches `nactive`, so reading it here costs no
-# device round-trip on the adaptive reorder path.
-nassigned(bs::GPUBlockStrategy) = bs.nassigned[]
 
 block_ordered_particle_contiguity(bs::GPUBlockStrategy) = same_block_neighbor_fraction(bs)
 
@@ -189,16 +184,6 @@ function same_block_neighbor_fraction(bs::GPUBlockStrategy)
     maxsame = nassigned(bs) - nactive(bs)
     maxsame ≤ 0 && return 1.0
     same / maxsame
-end
-
-function reorder_particles!(particles::StructVector, bs::GPUBlockStrategy; threshold=1)
-    0 ≤ threshold ≤ 1 || throw(ArgumentError("threshold must be in [0, 1]."))
-    iszero(threshold) && return false
-    if threshold == 1 || block_ordered_particle_contiguity(bs) < threshold
-        _reorder_partition_particles!(particles, bs)
-        return true
-    end
-    return false
 end
 
 function _reorder_partition_particles!(particles::StructVector, bs::GPUBlockStrategy)

@@ -44,7 +44,7 @@ for p in eachindex(particles)
         i = nodeindices[ip]
         grid.m [i] += bw.w[ip] * particles.m[p]
         grid.mv[i] += bw.w[ip] * particles.m[p] * particles.v[p]
-        grid.mv[i] += -particles.V[p] * particles.σ[p] * bw.∇w[ip]
+        grid.f [i] += -particles.V[p] * particles.σ[p] * bw.∇w[ip]
     end
 end
 
@@ -73,6 +73,7 @@ end
 
 function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, program::TransferProgram)
     sum_equations, nosum_equations = split_sum_equations(program, "@P2G")
+    check_nosum_refs("@P2G", nosum_equations, i, p, ip)
 
     code = quote
         Tesserae.check_transfer_arguments("@P2G", $grid, $particles, $weights, $partition)
@@ -316,7 +317,7 @@ end
 # They are passed down instead of being zeroed by the caller so that the threaded
 # path can fold them into the parallel region it already opens.
 function P2G(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {scheduler}
-    scheduler == :nothing || @warn "@P2G: `Partition` must be given for threaded computation" maxlog=1
+    scheduler == :nothing || @warn "`Partition` must be given for a threaded particle-to-grid transfer" maxlog=1
 
     fillzero_each!(zeroed)
     for p in eachindex(particles)

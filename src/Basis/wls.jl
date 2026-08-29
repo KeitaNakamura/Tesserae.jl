@@ -87,23 +87,12 @@ function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadrat
     # A mask breaks the axis-wise decomposition below, so it needs the general matrix.
     filter isa Trues || return update_wls_values!(bw, wls, pt, mesh, filter)
 
-    wls_1d = WLS(wls.kernel, Polynomial(Linear()))
     if dim == 1
-        return update_basis_values!(bw, wls_1d, pt, mesh, filter)
+        return update_basis_values!(bw, WLS(wls.kernel, Polynomial(Linear())), pt, mesh, filter)
     end
 
-    T = scalartype(bw)
     order = derivative_order(bw)
-    vals_axes = ntuple(Val(dim)) do d
-        mesh_1d = axismesh(mesh, d)
-        vals_1d = allocate_static_basis_values(@NamedTuple{w::T}, wls_1d, Val(1); derivative=order)
-        indices_1d = CartesianIndices((supportnodes(bw).indices[d],))
-        bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(indices_1d), order)
-        # Must be inlined: otherwise the small MArray escapes and the GPU falls
-        # back to dynamic allocation (gpu_gc_pool_alloc).
-        update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
-        scalarize_axis_values(order, bw_1d)
-    end
+    vals_axes = wls_axis_jets(scalartype(bw), order, wls.kernel, pt, mesh, supportnodes(bw))
     set_values!(bw, tensor_product_axis_values(order, vals_axes))
 end
 @inline function scalarize_axis_values(::Order{k}, bw) where {k}
@@ -168,14 +157,14 @@ can_defer_basis(::Type{<: WLS}) = true
 # than one pass over the whole support with a `(dim+1)²` inverse. What makes the
 # decomposition exact is the absence of a filter, whose type selects between this
 # and the general form, so each stays type-stable.
-@inline function wls_axis_jets(order::Order, kernel, pt, mesh::CartesianMesh{dim}, window) where {dim}
+@inline function wls_axis_jets(::Type{T}, order::Order, kernel, pt, mesh::CartesianMesh{dim}, window) where {T, dim}
     wls_1d = WLS(kernel, Polynomial(Linear()))
-    T = eltype(getx(pt))
     ntuple(Val(dim)) do d
         mesh_1d = axismesh(mesh, d)
         vals_1d = allocate_static_basis_values(@NamedTuple{w::T}, wls_1d, Val(1); derivative=order)
         bw_1d = BasisWeight(wls_1d, vals_1d, Scalar(CartesianIndices((window.indices[d],))), order)
-        # Must be inlined, as in the stored path: the small MArray must not escape.
+        # Must be inlined: otherwise the small MArray escapes and the GPU falls
+        # back to dynamic allocation (gpu_gc_pool_alloc).
         update_basis_values!(bw_1d, wls_1d, Vec(getx(pt)[d]), mesh_1d, Trues(size(mesh_1d)))
         scalarize_axis_values(order, bw_1d)
     end

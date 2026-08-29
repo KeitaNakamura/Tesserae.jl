@@ -81,7 +81,6 @@ Base.size(A::SpArray) = size(A.spinds)
 get_data(A::SpArray) = A.data
 get_spinds(A::SpArray) = A.spinds
 nblocks(A::SpArray) = nblocks(get_spinds(A))
-storedindices(A::SpArray) = eachindex(get_data(A))
 activeindices(A::SpArray) = activeindices(get_spinds(A))
 
 function Base.fill!(A::SpArray, x)
@@ -113,14 +112,6 @@ end
 @inline function Base.setindex!(A::SpArray{<: Any, dim}, v, I::Vararg{Integer, dim}) where {dim}
     @_propagate_inbounds_meta
     A[get_spinds(A)[I...]] = v
-    A
-end
-
-@inline function add!(A::SpArray{T}, i::SpIndex, v::T) where {T}
-    @boundscheck checkbounds(A, logicalindex(i))
-    isactive(i) || return A
-    @debug checkbounds(get_data(A), storageindex(i))
-    @inbounds get_data(A)[storageindex(i)] += v
     A
 end
 
@@ -182,7 +173,7 @@ _preserves_sparsity(bc::Broadcasted) = _all_sparrays(bc.args) && identical_spind
 _is_zero_preserving_bc_function(f) = f in (+, -, *)
 
 function Base.copyto!(dest::SpArray, bc::Broadcasted{ArrayStyle{SpArray}})
-    axes(dest) == axes(bc) || throwdm(axes(dest), axes(bc))
+    axes(dest) == axes(bc) || throw(DimensionMismatch("destination axes $(axes(dest)) do not match broadcast axes $(axes(bc))"))
     bc = Broadcast.instantiate(bc)
     bcf = Broadcast.flatten(bc)
     # The shared-sparsity test needs every leaf array in one tuple, which only the

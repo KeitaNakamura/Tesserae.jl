@@ -81,7 +81,6 @@ function support_width(basis::Basis)
 end
 
 initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
-initial_supportnodes(shape::Shape, mesh::FEMesh) = zero(SVector{nlocalnodes(shape), Int})
 
 function basis_property_type(::Type{T}, name) where {T}
     NamedTuple{(basis_value_name(Order(0), name),), Tuple{T}}
@@ -222,9 +221,6 @@ end
 
 BasisWeight(::Type{T}, basis::Basis, mesh::CartesianMesh; kwargs...) where {T} = _basis_weight(T, basis, mesh; kwargs...)
 BasisWeight(basis::Basis, mesh::CartesianMesh; kwargs...) = _basis_weight(Float64, basis, mesh; kwargs...)
-
-BasisWeight(::Type{T}, mesh::FEMesh; kwargs...) where {T} = _basis_weight(T, basis(mesh), mesh; kwargs...)
-BasisWeight(mesh::FEMesh; kwargs...) = BasisWeight(Float64, mesh; kwargs...)
 
 Base.propertynames(bw::BasisWeight) = propertynames(getfield(bw, :vals))
 @inline function Base.getproperty(bw::BasisWeight, name::Symbol)
@@ -496,11 +492,13 @@ _todims(x::Vararg{Int}) = x
 """
     generate_basis_weights([T,] ::Basis, mesh, dims...; derivative=Order(1), name=Val(:w))
     generate_basis_weights([T,] ::FEMesh, dims...; derivative=Order(1), name=Val(:w))
+    generate_basis_weights([T,] ::IGAMesh, dims...; derivative=Order(1), name=Val(:w))
     generate_basis_weights(Prop, ::Basis, mesh, dims...; derivative=Order(1))
     generate_basis_weights(Prop, ::FEMesh, dims...; derivative=Order(1))
 
 Generate an array of [`BasisWeight`](@ref)s for `basis` on `mesh`.
-For `FEMesh`, the mesh cell shape is used as the basis.
+For `FEMesh`, the mesh cell shape is used as the basis; for `IGAMesh`, the
+basis is taken from the patch degrees. The `Prop` forms cover `IGAMesh` too.
 
 In the `Prop` forms, `Prop` follows the same rules as in
 `BasisWeight(Prop, basis, mesh)`: its first field defines the basis value name
@@ -579,10 +577,9 @@ end
 end
 
 function _show_basis_weight_array(io::IO, weights::BasisWeightArray)
-    bw = first(weights)
     print(io, Base.dims2string(size(weights)), " ", ndims(weights)==1 ? "BasisWeightVector" : "BasisWeightArray", ": \n")
     print(io, "  Basis: ", basis(weights), "\n")
-    print(io, "  Basis values: ", join(propertynames(bw), ", "))
+    print(io, "  Basis values: ", join(propertynames(weights), ", "))
 end
 
 Base.show(io::IO, ::MIME"text/plain", weights::BasisWeightArray) = _show_basis_weight_array(io, weights)

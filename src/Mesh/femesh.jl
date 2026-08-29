@@ -69,17 +69,17 @@ function FEMesh(shape::Shape{dim}, mesh::CartesianMesh{dim}) where {dim}
 
     cellranges = _cellnodes_ranges(get_order(shape), size(mesh).-1)
     dims = (length(_cellnodes_connectivities(shape, first(cellranges))), length(cellranges))
-    connecitivies = Matrix{SVector{nlocalnodes(shape), Int}}(undef, dims)
+    connectivities = Matrix{SVector{nlocalnodes(shape), Int}}(undef, dims)
     @inbounds for (j, range) in enumerate(cellranges)
         conns = _cellnodes_connectivities(shape, range)
         for (i, conn) in enumerate(conns)
             inds = LinearIndices(mesh′)[conn]
-            connecitivies[i,j] = inds
+            connectivities[i,j] = inds
         end
     end
 
     nodeindices = zeros(Int, size(mesh′)) # handle Serendipity cell
-    @inbounds for conn in connecitivies
+    @inbounds for conn in connectivities
         nodeindices[conn] .= 1
     end
     count = 0
@@ -89,11 +89,11 @@ function FEMesh(shape::Shape{dim}, mesh::CartesianMesh{dim}) where {dim}
         end
     end
 
-    @inbounds for (i, conn) in enumerate(connecitivies)
-        connecitivies[i] = nodeindices[conn]
+    @inbounds for (i, conn) in enumerate(connectivities)
+        connectivities[i] = nodeindices[conn]
     end
 
-    FEMesh(shape, mesh′[findall(>(0), nodeindices)], vec(connecitivies))
+    FEMesh(shape, mesh′[findall(>(0), nodeindices)], vec(connectivities))
 end
 # An order-`n` cell spans `n` intervals, so its nodes are `n(I-1)+1` to `nI+1`.
 _cellnodes_ranges(::Order{n}, cellsize::Dims) where {n} = maparray(I -> (n*I-(n-1)*oneunit(I)):(n*I+oneunit(I)), CartesianIndices(cellsize))

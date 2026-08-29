@@ -697,6 +697,14 @@ end
     @test any(!iszero, Tesserae.SparseArrays.nonzeros(A))
     @test B ≈ A'
 
+    # The dense target used to assert sorted DoFs, which unsorted FEM cell
+    # connectivity violates.
+    A_dense = zeros(size(A))
+    @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
+        A_dense[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
+    end
+    @test A_dense ≈ Matrix(A)
+
     parent_matrix = create_sparse_matrix((quad9, quad4); ndofs=(3, 2))
     parent_row_dofs = LinearIndices((3, length(quad9)))
     parent_col_dofs = LinearIndices((2, length(quad4)))

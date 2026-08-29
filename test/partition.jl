@@ -211,11 +211,11 @@ end
 
         @test_throws "CPU-only" update_sparsity!(Tesserae.SpIndices(mesh), gpu_partition)
 
-        @test_throws "lives on the GPU" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, weights, gpu_partition)
-        @test_throws "lives on the CPU" Tesserae.check_partition_for_transfer("@P2G", gpu_device, grid, weights, cpu_partition)
-        @test_throws "only supports @P2G" Tesserae.check_partition_for_transfer("@G2P2G", gpu_device, grid, weights, gpu_partition)
-        @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", gpu_device, grid, weights, gpu_partition)
-        @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, weights, cpu_partition)
+        @test_throws "lives on the GPU" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, particles, weights, gpu_partition)
+        @test_throws "lives on the CPU" Tesserae.check_partition_for_transfer("@P2G", gpu_device, grid, particles, weights, cpu_partition)
+        @test_throws "only supports @P2G" Tesserae.check_partition_for_transfer("@G2P2G", gpu_device, grid, particles, weights, gpu_partition)
+        @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", gpu_device, grid, particles, weights, gpu_partition)
+        @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, particles, weights, cpu_partition)
     end
     @testset "reorder_particles! on a GPU partition" begin
         mesh = CartesianMesh(1.0, (0,16), (0,16))

@@ -6,11 +6,14 @@ struct Order{n}
     Order{n}() where {n} = new{n::Int}()
 end
 Order(n::Int) = Order{n}()
+_order_value(::Order{n}) where {n} = n
+_order_value(::Type{Order{n}}) where {n} = n
 
 struct Degree{n}
     Degree{n}() where {n} = new{n::Int}()
 end
 Degree(n::Int) = Degree{n}()
+_degree(::Degree{n}) where {n} = n
 const Constant  = Degree{0}
 const Linear    = Degree{1}
 const Quadratic = Degree{2}
