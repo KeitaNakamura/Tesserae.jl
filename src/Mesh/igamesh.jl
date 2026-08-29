@@ -1,4 +1,3 @@
-
 """
     IGAPatch(degrees, knot_vectors, controlpoint_ids)
 

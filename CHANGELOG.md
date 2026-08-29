@@ -9,6 +9,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.
+- Added `dofmap` and `BlockDofMap` for extracting active monolithic and block
+  systems.
 - `DofMap` and `dofmap` accept a mask whose elements are `Vec{ndofs, Bool}`, so
   the DoF mask can be a grid field written with `@foreach` rather than a
   separately allocated array. A plain `(ndofs, size(grid)...)` Boolean array
@@ -27,8 +29,6 @@ All notable changes to Tesserae.jl will be documented in this file.
   matrix, reducing it through the `DofMap`'s Boolean mask. A `BlockDofMap` works
   the same way, so a monolithic block system reduces on the device too, and a
   single block view reduces through the per-field maps.
-- Added `dofmap` and `BlockDofMap` for extracting active monolithic and block
-  systems.
 
 ### Performance
 

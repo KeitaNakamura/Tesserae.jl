@@ -216,6 +216,13 @@ end
         @test_throws "only supports @P2G" Tesserae.check_partition_for_transfer("@G2P2G", gpu_device, grid, particles, weights, gpu_partition)
         @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", gpu_device, grid, particles, weights, gpu_partition)
         @test_throws "No particles assigned" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, particles, weights, cpu_partition)
+
+        update!(cpu_partition, particles.x)
+        @test_throws "must run with these particles" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, particles[1:end-1], weights, cpu_partition)
+
+        mismatched_partition = Partition(CartesianMesh(1.0, (0,16), (0,16)))
+        update!(mismatched_partition, particles.x)
+        @test_throws "does not match the mesh" Tesserae.check_partition_for_transfer("@P2G", Tesserae.CPUDevice(), grid, particles, weights, mismatched_partition)
     end
     @testset "reorder_particles! on a GPU partition" begin
         mesh = CartesianMesh(1.0, (0,16), (0,16))

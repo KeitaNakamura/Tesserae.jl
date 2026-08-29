@@ -89,13 +89,18 @@ get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
 """
     update_sparsity!(grid::SpGrid, xₚ::AbstractVector{<: Vec})
-    update_sparsity!(grid::SpGrid, blkspy::AbstractArray)
+    update_sparsity!(grid::SpGrid, partition::Partition)
+    update_sparsity!(grid::SpGrid, blkspy)
 
-Activate the blocks of a sparse grid that carry particles, plus their
-neighbors for basis support, and resize the grid storage accordingly.
+Activate blocks of a sparse grid and resize the grid storage accordingly.
 All grid values are zeroed. Must run before a transfer whenever particles may
-have moved across blocks: pass the particle positions `xₚ`, or a block-level
-sparsity pattern `blkspy`.
+have moved across blocks.
+
+The `xₚ` and `partition` forms activate the blocks carrying particles plus
+their neighbor blocks for basis support; the `partition` form is CPU-only, so
+pass the particle positions on GPU. The `blkspy` form activates exactly the
+blocks marked in the given block-level pattern, so the caller must already
+include any neighbor blocks the basis support needs.
 """
 update_sparsity!(A::SpGrid, blkspy) =
     _apply_numbering_result!(A, update_sparsity!(get_spinds(A), blkspy))

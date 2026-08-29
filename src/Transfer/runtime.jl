@@ -211,7 +211,8 @@ function check_partition_for_transfer(macroname, ::CPUDevice, grid, particles, w
 end
 check_partition_for_transfer(macroname, grid, particles, weights, strat) = nothing
 function check_partition_for_transfer(macroname, grid, particles, weights, strat::BlockStrategy)
-    @assert nblocks(get_mesh(grid)) == nblocks(strat)
+    nblocks(get_mesh(grid)) == nblocks(strat) ||
+        error("$macroname: the grid's mesh does not match the mesh the `Partition` was built for")
     if nassigned(strat) == 0
         error("$macroname: No particles assigned to any block in Partition")
     end

@@ -92,7 +92,7 @@ end
 function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::QuadraturePoints,
                     weights::Tuple{<:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, <:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}},
                     ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "@P2G_Matrix: `Partition` must be given for threaded computation" maxlog=1
+    scheduler == :nothing || @warn "`Partition` must be given for a threaded particle-to-grid transfer" maxlog=1
 
     for cell in axes(particles, 2)
         @inline f(grids, particles, weights, cell_quadrature_indices(particles, cell), CellAssembly())
@@ -205,8 +205,11 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     shared_weights = grid_i == grid_j && weights_i == weights_j
     names_i = collect_transfer_refs(equations, ip)
     names_j = collect_transfer_refs(equations, jp)
+    # The side holding `load=true` emits the binding only when it resolves a
+    # weight ref, so the row side may hand the load to the column side when the
+    # equations reference weights through `jp` alone.
     cols_i = WeightColumnsBinding(shared_weights ? union(names_i, names_j) : names_i)
-    cols_j = shared_weights ? WeightColumnsBinding(cols_i; load=false) : WeightColumnsBinding(names_j)
+    cols_j = shared_weights ? WeightColumnsBinding(cols_i; load=isempty(names_i)) : WeightColumnsBinding(names_j)
     scope = TransferScope([grid_i′=>i, grid_j′=>j, particles=>p,
                            TrailingIndexed(weights_i′, p, particles, grid_i′, gridindices_i, cols_i)=>ip,
                            TrailingIndexed(weights_j′, p, particles, grid_j′, gridindices_j, cols_j)=>jp]; cache=true)
