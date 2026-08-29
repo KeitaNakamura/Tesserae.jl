@@ -376,7 +376,7 @@
         particle_nodes = map(p -> supportnodes(weights[p]), particle_indices)
         first_node = CartesianIndex(map(min, Tuple.(first.(particle_nodes))...))
         last_node = CartesianIndex(map(max, Tuple.(last.(particle_nodes))...))
-        @test Tesserae.matrix_block_supportnodes(weights, particle_indices, grid) ==
+        @test Tesserae.matrix_block_supportnodes(weights, particles, particle_indices, grid) ==
               first_node:last_node
 
         ip = length(nodes_i)
