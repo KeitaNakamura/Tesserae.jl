@@ -232,6 +232,7 @@ function transfer_stages(kind::Symbol, program::TransferProgram, ctx)
     end
     check_nosum_refs("@$kind", stages.g2p_nosum, p, i, ip)
     check_nosum_refs("@$kind", stages.p2g_nosum, i, p, ip)
+    check_unique_sum_targets("@$kind", stages.g2p_sum)
     stages
 end
 

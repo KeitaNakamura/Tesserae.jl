@@ -981,6 +981,33 @@
         end
     end
 
+    # A shared accumulator would store what both equations accumulated, twice.
+    @testset "duplicate particle @∑ targets are rejected" begin
+        for ex in (
+            quote
+                @G2P grid=>i particles=>p weights=>ip begin
+                    v[p] += @∑ w[ip] * v[i]
+                    v[p] += @∑ w[ip] * vⁿ[i]
+                end
+            end,
+            quote
+                @G2P2G grid=>i particles=>p weights=>ip begin
+                    ∇v[p] = @∑ v[i] ⊗ ∇w[ip]
+                    ∇v[p] += @∑ vⁿ[i] ⊗ ∇w[ip]
+                    f[i] = @∑ -V[p] * σ[p] * ∇w[ip]
+                end
+            end,
+            quote
+                @explain @G2P grid=>i particles=>p weights=>ip begin
+                    v[p] += @∑ w[ip] * v[i]
+                    v[p] += @∑ w[ip] * vⁿ[i]
+                end
+            end,
+        )
+            @test_throws "duplicate `@∑` target" macroexpand(@__MODULE__, ex)
+        end
+    end
+
     # The P2G half used to read an unbound weight-columns binding when the G2P
     # `@∑` half referenced no weight property.
     @testset "@G2P2G with a weight-free G2P half" begin
@@ -995,6 +1022,31 @@
             m[i] = @∑ w[ip] * m[p]
         end
         @test sum(grid.m) ≈ sum(particles.m)
+    end
+
+    # The handed-off columns binding must land before the particle equations, so
+    # deferred weights evaluate at the position the support window was taken at.
+    @testset "@G2P2G weight-free G2P half: deferred matches stored across a position write" begin
+        mesh = CartesianMesh(0.5, (0,3), (0,3))
+        function run_g2p2g(deferred)
+            grid = generate_grid(@NamedTuple{x::Vec{2,Float64}, m::Float64, v::Vec{2,Float64}}, mesh)
+            grid.v .= (x -> Vec(x[1], -x[2])).(grid.x)
+            particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64, s::Float64}, mesh; alg=GridSampling())
+            particles.m .= 1
+            weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(particles))
+            update!(weights, particles, mesh; deferred)
+            @G2P2G grid=>i particles=>p weights=>ip begin
+                s[p] = @∑ v[i][1]
+                x[p] += $(Vec(0.04, 0.04))
+                m[i] = @∑ w[ip] * m[p]
+            end
+            (copy(grid.m), copy(particles.s), copy(particles.x))
+        end
+        m_stored, s_stored, x_stored = run_g2p2g(false)
+        m_deferred, s_deferred, x_deferred = run_g2p2g(true)
+        @test m_deferred ≈ m_stored
+        @test s_deferred ≈ s_stored
+        @test x_deferred ≈ x_stored
     end
 
     # Every particle assigned to a block must have its entire support window

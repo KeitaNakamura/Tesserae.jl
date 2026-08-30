@@ -89,6 +89,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     stages = split_g2p2g_stages(program, i, p)
     check_nosum_refs("@G2P2G", stages.g2p_nosum, p, i, ip)
     check_nosum_refs("@G2P2G", stages.p2g_nosum, i, p, ip)
+    check_unique_sum_targets("@G2P2G", stages.g2p_sum)
 
     code = quote
         Tesserae.check_transfer_arguments("@G2P2G", $grid, $particles, $weights, $partition)
@@ -102,8 +103,11 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
         collect_transfer_refs(stages.g2p_sum, ip),
         collect_transfer_refs(stages.p2g_sum, ip)))
 
+    g2p_has_weight_refs = !isempty(collect_transfer_refs(stages.g2p_sum, ip))
+    p2g_has_weight_refs = !isempty(collect_transfer_refs(stages.p2g_sum, ip))
     if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
-        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, binding, colsbinding)
+        preload_cols = !isempty(stages.g2p_sum) && !g2p_has_weight_refs && p2g_has_weight_refs
+        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, binding, colsbinding; preload_cols)
         body = quote
             $body
             $expr
@@ -112,11 +116,12 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
 
     zeroed = Expr(:tuple)
     if !isempty(stages.p2g_sum)
-        # `G2P_sum_expr` binds the window only when it has `@∑` equations, and the
-        # weight columns only when those equations actually reference a weight
-        # property, so this half must load whatever the G2P half did not emit.
+        # `G2P_sum_expr` binds the window only when it has `@∑` equations, and
+        # then always holds the columns binding -- preloaded when its own
+        # equations reference no weight property -- so this half loads only when
+        # the G2P `@∑` half is absent.
         p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
-        p2g_cols = isempty(collect_transfer_refs(stages.g2p_sum, ip)) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
+        p2g_cols = isempty(stages.g2p_sum) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
         zeroed, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
         body = quote
             $body

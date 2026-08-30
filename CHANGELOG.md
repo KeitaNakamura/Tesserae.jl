@@ -55,7 +55,10 @@ All notable changes to Tesserae.jl will be documented in this file.
   `Polynomial(Quadratic())` and `Polynomial(MultiQuadratic())` remain valid on
   their own.
 - `@G2P2G` emitted a read of an unbound variable when the grid-to-particle `@∑`
-  half referenced no weight property while the particle-to-grid half did.
+  half referenced no weight property while the particle-to-grid half did. In
+  that shape the weight columns now bind before the particle equations, so
+  deferred basis weights evaluate at the position the support window was taken
+  at even when an equation moves `x[p]` mid-transfer.
 - `copy` on a `CartesianMesh` (and hence on a generated grid) threw
   `UndefVarError`.
 - `@P2G_Matrix` assembling the FEM cell path into a dense matrix failed on
@@ -79,6 +82,9 @@ All notable changes to Tesserae.jl will be documented in this file.
   equations at macro-expansion time; previously these expanded to code that
   failed at runtime with `UndefVarError` or silently captured caller-scope
   variables.
+- `@G2P` and `@G2P2G` reject a duplicated particle `@∑` target at
+  macro-expansion time; the shared accumulator used to store what both sums
+  accumulated into the target twice.
 - Transfer argument validation raises descriptive errors instead of bare
   `@assert` failures, and CPU partitioned transfers now check that
   `update!(partition, particles.x)` ran with the current particle array, as the
