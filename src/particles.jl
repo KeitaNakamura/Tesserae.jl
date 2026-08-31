@@ -18,10 +18,13 @@ function generate_points(alg::GridSampling, mesh::CartesianMesh{dim, T}) where {
 end
 
 """
-    PoissonDiskSampling(spacing = 1/2, rng = Random.default_rng())
+    PoissonDiskSampling(spacing = 1/2, rng = Random.default_rng(), threaded = rng isa Random.TaskLocalRNG)
 
 The particles are generated based on the Poisson disk sampling.
 The `spacing` parameter is used to produce a similar number of particles as are generated with [`GridSampling`](@ref).
+Multithreaded sampling is enabled by default only for the task-local RNG (the default);
+passing a custom `rng` disables it so sampling stays reproducible, and `threaded` can
+be set explicitly.
 """
 @kwdef struct PoissonDiskSampling{T, RNG} <: SamplingAlgorithm
     spacing  :: T    = 1/2
@@ -181,6 +184,8 @@ Base.propertynames(points::QuadraturePoints, private::Bool=false) = propertyname
 @inline Base.setindex!(points::QuadraturePoints, value, i::Int, j::Int) = setindex!(parent(points), value, i, j)
 @inline Base.view(points::QuadraturePoints, ::Colon, cells::Union{Colon, AbstractVector}) = QuadraturePoints(view(parent(points), :, cells), quadrature_rule(points))
 Base.copy(points::QuadraturePoints) = QuadraturePoints(copy(parent(points)), quadrature_rule(points))
+
+cell_quadrature_indices(points, cell) = (CartesianIndex(q, cell) for q in axes(points, 1))
 StructArrays.components(points::QuadraturePoints) = StructArrays.components(parent(points))
 
 function _check_quadrature_rule(::QuadratureRule{F, qdim}, mesh::FEMesh) where {F, qdim}
@@ -213,16 +218,7 @@ end
 
 function cell_point(mesh::IGAMesh, cell, qpt)
     patch = patches(mesh, cell.patch)
-    ξ = span_point(patch, cell.span, qpt)
-    N, _ = iga_basis_values_and_gradients(patch, cell.span, ξ)
     indices = supportnodes(mesh, cell)
-    R = geometry_basis_values(N, mesh.weights, indices)
+    R, _ = iga_span_basis(patch, cell.span, qpt, mesh.weights, indices)
     sum(R .* mesh[indices])
-end
-
-geometry_basis_values(N, ::Nothing, indices) = N
-function geometry_basis_values(N, weights::AbstractVector, indices)
-    w = weights[indices]
-    W = sum(N .* w)
-    map((Nᵢ, wᵢ) -> Nᵢ*wᵢ/W, N, w)
 end

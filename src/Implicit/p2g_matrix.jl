@@ -4,10 +4,19 @@
 
 # ---- support nodes ----
 
+# Logical grid indices, not `SpGrid` storage tokens: the global DOF tables are
+# built on logical indices.
+@inline function matrix_support_window(weights, particles, p, grid)
+    @_propagate_inbounds_meta
+    window = transfer_support_window(weights, particles, p, get_mesh(grid))
+    @boundscheck checkbounds(get_mesh(grid), window)
+    window
+end
+
+# Kept for the readable `@explain` lowering, which materializes `BasisWeight`
+# rows on purpose.
 function matrix_supportnodes(bw, grid)
     @_propagate_inbounds_meta
-    # The global DOF tables are built on logical grid indices, where
-    # `supportnodes(bw, grid)` would hand back an `SpGrid`'s storage tokens.
     nodes = supportnodes(bw)
     @boundscheck checkbounds(get_mesh(grid), nodes)
     nodes, nodes
@@ -15,7 +24,6 @@ end
 
 function matrix_supportnodes(bw_i, grid_i, bw_j, grid_j)
     @_propagate_inbounds_meta
-    # Logical grid indices, not `SpGrid` storage tokens; see the single-grid method.
     nodes_i = supportnodes(bw_i)
     nodes_j = supportnodes(bw_j)
     @boundscheck checkbounds(get_mesh(grid_i), nodes_i)
@@ -23,19 +31,20 @@ function matrix_supportnodes(bw_i, grid_i, bw_j, grid_j)
     nodes_i, nodes_j
 end
 
-function matrix_block_supportnodes(weights, particle_indices, grid)
+function matrix_block_supportnodes(weights, particles, particle_indices, grid)
     @_propagate_inbounds_meta
+    mesh = get_mesh(grid)
     p, remaining_particles = Iterators.peel(particle_indices)
-    nodes = supportnodes(weights[p])
+    nodes = transfer_support_window(weights, particles, p, mesh)
     first_node = first(nodes)
     last_node = last(nodes)
     for p in remaining_particles
-        nodes = supportnodes(weights[p])
+        nodes = transfer_support_window(weights, particles, p, mesh)
         first_node = CartesianIndex(map(min, Tuple(first_node), Tuple(first(nodes))))
         last_node = CartesianIndex(map(max, Tuple(last_node), Tuple(last(nodes))))
     end
     nodes = first_node:last_node
-    @boundscheck checkbounds(get_mesh(grid), nodes)
+    @boundscheck checkbounds(mesh, nodes)
     nodes
 end
 
@@ -60,8 +69,8 @@ function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles, weights,
     matrix_buffer_pool = strategy(partition).matrix_buffer_pool
     partitioned_foreach(strategy(partition), Val(scheduler)) do block
         block_particle_indices = particle_indices(partition, particles, block)
-        nodes_i = matrix_block_supportnodes(weights[1], block_particle_indices, grids[1])
-        nodes_j = grids[1] === grids[2] && weights[1] === weights[2] ? nodes_i : matrix_block_supportnodes(weights[2], block_particle_indices, grids[2])
+        nodes_i = matrix_block_supportnodes(weights[1], particles, block_particle_indices, grids[1])
+        nodes_j = grids[1] === grids[2] && weights[1] === weights[2] ? nodes_i : matrix_block_supportnodes(weights[2], particles, block_particle_indices, grids[2])
         @inline f(grids, particles, weights, block_particle_indices, BlockAssembly(nodes_i, nodes_j, matrix_buffer_pool))
     end
 end
@@ -70,9 +79,8 @@ end
 
 # The shared particle-parallel kernel serves this transfer too; only the scatter
 # mode differs from the CPU wrapping above.
-function P2G_Matrix(f, device::GPUDevice, ::Val{scheduler}, grids, particles, weights, ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "Multi-threading is disabled for GPU" maxlog=1
-    particles = particles isa QuadraturePoints ? parent(particles) : particles
+function P2G_Matrix(f::F, device::GPUDevice, schedule::Val, grids, particles, weights, ::Nothing) where {F}
+    particles = gpu_launch_collection(particles, schedule)
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
     kernel((grids, particles, weights, p) -> (@inline f(grids, particles, weights, (p,), ParticleAssembly{AtomicScatter}())),
@@ -84,11 +92,10 @@ end
 function P2G_Matrix(f, ::CPUDevice, ::Val{scheduler}, grids, particles::QuadraturePoints,
                     weights::Tuple{<:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}, <:BasisWeightArray{<:Any, <:Any, <:CellSupportMatrix}},
                     ::Nothing) where {scheduler}
-    scheduler == :nothing || @warn "@P2G_Matrix: `Partition` must be given for threaded computation" maxlog=1
+    scheduler == :nothing || @warn "`Partition` must be given for a threaded particle-to-grid transfer" maxlog=1
 
     for cell in axes(particles, 2)
-        particle_indices = (CartesianIndex(q, cell) for q in axes(particles, 1))
-        @inline f(grids, particles, weights, particle_indices, CellAssembly())
+        @inline f(grids, particles, weights, cell_quadrature_indices(particles, cell), CellAssembly())
     end
 end
 
@@ -186,12 +193,26 @@ function P2G_Matrix_expr(schedule, grid_ij, particles_p, weights_ipjp, partition
 end
 
 function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particles,p), ((weights_i,weights_j),(ip,jp)), partition, program::TransferProgram)
-    @gensym grid_i′ grid_j′ weights_i′ weights_j′ bw_i bw_j gridindices_i gridindices_j particle_indices matrix_assembly remaining_particles
+    @gensym grid_i′ grid_j′ weights_i′ weights_j′ gridindices_i gridindices_j particle_indices matrix_assembly remaining_particles
 
     equations = program.equations
     check_matrix_program("@P2G_Matrix", equations)
 
-    scope = TransferScope([grid_i′=>i, grid_j′=>j, particles=>p, bw_i=>ip, bw_j=>jp]; cache=true)
+    # Weight references resolve through per-particle columns, like the transfer
+    # macros; see the weight-references note in program.jl. With one weight set
+    # on both sides the columns are bound once and shared by the row and column
+    # node lookups.
+    shared_weights = grid_i == grid_j && weights_i == weights_j
+    names_i = collect_transfer_refs(equations, ip)
+    names_j = collect_transfer_refs(equations, jp)
+    # The side holding `load=true` emits the binding only when it resolves a
+    # weight ref, so the row side may hand the load to the column side when the
+    # equations reference weights through `jp` alone.
+    cols_i = WeightColumnsBinding(shared_weights ? union(names_i, names_j) : names_i)
+    cols_j = shared_weights ? WeightColumnsBinding(cols_i; load=isempty(names_i)) : WeightColumnsBinding(names_j)
+    scope = TransferScope([grid_i′=>i, grid_j′=>j, particles=>p,
+                           TrailingIndexed(weights_i′, p, particles, grid_i′, gridindices_i, cols_i)=>ip,
+                           TrailingIndexed(weights_j′, p, particles, grid_j′, gridindices_j, cols_j)=>jp]; cache=true)
     equations = map(equations) do eq
         TransferEquation(eq.kind, eq.lhs, resolve_refs(eq.rhs, scope), eq.op)
     end
@@ -254,16 +275,21 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         :(Tesserae.fillzero_matrix_targets!(($(zeroed_targets...),)))
     end
 
-    supportnodes_expr = if grid_i == grid_j && weights_i == weights_j
-        :(($gridindices_i, $gridindices_j) = Tesserae.matrix_supportnodes($bw_i, $grid_i′))
+    supportnodes_expr = if shared_weights
+        quote
+            $gridindices_i = Tesserae.matrix_support_window($weights_i′, $particles, $p, $grid_i′)
+            $gridindices_j = $gridindices_i
+        end
     else
-        :(($gridindices_i, $gridindices_j) = Tesserae.matrix_supportnodes($bw_i, $grid_i′, $bw_j, $grid_j′))
+        quote
+            $gridindices_i = Tesserae.matrix_support_window($weights_i′, $particles, $p, $grid_i′)
+            $gridindices_j = Tesserae.matrix_support_window($weights_j′, $particles, $p, $grid_j′)
+        end
     end
 
     particle_init = quote
         $(particle_replacements...)
         $(hoist_exprs...)
-        $bw_i, $bw_j = $weights_i′[$p], $weights_j′[$p]
     end
 
     function assemble_particle(assembly)
@@ -285,8 +311,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     # returns a zeroed buffer.
     particle_or_cell_body = quote
         $p, $remaining_particles = Base.Iterators.peel($particle_indices)
-        $particle_init
         $supportnodes_expr
+        $particle_init
         $(map(t -> t.buffer_init, targets)...)
         $(assemble_particle(map(t -> t.assemble_first, targets)))
         for $p in $remaining_particles
@@ -299,8 +325,8 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     block_body = quote
         $(map(t -> t.block_buffer_init, targets)...)
         for $p in $particle_indices
-            $particle_init
             $supportnodes_expr
+            $particle_init
             $(assemble_particle(map(t -> t.assemble_add, targets)).args...)
         end
         $(map(t -> t.finish, targets)...)

@@ -82,6 +82,16 @@ function _vtk_format(A::AbstractArray{<: SymmetricSecondOrderTensor{3, T}}) wher
     _vtk_format(maparray(x->Vec{6, T}(x[1,1],x[2,2],x[3,3],x[1,2],x[2,3],x[3,1]), A))
 end
 
+"""
+    openvtk(filename, x; kwargs...) -> vtk
+    openvtk(f::Function, filename, x; kwargs...)
+
+Open a VTK dataset file for `x`, which may be a `CartesianMesh`, an `FEMesh`,
+or a vector of points. Fields are written with `vtk["name"] = data` and the
+file is saved with [`closevtk`](@ref). The `do`-block form saves the file and
+returns the written paths. Keyword arguments are passed to
+`WriteVTK.vtk_grid`.
+"""
 openvtk(vtk, x; kwargs...) = _vtk_grid(vtk, x; kwargs...)
 function openvtk(f::Function, args...; kwargs...)
     vtk = openvtk(args...; kwargs...)
@@ -93,10 +103,42 @@ function openvtk(f::Function, args...; kwargs...)
     end
     outfiles::Vector{String}
 end
+
+"""
+    openvtm(filename) -> vtm
+
+Open a VTK multiblock file. Blocks are added with `openvtk(vtm, x)` and the
+file is saved with [`closevtm`](@ref).
+"""
 openvtm(args...; kwargs...) = WriteVTK.vtk_multiblock(args...; kwargs...)
+
+"""
+    openpvd(filename) -> pvd
+
+Open a ParaView collection for a time series. Snapshots are added with
+`pvd[t] = vtk` and the collection is saved with [`closepvd`](@ref).
+"""
 openpvd(args...; kwargs...) = WriteVTK.paraview_collection(args...; kwargs...)
+
+"""
+    closevtk(vtk)
+
+Save a file opened with [`openvtk`](@ref) to disk.
+"""
 closevtk(file::WriteVTK.DatasetFile) = WriteVTK.vtk_save(file)
+
+"""
+    closevtm(vtm)
+
+Save a file opened with [`openvtm`](@ref) to disk.
+"""
 closevtm(file::WriteVTK.MultiblockFile) = WriteVTK.vtk_save(file)
+
+"""
+    closepvd(pvd)
+
+Save a collection opened with [`openpvd`](@ref) to disk.
+"""
 closepvd(file::WriteVTK.CollectionFile) = WriteVTK.vtk_save(file)
 
 f32(A::AbstractArray{Float64}) = maparray(Float32, A)

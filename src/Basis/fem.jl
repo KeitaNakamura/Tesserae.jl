@@ -30,7 +30,7 @@ function update!(
     ncells(fieldmesh) == ncells(geometry) || throw(DimensionMismatch("field and geometry must have the same number of cells"))
     set_cellsupports!(getfield(weights, :indices), cellsupports(fieldmesh))
     is_domain = pdim == dim
-    mode = pdim == dim ? Val(:domain) : Val(:boundary)
+    mode = is_domain ? Val(:domain) : Val(:boundary)
     rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
 
     field_shape = cellshape(fieldmesh)
@@ -65,7 +65,7 @@ function update!(
         normal::Union{Nothing, AbstractArray}=nothing,
     ) where {dim, pdim, T, Degrees, B <: IGABasis{pdim, Degrees}}
     is_domain = pdim == dim
-    mode = pdim == dim ? Val(:domain) : Val(:boundary)
+    mode = is_domain ? Val(:domain) : Val(:boundary)
     rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
     fieldmesh === geometry && return _update_iga!(mode, weights, rule, fieldmesh, measure, normal)
     check_matching_cell_partitions(fieldmesh, geometry)

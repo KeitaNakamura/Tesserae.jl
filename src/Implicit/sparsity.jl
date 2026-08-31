@@ -102,11 +102,11 @@ end
 create_sparse_matrix(basis::Basis, mesh::CartesianMesh; ndofs) = _create_sparse_matrix(Float64, basis, mesh, ndofs)
 create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh; ndofs) where {T} = _create_sparse_matrix(T, basis, mesh, ndofs)
 
-function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}, ndofs::Int) where {T, dim}
+function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh, ndofs::Int) where {T}
     _create_sparse_matrix(T, basis, mesh, (ndofs, ndofs))
 end
 
-function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh{dim}, ndofs::Tuple{Int, Int}) where {T, dim}
+function _create_sparse_matrix(::Type{T}, basis::Basis, mesh::CartesianMesh, ndofs::Tuple{Int, Int}) where {T}
     row_ndofs, col_ndofs = ndofs
     I, J = Int[], Int[]
     _append_sparse_pattern!(I, J, 0, 0, basis, mesh, row_ndofs, col_ndofs)
@@ -169,15 +169,13 @@ end
 
 # -- IGA --
 
-create_sparse_matrix(::IGABasis, mesh::IGAMesh{dim}; ndofs) where {dim} = _create_sparse_matrix(Float64, mesh, ndofs)
-create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh{dim}; ndofs) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
+create_sparse_matrix(::IGABasis, mesh::IGAMesh; ndofs) = _create_sparse_matrix(Float64, mesh, ndofs)
+create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh; ndofs) where {T} = _create_sparse_matrix(T, mesh, ndofs)
 
-_create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Int) where {T} = _create_sparse_matrix(T, mesh, ndofs)
-_create_sparse_matrix(::Type{T}, ::IGABasis, mesh::IGAMesh, ndofs::Tuple{Int, Int}) where {T} = _create_sparse_matrix(T, mesh, ndofs)
 _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Int) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
 _create_sparse_matrix(::Type{T}, mesh::IGAMesh, ndofs::Tuple{Int, Int}) where {T} = _create_cell_support_sparse_matrix(T, mesh, ndofs)
-create_sparse_matrix(::Type{T}, mesh::IGAMesh{dim}; ndofs) where {T, dim} = _create_sparse_matrix(T, mesh, ndofs)
-create_sparse_matrix(mesh::IGAMesh{dim}; ndofs) where {dim} = create_sparse_matrix(Float64, mesh; ndofs)
+create_sparse_matrix(::Type{T}, mesh::IGAMesh; ndofs) where {T} = _create_sparse_matrix(T, mesh, ndofs)
+create_sparse_matrix(mesh::IGAMesh; ndofs) = create_sparse_matrix(Float64, mesh; ndofs)
 
 function _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh::IGAMesh{dim, pdim}, colmesh::IGAMesh{dim, pdim}, row_ndofs, col_ndofs) where {dim, pdim}
     rowmesh === colmesh && return _append_sparse_pattern!(I, J, row_offset, col_offset, rowmesh, row_ndofs, col_ndofs)
@@ -426,7 +424,6 @@ end
 
 function add!(A::AbstractMatrix, I::AbstractVector{Int}, J::AbstractVector{Int}, K::AbstractMatrix)
     @boundscheck checkbounds(A, I, J)
-    @assert issorted(I)
     @assert size(K) == map(length, (I, J))
     @inbounds @views A[I,J] .+= K
 end

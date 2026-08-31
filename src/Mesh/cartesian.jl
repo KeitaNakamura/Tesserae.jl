@@ -17,11 +17,12 @@ function _check_block_size_log2(::Val{L}) where {L}
 end
 
 """
-    CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...; warn=true, block_size_log2=Val(2))
+    CartesianMesh([T,] h, (xmin, xmax), (ymin, ymax)...; pad=0, warn=true, block_size_log2=Val(2))
 
 Construct a uniform Cartesian mesh with scalar spacing `h` (same in all directions).
 If an axis length is not divisible by `h`, the upper bound is expanded to cover the
 requested domain. Set `warn=false` to suppress the expansion warning.
+`pad` extends every axis by `pad` cells (`pad*h`) beyond both bounds.
 `block_size_log2` sets the block decomposition used by [`Partition`](@ref) and [`SpArray`](@ref)
 grids generated from this mesh.
 
@@ -141,7 +142,7 @@ end
     mesh[indices.indices...]
 end
 
-Base.copy(mesh::CartesianMesh) = CartesianMesh(copy(get_axisarray(mesh)), spacing(mesh), spacing_inv(mesh); block_size_log2=Val(block_size_log2(mesh)))
+Base.copy(mesh::CartesianMesh) = CartesianMesh(map(copy, mesh.axes), spacing(mesh), spacing_inv(mesh); block_size_log2=Val(block_size_log2(mesh)))
 
 @inline function Tensorial.normalize(x::Vec{dim}, mesh::CartesianMesh{dim}) where {dim}
     xmin = get_xmin(mesh)
@@ -167,7 +168,7 @@ end
 
 Return `CartesianIndices` for support nodes around `x`.
 `r` denotes the range for searching area. In 1D, for example, the range `a`
-becomes ` x-r*h ≤ a < x+r*h` where `h` is `spacing(mesh)`.
+becomes ` x-r*h < a ≤ x+r*h` where `h` is `spacing(mesh)`.
 
 # Examples
 ```jldoctest

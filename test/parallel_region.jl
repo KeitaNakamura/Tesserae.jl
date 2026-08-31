@@ -114,8 +114,8 @@
                 isempty(group) && continue
                 nregions = length(group)
                 nregions < nworkers && continue
-                for bounds in (Tesserae.equal_count_bounds(nregions, nworkers),
-                               Tesserae.particle_count_bounds(bs, group, nworkers))
+                for bounds in (Tesserae.equal_count_bounds!(Vector{Int}(undef, nworkers + 1), nregions, nworkers),
+                               Tesserae.particle_count_bounds!(Vector{Int}(undef, nworkers + 1), bs, group, nworkers))
                     @test bounds[1] == 0 && bounds[end] == nregions
                     @test issorted(bounds)
                     @test all(w -> bounds[w+1] > bounds[w], 1:nworkers)

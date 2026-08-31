@@ -156,7 +156,6 @@ function durationstring(seconds)
 end
 
 function timestring(seconds)
-    seconds == Inf && return "  N/A  s"
     isfinite(seconds) || return "  N/A  s"
     ns = 1_000_000_000 * seconds
     units = (
@@ -174,8 +173,6 @@ function timestring(seconds)
     end
     " >100  d"
 end
-
-speedstring(seconds_per_iteration) = timestring(seconds_per_iteration) * "/it"
 
 function record_step!(p::Meter, seconds)
     isfinite(seconds) && seconds ≥ 0 || return p

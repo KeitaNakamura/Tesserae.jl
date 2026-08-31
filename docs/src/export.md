@@ -108,3 +108,14 @@ for (step, t) in enumerate(range(0, 10, step=0.5))
     end
 end
 ```
+
+## API
+
+```@docs
+openvtk
+closevtk
+openvtm
+closevtm
+openpvd
+closepvd
+```

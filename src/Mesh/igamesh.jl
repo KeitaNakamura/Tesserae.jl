@@ -1,5 +1,3 @@
-_degree(::Degree{p}) where {p} = p
-
 """
     IGAPatch(degrees, knot_vectors, controlpoint_ids)
 

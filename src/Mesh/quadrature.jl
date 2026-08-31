@@ -13,15 +13,12 @@ function QuadratureRule(::Type{F}, points::P, weights::W) where {F <: Shape, dim
     QuadratureRule{F, dim, T, P, W}(points, weights)
 end
 
-_reference_cell_family(::S) where {S <: Shape} = S
 _reference_cell_family(::Line) = Line
 _reference_cell_family(::Quad) = Quad
 _reference_cell_family(::Hex) = Hex
 _reference_cell_family(::Tri) = Tri
 _reference_cell_family(::Tet) = Tet
 _reference_cell_family(::QuadratureRule{F}) where {F} = F
-
-_order_value(::Order{p}) where {p} = p
 
 """
     generate_quadrature_rule(shape::Shape)
@@ -38,6 +35,13 @@ function generate_quadrature_rule(::Type{T}, shape::Shape) where {T}
     generate_quadrature_rule(T, _reference_cell_family(shape), 2 * _order_value(get_order(shape)))
 end
 
+const ReferenceShapeFamily = Union{Line, Quad, Hex, Tri, Tet}
+
+function _check_quadrature_float(::Type{T}) where {T}
+    T in (Float16, Float32, Float64) || throw(ArgumentError("quadrature rule scalar type must be Float16, Float32, or Float64; got $T"))
+    T
+end
+
 """
     generate_quadrature_rule(family, exactness)
     generate_quadrature_rule(T, family, exactness)
@@ -50,13 +54,6 @@ reference coordinate; for `Tri` and `Tet`, it applies to total degree.
 exactness from 0 through 6, and `Tet` from 0 through 7. `T` may be `Float16`,
 `Float32`, or `Float64` and defaults to `Float64`.
 """
-const ReferenceShapeFamily = Union{Line, Quad, Hex, Tri, Tet}
-
-function _check_quadrature_float(::Type{T}) where {T}
-    T in (Float16, Float32, Float64) || throw(ArgumentError("quadrature rule scalar type must be Float16, Float32, or Float64; got $T"))
-    T
-end
-
 generate_quadrature_rule(family::Type{<: ReferenceShapeFamily}, exactness::Int) = generate_quadrature_rule(Float64, family, exactness)
 generate_quadrature_rule(::Type{T}, ::Type{Line}, exactness::Int) where {T} = _generate_tensor_quadrature_rule(_check_quadrature_float(T), Line, exactness, Val(1))
 generate_quadrature_rule(::Type{T}, ::Type{Quad}, exactness::Int) where {T} = _generate_tensor_quadrature_rule(_check_quadrature_float(T), Quad, exactness, Val(2))

@@ -111,4 +111,5 @@ Larger blocks reduce sparsity bookkeeping, while smaller blocks follow the activ
 
 ```@docs
 SpArray
+update_sparsity!
 ```

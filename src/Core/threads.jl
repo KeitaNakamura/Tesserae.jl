@@ -22,11 +22,11 @@ get_scheduler(::Val{:nothing}) = SequentialScheduler()
 # `f` is only handed on to `_tforeach`, which is the one case where Julia skips
 # specializing on a function argument, so it takes the type parameter here. The
 # `_tforeach` methods below call `f` and specialize without one.
-function tforeach(f::F, iter, scheduler=DynamicScheduler(); kwargs...) where {F}
+function tforeach(f::F, iter, scheduler=DynamicScheduler()) where {F}
     if Threads.nthreads() > 1
-        _tforeach(f, iter, get_scheduler(scheduler); kwargs...)
+        _tforeach(f, iter, get_scheduler(scheduler))
     else
-        _tforeach(f, iter, SequentialScheduler(); kwargs...)
+        _tforeach(f, iter, SequentialScheduler())
     end
 end
 

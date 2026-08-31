@@ -16,18 +16,6 @@ commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]
 
 getx(x) = getproperty(x, first(propertynames(x)))
 getx(x::Vec) = x
-getx(x::Vector{<: Vec}) = x
-
-@generated function dropat(entries::Tuple{Vararg{Any, N}}, index::Int) where {N}
-    branches = map(1:N) do i
-        kept = map(j -> :(entries[$j]), filter(!=(i), 1:N))
-        :(index == $i && return tuple($(kept...)))
-    end
-    quote
-        $(branches...)
-        throw(ArgumentError("index must be between 1 and tuple length"))
-    end
-end
 
 struct MapArray{T, N, F, Args <: Tuple} <: AbstractArray{T, N}
     f::F

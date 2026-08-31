@@ -194,23 +194,20 @@ function _update_particle_block_tracker!(spinds::SpIndices, xₚ, mesh, backend:
 end
 
 # Occupied blocks -> active blocks for basis support.
-function _activate_block_neighborhood!(active_blocks, I::CartesianIndex, CI)
-    blks = (I - oneunit(I)):(I + oneunit(I))
-    active_blocks[blks ∩ CI] .= true
+@inline block_neighborhood(I::CartesianIndex{dim}, dims::Dims{dim}) where {dim} =
+    max(I - oneunit(I), oneunit(I)):min(I + oneunit(I), CartesianIndex(dims))
+
+function _activate_block_neighborhood!(active_blocks, I::CartesianIndex)
+    active_blocks[block_neighborhood(I, size(active_blocks))] .= true
     active_blocks
 end
 
 function _activate_neighbor_blocks!(active, occupied, ::CPU)
     fillzero!(active)
-    CI = CartesianIndices(active)
     @inbounds for I in CartesianIndices(occupied)
-        iszero(occupied[I]) || _activate_block_neighborhood!(active, I, CI)
+        iszero(occupied[I]) || _activate_block_neighborhood!(active, I)
     end
     active
-end
-
-@inline function _inbounds_block(I::CartesianIndex{dim}, dims::Dims{dim}) where {dim}
-    all(ntuple(d -> 1 ≤ I[d] ≤ dims[d], Val(dim)))
 end
 
 # GPU particle-driven updates expand occupied blocks here instead of relying on
@@ -220,12 +217,8 @@ end
     b = @index(Global)
     @inbounds if !iszero(occupied_blocks[b])
         dims = size(occupied_blocks)
-        blk = CartesianIndices(dims)[b]
-        for offset in CartesianIndices(nfill(-1:1, Val(length(dims))))
-            neighbor = CartesianIndex(ntuple(d -> blk[d] + offset[d], Val(length(dims))))
-            if _inbounds_block(neighbor, dims)
-                active_blocks[sub2ind(dims, neighbor)] = true
-            end
+        for neighbor in block_neighborhood(CartesianIndices(dims)[b], dims)
+            active_blocks[sub2ind(dims, neighbor)] = true
         end
     end
 end
@@ -246,10 +239,9 @@ function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, part
         throw(ArgumentError("block_size_log2 $(block_size_log2(spinds)) must match partition block_size_log2 $(block_size_log2(bs))"))
 
     activity = fillzero!(active_blocks(spinds))
-    CI = CartesianIndices(activity)
-    @inbounds for I in CI
+    @inbounds for I in CartesianIndices(activity)
         if !isempty(particle_indices(bs, I))
-            _activate_block_neighborhood!(activity, I, CI)
+            _activate_block_neighborhood!(activity, I)
         end
     end
 

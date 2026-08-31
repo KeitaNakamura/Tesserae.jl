@@ -305,6 +305,27 @@
 
         @test Aup ≈ Bpu'
     end
+    @testset "column-only weight references" begin
+        col_mesh = CartesianMesh(0.5, (0,2), (0,2))
+        col_grid = generate_grid(@NamedTuple{x::Vec{2,Float64}}, col_mesh)
+        col_particles = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64}, col_mesh; alg=GridSampling())
+        col_particles.m .= 1
+        col_weights = generate_basis_weights(BSpline(Linear()), col_mesh, length(col_particles))
+        update!(col_weights, col_particles, col_mesh)
+        # The shared-weights lowering must bind the weight columns even when
+        # every weight reference goes through the column index.
+        K_cols = create_sparse_matrix(BSpline(Linear()), col_mesh; ndofs=1)
+        @P2G_Matrix col_grid=>(i,j) col_particles=>p col_weights=>(ip,jp) begin
+            K_cols[i,j] = @∑ w[jp] * m[p]
+        end
+        K_rows = create_sparse_matrix(BSpline(Linear()), col_mesh; ndofs=1)
+        @P2G_Matrix col_grid=>(i,j) col_particles=>p col_weights=>(ip,jp) begin
+            K_rows[i,j] = @∑ w[ip] * m[p]
+        end
+        @test any(!iszero, Tesserae.SparseArrays.nonzeros(K_cols))
+        @test K_cols ≈ K_rows'
+    end
+
     @testset "assignment operators" begin
         Aterm = create_sparse_matrix(basis, mesh; ndofs=1)
         Aeq = create_sparse_matrix(basis, mesh; ndofs=1)
@@ -376,7 +397,7 @@
         particle_nodes = map(p -> supportnodes(weights[p]), particle_indices)
         first_node = CartesianIndex(map(min, Tuple.(first.(particle_nodes))...))
         last_node = CartesianIndex(map(max, Tuple.(last.(particle_nodes))...))
-        @test Tesserae.matrix_block_supportnodes(weights, particle_indices, grid) ==
+        @test Tesserae.matrix_block_supportnodes(weights, particles, particle_indices, grid) ==
               first_node:last_node
 
         ip = length(nodes_i)
@@ -696,6 +717,14 @@ end
     end
     @test any(!iszero, Tesserae.SparseArrays.nonzeros(A))
     @test B ≈ A'
+
+    # The dense target used to assert sorted DoFs, which unsorted FEM cell
+    # connectivity violates.
+    A_dense = zeros(size(A))
+    @P2G_Matrix (velocity_grid,pressure_grid)=>(i,j) points=>p (velocity_weights,pressure_weights)=>(ip,jp) begin
+        A_dense[i,j] = @∑ ∇N[ip] * N[jp] * V[p]
+    end
+    @test A_dense ≈ Matrix(A)
 
     parent_matrix = create_sparse_matrix((quad9, quad4); ndofs=(3, 2))
     parent_row_dofs = LinearIndices((3, length(quad9)))

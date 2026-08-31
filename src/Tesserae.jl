@@ -27,6 +27,9 @@ using MacroTools
 using TaskLocalValues
 
 # GPU
+# GPUArraysCore has no direct uses, but loading it activates the StructArrays
+# extension that gives `KernelAbstractions.get_backend` a `StructArray` method;
+# without it every `get_device` on a grid or particle array throws.
 using GPUArraysCore
 using KernelAbstractions
 using Adapt
@@ -134,6 +137,7 @@ include("progress.jl")
 import .Progress: @showprogress
 
 include("NURBS/NURBS.jl")
+using .NURBS: dropat
 include("Mesh/Mesh.jl")
 include("Parallel/Parallel.jl")
 include("Grids/Grids.jl")

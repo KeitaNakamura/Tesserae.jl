@@ -4,6 +4,15 @@
 
 abstract type PartitionStrategy end
 
+# The CPU and GPU block strategies partition the same mesh blocks and share the
+# accessor contract; only how they maintain the assignment differs.
+abstract type BlockStrategy <: PartitionStrategy end
+
+nblocks(bs::BlockStrategy) = nblocks(bs.mesh)
+block_size_log2(bs::BlockStrategy) = block_size_log2(bs.mesh)
+blockwidth(bs::BlockStrategy) = blockwidth(bs.mesh)
+nassigned(bs::BlockStrategy) = bs.nassigned[]
+
 struct ParticleReorderBuffers
     by_component_type::Dict{DataType, Any}
 end

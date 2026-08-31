@@ -138,6 +138,28 @@ end
 narrowed_grid_expr(grid, equations, index) =
     :(Tesserae.narrow_transfer_grid($grid, Val($(Expr(:tuple, map(QuoteNode, collect_transfer_refs(equations, index))...)))))
 
+# Non-`@∑` equations run outside the support loop, where only their own stage's
+# index is bound; anything else must fail at macro time, not as a runtime
+# `UndefVarError` from the expansion.
+function check_nosum_refs(macroname, equations, allowed, banned...)
+    for index in banned
+        for name in collect_transfer_refs(equations, index)
+            error("$macroname: `$name[$index]` cannot be used in a non-`@∑` equation; only `[$allowed]`-indexed properties are available there")
+        end
+    end
+end
+
+# Particle-side sums accumulate each target into one temporary and store it once
+# per equation, so a duplicated target would store what both equations
+# accumulated, twice.
+function check_unique_sum_targets(macroname, equations)
+    seen = Set{Any}()
+    for eq in equations
+        eq.lhs in seen && error("$macroname: duplicate `@∑` target `$(eq.lhs)`; combine the sums into one equation")
+        push!(seen, eq.lhs)
+    end
+end
+
 # Keep the mesh so the result stays a grid, and at least one array component so an
 # `SpGrid` stays an `SpGrid` for dispatch and `get_spinds`.
 narrow_transfer_grid(grid, ::Val) = grid
@@ -260,7 +282,7 @@ function resolve_refs(expr, scope::TransferScope)
                 # `push_unique!` emits each binding once, so the referenced
                 # properties share a single basis evaluation.
                 parent.loadcols && push_unique!(scope.replacements[parent.trailing],
-                             :($(parent.cols) = Tesserae.weight_columns($(parent.parent), Val($(parent.names)), $(parent.particles), $(parent.trailing), Tesserae.get_mesh($(parent.grid)), $(parent.window))))
+                             weight_columns_binding_expr(parent))
                 push_unique!(scope.replacements[i],
                              :($(parent.vals) = Tesserae.weight_node_values($(parent.parent), $(parent.cols), Val($(parent.names)), $i)))
                 return :($(parent.vals).$x)
@@ -275,6 +297,9 @@ function resolve_refs(expr, scope::TransferScope)
         ex
     end
 end
+
+weight_columns_binding_expr(ti::TrailingIndexed) =
+    :($(ti.cols) = Tesserae.weight_columns($(ti.parent), Val($(ti.names)), $(ti.particles), $(ti.trailing), Tesserae.get_mesh($(ti.grid)), $(ti.window)))
 
 function remove_indexing(expr)
     MacroTools.postwalk(expr) do ex

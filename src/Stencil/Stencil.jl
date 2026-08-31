@@ -11,7 +11,6 @@ export
     Cell,
     Face,
     StencilArray,
-    padded,
     inner,
     foldpad!,
     mirrorpad!,
@@ -21,9 +20,7 @@ export
     Gradient,
     Divergence,
     Laplacian,
-    Curl,
-    ArithmeticMean,
-    HarmonicMean
+    Curl
 
 include("array.jl")
 include("core.jl")

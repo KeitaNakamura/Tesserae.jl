@@ -12,98 +12,36 @@ generate_offsets(op::Diff, dest::Cell, src::Cell) = _generate_offsets(op, dest, 
 generate_offsets(op::Diff, dest::Cell, src::Face) = _generate_offsets(op, dest, src)
 generate_offsets(op::Diff, dest::Face, src::Cell) = (@assert getaxis(op) == getaxis(dest); _generate_offsets(op, dest, src))
 generate_offsets(op::Diff, dest::Face, src::Face) = (@assert getaxis(dest) == getaxis(src); _generate_offsets(op, dest, src))
-_generate_offsets(::Diff{1, 1}, ::Cell, ::Cell) = (-1, 1)
-_generate_offsets(::Diff{1, 2}, ::Cell, ::Cell) = (-2, -1, 1, 2)
-_generate_offsets(::Diff{1, 3}, ::Cell, ::Cell) = (-3, -2, -1, 1, 2, 3)
-_generate_offsets(::Diff{1, 1}, ::Face, ::Face) = (-1, 1)
-_generate_offsets(::Diff{1, 2}, ::Face, ::Face) = (-2, -1, 1, 2)
-_generate_offsets(::Diff{1, 3}, ::Face, ::Face) = (-3, -2, -1, 1, 2, 3)
+_generate_offsets(::Diff{1, 1}, ::L, ::L) where {L <: Union{Cell, Face}} = (-1, 1)
+_generate_offsets(::Diff{1, 2}, ::L, ::L) where {L <: Union{Cell, Face}} = (-2, -1, 1, 2)
+_generate_offsets(::Diff{1, 3}, ::L, ::L) where {L <: Union{Cell, Face}} = (-3, -2, -1, 1, 2, 3)
 _generate_offsets(::Diff{1, 1}, ::Face, ::Cell) = (-1, 0)
 _generate_offsets(::Diff{1, 2}, ::Face, ::Cell) = (-2, -1, 0, 1)
 _generate_offsets(::Diff{1, 3}, ::Face, ::Cell) = (-3, -2, -1, 0, 1, 2)
 _generate_offsets(::Diff{1, 1}, ::Cell, ::Face) = (0, 1)
 _generate_offsets(::Diff{1, 2}, ::Cell, ::Face) = (-1, 0, 1, 2)
 _generate_offsets(::Diff{1, 3}, ::Cell, ::Face) = (-2, -1, 0, 1, 2, 3)
-_generate_offsets(::Diff{2, 1}, ::Cell, ::Cell) = (-1, 0, 1)
-_generate_offsets(::Diff{2, 2}, ::Cell, ::Cell) = (-2, -1, 0, 1, 2)
-_generate_offsets(::Diff{2, 3}, ::Cell, ::Cell) = (-3, -2, -1, 0, 1, 2, 3)
-_generate_offsets(::Diff{2, 1}, ::Face, ::Face) = (-1, 0, 1)
-_generate_offsets(::Diff{2, 2}, ::Face, ::Face) = (-2, -1, 0, 1, 2)
-_generate_offsets(::Diff{2, 3}, ::Face, ::Face) = (-3, -2, -1, 0, 1, 2, 3)
+_generate_offsets(::Diff{2, 1}, ::L, ::L) where {L <: Union{Cell, Face}} = (-1, 0, 1)
+_generate_offsets(::Diff{2, 2}, ::L, ::L) where {L <: Union{Cell, Face}} = (-2, -1, 0, 1, 2)
+_generate_offsets(::Diff{2, 3}, ::L, ::L) where {L <: Union{Cell, Face}} = (-3, -2, -1, 0, 1, 2, 3)
 
 generate_weights(op::Diff, dest::Cell, src::Cell) = _generate_weights(op, dest, src)
 generate_weights(op::Diff, dest::Cell, src::Face) = _generate_weights(op, dest, src)
 generate_weights(op::Diff, dest::Face, src::Cell) = (@assert getaxis(op) == getaxis(dest); _generate_weights(op, dest, src))
 generate_weights(op::Diff, dest::Face, src::Face) = (@assert getaxis(dest) == getaxis(src); _generate_weights(op, dest, src))
-_generate_weights(::Diff{1, 1}, ::Cell, ::Cell) = (-1/2, 1/2)
-_generate_weights(::Diff{1, 2}, ::Cell, ::Cell) = ( 1/12, -2/3, 2/3, -1/12)
-_generate_weights(::Diff{1, 3}, ::Cell, ::Cell) = (-1/60, 3/20, -3/4, 3/4, -3/20, 1/60)
-_generate_weights(::Diff{1, 1}, ::Face, ::Face) = (-1/2, 1/2)
-_generate_weights(::Diff{1, 2}, ::Face, ::Face) = ( 1/12, -2/3, 2/3, -1/12)
-_generate_weights(::Diff{1, 3}, ::Face, ::Face) = (-1/60, 3/20, -3/4, 3/4, -3/20, 1/60)
+_generate_weights(::Diff{1, 1}, ::L, ::L) where {L <: Union{Cell, Face}} = (-1/2, 1/2)
+_generate_weights(::Diff{1, 2}, ::L, ::L) where {L <: Union{Cell, Face}} = ( 1/12, -2/3, 2/3, -1/12)
+_generate_weights(::Diff{1, 3}, ::L, ::L) where {L <: Union{Cell, Face}} = (-1/60, 3/20, -3/4, 3/4, -3/20, 1/60)
 _generate_weights(::Diff{1, 1}, ::Face, ::Cell) = (-1.0, 1.0)
 _generate_weights(::Diff{1, 2}, ::Face, ::Cell) = ( 1/24, -9/8, 9/8, -1/24)
 _generate_weights(::Diff{1, 3}, ::Face, ::Cell) = (-3/640, 25/384, -75/64, 75/64, -25/384, 3/640)
 _generate_weights(::Diff{1, 1}, ::Cell, ::Face) = (-1.0, 1.0)
 _generate_weights(::Diff{1, 2}, ::Cell, ::Face) = ( 1/24, -9/8, 9/8, -1/24)
 _generate_weights(::Diff{1, 3}, ::Cell, ::Face) = (-3/640, 25/384, -75/64, 75/64, -25/384, 3/640)
-_generate_weights(::Diff{2, 1}, ::Cell, ::Cell) = ( 1.0, -2.0, 1.0)
-_generate_weights(::Diff{2, 2}, ::Cell, ::Cell) = (-1/12, 4/3, -5/2, 4/3, -1/12)
-_generate_weights(::Diff{2, 3}, ::Cell, ::Cell) = ( 1/90, -3/20, 3/2, -49/18, 3/2, -3/20, 1/90)
-_generate_weights(::Diff{2, 1}, ::Face, ::Face) = ( 1.0, -2.0, 1.0)
-_generate_weights(::Diff{2, 2}, ::Face, ::Face) = (-1/12, 4/3, -5/2, 4/3, -1/12)
-_generate_weights(::Diff{2, 3}, ::Face, ::Face) = ( 1/90, -3/20, 3/2, -49/18, 3/2, -3/20, 1/90)
+_generate_weights(::Diff{2, 1}, ::L, ::L) where {L <: Union{Cell, Face}} = ( 1.0, -2.0, 1.0)
+_generate_weights(::Diff{2, 2}, ::L, ::L) where {L <: Union{Cell, Face}} = (-1/12, 4/3, -5/2, 4/3, -1/12)
+_generate_weights(::Diff{2, 3}, ::L, ::L) where {L <: Union{Cell, Face}} = ( 1/90, -3/20, 3/2, -49/18, 3/2, -3/20, 1/90)
 
-#=
-@generated function _reduce_stencil_coeffs(::Val{offsets}, ::Val{weights}) where {offsets, weights}
-    offsets_tmp = similar(offsets)
-    weights_tmp = similar(weights)
-    offsets_tmp[1] = offsets[1]
-    weights_tmp[1] = weights[1]
-    count = 1
-    for j in 2:length(offsets)
-        if offsets[j] === offsets[count]
-            weights_tmp[count] += weights[j]
-        else
-            count += 1
-            offsets_tmp[count] = offsets[j]
-            weights_tmp[count] = weights[j]
-        end
-    end
-    quote
-        SVector($(offsets_tmp[1:count]...)), SVector($(weights_tmp[1:count]...))
-    end
-end
-
-function reduce_stencil_coeffs(offsets::SVector{N, CartesianIndex{dim}}, weights::SVector{N, T}) where {N, dim, T}
-    # _reduce_stencil_coeffs(Val(offsets), Val(weights))
-    offsets_tmp = similar(offsets)
-    weights_tmp = similar(weights)
-    offsets_tmp[1] = offsets[1]
-    weights_tmp[1] = weights[1]
-    count = 1
-    for j in 2:length(offsets)
-        if offsets[j] === offsets[count]
-            weights_tmp[count] += weights[j]
-        else
-            count += 1
-            offsets_tmp[count] = offsets[j]
-            weights_tmp[count] = weights[j]
-        end
-    end
-    SVector(offsets_tmp[SOneTo(count)]), SVector(weights_tmp[SOneTo(count)]...)
-end
-
-function reorder_stencil_coeffs(offsets::SVector{N, CartesianIndex{dim}}, weights::SVector{N}) where {N, dim}
-    mins = ntuple(d -> minimum(off -> off[d], offsets), Val(dim))
-    maxs = ntuple(d -> maximum(off -> off[d], offsets), Val(dim))
-    dims = ntuple(d -> maxs[d] - mins[d] + 1, Val(dim))
-    LI = LinearIndices(dims)
-    key(off) = LI[CartesianIndex(ntuple(d -> off[d] - mins[d] + 1, Val(dim)))]
-    p = sortperm(offsets; by = key)
-    offsets[p], weights[p]
-end
-=#
 
 function stencil_coeffs(op::Diff{order}, dest::Location, src::Location, h::NTuple{dim, T}) where {order, dim, T <: Real}
     ax = getaxis(op)
@@ -149,12 +87,8 @@ function stencil(op::Gradient, src::StencilArray{Cell, T, dim}; pad::Int, spacin
 end
 
 # Gradient: Face → Cell
-# NOTE: unreachable and untested. `fillzero!` is not bound in this module --
-# `tesserae.jl` only adds a method to `Tesserae.fillzero!` -- so this throws
-# `UndefVarError` before doing any work. Import it, or zero the destination the
-# way the `Divergence` method below does, before relying on this.
 function stencil!(::Gradient{r}, dest::StencilArray{Cell, <: Any, dim}, srcs::NTuple{dim, <: StencilArray{Face, <: Any, dim}}; pad::Int, spacing::Real) where {r, dim}
-    fillzero!(inner(dest; pad))
+    inner(dest; pad) .= Ref(zero(eltype(dest)))
     for i in 1:dim
         src = srcs[i]
         eᵢ = Vec{dim}(==(i))

@@ -37,7 +37,6 @@ Base.@propagate_inbounds Base.getindex(A::HybridArray, i::SpIndex) = parent(A)[i
 @inline _atomic_array(A::HybridArray) = parent(A)
 @inline _atomic_array(A::HybridArray{<:Any, <:Any, <:SpArray}) = get_data(parent(A))
 @inline _atomic_index(A::HybridArray, i) = i
-@inline _atomic_index(A::HybridArray{<:Any, <:Any, <:SpArray}, i::SpIndex) = storageindex(i)
 @inline function _add!(::GPUDevice, A::HybridArray, i, v::Number)
     @_propagate_inbounds_meta
     Atomix.@atomic _atomic_array(A)[_atomic_index(A, i)] += v

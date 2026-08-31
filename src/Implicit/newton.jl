@@ -1,5 +1,5 @@
 """
-    Tesserae.newton!(x::AbstractVector, f, J,
+    Tesserae.newton!(x::AbstractVector, f, J;
                      maxiter = 100, atol = zero(eltype(x)), rtol = sqrt(eps(eltype(x))),
                      linsolve = (x,A,b) -> copyto!(x, A\\b),
                      backtracking = false, verbose = false)
@@ -50,8 +50,8 @@ function newton!(
     rnorm = rnorm0 = norm(r)
     δx = similar(x)
 
-    # old accepted step values
-    x_old, rnorm_old = similar(x), rnorm
+    # old accepted step value
+    x_old = similar(x)
 
     iter = 0
     solved = rnorm0 ≤ atol
@@ -64,13 +64,12 @@ function newton!(
 
     while !(solved || giveup)
         @. x_old = x
-        rnorm_old = rnorm
 
         Jx = J(x)
         linsolve(fillzero!(δx), Jx, r)
 
         if backtracking
-            ϕ0 = rnorm_old * rnorm_old / 2
+            ϕ0 = rnorm * rnorm / 2
             ϕ′0 = -dot(r, Jx, δx)
             if !(isfinite(ϕ′0) && ϕ′0 < 0)
                 giveup = true
@@ -126,9 +125,9 @@ function newton_backtracking(ϕ, α::T, ϕ0::T, ϕ′0::T; c::T = T(1e-4), ρ_hi
         abs(α) < eps(T)^T(2/3) && return false
 
         if trial == 1
-            α_new = quad_step(α, ϕα, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+            α_new = quad_step(α, ϕα, ϕ0, ϕ′0, ρ_lo)
         else
-            α_new = cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+            α_new = cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_lo)
         end
         α_new = clamp(α_new, α*ρ_lo, α*ρ_hi)
         α_prev, ϕα_prev = α, ϕα
@@ -137,7 +136,7 @@ function newton_backtracking(ϕ, α::T, ϕ0::T, ϕ′0::T; c::T = T(1e-4), ρ_hi
     false
 end
 
-function quad_step(α, ϕα, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+function quad_step(α, ϕα, ϕ0, ϕ′0, ρ_lo)
     den = 2(ϕα - α*ϕ′0 - ϕ0)
     if isfinite(den) && den > 0
         return -α^2 * ϕ′0 / den
@@ -146,7 +145,7 @@ function quad_step(α, ϕα, ϕ0, ϕ′0, ρ_hi, ρ_lo)
     end
 end
 
-function cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_hi, ρ_lo)
+function cubic_step(α, ϕα, α_prev, ϕα_prev, ϕ0, ϕ′0, ρ_lo)
     den = α_prev^2 * α^2 * (α - α_prev)
     if isfinite(den) && !iszero(den)
         sα = ϕα - ϕ0 - ϕ′0*α

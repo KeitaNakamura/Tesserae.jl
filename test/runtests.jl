@@ -22,6 +22,9 @@ include("implicit.jl")
 include("nurbs.jl")
 include("iga.jl")
 include("explain.jl")
+include("stencil.jl")
+
+include("deprecated.jl")
 
 include("export.jl")
 include("gmsh.jl")

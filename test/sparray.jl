@@ -332,13 +332,15 @@ end
     blkspy = rand(Bool, Tesserae.nblocks(A))
     n = update_sparsity!(A, blkspy)
     @test length(Tesserae.get_data(A)) === n
-    @test Tesserae.storedindices(A) == eachindex(Tesserae.get_data(A))
     @test Set(map(Tesserae.logicalindex, Tesserae.activeindices(A))) ==
           Set(filter(i->Tesserae.isactive(A,i), eachindex(A)))
     @test all(i->(A[i]=rand(); iszero(A[i])), filter(i->!Tesserae.isactive(A,i), eachindex(A)))
     @test all(i->(a=rand(); A[i]=a; A[i]==a), filter(i->Tesserae.isactive(A,i), eachindex(A)))
     fill!(A, 4)
     @test all(i->A[i] == 4, filter(i->Tesserae.isactive(A,i), eachindex(A)))
+    let B = SpArray{Float64}(undef, 9, 18)
+        @test_throws DimensionMismatch copyto!(A, Broadcast.broadcasted(+, B, B))
+    end
     @test all(i->iszero(A[i]), filter(i->!Tesserae.isactive(A,i), eachindex(A)))
     Tesserae.resize_fillzero_data!(A, length(Tesserae.get_data(A)))
     @test all(iszero, Tesserae.get_data(A))

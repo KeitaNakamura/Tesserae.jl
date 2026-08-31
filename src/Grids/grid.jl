@@ -87,15 +87,27 @@ end
 
 get_spinds(A::SpGrid) = get_spinds(getproperty(A, 2))
 
-function update_sparsity!(A::SpGrid, blkspy)
-    n = update_sparsity!(get_spinds(A), blkspy)
-    n === nothing && return fillzero!(A)
-    StructArrays.foreachfield(a->resize_fillzero_data!(a,n), A)
-    A
-end
+"""
+    update_sparsity!(grid::SpGrid, xₚ::AbstractVector{<: Vec})
+    update_sparsity!(grid::SpGrid, partition::Partition)
+    update_sparsity!(grid::SpGrid, blkspy)
 
-function update_sparsity!(A::SpGrid, xₚ::AbstractVector{<: Vec})
-    n = update_sparsity!(get_spinds(A), xₚ, get_mesh(A))
+Activate blocks of a sparse grid and resize the grid storage accordingly.
+All grid values are zeroed. Must run before a transfer whenever particles may
+have moved across blocks.
+
+The `xₚ` and `partition` forms activate the blocks carrying particles plus
+their neighbor blocks for basis support; the `partition` form is CPU-only, so
+pass the particle positions on GPU. The `blkspy` form activates exactly the
+blocks marked in the given block-level pattern, so the caller must already
+include any neighbor blocks the basis support needs.
+"""
+update_sparsity!(A::SpGrid, blkspy) =
+    _apply_numbering_result!(A, update_sparsity!(get_spinds(A), blkspy))
+update_sparsity!(A::SpGrid, xₚ::AbstractVector{<: Vec}) =
+    _apply_numbering_result!(A, update_sparsity!(get_spinds(A), xₚ, get_mesh(A)))
+
+function _apply_numbering_result!(A::SpGrid, n)
     n === nothing && return fillzero!(A)
     StructArrays.foreachfield(a->resize_fillzero_data!(a,n), A)
     A

@@ -9,6 +9,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.
+- Added `dofmap` and `BlockDofMap` for extracting active monolithic and block
+  systems.
 - `DofMap` and `dofmap` accept a mask whose elements are `Vec{ndofs, Bool}`, so
   the DoF mask can be a grid field written with `@foreach` rather than a
   separately allocated array. A plain `(ndofs, size(grid)...)` Boolean array
@@ -45,6 +47,27 @@ All notable changes to Tesserae.jl will be documented in this file.
   `SparseMatrixCSC`. `KernelAbstractions.get_backend` also answers for sparse
   matrices instead of throwing.
 - `Tesserae.dofs` scalar-indexed a `DofMap` whose indices live on a device.
+- `WLS` and `KernelCorrection` now reject polynomial bases above
+  `Polynomial(Linear())` / `Polynomial(MultiLinear())` with an `ArgumentError`
+  instead of accepting them. A kernel support does not carry enough independent
+  nodes to condition the least-squares moment matrix for a higher degree, so
+  those combinations silently produced negative and unbounded weights.
+  `Polynomial(Quadratic())` and `Polynomial(MultiQuadratic())` remain valid on
+  their own.
+- `@G2P2G` emitted a read of an unbound variable when the grid-to-particle `@∑`
+  half referenced no weight property while the particle-to-grid half did. In
+  that shape the weight columns now bind before the particle equations, so
+  deferred basis weights evaluate at the position the support window was taken
+  at even when an equation moves `x[p]` mid-transfer.
+- `copy` on a `CartesianMesh` (and hence on a generated grid) threw
+  `UndefVarError`.
+- `@P2G_Matrix` assembling the FEM cell path into a dense matrix failed on
+  unsorted cell connectivity.
+- Showing an empty `BasisWeightArray` threw `BoundsError`.
+- `copyto!` into an `SpArray` from a broadcast with mismatched axes now throws
+  `DimensionMismatch` instead of `UndefVarError`.
+- The Stencil `Gradient` Face-to-Cell `stencil!` threw `UndefVarError` before
+  doing any work.
 
 ### Changed
 
@@ -52,6 +75,24 @@ All notable changes to Tesserae.jl will be documented in this file.
   workgroups through the block-scheduled `@P2G`, so the name no longer implies
   CPU threads. `ThreadPartition` remains as a deprecated alias, and the
   `ColorPartition` deprecation now points at `Partition`.
+- `create_sparse_matrix(femesh; ndofs)` now accepts a `(row_ndofs, col_ndofs)`
+  pair, matching `CartesianMesh` and `IGAMesh`. A mesh pair still requires an
+  explicit pair, so a rectangular matrix is never inferred from a single number.
+- The transfer macros now reject `x[i]`/`x[ip]`-style references in non-`@∑`
+  equations at macro-expansion time; previously these expanded to code that
+  failed at runtime with `UndefVarError` or silently captured caller-scope
+  variables.
+- `@G2P` and `@G2P2G` reject a duplicated particle `@∑` target at
+  macro-expansion time; the shared accumulator used to store what both sums
+  accumulated into the target twice.
+- Transfer argument validation raises descriptive errors instead of bare
+  `@assert` failures, and CPU partitioned transfers now check that
+  `update!(partition, particles.x)` ran with the current particle array, as the
+  GPU block-scheduled path already did.
+- The Stencil module no longer exports `padded`, `ArithmeticMean`, and
+  `HarmonicMean`; none of them was functional. `stencil!` now requires the
+  `SVector` coefficients that `stencil_coeffs` produces, matching what the
+  implementation always required.
 
 ## v0.7.5
 
@@ -60,30 +101,12 @@ All notable changes to Tesserae.jl will be documented in this file.
 - Added `create_block_sparse_matrix` for constructing monolithic field matrices
   with fixed-sparsity block views of one shared parent CSC matrix.
 - Added direct `@P2G_Matrix` assembly into individual sparse matrix blocks.
-- Added `dofmap` and `BlockDofMap` for extracting active monolithic and block
-  systems.
 
 ### Performance
 
 - Reused the Cartesian sparsity guarantee recorded by
   `create_block_sparse_matrix` instead of validating every block on each
   `@P2G_Matrix` call.
-
-### Changed
-
-- `create_sparse_matrix(femesh; ndofs)` now accepts a `(row_ndofs, col_ndofs)`
-  pair, matching `CartesianMesh` and `IGAMesh`. A mesh pair still requires an
-  explicit pair, so a rectangular matrix is never inferred from a single number.
-
-### Fixed
-
-- `WLS` and `KernelCorrection` now reject polynomial bases above
-  `Polynomial(Linear())` / `Polynomial(MultiLinear())` with an `ArgumentError`
-  instead of accepting them. A kernel support does not carry enough independent
-  nodes to condition the least-squares moment matrix for a higher degree, so
-  those combinations silently produced negative and unbounded weights.
-  `Polynomial(Quadratic())` and `Polynomial(MultiQuadratic())` remain valid on
-  their own.
 
 ## v0.7.4
 

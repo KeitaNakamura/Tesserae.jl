@@ -4,8 +4,6 @@
 
 # ---- entry points ----
 
-# NOTE: `gpu` always tries to convert Float64 to Float32 (is this really good?)
-
 function Adapt.adapt_storage(::CPUDevice, A::AbstractArray)
     get_device(A) isa CPUDevice ? A : Array(A)
 end
@@ -18,13 +16,36 @@ end
 
 # A method specialized on `to::AbstractDevice` is an explicit Tesserae transfer,
 # while an unspecialized `adapt_structure(to, ...)` may serve other Adapt callers.
+"""
+    cpu(A)
+
+Move `A` back to CPU memory. Works on the objects [`gpu`](@ref) accepts;
+anything already on the CPU is returned as is. A device sparse matrix comes
+back as a `SparseMatrixCSC`.
+"""
 cpu(A) = A |> CPUDevice()
+
+"""
+    gpu(A)
+
+Move `A` to the loaded GPU backend, converting `Float64` storage to `Float32`.
+Accepts meshes, grids, particle arrays, basis weights, partitions, sparse
+matrices, and plain arrays. Requires a backend package (CUDA.jl or Metal.jl)
+to be loaded. Use [`gpu_preserve`](@ref) to keep the element types.
+"""
 gpu(A) = A |> gpu_device(CastFloat32)
+
+"""
+    gpu_preserve(A)
+
+Like [`gpu`](@ref), but keeps the element types instead of converting
+`Float64` storage to `Float32`.
+"""
 gpu_preserve(A) = A |> gpu_device(PreserveEltype)
 
 # ---- special conversions ----
 
-# Unlike StructArrays.jl, this also `adapt` each array `to` GPU (no need?)
+# Unlike StructArrays.jl, this also `adapt`s each array `to` GPU
 function Adapt.adapt_structure(to::GPUDevice, A::StructArray)
     named_tuple = map(a -> adapt(to, a), StructArrays.components(A))
     StructArray(named_tuple) # always convert to NamedTuple
