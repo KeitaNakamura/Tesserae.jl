@@ -67,3 +67,8 @@ module TestHeat
         include(joinpath(@__DIR__, "../docs/literate/tutorials/heat.jl"))
     end
 end
+
+module TestFiniteVolume
+    const RUN_TESTS = true
+    include(joinpath(@__DIR__, "../docs/literate/tutorials/finite_volume.jl"))
+end

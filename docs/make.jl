@@ -35,6 +35,7 @@ makedocs(;
             "FEM" => [
                 "tutorials/heat.md"
             ],
+            "Finite volumes" => "tutorials/finite_volume.md",
         ],
         "Manual" => [
             "Overview" => "manual.md"
