@@ -7,7 +7,7 @@
 using Tesserae.Stencil
 
 function main(n=(32, 24); α=0.1, t_end=0.1)
-    # 各辺の長さが1の領域。nは各方向のセル数。
+    # Unit box; n gives the cell count along each axis.
     C = Region(Cell(), n)
     h = 1 ./ n
     temperature = [prod(sinpi, x) for x in coordinates(C, h)]

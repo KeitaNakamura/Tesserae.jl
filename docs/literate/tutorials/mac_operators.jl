@@ -9,9 +9,9 @@
 using Tesserae.Stencil
 
 """
-この使用例で使う周期差分。方向dで中央配置されたaを、格子線上のRへ微分します。
-内部差分・周期の継ぎ目・重複面の同期を、通常のviewとbroadcastで記述します。
-ライブラリへの追加APIではありません。
+Differentiate `a`, centered along axis `d`, at the grid-line positions in `R`.
+Set the interior differences, periodic seam, and duplicate boundary explicitly.
+This helper is local to the example.
 """
 function periodic_difference!(out, a, R, d, hd)
     e = unitoffsets(R)[d]
@@ -25,9 +25,9 @@ function periodic_difference!(out, a, R, d, hd)
 end
 
 """
-MAC演算子の使用例。pはセル中心、uはx面、vはy面の通常の配列です。
-静止壁でu・vにno-slip、pに法線勾配0を指定します。
-u・vの壁上の法線成分を更新します。圧力Poisson方程式は解きません。
+MAC operators for ordinary arrays: cell-centered pressure `p`, x-face velocity `u`,
+and y-face velocity `v`. Apply no-slip walls and zero normal pressure gradients.
+Update boundary-normal velocities in place; no pressure Poisson solve is performed.
 """
 function wall_operators(p, u, v, h)
     C = Region(Cell(), size(p))
@@ -42,7 +42,7 @@ function wall_operators(p, u, v, h)
     divergence = similar(p)
     fill!(divergence, 0)
 
-    # d=1はuとx方向、d=2はvとy方向。jはもう一方の接線方向です。
+    # d=1 pairs u with x; d=2 pairs v with y. j is the transverse axis.
     for (d, e) in enumerate(offsets)
         j = 3-d
         et, hd, ht = offsets[j], h[d], h[j]
@@ -50,7 +50,7 @@ function wall_operators(p, u, v, h)
         L, R = boundaries(F)
         a, g, dn, ds, lap = velocity[d], gradient[d], normal[d], transverse[d], laplacian[d]
 
-        # 壁上の法線速度は0、圧力の法線勾配も0。
+        # Normal wall velocity and normal pressure gradient are zero.
         @stencil begin
             a[L] = 0
             a[R] = 0
@@ -58,12 +58,12 @@ function wall_operators(p, u, v, h)
             g[L] = 0
             g[R] = 0
 
-            # 発散の各方向の寄与。
+            # Accumulate this direction's contribution to divergence.
             dn[C] = (a[C+e/2] - a[C-e/2])/hd
             divergence[C] += dn[C]
         end
 
-        # 接線速度のno-slipは、壁までの半セル距離で勾配を指定。
+        # Enforce tangential no-slip using the half-cell distance to the wall.
         B, T = boundaries(V, j)
         @stencil begin
             ds[V] = (a[V+et/2] - a[V-et/2])/ht
@@ -82,8 +82,9 @@ function wall_operators(p, u, v, h)
 end
 
 """
-同じMAC配置で両方向を周期境界にした使用例。
-上下・左右は同じ物理面なので、uの右端とvの上端を対応する下限側の値に同期します。
+MAC operators with periodic boundaries in both directions.
+The last x-face of `u` and last y-face of `v` duplicate the corresponding first
+faces and are synchronized before differencing.
 """
 function periodic_operators(p, u, v, h)
     C = Region(Cell(), size(p))
@@ -128,19 +129,19 @@ function mac_example(n=(32, 24))
     Fx, Fy = Region(Face(1), C), Region(Face(2), C)
     h = 1 ./ n
 
-    # 壁境界：圧力は壁で法線勾配0、速度は全ての壁で0となる滑らかな入力。
+    # Wall case: smooth fields with zero normal pressure gradient and zero wall velocity.
     p = [cospi(x)*cospi(y) for (x, y) in coordinates(C, h)]
     u = [x*(1-x)*y*(1-y) for (x, y) in coordinates(Fx, h)]
     v = [2*x*(1-x)*y*(1-y) for (x, y) in coordinates(Fy, h)]
     walls = wall_operators(p, u, v, h)
 
-    # 周期境界：両端の値が一致する三角関数の入力。
+    # Periodic case: matching endpoint values from trigonometric fields.
     pp = [sinpi(2*x)+0.5*sinpi(2*y) for (x, y) in coordinates(C, h)]
     up = [cospi(2*x)*cospi(2*y) for (x, y) in coordinates(Fx, h)]
     vp = [sinpi(2*x)*cospi(2*y) for (x, y) in coordinates(Fy, h)]
     periodic = periodic_operators(pp, up, vp, h)
 
-    # 壁では境界面流量0、周期では反対側の面流量が相殺されます。
+    # Net boundary flux vanishes for both impermeable and periodic boundaries.
     println("cells: ", n)
     println("wall net flux: ", sum(walls.divergence)*prod(h))
     println("periodic net flux: ", sum(periodic.divergence)*prod(h))

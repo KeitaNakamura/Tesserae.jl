@@ -1,7 +1,7 @@
 using Tesserae, Test, Random
 include("../../docs/literate/tutorials/mac_operators.jl")
 
-# Regionを使わず、通常の整数添字で組んだ比較用の離散式。
+# Reference stencils written with ordinary integer indices.
 function reference_operators(p, u0, v0, h; periodic)
     nx,ny = size(p)
     hx,hy = h
@@ -88,7 +88,7 @@ end
         @test v == expected.v
         for field in (:gx,:gy,:divergence,:du_dy,:dv_dx,:lap_u,:lap_v)
             actual,reference = getproperty(result,field),getproperty(expected,field)
-            # 演算順序による丸め誤差のみを許容。
+            # Allow only rounding differences caused by the order of arithmetic operations.
             scale = max(1,maximum(abs,reference))
             @test maximum(abs,actual-reference) <= 64eps(Float64)*scale
             @test all(isfinite,actual)
@@ -96,12 +96,12 @@ end
         @test u[2:nx,:] == u_before[2:nx,:]
         @test v[:,2:ny] == v_before[:,2:ny]
 
-        # 発散の総和は境界流量に一致し、両境界条件では0。
+        # Summed divergence equals the boundary flux, zero for both boundary conditions.
         @test abs(sum(result.divergence)) <=
             64eps(Float64)*max(1,sum(abs,result.divergence))
 
-        # 離散の部分積分：圧力勾配と発散が互いに負の転置。
-        # 周期では同じ物理面の重複を一度だけ数えます。
+        # Discrete integration by parts: gradient is the negative adjoint of divergence.
+        # Count duplicated periodic faces only once.
         if periodic
             pressure_work = sum(u[1:nx,:].*result.gx[1:nx,:]) +
                 sum(v[:,1:ny].*result.gy[:,1:ny])
