@@ -1,30 +1,15 @@
 module Stencil
 
-using StaticArrays
-using StructArrays
-using Tensorial
+import ..Tesserae: boundaries
 
-using KernelAbstractions
-using Adapt
+export Cell, Face, Edge, Vertex, Region, interior, boundaries, unitoffsets, coordinates, @stencil
 
-export
-    Cell,
-    Face,
-    StencilArray,
-    inner,
-    foldpad!,
-    mirrorpad!,
-    stencil,
-    stencil!,
-    Diff,
-    Gradient,
-    Divergence,
-    Laplacian,
-    Curl
-
-include("array.jl")
-include("core.jl")
-include("diff.jl")
-include("tesserae.jl")
+include("location.jl")
+include("offset.jl")
+include("region.jl")
+include("indices.jl")
+include("coordinates.jl")
+include("broadcast.jl")
+include("macro.jl")
 
 end # Stencil
