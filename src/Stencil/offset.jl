@@ -1,6 +1,6 @@
 # Twice the displacement is stored as integers, making all half-cell shifts exact.
 struct GridOffset{N}
-    doubled::NTuple{N, Int}
+    doubled::NTuple{N,Int}
 end
 
 """
@@ -9,14 +9,14 @@ end
 Return the `N` coordinate directions, each representing one cell width.
 Adding `e/2` to a region moves its sampling placement by half a cell.
 """
-unitoffsets(::Val{N}) where {N} = ntuple(Val(N)) do d
-    GridOffset(ntuple(j -> 2Int(j == d), Val(N)))
+function unitoffsets(::Val{N}) where {N}
+    ntuple(Val(N)) do d
+        GridOffset(ntuple(j -> 2Int(j == d), Val(N)))
+    end
 end
 
-@inline Base.:+(a::GridOffset{N}, b::GridOffset{N}) where {N} =
-    GridOffset(map(+, a.doubled, b.doubled))
-@inline Base.:-(a::GridOffset{N}, b::GridOffset{N}) where {N} =
-    GridOffset(map(-, a.doubled, b.doubled))
+@inline Base.:+(a::GridOffset{N}, b::GridOffset{N}) where {N} = GridOffset(map(+, a.doubled, b.doubled))
+@inline Base.:-(a::GridOffset{N}, b::GridOffset{N}) where {N} = GridOffset(map(-, a.doubled, b.doubled))
 @inline Base.:-(a::GridOffset) = GridOffset(map(-, a.doubled))
 @inline Base.:*(n::Int, a::GridOffset) = GridOffset(map(x -> n*x, a.doubled))
 @inline Base.:*(a::GridOffset, n::Int) = n*a

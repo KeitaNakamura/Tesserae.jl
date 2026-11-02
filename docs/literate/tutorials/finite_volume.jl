@@ -1,63 +1,62 @@
 # # Finite-volume heat diffusion
 #
-# Temperature is stored at cell centers and heat flux at face centers. We solve
-# ∂T/∂t = -∇⋅q with q = -α∇T on the unit box, using zero boundary temperature
-# and forward Euler time integration. The same code works in two or three dimensions.
+# Cell-centered temperature and face-centered heat flux on the unit box.
+# Zero boundary temperature and forward Euler time integration.
+# The same function works in one, two, and three dimensions.
 
 using Tesserae.Stencil
 
 function main(n=(32, 24); α=0.1, t_end=0.1)
-    N = length(n)
+    # 各辺の長さが1の領域。nは各方向のセル数。
+    C = Region(Cell(), n)
     h = 1 ./ n
-    x = ntuple(d -> ((1:n[d]) .- 0.5) .* h[d], N)
-    T = [prod(sinpi(x[d][J[d]]) for d in 1:N) for J in CartesianIndices(n)]
+    temperature = [prod(sinpi, x) for x in coordinates(C, h)]
 
-    ## Face dimensions and array backend follow from the source and target placements.
-    q = ntuple(d -> similar(T, Cell(), Face(d)), N)
-    rate = similar(T)
-    C = Region(Cell(), Val(N))
-    offsets = unitoffsets(Val(N))
+    faces = [Region(Face(d), C) for d in eachindex(n)]
+    flux = [similar(temperature, size(F)) for F in faces]
+    rate = similar(temperature, size(C))
 
-    dtmax = 0.2 / (α*sum(hd -> hd^(-2), h))
+    dtmax = 0.2/(α*sum(hd -> hd^(-2), h))
     nsteps = ceil(Int, t_end/dtmax)
     dt = t_end/nsteps
 
     for _ in 1:nsteps
         fill!(rate, 0)
-        for d in 1:N
-            F = Region(Face(d), Val(N))
-            I = interior(F)
+        for (d, e) in enumerate(unitoffsets(C))
+            F = faces[d]
             L, R = boundaries(F, d)
-            f, e, hd = q[d], offsets[d], h[d]
+            f, hd = flux[d], h[d]
 
-            ## Internal fluxes use the two cells half a cell away from each face.
-            @views @. f[I] = -α*(T[I+e/2] - T[I-e/2])/hd
+            @stencil begin
+                ## Internal faces read the two adjacent cell centers.
+                f[F] = -α*(temperature[F+e/2]-temperature[F-e/2])/hd
 
-            ## Each boundary face is half a cell away from its adjacent cell center.
-            @views @. f[L] = -α*T[L+e/2]/(hd/2)
-            @views @. f[R] =  α*T[R-e/2]/(hd/2)
+                ## The zero-temperature walls are half a cell away.
+                f[L] = -α*temperature[L+e/2]/(hd/2)
+                f[R] =  α*temperature[R-e/2]/(hd/2)
 
-            ## Update every cell, including the cells touching the boundary.
-            @views @. rate[C] -= (f[C+e/2] - f[C-e/2])/hd
+                ## Every cell reads its two bounding face fluxes.
+                rate[C] -= (f[C+e/2]-f[C-e/2])/hd
+            end
         end
-        @. T += dt*rate
+        @. temperature += dt*rate
     end
 
-    T
+    temperature
 end
 
-# `Region` represents a placement and a selection, not an array. Concrete
-# ranges are resolved when indexing an array; `@views` produces ordinary views,
-# and `@.` uses Julia's standard broadcast. There is no separate execution API.
+# `@stencil` combines automatic common-range selection, `@views`, and `@.`.
+# Each equation updates only the candidate points where every displayed read
+# exists. A block executes equations in order, choosing a range per equation.
+# Here the first equation updates internal faces; the boundary equations then
+# set the two wall fluxes, and the last equation updates every cell.
+# Scalar bindings, allocations, and standalone helper calls are prepared outside the
+# block. As with `@.`, every assignment inside the block is a dot assignment;
+# it does not introduce new scalar variables.
 #
-# `interior` preserves placement and excludes sampling points on the boundary.
-# Thus `interior(C)` contains all cell centers, whereas `interior(F)` excludes
-# the two boundary faces normal to `d`. Arrays have no halo in this example.
-#
-# The flux formula can also be written with its index anchored at the lower
-# cell. With `J = I-e/2`, the exact same operation is
-# `@views @. f[J+e/2] = -α*(T[J+e]-T[J])/hd`.
-# Both forms use the same region and displacement arithmetic.
+# Ordinary `@views @.` with a regular `Region` remains strict. To select a
+# fixed range for it, use `I = validregion(F, (-e/2, e/2))` and write the flux
+# formula with `I`. `interior(F)` instead means the physical interior of `F`.
 
 T2D = main()
 T3D = main((12, 10, 8))
