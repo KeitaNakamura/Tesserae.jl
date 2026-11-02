@@ -64,7 +64,7 @@ function available(v::RegionOperand{T,N}) where {T,N}
         axis = axes(v.parent, d)
         lo = max(1, first(axis)-first(requested[d])+1)
         hi = min(size(v)[d], last(axis)-first(requested[d])+1)
-        lo <= hi ? (lo:hi) : (1:0)
+        lo ≤ hi ? (lo:hi) : (1:0)
     end
 end
 

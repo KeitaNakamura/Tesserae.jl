@@ -59,7 +59,7 @@ end
                              for K in CartesianIndices(counts)]
             for offsets in lists
                 I = validregion(R,offsets)
-                expected = [all(0 <= 2*(K[d]-1)+center2[d]+shift.doubled[d] <= 2cells[d]
+                expected = [all(0 ≤ 2*(K[d]-1)+center2[d]+shift.doubled[d] ≤ 2cells[d]
                                 for shift in offsets for d in 1:N)
                             for K in CartesianIndices(counts)]
                 selected = falses(counts)

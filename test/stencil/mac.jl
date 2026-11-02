@@ -90,14 +90,14 @@ end
             actual,reference = getproperty(result,field),getproperty(expected,field)
             # Allow only rounding differences caused by the order of arithmetic operations.
             scale = max(1,maximum(abs,reference))
-            @test maximum(abs,actual-reference) <= 64eps(Float64)*scale
+            @test maximum(abs,actual-reference) ≤ 64eps(Float64)*scale
             @test all(isfinite,actual)
         end
         @test u[2:nx,:] == u_before[2:nx,:]
         @test v[:,2:ny] == v_before[:,2:ny]
 
         # Summed divergence equals the boundary flux, zero for both boundary conditions.
-        @test abs(sum(result.divergence)) <=
+        @test abs(sum(result.divergence)) ≤
             64eps(Float64)*max(1,sum(abs,result.divergence))
 
         # Discrete integration by parts: gradient is the negative adjoint of divergence.
@@ -112,9 +112,9 @@ end
             viscous_work = sum(u.*result.lap_u)+sum(v.*result.lap_v)
         end
         cell_work = sum(p.*result.divergence)
-        @test abs(pressure_work+cell_work) <=
+        @test abs(pressure_work+cell_work) ≤
             128eps(Float64)*max(1,abs(pressure_work),sum(abs,p.*result.divergence))
-        @test viscous_work <= 0
+        @test viscous_work ≤ 0
     end
 end
 

@@ -8,7 +8,7 @@ struct Region{N}
         all(>(0), cells) ||
             throw(ArgumentError("the region must span a positive number of cells"))
         all(d -> isempty(indices[d]) ||
-            1 <= first(indices[d]) <= last(indices[d]) <= cells[d]+Int(isnodealigned(location, d)), 1:N) ||
+            1 ≤ first(indices[d]) ≤ last(indices[d]) ≤ cells[d]+Int(isnodealigned(location, d)), 1:N) ||
             throw(ArgumentError("selected indices must lie within the whole-domain placement"))
         normalized = map(i -> isempty(i) ? (1:0) : i, indices)
         new{N}(location, cells, normalized)
@@ -36,7 +36,7 @@ end
 sampleindices(r::Region, d::Int) = r.indices[d]
 
 function Base.size(r::Region{N}, d::Integer) where {N}
-    d >= 1 || throw(BoundsError(size(r), d))
+    d ≥ 1 || throw(BoundsError(size(r), d))
     d > N && return 1
     length(sampleindices(r, Int(d)))
 end
@@ -47,7 +47,7 @@ unitoffsets(::Region{N}) where {N} = unitoffsets(Val(N))
 intersect_range(a::UnitRange{Int}, b::UnitRange{Int}) = max(first(a), first(b)):min(last(a), last(b))
 
 function select_interior(r::Region{N}, dimensions::Tuple{Vararg{Int}}) where {N}
-    all(d -> 1 <= d <= N, dimensions) || throw(ArgumentError("invalid interior axis"))
+    all(d -> 1 ≤ d ≤ N, dimensions) || throw(ArgumentError("invalid interior axis"))
     indices = ntuple(Val(N)) do d
         d in dimensions && isnodealigned(r.location, d) ? intersect_range(r.indices[d], 2:r.cells[d]) : r.indices[d]
     end
@@ -118,7 +118,7 @@ placement has exactly one grid-line-aligned axis. A boundary absent from `r`
 produces an empty region; it does not become a boundary of the selected subset.
 """
 function boundaries(r::Region{N}, d::Int) where {N}
-    1 <= d <= N || throw(ArgumentError("invalid boundary axis $d"))
+    1 ≤ d ≤ N || throw(ArgumentError("invalid boundary axis $d"))
     isnodealigned(r.location, d) ||
         throw(ArgumentError("this placement has no sampling points on boundaries normal to axis $d"))
     count = r.cells[d]+1
