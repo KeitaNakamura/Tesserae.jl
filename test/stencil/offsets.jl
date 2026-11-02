@@ -1,4 +1,5 @@
 using Test
+using Tesserae.Stencil: validregion
 
 @testset "Tuple, varargs, and one-sided reads" begin
     C = Region(Cell(),(5,4))

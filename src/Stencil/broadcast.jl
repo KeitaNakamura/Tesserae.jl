@@ -13,6 +13,8 @@ inputs have been restricted together to positions where every read exists.
 Each assignment chooses its own intersection; other positions stay unchanged.
 
 ```julia
+using Tesserae.Stencil: common
+
 f, temperature = common(flux), common(values)
 @views @. f[F] = -(temperature[F+e/2] - temperature[F-e/2]) / h
 ```

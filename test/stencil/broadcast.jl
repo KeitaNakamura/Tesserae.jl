@@ -1,4 +1,5 @@
 using Test
+using Tesserae.Stencil: common, validregion
 
 @testset "Explicit common adapters with standard views and broadcast" begin
     C = Region(Cell(), (5,))

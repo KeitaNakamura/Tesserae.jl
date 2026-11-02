@@ -1,4 +1,5 @@
 using Tesserae.Stencil
+using Tesserae.Stencil: validregion
 
 function main(n=(32, 24); α=0.1, t_end=0.1)
     C = Region(Cell(), n)

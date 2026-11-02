@@ -82,6 +82,8 @@ Use this function to choose a fixed region for ordinary, strict indexing.
 `interior` instead excludes points on physical boundaries.
 
 ```julia
+using Tesserae.Stencil: validregion
+
 C = Region(Cell(), (32,24))
 ex, ey = unitoffsets(C)
 I = validregion(C, (-ex, ex))  # same as validregion(C, -ex, ex)

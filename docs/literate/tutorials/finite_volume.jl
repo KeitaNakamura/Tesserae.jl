@@ -54,9 +54,10 @@ end
 # block. As with `@.`, every assignment inside the block is a dot assignment;
 # it does not introduce new scalar variables.
 #
-# Ordinary `@views @.` with a regular `Region` remains strict. To select a
-# fixed range for it, use `I = validregion(F, (-e/2, e/2))` and write the flux
-# formula with `I`. `interior(F)` instead means the physical interior of `F`.
+# Ordinary `@views @.` with a regular `Region` reports out-of-bounds references.
+# For an explicit range, first use `using Tesserae.Stencil: validregion`, then
+# select `I = validregion(F, (-e/2, e/2))` and write the flux formula with `I`.
+# `interior(F)` instead means the physical interior of `F`.
 
 T2D = main()
 T3D = main((12, 10, 8))

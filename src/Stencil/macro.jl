@@ -26,9 +26,10 @@ end
         equations...
     end
 
-Apply `common`, `@views`, and `@.` to numerical update equations. Region indices
-use expression-wide common-range selection; ordinary scalar and range indices
-retain their usual bounds rules. Index expressions are evaluated normally.
+Select a common valid range and apply `@views` and `@.` to numerical update
+equations. Region indices use expression-wide common-range selection; ordinary
+scalar and range indices retain their usual bounds rules. Index expressions
+are evaluated normally.
 
 Equations in a block execute in order. Each equation selects its own common
 range, so a block can mix cell, face, and boundary updates. Unwritten positions

@@ -2,8 +2,7 @@ module Stencil
 
 import ..Tesserae: boundaries
 
-export Cell, Face, Edge, Vertex, Region, interior, validregion, boundaries,
-       unitoffsets, coordinates, common, @stencil
+export Cell, Face, Edge, Vertex, Region, interior, boundaries, unitoffsets, coordinates, @stencil
 
 include("location.jl")
 include("offset.jl")
