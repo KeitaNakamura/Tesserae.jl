@@ -1,6 +1,3 @@
-using Tesserae, Test
-
-
 @testset "Each placement takes its own sample counts" begin
     C = Region(Cell(), (32, 24, 16))
     placements = (Cell(), Face(1), Face(2), Face(3), Edge(1), Edge(2), Edge(3), Vertex())
@@ -251,12 +248,6 @@ end
     empty_faces = interior(Region(Face(1), singleton))
     f = zeros(2,3)
     @test size(view(f,empty_faces)) == (0,3)
-end
-
-@testset "Actual finite-volume calculation" begin
-    for n in ((9,), (32,24), (12,10,8), (1,7))
-        @test HeatExample.main(n) == ReferenceHeat.main(n)
-    end
 end
 
 @testset "Cross-component MAC interpolation" begin

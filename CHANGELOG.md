@@ -6,8 +6,6 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Added
 
-- Added finite-volume heat diffusion and wall/periodic MAC operator tutorials
-  using ordinary arrays, staggered regions, and `@stencil` updates.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.
@@ -93,7 +91,6 @@ All notable changes to Tesserae.jl will be documented in this file.
   and halo helpers with placement-aware `Region`s and half-cell offsets.
   `@stencil` selects the common valid range for each update equation and
   delegates computation to standard Julia broadcasting over plain arrays.
-  Removed the unregistered particle MAC tutorial that used the old interface.
 
 ## v0.7.5
 

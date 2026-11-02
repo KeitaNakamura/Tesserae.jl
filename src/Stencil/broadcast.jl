@@ -20,7 +20,7 @@ f, temperature = common(flux), common(values)
 ```
 
 The assignment returns the native view that was updated. Ordinary `Region`
-indexing remains strict. `@stencil` applies this adapter automatically.
+views retain their usual bounds checks. `@stencil` applies this adapter automatically.
 """
 common(A::AbstractArray) = CommonSource(A)
 common(A::CommonSource) = A
@@ -29,12 +29,12 @@ Base.lastindex(A::CommonSource, d...) = lastindex(A.parent, d...)
 
 # A deferred broadcast operand, not an AbstractArray pretending all of its
 # candidate indices can already be read. No field values are read here.
-struct RegionOperand{T,N,A,S}
+struct RegionOperand{A,N}
     parent::A
-    selector::S
+    indices::NTuple{N,UnitRange{Int}}
 end
 function RegionOperand(A::AbstractArray{T,N}, r::Union{Region{N},ShiftedRegion{N}}) where {T,N}
-    RegionOperand{T,N,typeof(A),typeof(r)}(A, r)
+    RegionOperand(A, Base.to_indices(A, (r,)))
 end
 
 # Dispatch on our adapter only. Parent array types keep ownership of their
@@ -43,23 +43,21 @@ Base.getindex(A::CommonSource, r::Union{Region,ShiftedRegion}) = RegionOperand(A
 Base.getindex(A::CommonSource, indices...) = Base.maybeview(A.parent, indices...)
 Base.view(A::CommonSource, r::Union{Region,ShiftedRegion}) = A[r]
 Base.view(A::CommonSource, indices...) = view(A.parent, indices...)
-Base.size(v::RegionOperand) = size(v.selector)
-Base.ndims(::RegionOperand{T,N}) where {T,N} = N
+Base.size(v::RegionOperand) = map(length, v.indices)
+Base.ndims(::RegionOperand{A,N}) where {A,N} = N
 Base.axes(v::RegionOperand) = map(Base.OneTo, size(v))
 Base.size(v::RegionOperand, d::Integer) = d > ndims(v) ? 1 : size(v)[d]
 Base.axes(v::RegionOperand, d::Integer) = Base.OneTo(size(v, d))
-Base.eltype(::Type{<:RegionOperand{T}}) where {T} = T
+Base.eltype(::Type{<:RegionOperand{A}}) where {A} = eltype(A)
 Base.broadcastable(v::RegionOperand) = v
-Broadcast.BroadcastStyle(::Type{<:RegionOperand{T,N}}) where {T,N} = Broadcast.DefaultArrayStyle{N}()
+Broadcast.BroadcastStyle(::Type{<:RegionOperand{A,N}}) where {A,N} = Broadcast.DefaultArrayStyle{N}()
 
-readranges(v::RegionOperand) = Base.to_indices(v.parent, (v.selector,))
 function Base.getindex(::RegionOperand, indices...)
     throw(ArgumentError("common-region inputs require an in-place broadcast with a common-region destination"))
 end
 
-intersectrange(a, b) = max(first(a), first(b)):min(last(a), last(b))
-function available(v::RegionOperand{T,N}) where {T,N}
-    requested = readranges(v)
+function available(v::RegionOperand{A,N}) where {A,N}
+    requested = v.indices
     ntuple(N) do d
         axis = axes(v.parent, d)
         lo = max(1, first(axis)-first(requested[d])+1)
@@ -77,7 +75,7 @@ function restrict(bounds, v::RegionOperand)
         if size(v)[d] == 1
             isempty(valid[d]) ? (1:0) : bounds[d]
         else
-            intersectrange(bounds[d], valid[d])
+            intersect_range(bounds[d], valid[d])
         end
     end
 end
@@ -90,7 +88,7 @@ function localslices(x, bounds)
     end
 end
 function lower(v::RegionOperand, bounds)
-    requested = readranges(v)
+    requested = v.indices
     local_ranges = localslices(v, bounds)
     indices = ntuple(ndims(v)) do d
         isempty(local_ranges[d]) ? (first(axes(v.parent, d)):(first(axes(v.parent, d))-1)) :

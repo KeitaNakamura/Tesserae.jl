@@ -1,5 +1,72 @@
-using Tesserae, Test, Random
-include("../../docs/literate/tutorials/mac_operators.jl")
+function periodic_difference!(out, a, R, d, hd)
+    e = unitoffsets(R)[d]
+    L, U = boundaries(R, d)
+    @stencil begin
+        out[R] = (a[R+e/2] - a[R-e/2])/hd
+        out[L] = (a[L+e/2] - a[U-e/2])/hd
+        out[U] = out[L]
+    end
+    out
+end
+
+function mac_operators(p, u, v, h; periodic)
+    C = Region(Cell(), size(p))
+    V = Region(Vertex(), C)
+    faces = [Region(Face(d), C) for d in 1:2]
+    offsets = unitoffsets(C)
+    velocity = [u, v]
+    gradient = [similar(p, size(F)) for F in faces]
+    normal = [similar(p) for _ in velocity]
+    transverse = [similar(p, size(V)) for _ in velocity]
+    laplacian = [similar(a) for a in velocity]
+    divergence = similar(p)
+    fill!(divergence, 0)
+
+    for (d, e) in enumerate(offsets)
+        j = 3-d
+        et, hd, ht = offsets[j], h[d], h[j]
+        F = faces[d]
+        L, R = boundaries(F)
+        a, g, dn, ds, lap = velocity[d], gradient[d], normal[d], transverse[d], laplacian[d]
+
+        if periodic
+            @stencil a[R] = a[L]
+            periodic_difference!(g, p, F, d, hd)
+        else
+            @stencil begin
+                a[L] = 0
+                a[R] = 0
+                g[F] = (p[F+e/2] - p[F-e/2])/hd
+                g[L] = 0
+                g[R] = 0
+            end
+        end
+        @stencil begin
+            dn[C] = (a[C+e/2] - a[C-e/2])/hd
+            divergence[C] += dn[C]
+        end
+
+        if periodic
+            periodic_difference!(ds, a, V, j, ht)
+            periodic_difference!(lap, dn, F, d, hd)
+            @stencil lap[F] += (ds[F+et/2] - ds[F-et/2])/ht
+        else
+            # Tangential no-slip walls are half a cell from the velocity samples.
+            B, T = boundaries(V, j)
+            @stencil begin
+                ds[V] = (a[V+et/2] - a[V-et/2])/ht
+                ds[B] =  a[B+et/2]/(ht/2)
+                ds[T] = -a[T-et/2]/(ht/2)
+            end
+            fill!(lap, 0)
+            @stencil lap[F] = (dn[F+e/2] - dn[F-e/2])/hd + (ds[F+et/2] - ds[F-et/2])/ht
+        end
+    end
+
+    (; gx=gradient[1], gy=gradient[2], divergence,
+       du_dx=normal[1], dv_dy=normal[2], du_dy=transverse[1], dv_dx=transverse[2],
+       lap_u=laplacian[1], lap_v=laplacian[2])
+end
 
 # Reference stencils written with ordinary integer indices.
 function reference_operators(p, u0, v0, h; periodic)
@@ -82,7 +149,7 @@ end
         p,u,v = randn(rng,n),randn(rng,nx+1,ny),randn(rng,nx,ny+1)
         p_before,u_before,v_before = copy(p),copy(u),copy(v)
         expected = reference_operators(p,u,v,h; periodic)
-        result = periodic ? periodic_operators(p,u,v,h) : wall_operators(p,u,v,h)
+        result = mac_operators(p,u,v,h; periodic)
         @test p == p_before
         @test u == expected.u
         @test v == expected.v
@@ -127,7 +194,7 @@ function manufactured_errors(n; periodic)
         p = [sinpi(2x)+0.5sinpi(2y) for x in xc,y in yc]
         u = [cospi(2x)*cospi(2y) for x in xf,y in yc]
         v = [sinpi(2x)*cospi(2y) for x in xc,y in yf]
-        r = periodic_operators(p,u,v,(hx,hy))
+        r = mac_operators(p,u,v,(hx,hy); periodic=true)
         kx,ky = 2sinpi(hx)/hx,2sinpi(hy)/hy
         gx = [kx*cospi(2x) for x in xf,y in yc]
         gy = [0.5ky*cospi(2y) for x in xc,y in yf]
@@ -147,7 +214,7 @@ function manufactured_errors(n; periodic)
         p = [cospi(x)*cospi(y) for x in xc,y in yc]
         u = [x*(1-x)*y*(1-y) for x in xf,y in yc]
         v = [2x*(1-x)*y*(1-y) for x in xc,y in yf]
-        r = wall_operators(p,u,v,(hx,hy))
+        r = mac_operators(p,u,v,(hx,hy); periodic=false)
         gx = [-2sinpi(hx/2)/hx*sinpi(x)*cospi(y) for x in xf,y in yc]
         gy = [-2sinpi(hy/2)/hy*cospi(x)*sinpi(y) for x in xc,y in yf]
         exact_div = [(1-2x)*y*(1-y)+2x*(1-x)*(1-2y) for x in xc,y in yc]
@@ -170,40 +237,13 @@ end
     @test 3.8 < wall_coarse.gradient_error/wall_fine.gradient_error < 4.2
     @test 3.8 < periodic_coarse.gradient_error/periodic_fine.gradient_error < 4.2
     @test 3.8 < periodic_coarse.divergence_error/periodic_fine.divergence_error < 4.2
-    println("wall gradient refinement: ",wall_coarse.gradient_error," -> ",wall_fine.gradient_error)
-    println("periodic gradient refinement: ",periodic_coarse.gradient_error," -> ",periodic_fine.gradient_error)
-    println("periodic divergence refinement: ",periodic_coarse.divergence_error," -> ",periodic_fine.divergence_error)
 end
 
 @testset "Periodic constant fields" begin
     p,u,v = fill(2.0,7,5),fill(3.0,8,5),fill(-4.0,7,6)
-    r = periodic_operators(p,u,v,(0.13,0.21))
+    r = mac_operators(p,u,v,(0.13,0.21); periodic=true)
     for field in propertynames(r)
         @test all(iszero,getproperty(r,field))
-    end
-end
-
-@testset "Coordinate-based MAC initialization preserves results" begin
-    for n in ((7,5),(32,24),(1,4))
-        nx,ny = n
-        hx,hy = 1/nx,1/ny
-        xc,yc = ((1:nx).-0.5).*hx,((1:ny).-0.5).*hy
-        xf,yf = (0:nx).*hx,(0:ny).*hy
-        p = [cospi(x)*cospi(y) for x in xc,y in yc]
-        u = [x*(1-x)*y*(1-y) for x in xf,y in yc]
-        v = [2x*(1-x)*y*(1-y) for x in xc,y in yf]
-        walls = wall_operators(p,u,v,(hx,hy))
-        pp = [sinpi(2x)+0.5sinpi(2y) for x in xc,y in yc]
-        up = [cospi(2x)*cospi(2y) for x in xf,y in yc]
-        vp = [sinpi(2x)*cospi(2y) for x in xc,y in yf]
-        periodic = periodic_operators(pp,up,vp,(hx,hy))
-        example = redirect_stdout(devnull) do
-            mac_example(n)
-        end
-        for field in propertynames(walls)
-            @test getproperty(example.walls,field) == getproperty(walls,field)
-            @test getproperty(example.periodic,field) == getproperty(periodic,field)
-        end
     end
 end
 
@@ -214,12 +254,11 @@ end
         p = randn(rng, n)
         u,v = randn(rng, nx+1, ny),randn(rng, nx, ny+1)
         h = (0.13,0.21)
-        operator = periodic ? periodic_operators : wall_operators
-        expected = operator(p, copy(u), copy(v), h)
+        expected = mac_operators(p, copy(u), copy(v), h; periodic)
         pressure = TrackedArray(copy(p), Ref(0))
         horizontal = TrackedArray(copy(u), Ref(0))
         vertical = TrackedArray(copy(v), Ref(0))
-        actual = operator(pressure, horizontal, vertical, h)
+        actual = mac_operators(pressure, horizontal, vertical, h; periodic)
         @test pressure.data == p
         @test all(field -> getproperty(actual, field) isa TrackedArray, propertynames(actual))
         for field in propertynames(expected)

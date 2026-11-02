@@ -129,32 +129,6 @@ end
     @test out == [-999.,32.,63.,124.,-999.]
 end
 
-# A backend with its own view type and broadcast style verifies that execution
-# is handed back to the parent's numerical implementation after lowering.
-struct TrackedArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
-    data::A
-    calls::Base.RefValue{Int}
-end
-Base.size(A::TrackedArray) = size(A.data)
-Base.getindex(A::TrackedArray,I::Vararg{Int}) = A.data[I...]
-Base.setindex!(A::TrackedArray,v,I::Vararg{Int}) = (A.data[I...] = v)
-Base.view(A::TrackedArray,I...) = TrackedArray(view(A.data,I...),A.calls)
-function Base.similar(A::TrackedArray, ::Type{T}, dims::Dims) where {T}
-    TrackedArray(similar(A.data, T, dims), Ref(0))
-end
-struct TrackedStyle{N} <: Base.Broadcast.AbstractArrayStyle{N} end
-TrackedStyle(::Val{N}) where {N} = TrackedStyle{N}()
-TrackedStyle{N}(::Val{M}) where {N,M} = TrackedStyle{M}()
-Base.Broadcast.BroadcastStyle(::Type{<:TrackedArray{T,N}}) where {T,N} = TrackedStyle{N}()
-untrack(A::TrackedArray) = A.data
-untrack(x) = x
-untrack(bc::Base.Broadcast.Broadcasted) = Base.Broadcast.broadcasted(bc.f,map(untrack,bc.args)...)
-function Base.copyto!(A::TrackedArray,bc::Base.Broadcast.Broadcasted{<:TrackedStyle})
-    A.calls[] += 1
-    Base.Broadcast.materialize!(A.data,untrack(bc))
-    A
-end
-
 @testset "Delegate to a backend's own broadcast style" begin
     C = Region(Cell(),(5,4))
     ex,ey = unitoffsets(C)
@@ -174,4 +148,41 @@ end
     @test out.data[2:4,:] == qdata[3:5,:]-qdata[1:3,:].*coefficient.data[2:4,:]
     @test all(==(-999.),out.data[[1,end],:])
     @test out.calls[] == 2
+end
+
+@testset "Common ranges against a physical-coordinate oracle" begin
+    for cells in ((4,), (1,), (4,3), (1,3), (3,1), (1,1), (3,2,1))
+        N = length(cells)
+        for mask in 0:(1<<N)-1
+            phase = ntuple(d -> Int(iszero(mask & (1<<(d-1)))), N)
+            samples = ntuple(d -> cells[d]+Int(iszero(phase[d])), N)
+            R = Region(Tesserae.Stencil.Location(UInt(mask)), samples)
+            directions = unitoffsets(R)
+            e, f = first(directions), last(directions)
+            shifts = (e/2, -e, (e+f)/2)
+            arrays = map(shifts) do shift
+                counts = ntuple(d -> cells[d]+Int(iseven(phase[d]+shift.doubled[d])), N)
+                reshape(collect(1:prod(counts)), counts)
+            end
+            destination, a, b = arrays
+            # Exercise shifted destinations and subsets, including empty interiors.
+            for selection in (R, interior(R))
+                result = fill(-999, size(destination))
+                expected = copy(result)
+                for K in CartesianIndices(samples)
+                    on_boundary = any(d -> phase[d] == 0 && K[d] in (1,samples[d]), 1:N)
+                    selection == interior(R) && on_boundary && continue
+                    positions = map(shifts) do shift
+                        ntuple(d -> 2*(K[d]-1)+phase[d]+shift.doubled[d], N)
+                    end
+                    all(x -> all(d -> 0 ≤ x[d] ≤ 2cells[d], 1:N), positions) || continue
+                    indices = map(x -> CartesianIndex(map(y -> fld(y,2)+1, x)), positions)
+                    expected[indices[1]] = a[indices[2]]-b[indices[3]]
+                end
+                target, left, right = selection+shifts[1], selection+shifts[2], selection+shifts[3]
+                @stencil result[target] = a[left]-b[right]
+                @test result == expected
+            end
+        end
+    end
 end

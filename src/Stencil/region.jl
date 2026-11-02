@@ -77,7 +77,7 @@ whole domain on the same grid. Offsets are `GridOffset`s such as `ex`, `-ex`,
 or `ex/2`. The returned region preserves `r`'s placement and existing selection.
 This selects calculation points; it does not read or compute field values.
 An empty tuple imposes no extra constraints and returns `r`.
-Use this function to choose a fixed region for ordinary, strict indexing.
+Use this function to choose a fixed region for ordinary bounds-checked views.
 `@stencil` infers these constraints directly from each update equation.
 `interior` instead excludes points on physical boundaries.
 
