@@ -43,6 +43,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Fixed
 
+- `fillzero!` uses byte zeroing only for types with known zero representations,
+  preserving valid zeros for types such as `Rational`.
 - `cpu` on a GPU sparse matrix returned a dense matrix; it now returns a
   `SparseMatrixCSC`. `KernelAbstractions.get_backend` also answers for sparse
   matrices instead of throwing.
