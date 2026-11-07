@@ -8,6 +8,26 @@ cellcoordinates(mesh, cell) = Tuple(Tuple(mesh[i]) for i in supportnodes(mesh, c
 nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
 
 @testset "Gmsh" begin
+    @testset "reference node order for every supported element" begin
+        extension = Base.get_extension(Tesserae, :TesseraeGmshExt)
+        Gmsh.gmsh.initialize(GMSH_TEST_ARGS)
+        try
+            for (family, order, serendip) in (("Line",1,false),("Line",2,false),("Line",3,false),
+                    ("Triangle",1,false),("Triangle",2,false),("Tetrahedron",1,false),("Tetrahedron",2,false),
+                    ("Quadrangle",1,false),("Quadrangle",2,true),("Quadrangle",2,false),
+                    ("Hexahedron",1,false),("Hexahedron",2,true),("Hexahedron",2,false))
+                element_type = Gmsh.gmsh.model.mesh.getElementType(family, order, serendip)
+                name, dim, _, n, coords, _ = Gmsh.gmsh.model.mesh.getElementProperties(element_type)
+                shape = extension.from_gmsh_shape(name)
+                permutation = extension.from_gmsh_connectivity(shape)
+                nodes = Tesserae.localnodes(shape)
+                expected = [nodes[j][d] for d in 1:dim, j in 1:n]
+                @test reshape(coords, Int(dim), Int(n))[:, permutation] ≈ expected
+            end
+        finally
+            Gmsh.gmsh.finalize()
+        end
+    end
     @testset "Coordinate dimension" begin
         @test_throws ArgumentError readtestmsh("embedded_surface.msh")
         @test !Bool(Gmsh.gmsh.isInitialized())

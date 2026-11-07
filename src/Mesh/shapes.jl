@@ -156,15 +156,7 @@ function localnodes(::Type{T}, ::Quad4) where {T}
     )
 end
 
-function value(::Quad4, X::Vec{2, T}) where {T}
-    ξ, η = X
-    SVector{4, T}(
-        0.25 * (1-ξ) * (1-η),
-        0.25 * (1+ξ) * (1-η),
-        0.25 * (1+ξ) * (1+η),
-        0.25 * (1-ξ) * (1+η),
-    )
-end
+@inline value(shape::Quad4, X::Vec{2}) = tensor_product_shape_values(shape, X)
 
 """
     Quad8()
@@ -257,20 +249,7 @@ function localnodes(::Type{T}, ::Quad9) where {T}
     )
 end
 
-function value(::Quad9, X::Vec{2, T}) where {T}
-    ξ, η = X
-    SVector{9, T}(
-         0.25 * ξ * η * (1-ξ) * (1-η),
-        -0.25 * ξ * η * (1+ξ) * (1-η),
-         0.25 * ξ * η * (1+ξ) * (1+η),
-        -0.25 * ξ * η * (1-ξ) * (1+η),
-        -0.5 * η * (1-ξ^2) * (1-η),
-         0.5 * ξ * (1+ξ) * (1-η^2),
-         0.5 * η * (1-ξ^2) * (1+η),
-        -0.5 * ξ * (1-ξ) * (1-η^2),
-         (1-ξ^2) * (1-η^2),
-    )
-end
+@inline value(shape::Quad9, X::Vec{2}) = tensor_product_shape_values(shape, X)
 
 # ---- Hex ----
 
@@ -316,19 +295,7 @@ function localnodes(::Type{T}, ::Hex8) where {T}
     )
 end
 
-function value(::Hex8, X::Vec{3, T}) where {T}
-    ξ, η, ζ = X
-    SVector{8, T}(
-        0.125 * (1-ξ) * (1-η) * (1-ζ),
-        0.125 * (1+ξ) * (1-η) * (1-ζ),
-        0.125 * (1+ξ) * (1+η) * (1-ζ),
-        0.125 * (1-ξ) * (1+η) * (1-ζ),
-        0.125 * (1-ξ) * (1-η) * (1+ζ),
-        0.125 * (1+ξ) * (1-η) * (1+ζ),
-        0.125 * (1+ξ) * (1+η) * (1+ζ),
-        0.125 * (1-ξ) * (1+η) * (1+ζ),
-    )
-end
+@inline value(shape::Hex8, X::Vec{3}) = tensor_product_shape_values(shape, X)
 
 @doc raw"""
     Hex20()
@@ -469,38 +436,7 @@ function localnodes(::Type{T}, ::Hex27) where {T}
     )
 end
 
-function value(::Hex27, X::Vec{3, T}) where {T}
-    ξ, η, ζ = X
-    SVector{27, T}(
-        -0.125 * ξ*η*ζ * (1-ξ) * (1-η) * (1-ζ),
-         0.125 * ξ*η*ζ * (1+ξ) * (1-η) * (1-ζ),
-        -0.125 * ξ*η*ζ * (1+ξ) * (1+η) * (1-ζ),
-         0.125 * ξ*η*ζ * (1-ξ) * (1+η) * (1-ζ),
-         0.125 * ξ*η*ζ * (1-ξ) * (1-η) * (1+ζ),
-        -0.125 * ξ*η*ζ * (1+ξ) * (1-η) * (1+ζ),
-         0.125 * ξ*η*ζ * (1+ξ) * (1+η) * (1+ζ),
-        -0.125 * ξ*η*ζ * (1-ξ) * (1+η) * (1+ζ),
-         0.25 * η*ζ * (1-ξ^2) * (1-η) * (1-ζ),
-         0.25 * ξ*ζ * (1-ξ) * (1-η^2) * (1-ζ),
-         0.25 * ξ*η * (1-ξ) * (1-η) * (1-ζ^2),
-        -0.25 * ξ*ζ * (1+ξ) * (1-η^2) * (1-ζ),
-        -0.25 * ξ*η * (1+ξ) * (1-η) * (1-ζ^2),
-        -0.25 * η*ζ * (1-ξ^2) * (1+η) * (1-ζ),
-         0.25 * ξ*η * (1+ξ) * (1+η) * (1-ζ^2),
-        -0.25 * ξ*η * (1-ξ) * (1+η) * (1-ζ^2),
-        -0.25 * η*ζ * (1-ξ^2) * (1-η) * (1+ζ),
-        -0.25 * ξ*ζ * (1-ξ) * (1-η^2) * (1+ζ),
-         0.25 * ξ*ζ * (1+ξ) * (1-η^2) * (1+ζ),
-         0.25 * η*ζ * (1-ξ^2) * (1+η) * (1+ζ),
-        -0.5 * ζ * (1-ξ^2) * (1-η^2) * (1-ζ),
-        -0.5 * η * (1-ξ^2) * (1-η) * (1-ζ^2),
-        -0.5 * ξ * (1-ξ) * (1-η^2) * (1-ζ^2),
-         0.5 * ξ * (1+ξ) * (1-η^2) * (1-ζ^2),
-         0.5 * η * (1-ξ^2) * (1+η) * (1-ζ^2),
-         0.5 * ζ * (1-ξ^2) * (1-η^2) * (1+ζ),
-         (1-ξ^2) * (1-η^2) * (1-ζ^2),
-    )
-end
+@inline value(shape::Hex27, X::Vec{3}) = tensor_product_shape_values(shape, X)
 
 # ---- Tri ----
 
@@ -708,4 +644,40 @@ function value(::Tet10, X::Vec{3, T}) where {T}
         4η * ζ,
         4ξ * ζ,
     )
+end
+
+# Tensor-product Lagrange shapes use the reference-node order as their single
+# ordering rule. Generate the expanded product so scalar promotion and the
+# multiplication order match the direct formulas.
+@generated function tensor_product_shape_values(shape::S, X::Vec{dim,T}) where {dim, T, S<:Union{Quad4,Quad9,Hex8,Hex27}}
+    order = _order_value(get_order(S()))
+    coordinates = [Symbol(:x_, d) for d in 1:dim]
+    entries = map(localnodes(S())) do node
+        coefficient = 1//1
+        powers = Any[]
+        factors = Any[]
+        for d in 1:dim
+            x = coordinates[d]
+            if order == 1
+                coefficient *= 1//2
+                push!(factors, node[d] < 0 ? :(1-$x) : :(1+$x))
+            elseif iszero(node[d])
+                push!(factors, :(1-$x^2))
+            else
+                coefficient *= node[d] < 0 ? -1//2 : 1//2
+                push!(powers, x)
+                push!(factors, node[d] < 0 ? :(1-$x) : :(1+$x))
+            end
+        end
+        terms = coefficient == 1 ? Any[] : Any[Float64(coefficient)]
+        append!(terms, powers)
+        append!(terms, factors)
+        length(terms) == 1 ? only(terms) : Expr(:call, :*, terms...)
+    end
+    loads = [:($(coordinates[d]) = X[$d]) for d in 1:dim]
+    quote
+        @_inline_meta
+        $(loads...)
+        SVector{$(length(entries)),T}($(entries...))
+    end
 end

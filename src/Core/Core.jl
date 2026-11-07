@@ -1,6 +1,7 @@
 include("debug.jl")
 include("devices.jl")
 include("orders.jl")
+include("bspline_recurrence.jl")
 include("helpers.jl")
 include("tensor_product.jl")
 include("threads.jl")

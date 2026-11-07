@@ -115,13 +115,7 @@ end
 Return the Greville abscissae associated with the B-spline basis functions
 defined by `axis`.
 """
-function greville_abscissae(axis::BSplineAxis)
-    p = axis.degree
-    # Greville abscissae: the parametric locations of the control points.
-    map(1:nbasis(axis)) do i
-        sum(j -> axis.knot_vector[i+j], 1:p) / p
-    end
-end
+greville_abscissae(axis::BSplineAxis) = greville_abscissae(axis.knot_vector, axis.degree)
 
 """
     knot_multiplicities(knot_vector::Vector) -> Vector{Tuple}
@@ -179,20 +173,7 @@ function active_basis(axis::BSplineAxis{T}, ξ::Real) where {T}
     u = T(ξ)
     left = Vector{T}(undef, p)
     right = Vector{T}(undef, p)
-    # Algorithm A2.2 from The NURBS Book: evaluate the nonzero basis functions
-    # on one span using a stable triangular recurrence.
-    for j in 1:p
-        left[j] = u - axis.knot_vector[span+1-j]
-        right[j] = axis.knot_vector[span+j] - u
-        saved = zero(T)
-        for r in 1:j
-            denominator = right[r] + left[j-r+1]
-            term = iszero(denominator) ? zero(T) : values[r] / denominator
-            values[r] = saved + right[r] * term
-            saved = left[j-r+1] * term
-        end
-        values[j+1] = saved
-    end
+    bspline_span_values!(values, left, right, axis.knot_vector, span, p, u)
 
     indices, values
 end

@@ -29,7 +29,7 @@ struct FEMesh{S <: Shape, dim, T, L, V <: AbstractVector{Vec{dim, T}}} <: Abstra
 end
 
 function FEMesh(shape::S, nodes::V, cellsupports::Vector{SVector{L, Int}}) where {S <: Shape, dim, T, L, V <: AbstractVector{Vec{dim, T}}}
-    FEMesh{S, dim, T, L, V}(shape, nodes, cellsupports, _collect_supportnodes(cellsupports))
+    FEMesh{S, dim, T, L, V}(shape, nodes, cellsupports, collect_supportnodes(cellsupports))
 end
 
 Base.size(mesh::FEMesh) = size(mesh.nodes)
@@ -82,30 +82,28 @@ function FEMesh(shape::Shape{dim}, mesh::CartesianMesh{dim}) where {dim}
     @inbounds for conn in connectivities
         nodeindices[conn] .= 1
     end
-    count = 0
-    @inbounds for i in eachindex(nodeindices)
-        if nodeindices[i] != 0
-            nodeindices[i] = (count+=1)
-        end
-    end
+    usednodes, nodeindices = compact_node_numbering!(nodeindices)
 
     @inbounds for (i, conn) in enumerate(connectivities)
         connectivities[i] = nodeindices[conn]
     end
 
-    FEMesh(shape, mesh′[findall(>(0), nodeindices)], vec(connectivities))
+    FEMesh(shape, mesh′[usednodes], vec(connectivities))
 end
 # An order-`n` cell spans `n` intervals, so its nodes are `n(I-1)+1` to `nI+1`.
 _cellnodes_ranges(::Order{n}, cellsize::Dims) where {n} = maparray(I -> (n*I-(n-1)*oneunit(I)):(n*I+oneunit(I)), CartesianIndices(cellsize))
-@inline _cellnodes_connectivities(::Line2, CI::CartesianIndices{1}) = @inbounds (SVector(CI[1], CI[2]),)
-@inline _cellnodes_connectivities(::Line3, CI::CartesianIndices{1}) = @inbounds (SVector(CI[1], CI[3], CI[2]),)
-@inline _cellnodes_connectivities(::Line4, CI::CartesianIndices{1}) = @inbounds (SVector(CI[1], CI[4], CI[2], CI[3]),)
-@inline _cellnodes_connectivities(::Quad4, CI::CartesianIndices{2}) = @inbounds (SVector(CI[1,1], CI[2,1], CI[2,2], CI[1,2]),)
-@inline _cellnodes_connectivities(::Quad8, CI::CartesianIndices{2}) = @inbounds (SVector(CI[1,1], CI[3,1], CI[3,3], CI[1,3], CI[2,1], CI[3,2], CI[2,3], CI[1,2]),)
-@inline _cellnodes_connectivities(::Quad9, CI::CartesianIndices{2}) = @inbounds (SVector(CI[1,1], CI[3,1], CI[3,3], CI[1,3], CI[2,1], CI[3,2], CI[2,3], CI[1,2], CI[2,2]),)
-@inline _cellnodes_connectivities(::Hex8,  CI::CartesianIndices{3}) = @inbounds (SVector(CI[1,1,1], CI[2,1,1], CI[2,2,1], CI[1,2,1], CI[1,1,2], CI[2,1,2], CI[2,2,2], CI[1,2,2]),)
-@inline _cellnodes_connectivities(::Hex20, CI::CartesianIndices{3}) = @inbounds (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[1,3,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,3,3], CI[2,1,1], CI[1,2,1], CI[1,1,2], CI[3,2,1], CI[3,1,2], CI[2,3,1], CI[3,3,2], CI[1,3,2], CI[2,1,3], CI[1,2,3], CI[3,2,3], CI[2,3,3]),)
-@inline _cellnodes_connectivities(::Hex27, CI::CartesianIndices{3}) = @inbounds (SVector(CI[1,1,1], CI[3,1,1], CI[3,3,1], CI[1,3,1], CI[1,1,3], CI[3,1,3], CI[3,3,3], CI[1,3,3], CI[2,1,1], CI[1,2,1], CI[1,1,2], CI[3,2,1], CI[3,1,2], CI[2,3,1], CI[3,3,2], CI[1,3,2], CI[2,1,3], CI[1,2,3], CI[3,2,3], CI[2,3,3], CI[2,2,1], CI[2,1,2], CI[1,2,2], CI[3,2,2], CI[2,3,2], CI[2,2,3], CI[2,2,2]),)
+@generated function _cellnodes_connectivities(shape::S, CI::CartesianIndices{dim}) where {dim, S<:Union{Line2,Line3,Line4,Quad4,Quad8,Quad9,Hex8,Hex20,Hex27}}
+    get_dimension(S()) == dim || return :(throw(MethodError(_cellnodes_connectivities, (shape, CI))))
+    order = _order_value(get_order(S()))
+    entries = map(localnodes(S())) do node
+        indices = map(x -> round(Int, (x+1)*order/2)+1, Tuple(node))
+        :(CI[$(indices...)])
+    end
+    quote
+        @_inline_meta
+        @inbounds (SVector($(entries...)),)
+    end
+end
 @inline _cellnodes_connectivities(::Tri3,  CI::CartesianIndices{2}) = @inbounds (SVector(CI[1,1], CI[2,1], CI[1,2]), SVector(CI[2,2], CI[1,2], CI[2,1]))
 @inline _cellnodes_connectivities(::Tri6,  CI::CartesianIndices{2}) = @inbounds (SVector(CI[1,1], CI[3,1], CI[1,3], CI[2,1], CI[1,2], CI[2,2]), SVector(CI[3,3], CI[1,3], CI[3,1], CI[2,3], CI[3,2], CI[2,2]))
 @inline _cellnodes_connectivities(::Tet4,  CI::CartesianIndices{3}) = @inbounds (SVector(CI[1,1,1], CI[2,1,1], CI[2,2,1], CI[2,2,2]), SVector(CI[1,1,1], CI[2,1,2], CI[2,1,1], CI[2,2,2]), SVector(CI[1,1,1], CI[2,2,1], CI[1,2,1], CI[2,2,2]), SVector(CI[1,1,1], CI[1,2,1], CI[1,2,2], CI[2,2,2]), SVector(CI[1,1,1], CI[1,2,2], CI[1,1,2], CI[2,2,2]), SVector(CI[1,1,1], CI[1,1,2], CI[2,1,2], CI[2,2,2]))
@@ -165,12 +163,11 @@ function Base.merge!(dest::FEMesh{S}, src::FEMesh{S}) where {S}
         end
     end
 
-    sortedinds_src = map(inds -> sort(nodemap[inds]), cellsupports(src))
-    sortedinds_dst = map(sort, cellsupports(dest))
+    original_cells = Set(sort(inds) for inds in cellsupports(dest))
     for cell in cells(src)
-        inds_src = sortedinds_src[cell]
-        if all(inds_dest -> inds_src !== inds_dest, sortedinds_dst)
-            push!(cellsupports(dest), nodemap[supportnodes(src, cell)])
+        indices = nodemap[supportnodes(src, cell)]
+        if sort(indices) ∉ original_cells
+            push!(cellsupports(dest), indices)
         end
     end
     _refresh_supportnodes!(dest)
@@ -274,9 +271,7 @@ function _prepare_field_meshes(meshes, order)
     all(isempty, unmatched) || throw(ArgumentError("each lower-dimensional geometry cell must be a subentity of a maximum-dimensional geometry cell"))
 
     # Dense numbering avoids unused grid entries; the view keeps field coordinates shared with the geometry.
-    nodeindices = findall(active)
-    nodemap = zeros(Int, length(geometry_nodes))
-    nodemap[nodeindices] .= eachindex(nodeindices)
+    nodeindices, nodemap = compact_node_numbering!(zeros(Int, length(geometry_nodes)), active)
     view(geometry_nodes, nodeindices), nodemap
 end
 
@@ -293,20 +288,9 @@ function _match_field_subentities!(unmatched, shape::Shape, indices)
     end
 end
 
-function _collect_supportnodes(cellsupports)
-    nodes = Int[]
-    if !isempty(cellsupports)
-        sizehint!(nodes, length(cellsupports) * length(first(cellsupports)))
-    end
-    for indices in cellsupports
-        append!(nodes, indices)
-    end
-    unique!(sort!(nodes))
-end
-
 function _refresh_supportnodes!(mesh::FEMesh)
     empty!(supportnodes(mesh))
-    append!(supportnodes(mesh), _collect_supportnodes(cellsupports(mesh)))
+    append!(supportnodes(mesh), collect_supportnodes(cellsupports(mesh)))
     mesh
 end
 
