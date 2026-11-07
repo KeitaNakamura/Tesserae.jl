@@ -8,6 +8,24 @@ cellcoordinates(mesh, cell) = Tuple(Tuple(mesh[i]) for i in supportnodes(mesh, c
 nodecoordinates(mesh) = sort([Tuple(mesh[i]) for i in eachindex(mesh)])
 
 @testset "Gmsh" begin
+    @testset "Coordinate dimension" begin
+        @test_throws ArgumentError readtestmsh("embedded_surface.msh")
+        @test !Bool(Gmsh.gmsh.isInitialized())
+        for spacedim in (0, 1, 2, 4, 2.5)
+            @test_throws ArgumentError readtestmsh("embedded_surface.msh"; spacedim)
+        end
+        surface = readtestmsh("embedded_surface.msh"; spacedim=3)["surface"]
+        @test collect(surface) == [Vec(0.0,0.0,0.0), Vec(0.0,1.0,0.0), Vec(0.0,0.0,1.0)]
+        points = generate_particles(@NamedTuple{x::Vec{3,Float64}, dS::Float64, n::Vec{3,Float64}},
+                                    surface, generate_quadrature_rule(basis(surface)))
+        weights = generate_basis_weights(surface, size(points))
+        update!(weights, points, surface; measure=points.dS, normal=points.n)
+        @test sum(points.dS) ≈ 0.5
+        @test all(n -> n ≈ Vec(1.0,0.0,0.0), points.n)
+        @test eltype(readtestmsh("square.msh")["domain"]) === Vec{2,Float64}
+        @test eltype(readtestmsh("square.msh"; spacedim=3)["domain"]) === Vec{3,Float64}
+    end
+
     meshes = readtestmsh("square.msh")
 
     @test sort(collect(keys(meshes))) == ["boundary", "domain"]

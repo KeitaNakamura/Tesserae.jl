@@ -6,6 +6,9 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Added
 
+- `readmsh(...; spacedim=3)` preserves the coordinates of curves and surfaces
+  embedded in three dimensions. Discarding nonzero coordinate components is
+  now rejected.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.
