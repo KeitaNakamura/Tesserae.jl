@@ -18,14 +18,7 @@ represented geometry. Repeated entries request repeated insertions.
 function insert_knot(net::ControlNet{dim, pdim, T}, knots::AbstractVector{T}; direction::Int) where {dim, pdim, T}
     check_parametric_direction(direction, pdim)
 
-    axis_new = net.axes[direction]
-    points = homogeneous_points(net)
-    for ξ in knots
-        axis = axis_new
-        axis_new = insert_knot(axis, ξ)
-        points = insert_knot_values(points, axis, ξ, direction)
-    end
-    rational_control_net(Base.setindex(net.axes, axis_new, direction), points)
+    refine_control_net(net, knots, direction)
 end
 
 function refineto(net::ControlNet{dim, pdim, T}, axis_new::BSplineAxis{T}; direction::Int) where {dim, pdim, T}
@@ -43,70 +36,143 @@ function refineto(net::ControlNet{dim, pdim, T}, axis_new::BSplineAxis{T}; direc
     end
     insert_knot(axis_old, knots) == axis_new || throw(ArgumentError("new axis must be produced by knot insertions from old axis"))
 
-    points = refine_values(homogeneous_points(net), axis_old, axis_new, knots, direction)
+    refine_control_net(net, knots, direction, axis_new)
+end
+
+function refine_control_net(net::ControlNet, knots, direction::Int, axis_new=nothing)
+    axis_old = net.axes[direction]
+    points = homogeneous_points(net)
+    if length(knots) <= 1
+        axis_new = axis_new === nothing ? insert_knot(axis_old, knots) : axis_new
+        isempty(knots) || (points = insert_knot_values(points, axis_old, only(knots), direction))
+    elseif issorted(knots) && can_batch_insert(points, axis_old)
+        axis_new = axis_new === nothing ? insert_knot(axis_old, knots) : axis_new
+        points = refine_values(points, axis_old, axis_new, knots, direction)
+    else
+        # Preserve the requested order and the original arithmetic for signed,
+        # zero, nonfinite or subnormal weights and generic scalar arithmetic.
+        # Cancellation can otherwise turn a small weight into zero, introducing
+        # an infinite control point when homogeneous coordinates are divided.
+        for ξ in knots
+            axis_next = insert_knot(axis_old, ξ)
+            points = insert_knot_values(points, axis_old, ξ, direction)
+            axis_old = axis_next
+        end
+        axis_new = axis_new === nothing ? axis_old : axis_new
+    end
     rational_control_net(Base.setindex(net.axes, axis_new, direction), points)
 end
 
-function refine_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new::BSplineAxis{T}, knots::Vector{T}, direction::Int) where {S, N, T}
-    p = axis_old.degree
-    knot_vector_old = axis_old.knot_vector
-    knot_vector_new = axis_new.knot_vector
-    n_old = nbasis(axis_old)
-    n_new = nbasis(axis_new)
+function can_batch_insert(points::AbstractArray{<:Vec{dim,T}}, axis::BSplineAxis) where {dim,T}
+    T <: AbstractFloat && isbitstype(T) || return false
+    # The forward and backward formulas need not propagate overflowing knot
+    # differences identically, even when every knot itself is finite.
+    isfinite(last(axis.knot_vector) - first(axis.knot_vector)) || return false
+    minimum_weight = floatmin(T)
+    all(point -> all(isfinite, point) && point[dim] ≥ minimum_weight, points)
+end
 
+@inline function refine_values(values::Array{S,N}, axis_old::BSplineAxis{T}, axis_new::BSplineAxis{T}, knots::AbstractVector{T}, direction::Int) where {S,N,T}
     isempty(knots) && return values
+    # Reuse coefficients across many fibers, while keeping the cache small
+    # relative to the control net. Short curves need no cache allocation.
+    nfibers = N == 1 ? 1 : length(values) ÷ size(values, direction)
+    coefficients = nfibers > max(16, 4 * axis_old.degree) ?
+        Matrix{Tuple{T,T}}(undef, axis_old.degree, length(knots)) : nothing
+    refine_values(values, axis_old, axis_new, knots, direction, coefficients)
+end
 
-    # One backward sweep over the inserted knots, so each tensor-product fiber
-    # is copied only once.
-    r = length(knots) - 1
-
-    # Only the basis functions between the first and last inserted knots change.
-    # The untouched leading/trailing controls are copied before the sweep.
-    a = searchsortedlast(knot_vector_old, first(knots)) - 1
-    b = searchsortedlast(knot_vector_old, last(knots))
-
-    map_fibers(values, direction, n_new) do columns_new, columns_old
-        for fiber in axes(columns_old, 2)
-            # Controls outside the refined knot interval are unchanged.
-            for j in 0:(a-p)
-                columns_new[j+1, fiber] = columns_old[j+1, fiber]
-            end
-            for j in (b-1):(n_old-1)
-                columns_new[j+length(knots)+1, fiber] = columns_old[j+1, fiber]
-            end
-
-            # `i` walks the old controls from right to left; `k` walks the new
-            # controls, leaving room for the inserted knots as they are processed.
-            i = b + p - 1
-            k = b + p + r
-            for j in (r+1):-1:1
-                ξ = knots[j]
-
-                # Move old controls that lie to the right of the current inserted
-                # knot into their final positions.
-                while i > a && ξ ≤ knot_vector_old[i+1]
-                    columns_new[k-p, fiber] = columns_old[i-p, fiber]
-                    k -= 1
-                    i -= 1
-                end
-
-                # Update the p affected controls by the usual knot-insertion
-                # convex combinations.
-                columns_new[k-p, fiber] = columns_new[k-p+1, fiber]
-                for l in 1:p
-                    row = k - p + l
-                    numerator = knot_vector_new[k+l+1] - ξ
-                    if iszero(numerator)
-                        columns_new[row, fiber] = columns_new[row+1, fiber]
-                    else
-                        α = numerator / (knot_vector_new[k+l+1] - knot_vector_old[i-p+l+1])
-                        columns_new[row, fiber] = α * columns_new[row, fiber] + (1 - α) * columns_new[row+1, fiber]
-                    end
-                end
-                k -= 1
+function refine_values(values, axis_old, axis_new, knots, direction, coefficients)
+    a = searchsortedlast(axis_old.knot_vector, first(knots)) - 1
+    b = searchsortedlast(axis_old.knot_vector, last(knots))
+    map_fibers(values, direction, nbasis(axis_new)) do columns_new, columns_old
+        if size(columns_old, 2) > 0
+            # The first fiber fills an optional cache; all others reuse it.
+            refine_fiber!(columns_new, columns_old, axis_old, axis_new, knots, a, b, 1, coefficients, Val(coefficients !== nothing))
+            for fiber in 2:size(columns_old, 2)
+                refine_fiber!(columns_new, columns_old, axis_old, axis_new, knots, a, b, fiber, coefficients, Val(false))
             end
         end
     end
+end
+
+@inline function refine_fiber!(columns_new, columns_old, axis_old, axis_new, knots, a, b, fiber, coefficients, cache_mode)
+    p = axis_old.degree
+    knot_vector_old, knot_vector_new = axis_old.knot_vector, axis_new.knot_vector
+    n_old, r = nbasis(axis_old), length(knots) - 1
+    # Controls outside the refined knot interval are unchanged.
+    for j in 0:(a-p)
+        columns_new[j+1, fiber] = columns_old[j+1, fiber]
+    end
+    for j in (b-1):(n_old-1)
+        columns_new[j+length(knots)+1, fiber] = columns_old[j+1, fiber]
+    end
+
+    # `i` walks the old controls from right to left; `k` walks the new
+    # controls, leaving room for the inserted knots as they are processed.
+    i = b + p - 1
+    k = b + p + r
+    for j in (r+1):-1:1
+        ξ = knots[firstindex(knots) + j - 1]
+
+        # Move old controls that lie to the right of the current inserted
+        # knot into their final positions.
+        while i > a && ξ ≤ knot_vector_old[i+1]
+            columns_new[k-p, fiber] = columns_old[i-p, fiber]
+            k -= 1
+            i -= 1
+        end
+
+        # Update the p affected controls by the usual knot-insertion
+        # convex combinations.
+        columns_new[k-p, fiber] = columns_new[k-p+1, fiber]
+        for l in 1:p
+            row = k - p + l
+            right = knot_vector_new[k+l+1]
+            if right == ξ
+                columns_new[row, fiber] = columns_new[row+1, fiber]
+            else
+                # The same coefficient pair is used for single insertions.
+                α, β = cached_insertion_coefficients!(coefficients, cache_mode, l, j, knot_vector_old[i-p+l+1], ξ, right)
+                columns_new[row, fiber] = β * columns_new[row, fiber] + α * columns_new[row+1, fiber]
+            end
+        end
+        k -= 1
+    end
+end
+
+@inline cached_insertion_coefficients!(::Nothing, ::Val{false}, l, j, left, ξ, right) = insertion_coefficients(left, ξ, right)
+@inline function cached_insertion_coefficients!(coefficients::Matrix, ::Val{true}, l, j, left, ξ, right)
+    @inbounds coefficients[l,j] = insertion_coefficients(left, ξ, right)
+end
+@inline function cached_insertion_coefficients!(coefficients::Matrix, ::Val{false}, l, j, left, ξ, right)
+    @inbounds coefficients[l,j]
+end
+
+@inline function insertion_coefficients(left, ξ, right)
+    # Retain generic scalar arithmetic: forming the right gap unnecessarily
+    # can overflow a fixed-size Rational even when both coefficients fit.
+    denominator = right - left
+    α = (ξ - left) / denominator
+    β = 1 - α
+    if iszero(β)
+        β = (right - ξ) / denominator
+        α = 1 - β
+    end
+    α, β
+end
+
+@inline function insertion_coefficients(left::AbstractFloat, ξ::AbstractFloat, right::AbstractFloat)
+    denominator = right - left
+    left_gap = ξ - left
+    right_gap = right - ξ
+    # Always compute the smaller coefficient directly. A fixed near-zero
+    # threshold still loses relative accuracy just outside that threshold.
+    # Overflowing intervals retain the sequential path's forward arithmetic.
+    left_is_small = (left_gap <= right_gap) | !isfinite(denominator)
+    small = ifelse(left_is_small, left_gap, right_gap) / denominator
+    large = 1 - small
+    ifelse(left_is_small, small, large), ifelse(left_is_small, large, small)
 end
 
 function insert_knot_values(values::Array{S, N}, axis::BSplineAxis{T}, ξ::T, direction::Int) where {S, N, T}
@@ -124,8 +190,8 @@ function insert_knot_values(values::Array{S, N}, axis::BSplineAxis{T}, ξ::T, di
                 columns_new[row, col] = columns_old[row-1, col]
             end
             for row in (span-p+1):(span-multiplicity)
-                α = (ξ - knot_vector[row]) / (knot_vector[row+p] - knot_vector[row])
-                columns_new[row, col] = α * columns_old[row, col] + (1 - α) * columns_old[row-1, col]
+                α, β = insertion_coefficients(knot_vector[row], ξ, knot_vector[row+p])
+                columns_new[row, col] = α * columns_old[row, col] + β * columns_old[row-1, col]
             end
         end
     end

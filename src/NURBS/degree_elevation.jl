@@ -144,8 +144,8 @@ function elevate_values(values::Array{S, N}, axis_old::BSplineAxis{T}, axis_new:
                 end
             end
 
-            # Reconstruct lower-order divided differences from right to left. The
-            # first layer of Q is the elevated control points.
+            # Reconstruct lower-order divided differences from left to right.
+            # The first column of Q holds the elevated control points.
             for d in order:-1:2
                 for i in 1:(n_new-1)
                     left = knots_new[i+d-1]

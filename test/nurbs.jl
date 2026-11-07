@@ -7,6 +7,321 @@ const nurbs_test_linear = Tesserae.NURBS.linear
 const nurbs_test_quadratic = Tesserae.NURBS.quadratic
 const nurbs_test_cubic = Tesserae.NURBS.cubic
 
+function nurbs_sequential_insert(net, knots; direction)
+    N = Tesserae.NURBS
+    axis = net.axes[direction]
+    points = N.homogeneous_points(net)
+    for ξ in knots
+        newaxis = N.insert_knot(axis, ξ)
+        points = N.insert_knot_values(points, axis, ξ, direction)
+        axis = newaxis
+    end
+    N.rational_control_net(Base.setindex(net.axes, axis, direction), points)
+end
+
+@testset "Knot insertion preserves cancellation and scalar arithmetic" begin
+    N = Tesserae.NURBS
+    for T in (Float16, Float32, Float64, BigFloat, Rational{Int})
+        axis = N.BSplineAxis(2, T[0,0,0,1//4,1//2,3//4,1,1,1])
+        points = Vec{2,T}[Vec(1,10), Vec(4,-7), Vec(-6,3), Vec(6,-9), Vec(-7,-6), Vec(-7,-5)]
+        weight_sets = [T[1,1,-1,1,2,2], T[0,1,1,1,2,2]]
+        T <: AbstractFloat && push!(weight_sets, fill(nextfloat(zero(T)), 6))
+        T <: AbstractFloat && append!(weight_sets, [T[Inf,1,1,1,2,2], T[NaN,1,1,1,2,2]])
+        T <: AbstractFloat || push!(weight_sets, T[1,2,3,4,5,6])
+        outcome(f) = try f() catch err; typeof(err) end
+        for weights in weight_sets
+            net = N.ControlNet((axis,), points, weights)
+            knots = T[1//8,1//4,5//8]
+            expected = outcome(() -> nurbs_sequential_insert(net, knots; direction=1))
+            target = N.insert_knot(axis, knots)
+            for actual in (outcome(() -> N.insert_knot(net, knots; direction=1)),
+                           outcome(() -> N.refineto(net, target; direction=1)))
+                @test typeof(actual) === typeof(expected)
+                if actual isa N.ControlNet && expected isa N.ControlNet
+                    @test isequal(actual.points, expected.points)
+                    @test isequal(actual.weights, expected.weights)
+                    if T === Float64 && weights == [1,1,-1,1,2,2]
+                        @test all(point -> all(isfinite, point), actual.points)
+                    end
+                else
+                    @test actual === expected
+                end
+            end
+            uniform_knots = T[1//8,3//8,5//8,7//8]
+            expected_uniform = outcome(() -> nurbs_sequential_insert(net, uniform_knots; direction=1))
+            actual_uniform = outcome(() -> N.refine(net, 1; direction=1))
+            @test typeof(actual_uniform) === typeof(expected_uniform)
+            if actual_uniform isa N.ControlNet && expected_uniform isa N.ControlNet
+                @test isequal(actual_uniform.points, expected_uniform.points)
+                @test isequal(actual_uniform.weights, expected_uniform.weights)
+            end
+        end
+        net = N.ControlNet((axis,), points, T[1,2,3,4,5,6])
+        @test N.insert_knot(net, T[]; direction=1).points == N.rational_control_net((axis,),N.homogeneous_points(net)).points
+    end
+    for T in (Float32, Float64)
+        limit = floatmax(T)
+        axis = N.BSplineAxis(1, T[-limit,-limit,limit,limit])
+        net = N.ControlNet((axis,), [Vec(one(T)), Vec(T(2))])
+        knots = T[-limit/2, -limit/4]
+        expected = nurbs_sequential_insert(net, knots; direction=1)
+        for actual in (N.insert_knot(net, knots; direction=1),
+                       N.refineto(net, N.insert_knot(axis, knots); direction=1))
+            @test all(point -> all(isfinite, point), actual.points)
+            @test actual.points == expected.points
+            @test actual.weights == expected.weights
+        end
+    end
+end
+
+@testset "Knot insertion retains small endpoint contributions" begin
+    N = Tesserae.NURBS
+    for T in (Float16, Float32, Float64), δ in (eps(T)/16,3eps(T)/4), degree in 1:5, side in (-1,1), pdim in 1:3, direction in 1:pdim
+        ends = side == 1 ? (zero(T),one(T)) : (-one(T),zero(T))
+        axis = N.BSplineAxis(degree, vcat(fill(ends[1],degree+1), fill(ends[2],degree+1)))
+        net_axes = ntuple(d -> d == direction ? axis : N.open_bspline_axis(T, 1, 1), pdim)
+        points = map(CartesianIndices(map(N.nbasis, net_axes))) do I
+            fraction = T(I[direction]-1) / T(degree)
+            Vec((side == 1 ? fraction : 1-fraction) / δ)
+        end
+        net = N.ControlNet(net_axes, points)
+        ξ = T(side) * δ
+        knots = sort(T[ξ, T(side)/2])
+        coordinate = Vec(ntuple(d -> d == direction ? ξ : T(1//4), pdim))
+        # Both curves have the analytic value 1 here. Merely comparing the bulk
+        # and single paths would miss complementary rounding errors in either.
+        @test N.evaluate(net, coordinate) ≈ Vec(one(T))
+        for refined in (N.insert_knot(net, ξ; direction),
+                        N.insert_knot(net, knots; direction),
+                        N.refineto(net, N.insert_knot(axis, ξ); direction),
+                        N.refineto(net, N.insert_knot(axis, knots); direction))
+            @test N.evaluate(refined, coordinate) ≈ Vec(one(T))
+            @test all(p -> all(isfinite, p), refined.points)
+        end
+        for piece in split(net, direction, ξ)
+            @test N.evaluate(piece, coordinate) ≈ Vec(one(T))
+        end
+    end
+end
+
+@testset "Knot insertion retains small interior-span contributions" begin
+    N = Tesserae.NURBS
+    for T in (Float32, Float64), side in (-1,1)
+        a = T(2)^(-10)
+        δ = nextfloat(a) - a
+        ξ = T(side) * nextfloat(a)
+        kv = side == 1 ? T[0,0,a,1,1] : T[-1,-1,-a,0,0]
+        points = side == 1 ? [Vec(zero(T)),Vec(zero(T)),Vec(inv(δ))] :
+                             [Vec(inv(δ)),Vec(zero(T)),Vec(zero(T))]
+        net = N.ControlNet((N.BSplineAxis(1,kv),), points)
+        knots = sort(T[ξ,T(side)/2])
+        expected = Vec(inv(one(T)-a))
+        @test N.evaluate(net, Vec(ξ)) ≈ expected
+        for refined in (N.insert_knot(net, ξ; direction=1),
+                        N.insert_knot(net, knots; direction=1),
+                        N.refineto(net, N.insert_knot(net.axes[1],knots); direction=1))
+            @test N.evaluate(refined, Vec(ξ)) ≈ expected
+        end
+    end
+end
+
+@testset "BigFloat small endpoint contributions" begin
+    N = Tesserae.NURBS
+    for side in (-1,1), δ in (eps(BigFloat)/16,3eps(BigFloat)/4)
+        ends = side == 1 ? BigFloat[0,0,1,1] : BigFloat[-1,-1,0,0]
+        points = side == 1 ? [Vec(BigFloat(0)),Vec(inv(δ))] : [Vec(inv(δ)),Vec(BigFloat(0))]
+        net = N.ControlNet((N.BSplineAxis(1,ends),),points)
+        ξ = side*δ
+        for refined in (N.insert_knot(net,ξ;direction=1),N.insert_knot(net,sort(BigFloat[ξ,side//2]);direction=1))
+            @test N.evaluate(refined,Vec(ξ)) ≈ Vec(BigFloat(1))
+        end
+    end
+end
+
+@testset "Knot insertion coefficients retain relative accuracy" begin
+    N = Tesserae.NURBS
+    # Both coefficients fit Rational{Int64}, although right-ξ does not.
+    b, d = Int64(4_000_000_000), Int64(4_000_000_001)
+    z, o = zero(Rational{Int64}), one(Rational{Int64})
+    right, ξ = 1//b, 1//d
+    @test N.insertion_coefficients(z,ξ,right) == (b//d,1//d)
+    axis = N.BSplineAxis(1,[z,z,right,right])
+    net = N.ControlNet((axis,),[Vec(z),Vec(o)])
+    @test N.insert_knot(net,ξ;direction=1).points == [Vec(z),Vec(b//d),Vec(o)]
+    for T in (Float16,Float32,Float64), scale in (one(T),floatmin(T),64nextfloat(zero(T)),floatmax(T)/4),
+        δ in (eps(T)/16,3eps(T)/4,16eps(T),sqrt(eps(T)),T(1//100),T(1//3))
+        for (left,ξ,right) in ((zero(T),scale*δ,scale),(-scale,-scale*δ,zero(T)),
+                              (scale,nextfloat(scale),2scale))
+            left < ξ < right || continue
+            α, β = N.insertion_coefficients(left,ξ,right)
+            # Exact rational arithmetic is independent of both insertion paths.
+            l, x, r = Rational{BigInt}.((left,ξ,right))
+            @test isapprox(α,T((x-l)/(r-l));rtol=8eps(T),atol=0)
+            @test isapprox(β,T((r-x)/(r-l));rtol=8eps(T),atol=0)
+            @test α + β == one(T)
+        end
+    end
+    for T in (Float16,Float32,Float64,BigFloat),
+        δ in (16eps(T),sqrt(eps(T)),T(1//10000),T(1//100),T(1//3)), side in (-1,1)
+        ends = side == 1 ? T[0,0,1,1] : T[-1,-1,0,0]
+        points = side == 1 ? [Vec(zero(T)),Vec(inv(δ))] : [Vec(inv(δ)),Vec(zero(T))]
+        net = N.ControlNet((N.BSplineAxis(1,ends),),points)
+        ξ = side*δ
+        knots = sort(T[ξ,side//2])
+        target = N.insert_knot(net.axes[1],knots)
+        for refined in (N.insert_knot(net,ξ;direction=1),N.insert_knot(net,knots;direction=1),
+                        N.refineto(net,target;direction=1),split(net,1,ξ)...)
+            @test isapprox(N.evaluate(refined,Vec(ξ)),Vec(one(T));rtol=8eps(T),atol=0)
+        end
+    end
+    for precision in (64,128,256)
+        setprecision(BigFloat,precision) do
+            for δ in (sqrt(eps(BigFloat)),16eps(BigFloat),BigFloat(1//10000))
+                α,β = N.insertion_coefficients(BigFloat(-1),-δ,BigFloat(0))
+                @test isapprox(β,δ;rtol=8eps(BigFloat),atol=0)
+                @test α + β == 1
+            end
+        end
+    end
+end
+
+@testset "Knot insertion paths preserve geometry and input order" begin
+    N = Tesserae.NURBS
+    for T in (Float32, Float64), pdim in 1:3, direction in 1:pdim
+        axes = ntuple(_ -> N.open_bspline_axis(T, 3, 2), pdim)
+        points = [Vec{3,T}(ntuple(d -> sin(T(sum(Tuple(I)) + d)), 3)) for I in CartesianIndices(map(N.nbasis, axes))]
+        weights = [T(1 + sum(Tuple(I)) / 7) for I in CartesianIndices(points)]
+        net = N.ControlNet(axes, points, weights)
+        for knots in (T[], T[0.3], T[0.2,0.2,0.5,0.7], T[0.7,0.2,0.5,0.2])
+            sequential = net
+            for ξ in knots
+                sequential = N.insert_knot(sequential, ξ; direction)
+            end
+            inserted = N.insert_knot(net, view(knots, :); direction)
+            # Identity ranges preserve a non-one-based vector axis without an
+            # extra dependency. Public knot insertion accepts AbstractVector.
+            shifted = view(vcat(zero(T), knots), Base.IdentityUnitRange(2:length(knots)+1))
+            from_shifted = N.insert_knot(net, shifted; direction)
+            @test from_shifted.points == inserted.points
+            @test from_shifted.weights == inserted.weights
+            @test inserted.axes == sequential.axes
+            @test inserted.points ≈ sequential.points
+            @test inserted.weights ≈ sequential.weights
+            # Unsorted input must take precisely the requested operation order,
+            # including keeping homogeneous coordinates between insertions.
+            if !issorted(knots)
+                hp, axis = N.homogeneous_points(net), axes[direction]
+                for ξ in knots
+                    hp = N.insert_knot_values(hp, axis, ξ, direction)
+                    axis = N.insert_knot(axis, ξ)
+                end
+                ordered = N.rational_control_net(Base.setindex(axes, axis, direction), hp)
+                @test inserted.points == ordered.points
+                @test inserted.weights == ordered.weights
+            end
+            target = N.refineto(net, inserted.axes[direction]; direction)
+            @test target.axes == inserted.axes
+            @test target.points ≈ sequential.points
+            @test target.weights ≈ sequential.weights
+            for u in (zero(T), T(0.17), T(0.5), T(0.89), one(T))
+                ξ = Vec(ntuple(_ -> u, pdim))
+                @test N.evaluate(inserted, ξ) ≈ N.evaluate(net, ξ)
+                @test N.evaluate(target, ξ) ≈ N.evaluate(net, ξ)
+            end
+        end
+        @test_throws ArgumentError N.insert_knot(net, T[0.2, 0]; direction)
+        @test_throws ArgumentError N.insert_knot(net, fill(T(0.2), 4); direction)
+    end
+end
+
+@testset "Refined rational geometry agrees with exact arithmetic" begin
+    N = Tesserae.NURBS
+    R = Rational{BigInt}
+    for T in (Float32,Float64), p in 1:5, side in (-1,1),
+        δ in (16eps(T),sqrt(eps(T)),T(1//10000),T(1//100)), weight_mode in (:unit,:positive,:signed)
+        ends = side == 1 ? (zero(T),one(T)) : (-one(T),zero(T))
+        axis = N.BSplineAxis(p,vcat(fill(ends[1],p+1),fill(ends[2],p+1)))
+        points = [Vec(T(i)/δ,one(T)+T(i)) for i in 0:p]
+        side == -1 && reverse!(points)
+        weights = weight_mode == :positive ? T[1+i//3 for i in 0:p] : ones(T,p+1)
+        if weight_mode == :signed
+            weights[side == 1 ? 1 : end] = -T(p)*δ/2
+        end
+        net = N.ControlNet((axis,),points,weights)
+        exact = N.ControlNet((N.BSplineAxis(p,R.(axis.knot_vector)),),Vec{2,R}.(points),R.(weights))
+        ξ = T(side)*δ
+        expected = Vec{2,T}(N.evaluate(exact,Vec(R(ξ))))
+        knots = sort(T[ξ,T(side)/2])
+        target = N.insert_knot(axis,knots)
+        for refined in (N.insert_knot(net,ξ;direction=1),N.insert_knot(net,knots;direction=1),
+                        N.refineto(net,target;direction=1))
+            @test isapprox(N.evaluate(refined,Vec(ξ)),expected;rtol=32eps(T),atol=0)
+        end
+    end
+end
+
+@testset "Refinement of asymmetric tensor-product control nets" begin
+    N = Tesserae.NURBS
+    for T in (Float32,Float64), direction in (1,3), knots in (T[0.013,0.347,0.973], T.(collect(range(0.013,0.973;length=65))[1:64]))
+        net_axes = map(n -> N.open_bspline_axis(T,3,n), (14,16,18))
+        points = [Vec(sin(T(I[1]+2I[2]+3I[3])),cos(T(3I[1]-I[2]+4I[3])),T(I[1]*I[2]+2I[3])/17)
+                  for I in CartesianIndices(map(N.nbasis,net_axes))]
+        weights = [one(T)+T(I[1]+3I[2]+5I[3])/31 for I in CartesianIndices(points)]
+        net = N.ControlNet(net_axes,points,weights)
+        inserted = N.insert_knot(net,knots;direction)
+        expected = nurbs_sequential_insert(net,knots;direction)
+        @test inserted.points ≈ expected.points
+        @test inserted.weights ≈ expected.weights
+        targeted = N.refineto(net,inserted.axes[direction];direction)
+        @test targeted.points ≈ expected.points
+        @test targeted.weights ≈ expected.weights
+        for ξ in (Vec(T(0.17),T(0.41),T(0.83)),Vec(T(0.78),T(0.23),T(0.56)))
+            @test N.evaluate(inserted,ξ) ≈ N.evaluate(net,ξ)
+        end
+    end
+end
+
+@testset "Cached refinement coefficients agree with direct evaluation" begin
+    N = Tesserae.NURBS
+    for T in (Float32,Float64), p in (1,3,5,10), nfibers in (0,1,16,17,21,64), direction in (1,2)
+        axis = N.open_bspline_axis(T,p,3)
+        knots = p == 1 ? T[0.13,0.61,0.87] : T[0.13,0.13,0.61,0.87]
+        target = N.insert_knot(axis,knots)
+        dims = direction == 1 ? (N.nbasis(axis),nfibers) : (nfibers,N.nbasis(axis))
+        values = Vec{2,T}[Vec(T(1)+T(I[1])/7,T(2)+T(I[2])/13) for I in CartesianIndices(dims)]
+        actual = N.refine_values(values,axis,target,knots,direction)
+        direct = N.refine_values(values,axis,target,knots,direction,nothing)
+        @test actual == direct
+        sequential, current_axis = values, axis
+        for ξ in knots
+            sequential = N.insert_knot_values(sequential,current_axis,ξ,direction)
+            current_axis = N.insert_knot(current_axis,ξ)
+        end
+        @test isapprox(actual,sequential;rtol=32eps(T),atol=0)
+    end
+end
+
+@testset "Degree elevation across unequal knot multiplicities" begin
+    N = Tesserae.NURBS
+    R = Rational{BigInt}
+    axis = N.BSplineAxis(2, R[0,0,0,1//4,1//2,1//2,1,1,1])
+    other = N.BSplineAxis(1, R[0,0,1//2,1,1])
+    points = [Vec(R(i*i+j), R(i-j*j)) for i in 1:3, j in 1:6]
+    weights = [one(R) + R(i+2j)/13 for i in 1:3, j in 1:6]
+    net = N.ControlNet((other, axis), points, weights)
+    elevated = N.elevate(net, 5; direction=2)
+    @test elevated.axes[2].knot_vector == vcat(fill(R(0),6), fill(R(1//4),4), fill(R(1//2),5), fill(R(1),6))
+    for (v,u) in ((0,0),(2//5,1//8),(3//4,1//4),(1,1//2),(1//5,3//4),(4//5,1))
+        ξ = Vec(R(v), R(u))
+        @test N.evaluate(elevated, ξ) == N.evaluate(net, ξ)
+    end
+    constant = N.ControlNet((N.BSplineAxis(0, R[0,1]),), [Vec(R(7//3))], R[2//5])
+    elevated_constant = N.elevate(constant, 3; direction=1)
+    @test (elevated_constant.points, elevated_constant.weights) == (fill(Vec(R(7//3)),4), fill(R(2//5),4))
+    invalid = N.ControlNet((N.BSplineAxis(0, [0.0,NaN]),), [Vec(1.0)])
+    @test_throws ArgumentError N.elevate(invalid, 2; direction=1)
+end
+
 @testset "NURBS" begin
     # Shared fixtures: one rational quadratic curve and one tensor-product
     # surface used to check geometry-preserving operations.

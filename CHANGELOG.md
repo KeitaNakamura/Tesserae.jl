@@ -49,6 +49,9 @@ All notable changes to Tesserae.jl will be documented in this file.
 - CPU no-op transfers of sparse grids retain their shared particle-tracking
   cache, so alternating updates through the original and transferred objects
   cannot leave stale block numbering.
+- NURBS knot insertion and refinement retain small contributions near knots
+  and preserve sequential insertion arithmetic for cancellation-prone weights
+  and generic scalar types, avoiding spurious infinite control points.
 - Basis-weight views inherit their parent's current evaluation mode and filter
   without changing that shared policy. Conflicting mode or deferred-filter
   requests are rejected before modifying values or settings; a stored view can
