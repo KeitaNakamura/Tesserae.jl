@@ -169,6 +169,19 @@ end
 end
 
 @testset "zero_buffer and device-carrying hybrid" begin
+    for T in (Vec{1,Float32}, Mat{1,1,Float32,1})
+        A = fill(T(2), 3, 4)
+        flat = Tesserae.flatten(A)
+        @test size(flat) == (1, 3, 4)
+        flat[1,2,3] = 7
+        @test A[2,3] == T(7)
+        sparse = SpArray{T}(undef, 5)
+        update_sparsity!(sparse, trues(Tesserae.nblocks(sparse)))
+        @test size(Tesserae.flatten(sparse)) == (1, length(Tesserae.get_data(sparse)))
+        Tesserae.flatten(sparse)[1,3] = 7
+        @test sparse[3] == T(7)
+    end
+
     mesh = CartesianMesh(1.0, (0,8), (0,8))
     grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64, mv::Vec{2,Float64}}, mesh)
     update_sparsity!(grid, trues(Tesserae.nblocks(mesh)))
@@ -185,6 +198,29 @@ end
         @test typeof(Tesserae.flatten(b)) === typeof(Tesserae.flatten(a))
     end
     @test Tesserae.get_mesh(hb) === Tesserae.get_mesh(ha)
+end
+
+@testset "HybridArray tensor atomic scatter indexing" begin
+    # Run the GPU scatter method on host storage so bounds are also checked in
+    # the standard test suite, without requiring a GPU backend.
+    device = Tesserae.CUDADevice{Tesserae.PreserveEltype}()
+    for dims in ((5,), (3, 5), (2, 3, 5)), T in
+            (Vec{1,Float32}, Vec{2,Float32}, Vec{3,Float32}, Mat{2,2,Float32,4})
+        A = fill(zero(T), dims)
+        expected = copy(A)
+        hybrid = Tesserae.hybrid(A)
+        for indices in (eachindex(A), CartesianIndices(A))
+            for (k, i) in enumerate(indices)
+                value = T(ntuple(j -> Float32(j * k), length(Tuple(zero(T)))))
+                Tesserae._add!(device, hybrid, i, value)
+                expected[i] += value
+            end
+            @test A == expected
+        end
+        @test_throws BoundsError Tesserae._add!(device, hybrid, 0, zero(T))
+        @test_throws BoundsError Tesserae._add!(device, hybrid, length(A) + 1, zero(T))
+        @test A == expected
+    end
 end
 
 @testset "SpArray GPU sparsity kernels on CPU backend" begin

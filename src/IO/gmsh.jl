@@ -1,5 +1,5 @@
 """
-    readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=false)
+    readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=false, spacedim=nothing)
 
 Read a Gmsh `.msh` file.
 
@@ -16,6 +16,11 @@ Returns a `Dict{String,FEMesh}` keyed by physical group name.
 Each physical group is read as one `FEMesh` and must contain exactly
 one supported element shape. Unnamed physical groups use keys of the form
 `"physical_group[dim,tag]"`.
+
+`spacedim` sets the coordinate dimension independently of the element dimension.
+It defaults to the model's topological dimension. Pass `spacedim=3` for curves
+or surfaces embedded in 3D. Discarding a nonzero coordinate component is an
+error, including when `spacedim` is omitted.
 
 Pass `reorient_boundary=true` to reorder boundary cells that match exactly one
 volume face to follow the outward volume face orientation. Boundary cells that

@@ -1,4 +1,53 @@
+# Exercise the enabled expansion even when the test preferences disable display.
+@eval Tesserae.Progress macro test_showprogress(args...)
+    showprogress_expr(args...)
+end
+
+function progress_loop_trace(mode)
+    io = IOBuffer()
+    t, t_stop = 0, mode === :empty ? 0 : 4
+    events = Int[]
+    result = try
+        Tesserae.Progress.@test_showprogress output=io dt=0 summary=false while t < t_stop
+            t += 1
+            push!(events, t)
+            mode === :continue && iseven(t) && continue
+            mode === :break && t == 2 && break
+            mode === :error && t == 2 && throw(DomainError(t))
+            if mode === :return && t == 2
+                return (:returned, events, occursin("Time:", String(take!(io))))
+            end
+        end
+    catch e
+        e isa DomainError || rethrow()
+        :error
+    end
+    (result, events, occursin("Time:", String(take!(io))))
+end
+
+@testset "Progress loop control flow" begin
+    @test progress_loop_trace(:normal) == (true, [1, 2, 3, 4], true)
+    @test progress_loop_trace(:empty) == (true, Int[], false)
+    @test progress_loop_trace(:continue) == (true, [1, 2, 3, 4], true)
+    @test progress_loop_trace(:break) == (true, [1, 2], true)
+    @test progress_loop_trace(:error) == (:error, [1, 2], false)
+    @test progress_loop_trace(:return) == (:returned, [1, 2], false)
+end
+
 @testset "Utilities" begin
+    @testset "Greedy scheduler availability" begin
+        if Threads.nthreads() > 1
+            if VERSION < v"1.11"
+                @test_throws ArgumentError Tesserae._tforeach(identity, 1:2, Tesserae.GreedyScheduler())
+            else
+                visited = zeros(Int, 8)
+                @threaded :greedy for i in eachindex(visited)
+                    visited[i] = 1
+                end
+                @test all(==(1), visited)
+            end
+        end
+    end
     @test (@inferred Tesserae.nfill(3, Val(3)))   === (3,3,3)
     @test (@inferred Tesserae.nfill(1.2, Val(2))) === (1.2,1.2)
     @test (@inferred Tesserae.zero_recursive(1)) === 0
@@ -108,13 +157,15 @@ end
 @testset "fillzero!" begin
     # Types whose zero is all-zero bytes take the memset path; the rest must
     # still go through `fill!`, and both must produce the same array.
-    for T in (Float64, Float32, Int, Bool, Vec{2,Float64}, Vec{3,Float64},
+    for T in (Float64, Float32, Int, Bool, ComplexF64, Tesserae.SVector{2,Float64},
+              Vec{2,Float64}, Vec{3,Float64},
               SymmetricSecondOrderTensor{3,Float64,6}, SecondOrderTensor{2,Float64,4},
               @NamedTuple{a::Float64, b::Vec{3,Float64}})
         @test Tesserae.zeroed_by_memset(T)
     end
     @test !Tesserae.zeroed_by_memset(String)
     @test !Tesserae.zeroed_by_memset(Vector{Float64})
+    @test !Tesserae.zeroed_by_memset(Mat{1,1,Float32})
 
     randbytes!(A) = (GC.@preserve A rand!(unsafe_wrap(Array, Ptr{UInt8}(pointer(A)), sizeof(A))); A)
     for T in (Float64, Int, Vec{2,Float64}, Vec{3,Float64}, SymmetricSecondOrderTensor{3,Float64,6})
@@ -127,6 +178,20 @@ end
     end
     M = randbytes!(Matrix{Vec{2,Float64}}(undef, 5, 7))
     @test all(iszero, Tesserae.fillzero!(M))
+
+    rationals = fillzero!([1//2, 3//4])
+    @test numerator.(rationals) == [0, 0]
+    @test denominator.(rationals) == [1, 1]
+    @test Tesserae.memset_buffer(rationals) === nothing
+    @test Tesserae.fillzero_prologue((rationals,)) === nothing
+
+    nested = fillzero!([(a=1//2, b=Vec(1.0, 2.0))])
+    @test nested[1].a === 0//1
+    @test nested[1].b === zero(Vec{2,Float64})
+
+    for T in (ComplexF64, Tesserae.SVector{2,Float64})
+        @test fillzero!(fill(T(1, 2), 3)) == fill(zero(T), 3)
+    end
 end
 
 @testset "fillzero_prologue" begin

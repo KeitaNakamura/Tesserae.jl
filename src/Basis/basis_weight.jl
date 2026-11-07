@@ -93,9 +93,15 @@ function allocate_static_basis_values(::Type{Prop}, basis::Basis, ::Val{dim}; kw
     A = MArray{Tuple{nfill(support_width(basis), Val(dim))...}}
     _allocate_basis_values(A, Prop, Val(dim); kwargs...)
 end
-function allocate_static_basis_values(::Type{Prop}, shape::Shape, ::Val{dim}; kwargs...) where {Prop <: NamedTuple, dim}
+function check_cell_basis_derivative(::Order{k}) where {k}
+    0 ≤ k ≤ 1 || throw(ArgumentError("FEM and IGA basis weights support derivative=Order(0) or Order(1) only, got Order($k)"))
+    nothing
+end
+
+function allocate_static_basis_values(::Type{Prop}, shape::Shape, ::Val{dim}; derivative::Order) where {Prop <: NamedTuple, dim}
+    check_cell_basis_derivative(derivative)
     A = MArray{Tuple{nlocalnodes(shape)}}
-    _allocate_basis_values(A, Prop, Val(dim); kwargs...)
+    _allocate_basis_values(A, Prop, Val(dim); derivative)
 end
 
 function _allocate_basis_values(::Type{A}, ::Type{Prop}, ::Val{dim}; derivative::Order) where {A, Prop <: NamedTuple, dim}
@@ -499,6 +505,8 @@ _todims(x::Vararg{Int}) = x
 Generate an array of [`BasisWeight`](@ref)s for `basis` on `mesh`.
 For `FEMesh`, the mesh cell shape is used as the basis; for `IGAMesh`, the
 basis is taken from the patch degrees. The `Prop` forms cover `IGAMesh` too.
+FEM and IGA weights support `Order(0)` and `Order(1)` only; domain updates
+require `Order(1)`.
 
 In the `Prop` forms, `Prop` follows the same rules as in
 `BasisWeight(Prop, basis, mesh)`: its first field defines the basis value name

@@ -2,13 +2,12 @@
 #  Zeroing
 # -----------------------------------------------------------------------------
 
-@generated function zero_recursive(::Type{T}) where {T}
-    isbitstype(T) || return :(throw(ArgumentError("`zero_recursive` supports only `isbitstype`, got $T")))
-    :(@_inline_meta; zero(T))
+@inline function zero_recursive(::Type{T}) where {T}
+    isbitstype(T) || throw(ArgumentError("`zero_recursive` supports only `isbitstype`, got $T"))
+    zero(T)
 end
-@generated function zero_recursive(::Type{T}) where {T <: Union{Tuple, NamedTuple}}
-    exps = [:(zero_recursive($t)) for t in fieldtypes(T)]
-    :(@_inline_meta; T(($(exps...),)))
+@inline function zero_recursive(::Type{T}) where {T <: Union{Tuple, NamedTuple}}
+    T(map(zero_recursive, fieldtypes(T)))
 end
 zero_recursive(x) = zero_recursive(typeof(x))
 
@@ -20,17 +19,16 @@ end
 # `fill!` stores a composite element one field at a time, slower than a memset
 # over the same bytes, and grid fields are mostly composite.
 #
-# The test is structural rather than an inspection of a zero value, since reading
-# the bytes of one would also read padding, which is undefined. A type built only
-# from numbers but with a nonzero `zero` would take this path wrongly, but
-# `zero_recursive` reaches leaves the same way, so it is already outside what
-# `fillzero!` promises. Padding is fine: memset zeroes it and nothing reads it.
-Base.@assume_effects :foldable function zeroed_by_memset(::Type{T}) where {T}
-    isbitstype(T) && sizeof(T) > 0 || return false
-    T <: Union{Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64,
-               Int128, UInt128, Float16, Float32, Float64} && return true
-    isprimitivetype(T) && return false # unknown primitive: no zero to assume
-    fieldcount(T) > 0 && all(zeroed_by_memset, fieldtypes(T))
+# Only known representations opt in: numeric fields alone do not prove that
+# zero bytes represent `zero(T)`, as `Rational`'s denominator demonstrates.
+zeroed_by_memset(::Type) = false
+zeroed_by_memset(::Type{<:Union{Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32,
+                              Int64, UInt64, Int128, UInt128, Float16, Float32, Float64}}) = true
+zeroed_by_memset(::Type{Complex{T}}) where {T} = zeroed_by_memset(T)
+zeroed_by_memset(::Type{TT}) where {S,T,TT<:Tensor{S,T}} = isbitstype(TT) && zeroed_by_memset(T)
+zeroed_by_memset(::Type{SA}) where {S,T,SA<:SArray{S,T}} = isbitstype(SA) && zeroed_by_memset(T)
+Base.@assume_effects :foldable function zeroed_by_memset(::Type{T}) where {T<:Union{Tuple,NamedTuple}}
+    isbitstype(T) && sizeof(T) > 0 && all(zeroed_by_memset, fieldtypes(T))
 end
 
 function fillzero!(x::Array{T}) where {T}

@@ -6,6 +6,9 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Added
 
+- `readmsh(...; spacedim=3)` preserves the coordinates of curves and surfaces
+  embedded in three dimensions. Discarding nonzero coordinate components is
+  now rejected.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.
@@ -43,6 +46,14 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Fixed
 
+- GPU atomic writes now handle one-component tensors without losing the
+  component axis in their flattened storage.
+- FEM and IGA basis weights now reject derivative orders above `Order(1)`
+  instead of leaving the higher derivatives zero.
+- Transfers to Metal reject sparse array storage instead of silently creating
+  a dense device array. GPU sparse matrix assembly requires CUDA.
+- `fillzero!` uses byte zeroing only for types with known zero representations,
+  preserving valid zeros for types such as `Rational`.
 - `cpu` on a GPU sparse matrix returned a dense matrix; it now returns a
   `SparseMatrixCSC`. `KernelAbstractions.get_backend` also answers for sparse
   matrices instead of throwing.
@@ -71,6 +82,9 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Changed
 
+- The minimum Julia version is 1.10, matching the existing dependency
+  requirements. On Julia 1.10, `:greedy` is supported for partitioned transfers
+  and explicitly rejected for other threaded loops when requested.
 - Renamed `ThreadPartition` to `Partition`: the same type schedules GPU
   workgroups through the block-scheduled `@P2G`, so the name no longer implies
   CPU threads. `ThreadPartition` remains as a deprecated alias, and the

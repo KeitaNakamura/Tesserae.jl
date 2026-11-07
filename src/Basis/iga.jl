@@ -14,9 +14,10 @@ nsupportnodes(basis::IGABasis) = prod(degree -> _degree(degree) + 1, degrees(bas
 _generate_supportnodes(::IGABasis, mesh::IGAMesh, dims::Dims{2}) = _generate_cell_supportnodes(mesh, dims)
 _generate_supportnodes(::IGABasis, ::IGAMesh, ::Dims) = throw(DimensionMismatch("IGA basis weights must have dimensions (quadrature points, cells)"))
 
-function allocate_static_basis_values(::Type{Prop}, basis::IGABasis, ::Val{dim}; kwargs...) where {Prop <: NamedTuple, dim}
+function allocate_static_basis_values(::Type{Prop}, basis::IGABasis, ::Val{dim}; derivative::Order) where {Prop <: NamedTuple, dim}
+    check_cell_basis_derivative(derivative)
     A = MArray{Tuple{nsupportnodes(basis)}}
-    _allocate_basis_values(A, Prop, Val(dim); kwargs...)
+    _allocate_basis_values(A, Prop, Val(dim); derivative)
 end
 
 generate_basis_weights(::Type{T}, mesh::IGAMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, basis(mesh), mesh, _todims(dims...); kwargs...)

@@ -74,6 +74,9 @@
         @test supportnodes(weights[1,1]) == Tesserae.SVector(2, 3, 4, 5, 6, 7, 8, 9, 10)
         value_weights = generate_basis_weights(field, size(points); derivative=Order(0))
         @test_throws ArgumentError update!(value_weights, points, field; geometry)
+        for derivative in (Order(-1), Order(2), Order(3))
+            @test_throws ArgumentError generate_basis_weights(field, size(points); derivative)
+        end
         @test update!(weights, points, field; geometry, measure=points.V) === weights
         @test all(q -> weights[q,1].N ≈ Tesserae.value(Tesserae.Quad9(), rule.points[q]), eachindex(rule.points))
         @test all(q -> weights[q,1].∇N ≈ last(Tesserae.jet(Order(1), Tesserae.Quad9(), rule.points[q])) .⊡ Ref(inv(J)), eachindex(rule.points))

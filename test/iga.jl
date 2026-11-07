@@ -231,6 +231,10 @@ nurbs_test_knot_vectors(patch::IGAPatch) = patch.knot_vectors
     end
 
     @testset "Basis weights" begin
+        for derivative in (Order(-1), Order(2), Order(3))
+            @test_throws ArgumentError generate_basis_weights(mesh, 2, Tesserae.ncells(mesh); derivative)
+        end
+        @test propertynames(generate_basis_weights(mesh, 2, Tesserae.ncells(mesh); derivative=Order(0))) === (:w,)
         # IGA basis-weight arrays should carry the same support-node layout as
         # direct mesh support queries.
         WeightProp = @NamedTuple{w::Float64, ψ::Vec{2,Float32}}

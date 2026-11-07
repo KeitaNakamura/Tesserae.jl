@@ -41,10 +41,15 @@ function _tforeach(f, iter, ::DynamicScheduler)
         @inline f(i)
     end
 end
-function _tforeach(f, iter, ::GreedyScheduler)
-    Threads.@threads :greedy for i in iter
-        @inline f(i)
+@static if VERSION >= v"1.11"
+    function _tforeach(f, iter, ::GreedyScheduler)
+        Threads.@threads :greedy for i in iter
+            @inline f(i)
+        end
     end
+else
+    _tforeach(f, iter, ::GreedyScheduler) =
+        throw(ArgumentError(":greedy scheduling without a Partition requires Julia 1.11 or later"))
 end
 function _tforeach(f, iter, ::SequentialScheduler)
     for i in iter
@@ -63,6 +68,8 @@ A macro similar to `Threads.@threads`, but also works with the
 
 The optional `scheduler` can be `:static`, `:dynamic`, `:greedy`, or `:nothing`
 (sequential execution). The default is `:dynamic`.
+On Julia versions before 1.11, `:greedy` is available only for partitioned
+transfers; other threaded loops require Julia 1.11 for that scheduler.
 
 What the three parallel schedulers select depends on what is being threaded. On
 a plain loop, and on [`@G2P`](@ref), they pick the corresponding

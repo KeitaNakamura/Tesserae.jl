@@ -45,9 +45,17 @@ Read global nodes from the current Gmsh model and return `(nodes, nodeindices)`.
 `nodes` is a `Vector{Vec{dim,Float64}}`, and `nodeindices` maps each Gmsh
 node tag to the corresponding Tesserae node index.
 """
-function read_gmsh_nodes()
+function read_gmsh_nodes(; spacedim=nothing)
     node_tags, coords, _parametric_coords = Gmsh.gmsh.model.mesh.getNodes()
-    dim = Int(Gmsh.gmsh.model.getDimension())
+    modeldim = Int(Gmsh.gmsh.model.getDimension())
+    dim = isnothing(spacedim) ? modeldim : spacedim
+    dim isa Integer && modeldim ≤ dim ≤ GMSH_COORD_DIM && dim ≥ 1 ||
+        throw(ArgumentError("readmsh: spacedim must be an integer between max(1, $modeldim) and $GMSH_COORD_DIM"))
+    dim = Int(dim)
+    for i in eachindex(node_tags), d in (dim+1):GMSH_COORD_DIM
+        iszero(coords[GMSH_COORD_DIM * (i - 1) + d]) ||
+            throw(ArgumentError("readmsh: coordinate component $d would be discarded with spacedim=$dim; pass spacedim=$d or higher"))
+    end
     nodes = Vector{Vec{dim, Float64}}(undef, length(node_tags))
     nodeindices = Dict{eltype(node_tags), Int}()
     sizehint!(nodeindices, length(node_tags))
@@ -181,8 +189,8 @@ end
 Read all physical groups from the current Gmsh model and return a dictionary
 from physical group name to `FEMesh`.
 """
-function read_gmsh_physical_groups(; reorient_boundary=false)
-    nodes, nodeindices = read_gmsh_nodes()
+function read_gmsh_physical_groups(; reorient_boundary=false, spacedim=nothing)
+    nodes, nodeindices = read_gmsh_nodes(; spacedim)
     meshes = Dict{String, Tesserae.FEMesh}()
     for (dim, physical_tag) in Gmsh.gmsh.model.getPhysicalGroups()
         name, mesh = read_gmsh_physical_group(dim, physical_tag, nodes, nodeindices)
@@ -203,10 +211,10 @@ function with_gmsh(f, gmsh_argv=String[])
     end
 end
 
-function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=false)
+function Tesserae.readmsh(filename::AbstractString; gmsh_argv=String[], reorient_boundary=false, spacedim=nothing)
     with_gmsh(gmsh_argv) do
         Gmsh.gmsh.open(filename)
-        read_gmsh_physical_groups(; reorient_boundary)
+        read_gmsh_physical_groups(; reorient_boundary, spacedim)
     end
 end
 

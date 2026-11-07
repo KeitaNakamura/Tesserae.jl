@@ -12,10 +12,16 @@ nfill(v, ::Val{dim}) where {dim} = ntuple(i->v, Val(dim))
     ret
 end
 
-commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")
-
 getx(x) = getproperty(x, first(propertynames(x)))
 getx(x::Vec) = x
+
+# A scalar component axis precedes the logical array axes. A one-component
+# tensor has the scalar's size, so reinterpret alone does not add that axis.
+scalar_components(A::AbstractArray{<:Number}) = reshape(A, 1, size(A)...)
+function scalar_components(A::AbstractArray{T}) where {T <: Tensor}
+    flat = reinterpret(reshape, eltype(T), A)
+    sizeof(T) == sizeof(eltype(T)) ? reshape(flat, 1, size(A)...) : flat
+end
 
 struct MapArray{T, N, F, Args <: Tuple} <: AbstractArray{T, N}
     f::F
@@ -49,4 +55,20 @@ Base.IndexStyle(::Type{<: Trues}) = IndexLinear()
 @inline function Base.getindex(t::Trues, i::Integer)
     @boundscheck checkbounds(t, i)
     true
+end
+
+@inline sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
+@inline sub2ind(::Dims, ::Nothing)::Int = 0
+@inline sub2ind(lin::LinearIndices, I::CartesianIndex)::Int = @inbounds lin[I]
+@inline sub2ind(::LinearIndices, ::Nothing)::Int = 0
+
+@generated function dropat(entries::Tuple{Vararg{Any, N}}, index::Int) where {N}
+    branches = map(1:N) do i
+        kept = map(j -> :(entries[$j]), filter(!=(i), 1:N))
+        :(index == $i && return tuple($(kept...)))
+    end
+    quote
+        $(branches...)
+        throw(ArgumentError("index must be between 1 and tuple length"))
+    end
 end

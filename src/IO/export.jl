@@ -164,8 +164,6 @@ function write_ply(name::AbstractString, xs::AbstractArray{<: Vec})
         println(io, "property float y")
         println(io, "property float z")
         println(io, "end_header")
-    end
-    open(file, "a") do io
         for X in xs
             x, y, z = resize(X, 3)
             write(io, Float32(x), Float32(y), Float32(z))
