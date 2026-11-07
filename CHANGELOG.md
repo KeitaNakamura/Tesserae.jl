@@ -46,6 +46,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Fixed
 
+- GPU atomic writes now handle one-component tensors without losing the
+  component axis in their flattened storage.
 - FEM and IGA basis weights now reject derivative orders above `Order(1)`
   instead of leaving the higher derivatives zero.
 - Transfers to Metal reject sparse array storage instead of silently creating

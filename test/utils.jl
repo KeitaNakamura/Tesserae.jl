@@ -1,3 +1,39 @@
+# Exercise the enabled expansion even when the test preferences disable display.
+@eval Tesserae.Progress macro test_showprogress(args...)
+    showprogress_expr(args...)
+end
+
+function progress_loop_trace(mode)
+    io = IOBuffer()
+    t, t_stop = 0, mode === :empty ? 0 : 4
+    events = Int[]
+    result = try
+        Tesserae.Progress.@test_showprogress output=io dt=0 summary=false while t < t_stop
+            t += 1
+            push!(events, t)
+            mode === :continue && iseven(t) && continue
+            mode === :break && t == 2 && break
+            mode === :error && t == 2 && throw(DomainError(t))
+            if mode === :return && t == 2
+                return (:returned, events, occursin("Time:", String(take!(io))))
+            end
+        end
+    catch e
+        e isa DomainError || rethrow()
+        :error
+    end
+    (result, events, occursin("Time:", String(take!(io))))
+end
+
+@testset "Progress loop control flow" begin
+    @test progress_loop_trace(:normal) == (true, [1, 2, 3, 4], true)
+    @test progress_loop_trace(:empty) == (true, Int[], false)
+    @test progress_loop_trace(:continue) == (true, [1, 2, 3, 4], true)
+    @test progress_loop_trace(:break) == (true, [1, 2], true)
+    @test progress_loop_trace(:error) == (:error, [1, 2], false)
+    @test progress_loop_trace(:return) == (:returned, [1, 2], false)
+end
+
 @testset "Utilities" begin
     @testset "Greedy scheduler availability" begin
         if Threads.nthreads() > 1

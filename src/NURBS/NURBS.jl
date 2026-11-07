@@ -1,6 +1,7 @@
 module NURBS
 
 using Tensorial
+import ..Tesserae: dropat
 
 include("utils.jl")
 include("basis.jl")

@@ -2,13 +2,12 @@
 #  Zeroing
 # -----------------------------------------------------------------------------
 
-@generated function zero_recursive(::Type{T}) where {T}
-    isbitstype(T) || return :(throw(ArgumentError("`zero_recursive` supports only `isbitstype`, got $T")))
-    :(@_inline_meta; zero(T))
+@inline function zero_recursive(::Type{T}) where {T}
+    isbitstype(T) || throw(ArgumentError("`zero_recursive` supports only `isbitstype`, got $T"))
+    zero(T)
 end
-@generated function zero_recursive(::Type{T}) where {T <: Union{Tuple, NamedTuple}}
-    exps = [:(zero_recursive($t)) for t in fieldtypes(T)]
-    :(@_inline_meta; T(($(exps...),)))
+@inline function zero_recursive(::Type{T}) where {T <: Union{Tuple, NamedTuple}}
+    T(map(zero_recursive, fieldtypes(T)))
 end
 zero_recursive(x) = zero_recursive(typeof(x))
 

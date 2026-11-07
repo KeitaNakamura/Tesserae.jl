@@ -6,7 +6,8 @@ module Progress
 
 using Printf
 import Preferences
-import ..Tesserae: commas
+
+commas(num::Integer) = replace(string(num), r"(?<=[0-9])(?=(?:[0-9]{3})+(?![0-9]))" => ",")
 
 const ENABLED = Preferences.@load_preference("enable_showprogress_macro", true)
 
@@ -20,16 +21,13 @@ mutable struct P2Median
     count::Int          # Number of accepted samples.
     q::Vector{Float64}  # Initial samples, then marker heights after five samples.
     n::Vector{Int}      # Current integer marker positions.
-    np::Vector{Float64} # Desired marker positions.
-    dn::Vector{Float64} # Desired marker increments for min, q1, median, q3, max.
 end
 
-P2Median() = P2Median(0, Float64[], zeros(Int, 5), zeros(5), [0.0, 0.25, 0.5, 0.75, 1.0])
+P2Median() = P2Median(0, Float64[], zeros(Int, 5))
 
 function initialize_markers!(state::P2Median)
     sort!(state.q)
     state.n .= 1:5
-    state.np .= 1:5
     state
 end
 
@@ -61,16 +59,15 @@ function Base.push!(state::P2Median, value)
         state.count == 5 && initialize_markers!(state)
         return state
     end
-    q, n, np = state.q, state.n, state.np
+    q, n = state.q, state.n
     k = marker_interval!(q, value)
     for i in (k + 1):5
         n[i] += 1
     end
-    for i in 1:5
-        np[i] += state.dn[i]
-    end
     for i in 2:4
-        delta = np[i] - n[i]
+        # Desired quantiles are fixed at 0, 1/4, 1/2, 3/4 and 1.
+        desired = 1 + (state.count - 1) * ((i - 1) / 4)
+        delta = desired - n[i]
         if (delta ≥ 1 && n[i + 1] - n[i] > 1) || (delta ≤ -1 && n[i - 1] - n[i] < -1)
             d = delta ≥ 0 ? 1 : -1
             q_next = parabolic_marker(q, n, i, d)
@@ -420,6 +417,12 @@ macro showprogress(args...)
     isempty(args) && throw(ArgumentError("@showprogress requires a while loop"))
     expr = args[end]
     ENABLED || return esc(expr)
+    showprogress_expr(args...)
+end
+
+function showprogress_expr(args...)
+    isempty(args) && throw(ArgumentError("@showprogress requires a while loop"))
+    expr = args[end]
     kwargs = map(args[1:end-1]) do arg
         Meta.isexpr(arg, :(=)) ||
             throw(ArgumentError("@showprogress options must be keyword assignments"))
@@ -431,20 +434,15 @@ macro showprogress(args...)
         throw(ArgumentError("@showprogress supports only `while t < t_stop` loops"))
     t, t_stop = cnd.args[2], cnd.args[3]
     prog = gensym(:meter)
-    completed = gensym(:completed)
     quote
         # Macro hygiene resolves these unqualified names to Tesserae.Progress.
         local $prog = Meter($(esc(t)), $(esc(t_stop)); $(kwargs...))
-        local $completed = false
-        try
-            while $(esc(cnd))
-                $(esc(blk))
-                update!($prog, $(esc(t)), $(esc(t_stop)))
-            end
-            $completed = true
-        finally
-            $completed && finish!($prog)
+        while $(esc(cnd))
+            $(esc(blk))
+            update!($prog, $(esc(t)), $(esc(t_stop)))
         end
+        finish!($prog)
+        true
     end
 end
 

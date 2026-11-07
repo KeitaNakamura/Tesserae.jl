@@ -134,10 +134,9 @@ export
 
 include("Core/Core.jl")
 include("progress.jl")
-import .Progress: @showprogress
+import .Progress: @showprogress, commas
 
 include("NURBS/NURBS.jl")
-using .NURBS: dropat
 include("Mesh/Mesh.jl")
 include("Parallel/Parallel.jl")
 include("Grids/Grids.jl")

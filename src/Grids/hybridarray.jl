@@ -44,19 +44,22 @@ end
 @inline function _add!(::GPUDevice, A::HybridArray, i, v::Union{Tensor, StaticArray})
     @_propagate_inbounds_meta
     data = Tuple(v)
-    si = _atomic_index(A, i)
+    si = LinearIndices(_atomic_array(A))[_atomic_index(A, i)]
+    # The component axis precedes every grid axis. A linear node index cannot
+    # be used as the second Cartesian index of a multidimensional flat array.
+    offset = length(data) * (si - 1)
     for j in eachindex(data)
-        Atomix.@atomic flatten(A)[j,si] += data[j]
+        Atomix.@atomic flatten(A)[offset + j] += data[j]
     end
 end
 
-flatten(A::AbstractArray{T}) where {T <: Number} = reshape(A, 1, size(A)...)
-flatten(A::AbstractArray{T}) where {T <: Tensor} = reinterpret(reshape, eltype(T), A)
+flatten(A::AbstractArray{<:Union{Number,Tensor}}) = scalar_components(A)
 flatten(A::SpArray{T}) where {T <: Number} = reshape(get_data(A), 1, length(get_data(A)))
-flatten(A::SpArray{T}) where {T <: Tensor} = reinterpret(reshape, eltype(T), get_data(A))
+flatten(A::SpArray{T}) where {T <: Tensor} = flatten(get_data(A))
 
 get_spinds(A::HybridArray{<:Any, <:Any, <:SpArray}) = get_spinds(parent(A))
 get_data(A::HybridArray{<:Any, <:Any, <:SpArray}) = get_data(parent(A))
+
 
 hybrid(A::AbstractArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
 hybrid(A::StructArray) = StructArray(map(hybrid, StructArrays.components(A)))

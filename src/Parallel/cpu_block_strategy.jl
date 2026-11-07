@@ -2,6 +2,34 @@
 #  CPUBlockStrategy
 # -----------------------------------------------------------------------------
 
+struct ParticleReorderBuffers
+    by_component_type::Dict{DataType, Any}
+end
+ParticleReorderBuffers() = ParticleReorderBuffers(Dict{DataType, Any}())
+
+function buffer_for_component!(buffers::ParticleReorderBuffers, component::T) where {T}
+    buffer = get(buffers.by_component_type, T, nothing)
+    if !(buffer isa T) || length(buffer) != length(component)
+        buffer = similar(component, length(component))
+        buffers.by_component_type[T] = buffer
+    end
+    buffer::T
+end
+
+struct BlockUpdateWorkspace{dim}
+    chunk_counts::Vector{Array{Int, dim}}   # per-chunk block histogram
+    packed_particle_blocks::Vector{UInt64}  # block id and number within chunk/block
+    particle_reorder_buffers::ParticleReorderBuffers
+end
+
+function BlockUpdateWorkspace(blkdims::Dims{dim}) where {dim}
+    BlockUpdateWorkspace{dim}(
+        [zeros(Int, blkdims) for _ in 1:Threads.nthreads()],
+        UInt64[],
+        ParticleReorderBuffers(),
+    )
+end
+
 struct CPUBlockStrategy{dim, Mesh <: CartesianMesh{dim}} <: BlockStrategy
     mesh::Mesh
     particleindices::Vector{Int}
@@ -183,11 +211,6 @@ function scatter_particle_indices!(bs::CPUBlockStrategy, nₚ::Integer, chunksiz
 
     bs
 end
-
-@inline sub2ind(dims::Dims, I)::Int = @inbounds LinearIndices(dims)[I]
-@inline sub2ind(::Dims, ::Nothing)::Int = 0
-@inline sub2ind(lin::LinearIndices, I::CartesianIndex)::Int = @inbounds lin[I]
-@inline sub2ind(::LinearIndices, ::Nothing)::Int = 0
 
 @inline function block_color(I::CartesianIndex{dim}) where {dim}
     color = 1
