@@ -16,8 +16,14 @@ function _check_same_backend(label, x, backend)
     get_backend(x) == backend || throw(ArgumentError("SpIndices and $label must live on the same backend"))
 end
 
-function update_sparsity!(sp::SpIndices, blkspy::AbstractArray)
-    _apply_block_activity!(sp, blkspy)
+function update_sparsity!(sp::SpIndices, activity::AbstractArray)
+    backend = get_backend(blocknumbering(sp))
+    _check_nblocks(sp, activity)
+    _check_same_backend("block activity", activity, backend)
+    n = _number_blocks!(sp, activity, backend)
+    # Explicit activity bypasses particle positions, so the tracker must be rebuilt.
+    sparsity_tracker(sp).valid[] = false
+    n
 end
 
 function update_sparsity!(spinds::SpIndices, xₚ::AbstractVector{<: Vec}, mesh::CartesianMesh)
@@ -28,7 +34,7 @@ function update_sparsity!(spinds::SpIndices, xₚ::AbstractVector{<: Vec}, mesh:
 
     if isempty(xₚ)
         _reset_particle_block_tracker!(spinds, 0)
-        return _apply_block_activity!(spinds, fillzero!(active_blocks(spinds)); preserve_tracker=true)
+        return _number_blocks!(spinds, fillzero!(active_blocks(spinds)), backend)
     end
 
     # Reuse numbering when the occupied block set is unchanged.
@@ -36,20 +42,10 @@ function update_sparsity!(spinds::SpIndices, xₚ::AbstractVector{<: Vec}, mesh:
         return nothing
     end
     activity = _activate_neighbor_blocks!(active_blocks(spinds), occupied_blocks(spinds), backend)
-    _apply_block_activity!(spinds, activity; preserve_tracker=true)
+    _number_blocks!(spinds, activity, backend)
 end
 
 # Block activity -> compact block numbering.
-function _apply_block_activity!(sp::SpIndices, activity; preserve_tracker::Bool=false)
-    _check_nblocks(sp, activity)
-    _check_same_backend("block activity", activity, get_backend(blocknumbering(sp)))
-    n = _number_blocks!(sp, activity)
-    preserve_tracker || _invalidate_particle_block_tracker!(sp)
-    n
-end
-
-_number_blocks!(sp::SpIndices, activity) = _number_blocks!(sp, activity, get_backend(blocknumbering(sp)))
-
 function _number_blocks!(sp::SpIndices, activity, ::CPU)
     numbers = blocknumbering(sp)
     active_block_count = 0
@@ -92,24 +88,15 @@ function _number_blocks!(sp::SpIndices, activity, backend::GPU)
     only(Array(active_count_buffer)) * blocklength(sp)
 end
 
-# Manual sparsity updates bypass particle positions, so the tracker no longer
-# describes the current sparsity state.
-function _invalidate_particle_block_tracker!(spinds::SpIndices)
-    tracker = sparsity_tracker(spinds)
-    resize_fillzero!(tracker.blockids, 0)
-    fillzero!(tracker.counts)
-    fillzero!(occupied_blocks(spinds))
-    spinds
-end
-
 # Rebuild tracker storage on the first particle update, after invalidation, or
 # when the particle count changes.
 function _reset_particle_block_tracker!(spinds::SpIndices, nparticles::Integer)
     tracker = sparsity_tracker(spinds)
-    length(tracker.blockids) == nparticles && return false
+    tracker.valid[] && length(tracker.blockids) == nparticles && return false
     resize_fillzero!(tracker.blockids, nparticles)
     fillzero!(tracker.counts)
     fillzero!(occupied_blocks(spinds))
+    tracker.valid[] = true
     true
 end
 
@@ -248,7 +235,7 @@ function update_sparsity!(spinds::SpIndices{dim, <:Any, <:Array{Int, dim}}, part
     # Reuse numbering when the active block set is unchanged, mirroring the
     # particle-positions path: most steps move no block in or out of the set.
     _block_activity_unchanged(blocknumbering(spinds), activity) && return nothing
-    _apply_block_activity!(spinds, activity)
+    update_sparsity!(spinds, activity)
 end
 
 function _block_activity_unchanged(numbers, activity)

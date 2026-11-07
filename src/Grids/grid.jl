@@ -13,6 +13,12 @@ get_mesh(grid::Grid) = getx(grid)
 const SpGridComponent = Union{SpArray, HybridArray{<:Any, <:Any, <:SpArray}}
 const SpGrid{dim, T, N, NT <: NamedTuple{<: Any, <: Tuple{CartesianMesh{dim}, SpGridComponent, Vararg{SpGridComponent}}}, I} = StructArray{T, N, NT, I}
 
+function sparse_lookup_view(A::StructArray)
+    components = StructArrays.components(A)
+    lookup = map(sparse_lookup_view, components)
+    lookup === components ? A : StructArray{eltype(A)}(lookup)
+end
+
 function check_gridproperty(::Type{GridProp}, ::Type{Vec{dim, T}}) where {GridProp, dim, T}
     V = fieldtype(GridProp, 1)
     if V !== Vec{dim,T}

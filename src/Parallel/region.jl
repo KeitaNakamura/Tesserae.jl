@@ -59,7 +59,24 @@ end
 # The first worker gets its own task too: the body may leave things in
 # task-local storage, as `@P2G_Matrix` does, and running it in the caller would
 # strand those in a task that outlives the transfer.
-function spawn_region_workers(body::F, nworkers::Int, ngates::Int) where {F}
+function spawn_region_workers(work::F, active, plans, nworkers::Int, prologue::P, epilogue::E) where {F, P, E}
+    ngroups = length(active)
+    offset = prologue === nothing ? 0 : 1
+    ngates = ngroups - 1 + offset + (epilogue === nothing ? 0 : 1)
+    function body(w, barrier)
+        run_worker_hook(prologue, nworkers, w)
+        if prologue !== nothing
+            sync_phase!(barrier, 1)
+            barrier_aborted(barrier) && return
+        end
+        for k in 1:ngroups
+            @inbounds run_group(work, active[k], plans[k], w)
+            k == ngroups && epilogue === nothing && break
+            sync_phase!(barrier, k + offset)
+            barrier_aborted(barrier) && return
+        end
+        run_worker_hook(epilogue, nworkers, w)
+    end
     barrier = PhaseBarrier(nworkers, ngates)
     @sync for w in 1:nworkers
         Threads.@spawn begin
@@ -70,16 +87,6 @@ function spawn_region_workers(body::F, nworkers::Int, ngates::Int) where {F}
                 rethrow()
             end
         end
-    end
-    nothing
-end
-
-function run_worker_phases(phase::F, barrier::PhaseBarrier, nphases::Int) where {F}
-    for k in 1:nphases
-        @inline phase(k)
-        k == nphases && break
-        sync_phase!(barrier, k)
-        barrier_aborted(barrier) && break
     end
     nothing
 end
@@ -166,11 +173,12 @@ function run_group(work::F, group, cursor::Threads.Atomic{Int}, ::Int) where {F}
     end
 end
 
-function sequential_foreach(work::F, groups) where {F}
+function sequential_foreach(work::F, groups, prologue::P, epilogue::E) where {F, P, E}
+    run_worker_hook(prologue, 1, 1)
     for group in groups, region in group
         @inline work(region)
     end
-    nothing
+    run_worker_hook(epilogue, 1, 1)
 end
 
 run_worker_hook(::Nothing, nworkers::Int, w::Int) = nothing
@@ -200,20 +208,13 @@ transfer that failed.
 partitioned_foreach(work::F, strat::PartitionStrategy, ::Val{scheduler}; kwargs...) where {F, scheduler} =
     partitioned_foreach(work, strat, get_scheduler(Val(scheduler)); kwargs...)
 
-# `work` is captured into the worker closure rather than called here, which is
-# the case Julia declines to specialize on without the type parameter.
+# This entry only forwards `work`; its type parameter keeps it specialized.
 function partitioned_foreach(work::F, strat::PartitionStrategy, sched::Scheduler;
                             prologue::P=nothing, epilogue::E=nothing) where {F, P, E}
     groups = threadsafe_groups(strat)
 
-    # Both hooks still run here: a caller that put work in them relies on it
-    # whichever path is taken.
-    on_one_worker(groups) = (run_worker_hook(prologue, 1, 1);
-                             sequential_foreach(work, groups);
-                             run_worker_hook(epilogue, 1, 1))
-
     if sched isa SequentialScheduler || Threads.nthreads() == 1
-        return on_one_worker(groups)
+        return sequential_foreach(work, groups, prologue, epilogue)
     end
 
     # Every worker drops the same empty groups, so the phases stay in step.
@@ -222,28 +223,14 @@ function partitioned_foreach(work::F, strat::PartitionStrategy, sched::Scheduler
     for group in groups
         isempty(group) || push!(active, group)
     end
-    isempty(active) && return on_one_worker(active)
+    isempty(active) && return sequential_foreach(work, active, prologue, epilogue)
 
     # Regions cap the workers only when they are all there is to do: an epilogue
     # covers an index space of its own and would be left short.
     nworkers = epilogue === nothing ?
         min(Threads.nthreads(), maximum(length, active)) : Threads.nthreads()
-    nworkers == 1 && return on_one_worker(active)
+    nworkers == 1 && return sequential_foreach(work, active, prologue, epilogue)
 
-    ngroups = length(active)
-    nphases = ngroups + (prologue === nothing ? 0 : 1) + (epilogue === nothing ? 0 : 1)
-    offset = prologue === nothing ? 0 : 1
     plans = group_plans!(scratch, sched, strat, active, nworkers)
-    spawn_region_workers(nworkers, nphases - 1) do w, barrier
-        run_worker_phases(barrier, nphases) do k
-            if prologue !== nothing && k == 1
-                run_worker_hook(prologue, nworkers, w)
-            elseif epilogue !== nothing && k == nphases
-                run_worker_hook(epilogue, nworkers, w)
-            else
-                @inbounds run_group(work, active[k-offset], plans[k-offset], w)
-            end
-        end
-    end
-    nothing
+    spawn_region_workers(work, active, plans, nworkers, prologue, epilogue)
 end

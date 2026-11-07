@@ -1,8 +1,8 @@
-include("sparse.jl")
-
 include("dofmap.jl")
 include("blocks.jl")
+include("sparse.jl")
 include("sparsity.jl")
+include("extract.jl")
 
 include("assemblers.jl")
 include("buffers.jl")

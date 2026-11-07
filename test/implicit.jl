@@ -1,3 +1,31 @@
+struct IntegerWidthBasis{T<:Integer} <: Tesserae.Basis
+    width::T
+end
+Tesserae.support_width(b::IntegerWidthBasis) = b.width
+
+@testset "Scalar component views" begin
+    for T in (Float32, Float64), dim in 1:3
+        A = fill(ones(Vec{dim,T}), 3, 4)
+        for values in (A, @view A[2:3, :])
+            flat = Tesserae.flatten(values)
+            components = Tesserae.dof_components(values)
+            @test size(flat) == size(components) == (dim, size(values)...)
+            @test flat == components
+            components[1, 1, 1] = 7
+            @test values[1, 1][1] == flat[1, 1, 1] == 7
+        end
+        mesh = CartesianMesh(1.0, (0,16), (0,16))
+        grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, u::Vec{dim,T}}, mesh)
+        update_sparsity!(grid, [Vec(2.0, 2.0)])
+        flat = Tesserae.flatten(grid.u)
+        components = Tesserae.dof_components(grid.u)
+        @test size(flat) == (dim, length(Tesserae.get_data(grid.u)))
+        @test size(components) == (dim, size(mesh)...)
+        components[1, 3, 3] = 9
+        @test grid.u[3, 3][1] == 9
+    end
+end
+
 @testset "P2G_Matrix" begin
     basis = BSpline(Quadratic())
     mesh = CartesianMesh(1, (0,4), (0,5))
@@ -9,6 +37,15 @@
     update!(weights, particles, mesh)
 
     @test_throws UndefKeywordError create_sparse_matrix(basis, mesh)
+
+    @testset "custom basis integer widths" begin
+        reference = create_sparse_matrix(basis, mesh; ndofs=2)
+        for width in (Int8(3), UInt(3), Int128(3))
+            matrix = create_sparse_matrix(IntegerWidthBasis(width), mesh; ndofs=2)
+            @test matrix.colptr == reference.colptr
+            @test matrix.rowval == reference.rowval
+        end
+    end
 
     @testset "square matrix" begin
         entry = Mat{2,2}(1.0, 2.0, 2.0, 3.0)
@@ -200,7 +237,9 @@
         parent_threaded = create_sparse_matrix(basis, mesh; ndofs=3)
         parent_transposed = create_sparse_matrix(basis, mesh; ndofs=3)
         sequential = view(parent_sequential, velocity_dofs, pressure_dofs)
-        threaded = view(parent_threaded, velocity_dofs, pressure_dofs)
+        reordered_dofs = vec(parent_dofs[[1,3,2], :])
+        reordered = view(parent_threaded, reordered_dofs, reordered_dofs)
+        threaded = view(reordered, vec(parent_dofs[[2,1], :]), vec(parent_dofs[3:3, :]))
         transposed = view(parent_transposed, pressure_dofs, velocity_dofs)
         reference = create_sparse_matrix(basis, mesh; ndofs=(2, 1))
 
@@ -276,6 +315,11 @@
 
         @test block_sparse ≈ reference
         @test block_dense ≈ Matrix(reference')
+
+        @threaded :static @P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
+            block_sparse[i,j] -= @∑ 2 * ∇w[ip] * w[jp]
+        end
+        @test block_sparse ≈ -reference
     end
     @testset "duplicate matrix" begin
         ex = quote
@@ -481,6 +525,64 @@
     end
 end
 
+@testset "Matrix assembly schedules with complex rectangular entries" begin
+    cartesian = CartesianMesh(1.0, (0,12), (0,4))
+    for mesh in (cartesian, FEMesh(Tesserae.Quad4(), cartesian))
+        grid = generate_grid(@NamedTuple{x::Vec{2,Float64}}, mesh)
+        if mesh isa CartesianMesh
+            points = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64, l::Float64}, mesh; alg=GridSampling())
+            points.l .= 0.1
+            weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(points))
+            # Smaller uGIMP windows exercise the block buffer's row/column offset.
+            column_weights = generate_basis_weights(uGIMP(), mesh, length(points))
+            create = ndofs -> create_sparse_matrix(ComplexF64, BSpline(Quadratic()), mesh; ndofs)
+        else
+            points = generate_particles(@NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh, generate_quadrature_rule(basis(mesh)))
+            weights = generate_basis_weights(mesh, size(points))
+            column_weights = weights
+            create = ndofs -> create_sparse_matrix(ComplexF64, mesh; ndofs)
+        end
+        points.m .= reshape(range(0.5, 1.5; length=length(points)), size(points))
+        update!(weights, points, mesh)
+        column_weights === weights || update!(column_weights, points, mesh)
+        entry = reshape(ComplexF64[1.0 + 2im, 3.0 - 4im], 2, 1)
+        reference = zeros(ComplexF64, 2length(grid), length(grid))
+        nodes = LinearIndices(size(grid))
+        for p in eachindex(points)
+            bw_i, bw_j = weights[p], column_weights[p]
+            indices_i, indices_j = supportnodes(bw_i), supportnodes(bw_j)
+            for jp in eachindex(indices_j), ip in eachindex(indices_i)
+                i, j = nodes[indices_i[ip]], nodes[indices_j[jp]]
+                reference[(2i-1):2i, j] .+= bw_i.w[ip] * sum(bw_j.∇w[jp]) * points.m[p] * vec(entry)
+            end
+        end
+        partition = Partition(mesh)
+        mesh isa CartesianMesh && update!(partition, points.x)
+        @test maximum(length, threadsafe_groups(partition)) > 1
+        for part in (nothing, partition)
+            forward = create((2, 1))
+            reversed = create((1, 2))
+            dense = zeros(ComplexF64, size(reversed))
+            if part === nothing
+                @P2G_Matrix grid=>(i,j) points=>p (weights,column_weights)=>(ip,jp) begin
+                    forward[i,j] = @∑ w[ip] * sum(∇w[jp]) * m[p] * entry
+                    reversed[j,i] = @∑ w[ip] * sum(∇w[jp]) * m[p] * entry
+                    dense[j,i] = @∑ w[ip] * sum(∇w[jp]) * m[p] * entry
+                end
+            else
+                @threaded :static @P2G_Matrix grid=>(i,j) points=>p (weights,column_weights)=>(ip,jp) part begin
+                    forward[i,j] = @∑ w[ip] * sum(∇w[jp]) * m[p] * entry
+                    reversed[j,i] = @∑ w[ip] * sum(∇w[jp]) * m[p] * entry
+                    dense[j,i] = @∑ w[ip] * sum(∇w[jp]) * m[p] * entry
+                end
+            end
+            @test forward ≈ reference
+            @test reversed ≈ reference'
+            @test dense ≈ reference'
+        end
+    end
+end
+
 @testset "Newton" begin
     @testset "Initial nonfinite residual preserves x" begin
         f(v) = fill(Inf, length(v))
@@ -634,6 +736,20 @@ end
             refilled = fillzero!(copy(reference))
             @test @inferred(extract!(refilled, block, mi, mj)) === refilled
             @test refilled == reference
+        end
+
+        S = Tesserae.SparseArrays.sparse(reshape(1.0:36.0, 6, 6))
+        for rows in (2:5, [5,2,4])
+            selected = view(S, rows, [6,1,3])
+            mi, mj = DofMap(trues(1, length(rows))), DofMap(Bool[1 0 1])
+            expected = extract(selected, mi, mj)
+            dest = fillzero!(copy(expected))
+            if rows isa UnitRange
+                @test extract!(dest, selected, mi, mj) === dest
+                @test dest == expected
+            else
+                @test_throws ArgumentError extract!(dest, selected, mi, mj)
+            end
         end
     end
     @testset "block DoF map" begin

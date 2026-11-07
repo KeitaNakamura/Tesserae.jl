@@ -31,9 +31,9 @@ end
     col_ndofs = size(col_dof_table, 1)
     dims = row_ndofs * length(row_nodes), col_ndofs * length(col_nodes)
     matrix = cache[]
-    @boundscheck size(matrix) == dims || throw(DimensionMismatch("local matrix size changed during assembly"))
-    # The support nodes are kept so that `finish_assembly!` needs no arguments
-    # beyond the buffer: in the block schedule they are loop-local per particle.
+    # Validate reuse of the task-local allocation before the inbounds entry loop.
+    size(matrix) == dims || throw(DimensionMismatch("local matrix size changed during assembly"))
+    # Keep the cell support for the final scatter of the local matrix.
     LocalMatrixBuffer(matrix, row_ndofs, col_ndofs, row_nodes, col_nodes)
 end
 
@@ -43,41 +43,23 @@ local_dofs(ndofs::Int, index::Integer) = node_dofs(index, ndofs)
 
 # ---- assembly ----
 
-# One interface for all three assembly modes, so the macro can emit a single
-# statement shape: `nothing` writes entries straight into the matrix, a
-# `LocalMatrixBuffer` accumulates a dense element matrix, and a
-# `BlockMatrixBuffer` (below) accumulates a band-compressed block.
-
-function assemble_first!(assembler, buffer::LocalMatrixBuffer, assembly, orientation, row_node, col_node, ip, jp, value)
+function assemble_first!(buffer::LocalMatrixBuffer, ip, jp, value)
     @_propagate_inbounds_meta
     buffer.matrix[local_dofs(buffer.row_ndofs, ip), local_dofs(buffer.col_ndofs, jp)] .= value
     buffer
 end
 
-function assemble_add!(assembler, buffer::LocalMatrixBuffer, assembly, orientation, row_node, col_node, ip, jp, value)
+function assemble_add!(buffer::LocalMatrixBuffer, ip, jp, value)
     @_propagate_inbounds_meta
     @views buffer.matrix[local_dofs(buffer.row_ndofs, ip), local_dofs(buffer.col_ndofs, jp)] .+= value
     buffer
 end
 
-function finish_assembly!(assembler, buffer::LocalMatrixBuffer, assembly, orientation)
+function finish_assembly!(assembler, buffer::LocalMatrixBuffer, orientation)
     @_propagate_inbounds_meta
     row_nodes, col_nodes = orientation((buffer.row_nodes, buffer.col_nodes))
     add!(assembler, row_nodes, col_nodes, orient_matrix_entry(orientation, buffer.matrix))
 end
-
-function assemble_first!(assembler, ::Nothing, assembly, orientation, row_node, col_node, ip, jp, value)
-    @_propagate_inbounds_meta
-    row_node, col_node = orientation((row_node, col_node))
-    add_entry!(assembler, scatter_mode(assembly), row_node, col_node, orient_matrix_entry(orientation, value))
-end
-
-function assemble_add!(assembler, buffer::Nothing, assembly, orientation, row_node, col_node, ip, jp, value)
-    @_propagate_inbounds_meta
-    assemble_first!(assembler, buffer, assembly, orientation, row_node, col_node, ip, jp, value)
-end
-
-finish_assembly!(assembler, ::Nothing, assembly, orientation) = assembler.matrix
 
 # -----------------------------------------------------------------------------
 #  BlockMatrixBuffer
@@ -152,14 +134,13 @@ end
 
 # ---- block buffer selection ----
 
-# Only the Cartesian path needs a buffer; anything else is safe to write directly
-# within the thread-safe block schedule.
-function block_matrix_buffer(assembler::CartesianSparseMatrixAssembler, assembly::BlockAssembly, orientation)
-    row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
-    acquire!(assembly.matrix_buffer_pool, BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
+# Cartesian blocks share CSC columns and always use a buffer. Generic assembly
+# writes directly into the disjoint node sets of the block schedule.
+function block_matrix_buffer(assembler::CartesianSparseMatrixAssembler, pool::BlockMatrixBufferPool, row_nodes, col_nodes)
+    acquire!(pool, BlockMatrixBufferKey(assembler, row_nodes, col_nodes))
 end
 
-block_matrix_buffer(::GenericMatrixAssembler, ::BlockAssembly, orientation) = nothing
+block_matrix_buffer(::GenericMatrixAssembler, ::BlockMatrixBufferPool, row_nodes, col_nodes) = nothing
 
 # ---- assembly ----
 
@@ -251,34 +232,16 @@ end
     nothing
 end
 
-# -- assembly interface --
+# -- final scatter --
 
-# Only `assemble_add!` is defined: `acquire!` hands out a zeroed buffer, so the
-# block schedule never needs the overwrite-then-accumulate split that the cell
-# path uses to zero its reused `TaskLocalValue` matrix.
-function assemble_add!(assembler, buffer::BlockMatrixBuffer, assembly::BlockAssembly, orientation, row_node, col_node, ip, jp, value)
+function finish_assembly!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, pool::BlockMatrixBufferPool, row_nodes, col_nodes)
     @_propagate_inbounds_meta
-    row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
-    row_node, col_node = orientation((row_node, col_node))
-    add_entry!(buffer, row_nodes, col_nodes, row_node, col_node, orient_matrix_entry(orientation, value))
-end
-
-function finish_assembly!(assembler::CartesianSparseMatrixAssembler, buffer::BlockMatrixBuffer, assembly::BlockAssembly, orientation)
-    @_propagate_inbounds_meta
-    row_nodes, col_nodes = orientation((assembly.nodes_i, assembly.nodes_j))
     try
         scatter!(assembler, buffer, row_nodes, col_nodes)
     finally
-        release!(assembly.matrix_buffer_pool, buffer)
+        release!(pool, buffer)
     end
 end
 
-# A `nothing` buffer under a block schedule means several threads writing into
-# the matrix at once. `GenericMatrixAssembler` is safe there because the block
-# schedule hands out disjoint node sets, but the Cartesian path shares CSC slots
-# between neighbouring blocks and must go through a `BlockMatrixBuffer`.
-# `block_matrix_buffer` never produces this pairing; this keeps it that way.
-function assemble_add!(::CartesianSparseMatrixAssembler, ::Nothing, ::BlockAssembly, orientation, row_node, col_node, ip, jp, value)
-    error("Cartesian matrix assembly under a block schedule requires a BlockMatrixBuffer")
-end
+finish_assembly!(assembler::GenericMatrixAssembler, ::Nothing, pool::BlockMatrixBufferPool, row_nodes, col_nodes) = assembler.matrix
 

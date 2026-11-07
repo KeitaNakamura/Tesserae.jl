@@ -74,21 +74,29 @@
     # A prologue that throws has to fail the same way a region does, rather than
     # leaving the workers parked on a barrier that never opens.
     @testset "a failing prologue throws instead of hanging ($schedule)" for schedule in (:static, :dynamic, :greedy)
+        after = Threads.Atomic{Int}(0)
         @test_throws "prologue failed" Tesserae.partitioned_foreach(bs, Val(schedule);
-                                                                    prologue = (_, _) -> error("prologue failed")) do region
-            nothing
+                                                                    prologue = (_, w) -> w == 1 && error("prologue failed"),
+                                                                    epilogue = (_, _) -> Threads.atomic_add!(after, 1)) do region
+            Threads.atomic_add!(after, 1)
         end
+        @test after[] == 0
     end
 
     # A worker that throws must release the workers already waiting on the phase
     # barrier. If it does not, this hangs rather than fails.
-    @testset "one failing region throws instead of hanging ($schedule)" for schedule in (:static, :dynamic, :greedy)
+    @testset "one failing region throws and cancels later phases ($schedule)" for schedule in (:static, :dynamic, :greedy)
         # Fail inside the first group, so the remaining groups still have
         # barriers that the surviving workers would otherwise wait on forever.
         victim = last(first(groups))
-        @test_throws "region failed" Tesserae.partitioned_foreach(bs, Val(schedule)) do region
+        after = Threads.Atomic{Int}(0)
+        @test_throws "region failed" Tesserae.partitioned_foreach(bs, Val(schedule);
+                                                                epilogue = (_, _) -> Threads.atomic_add!(after, 1)) do region
             region == victim && error("region failed")
+            # Neither later groups nor the epilogue may run after a failure.
+            !(region in first(groups)) && Threads.atomic_add!(after, 1)
         end
+        @test after[] == 0
     end
 
     # The loop body may stash things in task-local storage -- @P2G_Matrix keeps
@@ -130,18 +138,29 @@
         @test_throws MethodError Tesserae.partitioned_foreach(identity, bs, Val(:sequential))
     end
 
-    @testset "no work is done after a failure ($schedule)" for schedule in (:static, :dynamic, :greedy)
-        victim = last(first(groups))
-        after = Threads.Atomic{Int}(0)
-        try
-            Tesserae.partitioned_foreach(bs, Val(schedule)) do region
-                region == victim && error("region failed")
-                # Regions of later groups must not run once the transfer failed.
-                !(region in first(groups)) && Threads.atomic_add!(after, 1)
+    @testset "hooks surround the regions, including a single-region partition" begin
+        single = Tesserae.CPUBlockStrategy(mesh)
+        update!(single, [Vec(0.01, 0.01)])
+        for (strat, with_prologue) in ((bs, true), (single, false))
+            nregions = sum(length, Tesserae.threadsafe_groups(strat))
+            initialized = Threads.Atomic{Int}(0)
+            visited = Threads.Atomic{Int}(0)
+            finished = Threads.Atomic{Int}(0)
+            out_of_order = Threads.Atomic{Bool}(false)
+            prologue = with_prologue ? (_, _) -> Threads.atomic_add!(initialized, 1) : nothing
+            epilogue = (nworkers, w) -> begin
+                visited[] == nregions || (out_of_order[] = true)
+                Threads.atomic_add!(finished, 1)
             end
-        catch
+            Tesserae.partitioned_foreach(strat, Val(:dynamic); prologue, epilogue) do region
+                if with_prologue && initialized[] != Threads.nthreads()
+                    out_of_order[] = true
+                end
+                Threads.atomic_add!(visited, 1)
+            end
+            @test !out_of_order[]
+            @test (visited[], finished[]) == (nregions, Threads.nthreads())
         end
-        @test after[] == 0
     end
 end
 

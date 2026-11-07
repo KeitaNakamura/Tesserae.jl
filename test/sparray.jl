@@ -67,6 +67,30 @@ end
     @test_throws MethodError Tesserae.SpIndices((9, 17); block_size_log2=3)
 end
 
+@testset "No-op Adapt conversions retain particle tracking" begin
+    mesh = CartesianMesh(1.0, (0,16))
+    first_positions, next_positions = [Vec(0.5)], [Vec(12.5)]
+    for to in (Array, identity, Tesserae.CPUDevice())
+        source = Tesserae.SpIndices(mesh)
+        update_sparsity!(source, first_positions, mesh)
+        first_numbering = copy(Tesserae.blocknumbering(source))
+        converted = Tesserae.Adapt.adapt(to, source)
+        @test Tesserae.sparsity_tracker(converted).valid === Tesserae.sparsity_tracker(source).valid
+        update_sparsity!(converted, next_positions, mesh)
+        reference = Tesserae.SpIndices(mesh)
+        update_sparsity!(reference, next_positions, mesh)
+        @test Tesserae.blocknumbering(converted) == Tesserae.blocknumbering(reference)
+        update_sparsity!(source, first_positions, mesh)
+        @test Tesserae.blocknumbering(source) == first_numbering
+        update_sparsity!(converted, next_positions, mesh)
+        # No-op conversions share storage, so manual invalidation must be
+        # visible when the original object is used again.
+        update_sparsity!(converted, falses(Tesserae.nblocks(converted)))
+        update_sparsity!(source, next_positions, mesh)
+        @test Tesserae.blocknumbering(source) == Tesserae.blocknumbering(reference)
+    end
+end
+
 @testset "SpGrid update from particles" begin
     mesh = CartesianMesh(0.25, (0,4), (0,4))
     xₚ = generate_particles(mesh)
@@ -123,8 +147,12 @@ end
     @test tracker.counts[bid₁] == 1
     @test tracker.counts[bid₂] == 2
 
+    # A count change rebuilds valid tracking even with unchanged occupied blocks.
+    @test update_sparsity!(spinds, xₚ[1:2], mesh) == n₁
+    @test tracker.counts[bid₂] == 1
+
     update_sparsity!(spinds, falses(Tesserae.nblocks(spinds)))
-    @test isempty(tracker.blockids)
+    @test !tracker.valid[]
     n₃ = update_sparsity!(spinds, xₚ, mesh)
     @test n₃ == n₁
     @test Tesserae.blocknumbering(spinds) == blocknumbering₁
@@ -135,7 +163,24 @@ end
     @test all(iszero, Tesserae.blocknumbering(spinds))
 end
 
-@testset "partition-driven update_sparsity! reuses unchanged numbering" begin
+@testset "manual sparsity invalidates particle tracking" begin
+    mesh = CartesianMesh(Float32, 1f0, (0f0, 8f0))
+    spinds = Tesserae.SpIndices(mesh)
+    inside = [Vec(0.5f0), Vec(4.5f0)]
+    outside = [Vec(-1f0), Vec(9f0)]
+    activity = falses(Tesserae.nblocks(mesh)); activity[1] = true
+    for positions in (outside, Vec{1,Float32}[], inside)
+        update_sparsity!(spinds, inside, mesh)
+        update_sparsity!(spinds, activity)
+        update_sparsity!(spinds, positions, mesh)
+        reference = Tesserae.SpIndices(mesh)
+        update_sparsity!(reference, positions, mesh)
+        @test Tesserae.blocknumbering(spinds) == Tesserae.blocknumbering(reference)
+        @test update_sparsity!(spinds, positions, mesh) === (isempty(positions) ? 0 : nothing)
+    end
+end
+
+@testset "sparsity update reuse and tracker invalidation" begin
     mesh = CartesianMesh(1.0, (0,40), (0,40))
     spinds = Tesserae.SpIndices(mesh)
     partition = Partition(mesh)
@@ -144,11 +189,17 @@ end
     n₁ = update_sparsity!(spinds, partition)
     @test n₁ isa Int
     numbering = copy(Tesserae.blocknumbering(spinds))
+    tracker = Tesserae.sparsity_tracker(spinds)
+    @test update_sparsity!(spinds, xₚ, mesh) == n₁
+    @test_throws ArgumentError update_sparsity!(spinds, trues(1, 1))
+    @test tracker.valid[]
+    @test Tesserae.blocknumbering(spinds) == numbering
 
     # Particles moved inside their blocks: same active set, numbering reused.
     update!(partition, [x + Vec(0.1, 0.1) for x in xₚ])
     @test update_sparsity!(spinds, partition) === nothing
     @test Tesserae.blocknumbering(spinds) == numbering
+    @test tracker.valid[]
 
     # The grid keeps its zero-on-update behavior on the reused path.
     grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float64}, m::Float64}, mesh)
@@ -166,6 +217,17 @@ end
     @test n₂ isa Int
     @test n₂ > n₁
     @test Tesserae.blocknumbering(spinds) != numbering
+    @test !tracker.valid[]
+    @test update_sparsity!(spinds, xₚ, mesh) == n₁
+    @test tracker.valid[]
+    @test Tesserae.blocknumbering(spinds) == numbering
+
+    # Even identical explicit activity invalidates the particle history.
+    @test update_sparsity!(spinds, map(!iszero, numbering)) == n₁
+    @test !tracker.valid[]
+    @test update_sparsity!(spinds, xₚ, mesh) == n₁
+    @test tracker.valid[]
+    @test Tesserae.blocknumbering(spinds) == numbering
 end
 
 @testset "zero_buffer and device-carrying hybrid" begin
@@ -548,4 +610,30 @@ end
     @test B_sp ≈ B_dense
 end
 
+end
+@testset "Sparse lookup views share storage without update state" begin
+    for dim in 1:3
+        mesh = CartesianMesh(1.0, ntuple(_ -> (0, 6), dim)...)
+        owner = Tesserae.SpIndices(mesh)
+        activity = [isodd(sum(Tuple(I))) for I in CartesianIndices(Tesserae.nblocks(owner))]
+        update_sparsity!(owner, activity)
+        lookup = @inferred Tesserae.sparse_lookup_view(owner)
+        @test lookup.workspace === nothing
+        @test Tesserae.blocknumbering(lookup) === Tesserae.blocknumbering(owner)
+        @test Tesserae.sparse_lookup_view(lookup) === lookup
+        @test collect(Tesserae.activeindices(lookup)) == collect(Tesserae.activeindices(owner))
+        @test all(I -> lookup[I] == owner[I], CartesianIndices(mesh))
+        update_sparsity!(owner, .!activity)
+        @test all(I -> lookup[I] == owner[I], CartesianIndices(mesh))
+        @test_throws BoundsError lookup[ntuple(_ -> 0, dim)...]
+    end
+    mesh = CartesianMesh(1.0, (0,6))
+    grid = generate_grid(SpArray, @NamedTuple{x::Vec{1,Float64}, m::Float64, v::Vec{1,Float64}}, mesh)
+    update_sparsity!(grid, trues(Tesserae.nblocks(mesh)))
+    lookup = Tesserae.sparse_lookup_view(grid)
+    @test Tesserae.get_spinds(lookup).workspace === nothing
+    @test Tesserae.get_data(lookup.m) === Tesserae.get_data(grid.m)
+    lookup.m[2] = 3
+    @test grid.m[2] == 3
+    @test Tesserae.get_spinds(grid).workspace !== nothing
 end

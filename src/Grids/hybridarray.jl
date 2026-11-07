@@ -60,6 +60,10 @@ flatten(A::SpArray{T}) where {T <: Tensor} = flatten(get_data(A))
 get_spinds(A::HybridArray{<:Any, <:Any, <:SpArray}) = get_spinds(parent(A))
 get_data(A::HybridArray{<:Any, <:Any, <:SpArray}) = get_data(parent(A))
 
+function sparse_lookup_view(A::HybridArray)
+    p = sparse_lookup_view(parent(A))
+    p === parent(A) ? A : HybridArray(p, flatten(A), get_device(A))
+end
 
 hybrid(A::AbstractArray{T}) where {T} = HybridArray(A, flatten(A), get_device(A))
 hybrid(A::StructArray) = StructArray(map(hybrid, StructArrays.components(A)))

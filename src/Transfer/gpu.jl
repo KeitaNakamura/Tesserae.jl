@@ -124,7 +124,7 @@ function P2G(f::F, device::GPUDevice, schedule::Val, grid, particles, weights, :
     isempty(particles) && return nothing
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
-    kernel(f, hybrid(grid, device), particles, weights; ndrange=length(particles))
+    kernel(f, sparse_lookup_view(hybrid(grid, device)), particles, weights; ndrange=length(particles))
 end
 
 # GPU with a device partition: one workgroup per nonempty grid block, merging a
@@ -210,7 +210,7 @@ function P2G(bodies::P2GBodies, device::GPUDevice, schedule::Val, grid, particle
         return P2G(bodies.particle, device, schedule, grid, particles, weights, nothing)
     end
     kernel = gpukernel_P2G_blocks(backend)
-    kargs = (bodies.tile, hybrid(grid, device), particles, weights,
+    kargs = (bodies.tile, sparse_lookup_view(hybrid(grid, device)), particles, weights,
              bs.particleindices, bs.offsets, bs.blocklist,
              Tt, names, Val(side), Val(tilelen), Val(total), Val(BW), Val(halo), nblocks(bs))
     gs = block_p2g_groupsize(backend, kernel, kargs)
@@ -223,5 +223,5 @@ function G2P(f::F, device::GPUDevice, schedule::Val, grid, particles, weights) w
     isempty(particles) && return nothing
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
-    kernel(f, grid, particles, weights; ndrange=length(particles))
+    kernel(f, sparse_lookup_view(grid), particles, weights; ndrange=length(particles))
 end
