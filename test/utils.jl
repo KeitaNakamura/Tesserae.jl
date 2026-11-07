@@ -1,4 +1,17 @@
 @testset "Utilities" begin
+    @testset "Greedy scheduler availability" begin
+        if Threads.nthreads() > 1
+            if VERSION < v"1.11"
+                @test_throws ArgumentError Tesserae._tforeach(identity, 1:2, Tesserae.GreedyScheduler())
+            else
+                visited = zeros(Int, 8)
+                @threaded :greedy for i in eachindex(visited)
+                    visited[i] = 1
+                end
+                @test all(==(1), visited)
+            end
+        end
+    end
     @test (@inferred Tesserae.nfill(3, Val(3)))   === (3,3,3)
     @test (@inferred Tesserae.nfill(1.2, Val(2))) === (1.2,1.2)
     @test (@inferred Tesserae.zero_recursive(1)) === 0

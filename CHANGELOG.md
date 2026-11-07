@@ -71,6 +71,9 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Changed
 
+- The minimum Julia version is 1.10, matching the existing dependency
+  requirements. On Julia 1.10, `:greedy` is supported for partitioned transfers
+  and explicitly rejected for other threaded loops when requested.
 - Renamed `ThreadPartition` to `Partition`: the same type schedules GPU
   workgroups through the block-scheduled `@P2G`, so the name no longer implies
   CPU threads. `ThreadPartition` remains as a deprecated alias, and the
