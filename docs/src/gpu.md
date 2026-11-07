@@ -201,7 +201,9 @@ It should not be expected to remove the main cost of `@P2G`, which is still prop
 
 ## Assembled matrices on GPU
 
-`@P2G_Matrix` assembles into a sparse matrix that lives on the device.
+`@P2G_Matrix` assembles into a CUDA sparse matrix that lives on the device.
+Metal does not support sparse matrix storage here, and `gpu` and `gpu_preserve`
+reject sparse array transfers to Metal before they can become dense arrays.
 Build the matrix on the CPU with [`create_sparse_matrix`](@ref) and move it with the same call as everything else:
 
 ```julia

@@ -48,6 +48,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 - FEM and IGA basis weights now reject derivative orders above `Order(1)`
   instead of leaving the higher derivatives zero.
+- Transfers to Metal reject sparse array storage instead of silently creating
+  a dense device array. GPU sparse matrix assembly requires CUDA.
 - `fillzero!` uses byte zeroing only for types with known zero representations,
   preserving valid zeros for types such as `Rational`.
 - `cpu` on a GPU sparse matrix returned a dense matrix; it now returns a

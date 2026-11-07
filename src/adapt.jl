@@ -31,7 +31,8 @@ cpu(A) = A |> CPUDevice()
 Move `A` to the loaded GPU backend, converting `Float64` storage to `Float32`.
 Accepts meshes, grids, particle arrays, basis weights, partitions, sparse
 matrices, and plain arrays. Requires a backend package (CUDA.jl or Metal.jl)
-to be loaded. Use [`gpu_preserve`](@ref) to keep the element types.
+to be loaded. Sparse matrix storage requires CUDA; Metal rejects sparse array
+transfers. Use [`gpu_preserve`](@ref) to keep the element types.
 """
 gpu(A) = A |> gpu_device(CastFloat32)
 
