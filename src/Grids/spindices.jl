@@ -23,12 +23,13 @@ Base.show(io::IO, x::SpIndex) = print(io, "SpIndex(", x.index, ", ", ifelse(isac
 struct ParticleBlockTracker{B <: AbstractArray{Int}, C <: AbstractArray{Int32}}
     blockids::B  # block id currently recorded for each particle
     counts::C    # number of particles currently recorded in each block
+    valid::Base.RefValue{Bool} # host policy; kernels carry no workspace
 end
 
 function ParticleBlockTracker(blocknumbering::AbstractArray)
     blockids = similar(vec(blocknumbering), Int, 0)
     counts = fillzero!(similar(blocknumbering, Int32))
-    ParticleBlockTracker(blockids, counts)
+    ParticleBlockTracker(blockids, counts, Ref(false))
 end
 
 # Owned by `SpIndices`, so particle-driven sparsity updates reuse storage
@@ -54,7 +55,7 @@ end
 
 # Block sparsity is stored as a dense array over block coordinates.
 # Zero means inactive; positive values are compact blocknumbers for SpArray.data.
-struct SpIndices{dim, L, B <: AbstractArray{Int, dim}, W <: BlockSparsityWorkspace} <: AbstractArray{SpIndex{CartesianIndex{dim}}, dim}
+struct SpIndices{dim, L, B <: AbstractArray{Int, dim}, W <: Union{BlockSparsityWorkspace,Nothing}} <: AbstractArray{SpIndex{CartesianIndex{dim}}, dim}
     dims::Dims{dim}
     blocknumbering::B
     workspace::W
@@ -68,6 +69,16 @@ function SpIndices(dims::Dims{dim}; block_size_log2::Val{L}=Val(BLOCK_SIZE_LOG2)
 end
 SpIndices(dims::Int...; kwargs...) = SpIndices(dims; kwargs...)
 SpIndices(mesh::CartesianMesh) = SpIndices(size(mesh); block_size_log2=Val(block_size_log2(mesh)))
+
+# Kernel lookups share numbering with the owner but carry none of its update
+# buffers or host policy. Ordinary Adapt conversions keep their owning state.
+sparse_lookup_view(x) = x
+function sparse_lookup_view(sp::SpIndices{dim,L}) where {dim,L}
+    sp.workspace === nothing && return sp
+    numbers = blocknumbering(sp)
+    SpIndices{dim,L,typeof(numbers),Nothing}(size(sp), numbers, nothing)
+end
+sparse_lookup_view(xs::Tuple) = map(sparse_lookup_view, xs)
 
 Base.size(sp::SpIndices) = sp.dims
 Base.IndexStyle(::Type{<: SpIndices}) = IndexCartesian()

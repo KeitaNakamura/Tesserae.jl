@@ -144,6 +144,7 @@ end
 
 function Adapt.adapt_structure(to::AbstractDevice, A::SpIndices{dim, L}) where {dim, L}
     numbers = adapt(to, blocknumbering(A))
+    numbers === blocknumbering(A) && return A
     workspace = BlockSparsityWorkspace(numbers)
     SpIndices{dim, L, typeof(numbers), typeof(workspace)}(A.dims, numbers, workspace)
 end
@@ -160,7 +161,13 @@ function Adapt.adapt_structure(to::CPUDevice, partition::Partition{<: GPUBlockSt
 end
 
 function Adapt.adapt_structure(to, tracker::ParticleBlockTracker)
-    ParticleBlockTracker(adapt(to, tracker.blockids), adapt(to, tracker.counts))
+    blockids, counts = adapt(to, tracker.blockids), adapt(to, tracker.counts)
+    valid = if blockids === tracker.blockids && counts === tracker.counts
+        tracker.valid # shared storage must also share its validity flag
+    else
+        Ref(tracker.valid[])
+    end
+    ParticleBlockTracker(blockids, counts, valid)
 end
 function Adapt.adapt_structure(to, workspace::BlockSparsityWorkspace)
     BlockSparsityWorkspace(adapt(to, workspace.occupied), adapt(to, workspace.active), adapt(to, workspace.tracker),
@@ -168,7 +175,9 @@ function Adapt.adapt_structure(to, workspace::BlockSparsityWorkspace)
 end
 function Adapt.adapt_structure(to, A::SpIndices{dim, L}) where {dim, L}
     numbers = adapt(to, blocknumbering(A))
-    workspace = adapt(to, sparsity_workspace(A))
+    # Device views only perform lookups. Ordinary storage moves keep the host
+    # workspace; kernel conversion drops it as a whole, just like launch paths.
+    workspace = isbitstype(typeof(numbers)) ? nothing : adapt(to, sparsity_workspace(A))
     SpIndices{dim, L, typeof(numbers), typeof(workspace)}(A.dims, numbers, workspace)
 end
 function KernelAbstractions.get_backend(A::SpIndices)

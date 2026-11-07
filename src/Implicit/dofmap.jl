@@ -117,10 +117,7 @@ dofmap(masks::Tuple{Vararg{AbstractArray{Bool}}}) = BlockDofMap(masks)
 
 # ---- indexing ----
 
-# A one-component `Vec` is the size of its scalar, so the reshaping reinterpret
-# gives back the array's own shape instead of prefixing the DoF axis.
-dof_components(A::AbstractArray{T}) where {T <: Vec{1}} = reshape(reinterpret(eltype(T), A), 1, size(A)...)
-dof_components(A::AbstractArray{T}) where {T <: Vec} = reinterpret(reshape, eltype(T), A)
+dof_components(A::AbstractArray{<:Vec}) = scalar_components(A)
 
 function (dofmap::DofMap)(A::AbstractArray{<: Vec})
     A′ = dof_components(A)
@@ -129,7 +126,7 @@ function (dofmap::DofMap)(A::AbstractArray{<: Vec})
 end
 
 function (dofmap::DofMap)(A::AbstractArray{T}) where {T <: Real}
-    A′ = reshape(A, 1, size(A)...)
+    A′ = scalar_components(A)
     @boundscheck checkbounds(A′, dofmap.indices4scalar)
     @inbounds view(A′, dofmap.indices4scalar)
 end
@@ -153,3 +150,6 @@ dofs(dofmap::BlockDofMap) = dofmap.indices
 full_ndofs(dofmap::DofMap) = length(dofmap.mask)
 full_ndofs(dofmap::BlockDofMap) = sum(full_ndofs, dofmap.maps)
 
+function node_dofs(node, ndofs)
+    (ndofs * (node - 1) + 1):(ndofs * node)
+end

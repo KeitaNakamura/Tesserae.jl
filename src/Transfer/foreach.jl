@@ -306,7 +306,7 @@ end
 end
 
 function foreach_loop(f::F, device::GPUDevice, schedule::Val, collection) where {F}
-    collection = gpu_launch_collection(collection, schedule)
+    collection = sparse_lookup_view(gpu_launch_collection(collection, schedule))
     backend = get_backend(device)
     if collection isa SpGrid
         spinds = get_spinds(collection)
@@ -322,7 +322,7 @@ function foreach_loop(f::F, device::GPUDevice, schedule::Val, collection) where 
 end
 
 function foreach_loop(f::F, device::GPUDevice, schedule::Val, collection, slice::ForeachSlice) where {F}
-    collection = gpu_launch_collection(collection, schedule)
+    collection = sparse_lookup_view(gpu_launch_collection(collection, schedule))
     foreach_check_slice(collection, slice)
     ndrange = foreach_slice_ndrange(slice)
     backend = get_backend(device)

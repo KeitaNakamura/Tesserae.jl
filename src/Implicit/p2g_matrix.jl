@@ -56,14 +56,7 @@ struct ParticleAssembly{S} end
 ParticleAssembly() = ParticleAssembly{SerialScatter}()
 struct CellAssembly end
 
-# Resolve the buffer by dispatch before the entry loop, so the generated local
-# is always defined and its type follows the assembly mode.
-assembly_buffer(::ParticleAssembly, cache, row_dofs, row_nodes, col_dofs, col_nodes) = nothing
-@inline assembly_buffer(::CellAssembly, cache, row_dofs, row_nodes, col_dofs, col_nodes) =
-    local_matrix_buffer(cache, row_dofs, row_nodes, col_dofs, col_nodes)
-
 scatter_mode(::ParticleAssembly{S}) where {S} = S()
-scatter_mode(::BlockAssembly) = SerialScatter()
 
 # -- MPM --
 
@@ -87,10 +80,11 @@ end
 # mode differs from the CPU wrapping above.
 function P2G_Matrix(f::F, device::GPUDevice, schedule::Val, grids, particles, weights, ::Nothing) where {F}
     particles = gpu_launch_collection(particles, schedule)
+    isempty(particles) && return nothing
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
     kernel((grids, particles, weights, p) -> (@inline f(grids, particles, weights, (p,), ParticleAssembly{AtomicScatter}())),
-           grids, particles, weights; ndrange=length(particles))
+           sparse_lookup_view(grids), particles, weights; ndrange=length(particles))
 end
 
 # -- FEM and IGA --
@@ -238,7 +232,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         gmat, gi, gj = check_matrix_equation("@P2G_Matrix", lhs, i, j, gmats)
         push!(gmats, gmat)
 
-        @gensym matrix buffer assembler matrix_cache
+        @gensym matrix buffer assembler matrix_cache row_nodes col_nodes
 
         op == :(-=) && (rhs = :(-$rhs))
         rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
@@ -246,8 +240,10 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
         orientation = reorder_pair === identity ? :(Base.identity) : :(Base.reverse)
         row_grid, col_grid = reorder_pair((grid_i, grid_j))
         row_weights, col_weights = reorder_pair((weights_i, weights_j))
+        row_node, col_node = reorder_pair((i, j))
+        block_nodes = reorder_pair((:($matrix_assembly.nodes_i), :($matrix_assembly.nodes_j)))
+        entry = reorder_pair === identity ? rhs : :($rhs')
         dof_table_i, dof_table_j = reorder_pair((:($(assembler).row_dof_table), :($(assembler).col_dof_table)))
-        assemble(f) = :(Tesserae.$f($assembler, $buffer, $matrix_assembly, $orientation, $i, $j, $ip, $jp, $rhs))
         (; matrix,
            zeroed = op == :(=),
            init = quote
@@ -255,11 +251,23 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
                $assembler = Tesserae.matrix_assembler($matrix, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
                $matrix_cache = Tesserae.local_matrix_cache($matrix, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
            end,
-           buffer_init = :($buffer = Tesserae.assembly_buffer($matrix_assembly, $matrix_cache, $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)),
-           block_buffer_init = :($buffer = Tesserae.block_matrix_buffer($assembler, $matrix_assembly, $orientation)),
-           assemble_first = assemble(:assemble_first!),
-           assemble_add = assemble(:assemble_add!),
-           finish = :(Tesserae.finish_assembly!($assembler, $buffer, $matrix_assembly, $orientation)))
+           cell_init = :($buffer = Tesserae.local_matrix_buffer($matrix_cache, $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)),
+           cell_first = :(Tesserae.assemble_first!($buffer, $ip, $jp, $rhs)),
+           cell_add = :(Tesserae.assemble_add!($buffer, $ip, $jp, $rhs)),
+           cell_finish = :(Tesserae.finish_assembly!($assembler, $buffer, $orientation)),
+           direct = :(Tesserae.add_entry!($assembler, Tesserae.scatter_mode($matrix_assembly), $row_node, $col_node, $entry)),
+           block_init = quote
+               $row_nodes, $col_nodes = ($(block_nodes...),)
+               $buffer = Tesserae.block_matrix_buffer($assembler, $matrix_assembly.matrix_buffer_pool, $row_nodes, $col_nodes)
+           end,
+           block_add = quote
+               if $buffer === nothing
+                   Tesserae.add_entry!($assembler, Tesserae.SerialScatter(), $row_node, $col_node, $entry)
+               else
+                   Tesserae.add_entry!($buffer, $row_nodes, $col_nodes, $row_node, $col_node, $entry)
+               end
+           end,
+           block_finish = :(Tesserae.finish_assembly!($assembler, $buffer, $matrix_assembly.matrix_buffer_pool, $row_nodes, $col_nodes)))
     end
 
     # Must stay a tuple literal: that is what lets `fillzero_matrix_targets!`
@@ -306,34 +314,44 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     # The cell path peels the first particle so its `assemble_first!` overwrites
     # the reused local matrix; the block path needs no peel because `acquire!`
     # returns a zeroed buffer.
-    particle_or_cell_body = quote
+    cell_body = quote
         $p, $remaining_particles = Base.Iterators.peel($particle_indices)
         $supportnodes_expr
         $particle_init
-        $(map(t -> t.buffer_init, targets)...)
-        $(assemble_particle(map(t -> t.assemble_first, targets)))
+        $(map(t -> t.cell_init, targets)...)
+        $(assemble_particle(map(t -> t.cell_first, targets)))
         for $p in $remaining_particles
             $particle_init
-            $(assemble_particle(map(t -> t.assemble_add, targets)))
+            $(assemble_particle(map(t -> t.cell_add, targets)))
         end
-        $(map(t -> t.finish, targets)...)
+        $(map(t -> t.cell_finish, targets)...)
     end
 
-    block_body = quote
-        $(map(t -> t.block_buffer_init, targets)...)
+    particle_body = quote
         for $p in $particle_indices
             $supportnodes_expr
             $particle_init
-            $(assemble_particle(map(t -> t.assemble_add, targets)).args...)
+            $(assemble_particle(map(t -> t.direct, targets)))
         end
-        $(map(t -> t.finish, targets)...)
+    end
+
+    block_body = quote
+        $(map(t -> t.block_init, targets)...)
+        for $p in $particle_indices
+            $supportnodes_expr
+            $particle_init
+            $(assemble_particle(map(t -> t.block_add, targets)))
+        end
+        $(map(t -> t.block_finish, targets)...)
     end
 
     body = quote
         if $matrix_assembly isa Tesserae.BlockAssembly
             $block_body
+        elseif $matrix_assembly isa Tesserae.CellAssembly
+            $cell_body
         else
-            $particle_or_cell_body
+            $particle_body
         end
     end
 

@@ -80,6 +80,10 @@ Base.size(A::SpArray) = size(A.spinds)
 
 get_data(A::SpArray) = A.data
 get_spinds(A::SpArray) = A.spinds
+function sparse_lookup_view(A::SpArray)
+    spinds = sparse_lookup_view(get_spinds(A))
+    spinds === get_spinds(A) ? A : SpArray(get_data(A), spinds, A.shared_spinds)
+end
 nblocks(A::SpArray) = nblocks(get_spinds(A))
 activeindices(A::SpArray) = activeindices(get_spinds(A))
 
@@ -204,10 +208,15 @@ end
 
 function _copyto_sp_broadcast!(device::GPUDevice, dest::SpArray, bc::Broadcasted)
     backend = get_backend(device)
-    spinds = get_spinds(dest)
+    lookup = sparse_lookup_view(dest)
+    spinds = get_spinds(lookup)
     kernel = gpukernel_copyto_sp_broadcast!(backend)
-    kernel(dest, bc, spinds; ndrange=_spindex_ndrange(spinds))
+    kernel(lookup, sparse_lookup_view(bc), spinds; ndrange=_spindex_ndrange(spinds))
     dest
+end
+
+function sparse_lookup_view(bc::Broadcasted{Style}) where {Style}
+    Broadcasted{Style}(bc.f, map(sparse_lookup_view, bc.args), bc.axes)
 end
 
 # Instantiated here so GPU kernels do not infer broadcast axes from the sparse wrapper.

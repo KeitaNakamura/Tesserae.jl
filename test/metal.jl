@@ -75,6 +75,128 @@ test_deferred_weights(gpu)
     @test all(==(7f0),Array(cpu(grid.m)))
 end
 
+@testset "Kernel sparse lookup views" begin
+    for dim in 1:3
+        mesh = CartesianMesh(Float32, 1f0, ntuple(_ -> (0f0, 6f0), dim)...)
+        activity = falses(Tesserae.nblocks(mesh)); activity[begin] = true
+        owner = gpu(Tesserae.SpIndices(mesh))
+        update_sparsity!(owner, gpu(activity))
+        lookup = Tesserae.sparse_lookup_view(owner)
+        adapted = Metal.mtlconvert(lookup)
+        @test isbitstype(typeof(adapted))
+        @test adapted.workspace === nothing
+        @test typeof(adapted) === typeof(Metal.mtlconvert(owner))
+        @test Tesserae.sparsity_tracker(owner).valid !== nothing
+        reference = Tesserae.SpIndices(mesh)
+        update_sparsity!(reference,activity)
+        expected = map(Tesserae.isactive,reference)
+        active = gpu(falses(size(mesh)))
+        backend = Tesserae.get_backend(owner)
+        for input in (owner,lookup)
+            read_sparse_activity!(backend)(active,input;ndrange=length(input))
+            Metal.synchronize()
+            @test Array(cpu(active)) == expected
+        end
+
+        source = SpArray{Float32}(undef,size(mesh))
+        update_sparsity!(source,activity); fill!(source,3f0)
+        device = gpu(source)
+        values = gpu(zeros(Float32,size(mesh)))
+        # Exercise nested adaptation without the explicit launch-time lookup view.
+        for input in (device,Tesserae.hybrid(device))
+            @test isbitstype(typeof(Metal.mtlconvert(input)))
+            read_sparse_values!(backend)(values,input;ndrange=length(input))
+            Metal.synchronize()
+            @test Array(cpu(values)) == Array(source)
+        end
+        @test Tesserae.get_spinds(device).workspace !== nothing
+    end
+end
+
+@testset "Sparse lookup foreach and independent broadcasts" begin
+    mesh = CartesianMesh(Float32, 1f0, (0f0,8f0), (0f0,8f0))
+    grid = generate_grid(SpArray, @NamedTuple{x::Vec{2,Float32}, m::Float32, v::Vec{2,Float32}}, mesh)
+    activity = falses(Tesserae.nblocks(mesh)); activity[1,1] = true
+    update_sparsity!(grid, activity)
+    gg = gpu(grid)
+    for g in (grid, gg)
+        @foreach g=>i begin
+            m[i] = sum(x[i])
+            v[i] = x[i]
+        end
+        @foreach g[:,begin]=>i begin
+            m[i] += 5f0
+        end
+    end
+    @test Array(cpu(gg.m)) == Array(grid.m)
+    @test Array(cpu(gg.v)) == Array(grid.v)
+    # Independent numbering forces the logical-index fallback, including when
+    # the broadcast is nested and the source has a larger active region.
+    other = SpArray{Float32}(undef, size(mesh))
+    update_sparsity!(other, trues(Tesserae.nblocks(mesh)))
+    fill!(other, 2f0)
+    grid.m .= 0.5f0 .* grid.m .+ sin.(other)
+    gg.m .= 0.5f0 .* gg.m .+ sin.(gpu(other))
+    @test Array(cpu(gg.m)) ≈ Array(grid.m)
+    @test Tesserae.get_spinds(gg).workspace !== nothing
+    update_sparsity!(gg, gpu(.!activity))
+    update_sparsity!(grid, .!activity)
+    @test Array(cpu(Tesserae.blocknumbering(Tesserae.get_spinds(gg)))) == Tesserae.blocknumbering(Tesserae.get_spinds(grid))
+end
+
+@testset "Metal manual sparsity invalidates particle tracking" begin
+    mesh = CartesianMesh(Float32, 1f0, (0f0, 8f0))
+    gm = gpu(mesh)
+    spinds = gpu(Tesserae.SpIndices(mesh))
+    inside = [Vec(0.5f0), Vec(4.5f0)]
+    outside = [Vec(-1f0), Vec(9f0)]
+    activity = falses(Tesserae.nblocks(mesh)); activity[1] = true
+    for positions in (outside, Vec{1,Float32}[], inside)
+        update_sparsity!(spinds, gpu(inside), gm)
+        update_sparsity!(spinds, gpu(activity))
+        gp = gpu(positions)
+        update_sparsity!(spinds, gp, gm)
+        reference = Tesserae.SpIndices(mesh)
+        update_sparsity!(reference, positions, mesh)
+        @test cpu(Tesserae.blocknumbering(spinds)) == Tesserae.blocknumbering(reference)
+        @test update_sparsity!(spinds, gp, gm) === (isempty(positions) ? 0 : nothing)
+    end
+end
+
+@testset "Adapt moves retain host tracking and drop it for kernels" begin
+    mesh = CartesianMesh(Float32, 1f0, (0f0,16f0))
+    positions = [Vec(0.5f0)]
+    source = Tesserae.SpIndices(mesh)
+    update_sparsity!(source, positions, mesh)
+    device = Tesserae.Adapt.adapt(MtlArray, source)
+    @test Tesserae.sparsity_tracker(device).valid !== Tesserae.sparsity_tracker(source).valid
+    @test Tesserae.sparsity_tracker(device).valid[]
+    kernel_view = Metal.mtlconvert(device)
+    @test isbitstype(typeof(kernel_view))
+    @test kernel_view.workspace === nothing
+    lookup = Tesserae.sparse_lookup_view(device)
+    @test typeof(kernel_view) === typeof(Metal.mtlconvert(lookup))
+    expected = map(I -> Tesserae.isactive(source[I]),CartesianIndices(source))
+    active = gpu(falses(size(source)))
+    for input in (device,lookup)
+        read_sparse_activity!(Tesserae.get_backend(device))(active,input;ndrange=length(input))
+        Metal.synchronize()
+        @test Array(cpu(active)) == expected
+    end
+    update_sparsity!(source, falses(Tesserae.nblocks(source)))
+    @test Tesserae.sparsity_tracker(device).valid[]
+    new_positions = [Vec(12.5f0)]
+    update_sparsity!(device, gpu(new_positions), gpu(mesh))
+    reference = Tesserae.SpIndices(mesh)
+    update_sparsity!(reference, new_positions, mesh)
+    @test cpu(Tesserae.blocknumbering(device)) == Tesserae.blocknumbering(reference)
+    host = Tesserae.Adapt.adapt(Array, device)
+    @test Tesserae.sparsity_tracker(host).valid !== Tesserae.sparsity_tracker(device).valid
+    update_sparsity!(host, positions, mesh)
+    update_sparsity!(reference, positions, mesh)
+    @test Tesserae.blocknumbering(host) == Tesserae.blocknumbering(reference)
+end
+
 @testset "Metal sparse transfers" begin
     for device in (Tesserae.MetalDevice{Tesserae.CastFloat32}(),
                    Tesserae.MetalDevice{Tesserae.PreserveEltype}())

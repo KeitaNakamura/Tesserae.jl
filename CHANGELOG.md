@@ -46,6 +46,9 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Fixed
 
+- CPU no-op transfers of sparse grids retain their shared particle-tracking
+  cache, so alternating updates through the original and transferred objects
+  cannot leave stale block numbering.
 - Basis-weight views inherit their parent's current evaluation mode and filter
   without changing that shared policy. Conflicting mode or deferred-filter
   requests are rejected before modifying values or settings; a stored view can

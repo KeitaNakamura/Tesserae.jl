@@ -136,7 +136,7 @@ end
 
 # -- sparsity pattern --
 
-function cartesian_neighbor_nodes(node::CartesianIndex{N}, mesh_size::Dims{N}, sparsity_radius::Int) where {N}
+function cartesian_neighbor_nodes(node::CartesianIndex{N}, mesh_size::Dims{N}, sparsity_radius::Integer) where {N}
     shift = sparsity_radius * oneunit(CartesianIndex{N})
     ((node-shift) : (node+shift)) ∩ CartesianIndices(mesh_size)
 end
@@ -216,18 +216,8 @@ function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler)
 end
 
 function has_cartesian_sparse_pattern(assembler::CartesianSparseMatrixAssembler{<:SparseMatrixCSCView})
-    (; matrix, row_dof_table, row_slots_per_node, sparsity_radius) = assembler
-    mesh_size = Base.tail(size(row_dof_table))
-    parent_col_ndofs = size(parent(matrix), 2) ÷ prod(mesh_size)
-    parent_row_dof_table = LinearIndices((row_slots_per_node, mesh_size...))
-    parent_col_dof_table = LinearIndices((parent_col_ndofs, mesh_size...))
-    parent_assembler = CartesianSparseMatrixAssembler(
-        parent(matrix),
-        parent_row_dof_table,
-        parent_col_dof_table,
-        row_slots_per_node,
-        sparsity_radius,
-    )
+    (; matrix, row_dof_table, sparsity_radius) = assembler
+    parent_assembler = cartesian_matrix_assembler(parent(matrix), Base.tail(size(row_dof_table)), sparsity_radius)
     has_cartesian_sparse_pattern(parent_assembler)
 end
 
