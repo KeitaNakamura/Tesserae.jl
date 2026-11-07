@@ -299,3 +299,8 @@ control-point indices of `cell`.
         SVector{$(prod(support_dims)), Int}($(ids...))
     end
 end
+
+function _check_quadrature_rule(::QuadratureRule{F, qdim}, ::IGAMesh{dim, pdim}) where {F, qdim, dim, pdim}
+    F === _tensor_product_family(Val(pdim)) || throw(ArgumentError("quadrature rule and IGA mesh must use the same reference-cell family"))
+    qdim == pdim || throw(DimensionMismatch("quadrature-rule and IGA parametric dimensions must match"))
+end

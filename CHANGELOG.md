@@ -46,6 +46,18 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Fixed
 
+- Basis-weight views inherit their parent's current evaluation mode and filter
+  without changing that shared policy. Conflicting mode or deferred-filter
+  requests are rejected before modifying values or settings; a stored view can
+  still use a different filter for its partial update.
+- Stored updates and deferred support evaluation accept particle views indexed
+  by an integer vector, as well as contiguous particle views.
+- B-spline values and derivatives share one polynomial definition across stored
+  and deferred evaluation, including the half-open endpoints of degree zero.
+- CPU/GPU transfers of basis weights preserve the evaluation mode and boundary
+  filter, and deferred values retain their declared element types.
+- `@G2P2G` snapshots basis data before particle-only updates even when its G2P
+  half contains no sums.
 - GPU atomic writes now handle one-component tensors without losing the
   component axis in their flattened storage.
 - FEM and IGA basis weights now reject derivative orders above `Order(1)`
@@ -82,6 +94,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Changed
 
+- Basis-weight views are native Julia `SubArray`s and retain the parent's
+  element type and row identity.
 - The minimum Julia version is 1.10, matching the existing dependency
   requirements. On Julia 1.10, `:greedy` is supported for partitioned transfers
   and explicitly rejected for other threaded loops when requested.

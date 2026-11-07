@@ -121,6 +121,7 @@ end
 function P2G(f::F, device::GPUDevice, schedule::Val, grid, particles, weights, ::Nothing, zeroed::Tuple=()) where {F}
     fillzero_each!(device, zeroed)
     particles = gpu_launch_collection(particles, schedule)
+    isempty(particles) && return nothing
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
     kernel(f, hybrid(grid, device), particles, weights; ndrange=length(particles))
@@ -219,6 +220,7 @@ end
 # The grid goes in unwrapped: nothing in a `@G2P` body scatters, so it needs no atomics.
 function G2P(f::F, device::GPUDevice, schedule::Val, grid, particles, weights) where {F}
     particles = gpu_launch_collection(particles, schedule)
+    isempty(particles) && return nothing
     backend = get_backend(device)
     kernel = gpukernel_transfer(backend)
     kernel(f, grid, particles, weights; ndrange=length(particles))

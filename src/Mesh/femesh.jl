@@ -309,3 +309,14 @@ function _refresh_supportnodes!(mesh::FEMesh)
     append!(supportnodes(mesh), _collect_supportnodes(cellsupports(mesh)))
     mesh
 end
+
+function _check_quadrature_rule(::QuadratureRule{F, qdim}, mesh::FEMesh) where {F, qdim}
+    F === _reference_cell_family(cellshape(mesh)) || throw(ArgumentError("quadrature rule and FEM mesh must use the same reference-cell family"))
+    qdim == get_dimension(cellshape(mesh)) || throw(DimensionMismatch("quadrature-rule and FEM reference dimensions must match"))
+end
+
+function cell_point(mesh::FEMesh, cell, qpt)
+    indices = supportnodes(mesh, cell)
+    N = value(cellshape(mesh), qpt)
+    sum(N .* mesh[indices])
+end

@@ -53,10 +53,13 @@
         end
         @test sum(points.V) ≈ 1 + 2α / 3
 
+        existing_view, existing_row = view(weights,:,1), weights[1,1]
         other_field = FEMesh(Tesserae.Quad4(), field.nodes, [Tesserae.SVector(1, 2, 3, 4)])
         update!(weights, points, other_field; geometry)
         @test Tesserae.cellsupports(getfield(weights, :indices)) === Tesserae.cellsupports(other_field)
         @test supportnodes(weights[1,1]) == Tesserae.SVector(1, 2, 3, 4)
+        @test all(w -> supportnodes(w) == supportnodes(other_field,1),existing_view)
+        @test supportnodes(existing_row) == supportnodes(other_field,1)
     end
 
     @testset "Higher-order field" begin

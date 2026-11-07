@@ -53,12 +53,15 @@ can_defer_basis(::Type{<: KernelCorrection}) = true
 const SeparableKernelCorrection = KernelCorrection{<: Union{BSpline{Quadratic}, BSpline{Cubic}, BSpline{Quartic}, BSpline{Quintic}}, Polynomial{MultiLinear}}
 
 @inline function deferred_particle_state(order::Order, kc::SeparableKernelCorrection, pt, mesh::CartesianMesh, window, ::Nothing)
-    (all(size(window) .== support_width(kc.kernel)), wls_axis_jets(eltype(getx(pt)), order, kc.kernel, pt, mesh, window))
+    full = all(size(window) .== support_width(kc.kernel))
+    ξ = normalize(getx(pt), mesh)
+    axisjets = full ? bspline_axis_jets(order, kc.kernel, pt, mesh) :
+                      wls_axis_jets(eltype(ξ), order, kc.kernel, pt, mesh, window)
+    origin = (full ? bspline_support_start(kc.kernel, Tuple(ξ)) : first(window)) - oneunit(first(window))
+    (; axisjets, origin)
 end
 
-@inline function deferred_node_jet(order::Order, kc::SeparableKernelCorrection, state::Tuple, pt, mesh::CartesianMesh, window, ::Nothing, ip)
+@inline function deferred_node_jet(order::Order, kc::SeparableKernelCorrection, state::NamedTuple, pt, mesh::CartesianMesh, window, ::Nothing, ip)
     @_propagate_inbounds_meta
-    full, axisjets = state
-    full ? nodal_basis_jet(order, kc.kernel, pt, mesh, window[ip]) :
-           wls_axis_jet_at(order, axisjets, node_offsets(window, ip))
+    tensor_product_jet_at(order, state.axisjets, Tuple(window[ip] - state.origin))
 end

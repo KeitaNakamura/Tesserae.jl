@@ -1,4 +1,7 @@
+include("core.jl")
 include("basis_weight.jl")
+include("deferred.jl")
+include("cell_weights.jl")
 include("polynomials.jl")
 
 include("bspline.jl")

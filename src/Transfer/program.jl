@@ -21,7 +21,7 @@ end
 function split_sum_equations(program::TransferProgram, macroname::String)
     equations = program.equations
     issum = map(is_sum, equations)
-    if !allequal(issum) && !issorted(issum; rev=true)
+    if !issorted(issum; rev=true)
         error("$macroname: Equations without `@∑` must come after those with `@∑`")
     end
     equations[issum], equations[.!issum]
@@ -31,31 +31,35 @@ end
 
 # Weight references resolve through per-particle columns rather than a
 # per-particle `BasisWeight`, whose live SubArray state spilled GPU registers.
-# `@G2P2G` shares one binding across both halves: the P2G half runs after the G2P
-# half may have written `x[p]`, so rebinding would evaluate the basis at the new
-# position against the window taken at the old one.
-struct WeightColumnsBinding
-    names::Any
+# Each macro emits the support and column bindings before its particle stages.
+# `@G2P2G` shares those bindings across both halves, including when G2P moves x[p].
+struct WeightAccess
+    names::Tuple
+    window::Symbol
     cols::Symbol
-    load::Bool
 end
-WeightColumnsBinding(names) = WeightColumnsBinding(Tuple(names), gensym(:wcols), true)
-WeightColumnsBinding(binding::WeightColumnsBinding; load::Bool) = WeightColumnsBinding(binding.names, binding.cols, load)
+WeightAccess(names; window::Symbol=gensym(:window), cols::Symbol=gensym(:wcols)) =
+    WeightAccess(Tuple(names), window, cols)
+
+function weight_columns_exprs(access::WeightAccess, weights, particles, p, grid)
+    isempty(access.names) && return ()
+    (:($(access.cols) = Tesserae.weight_columns($weights, Val($(access.names)), $particles, $p, Tesserae.get_mesh($grid), $(access.window))),)
+end
+
+function weight_access_exprs(access::WeightAccess, weights, particles, p, grid)
+    (:($(access.window) = Tesserae.transfer_support_window($weights, $particles, $p, Tesserae.get_mesh($grid))),
+     weight_columns_exprs(access, weights, particles, p, grid)...)
+end
 
 struct TrailingIndexed
     parent::Any
     trailing::Any   # particle index
-    particles::Any
-    grid::Any
-    window::Any     # support index -> node
     names::Any      # referenced weight properties
     cols::Any       # bound once per particle
     vals::Any       # bound once per support node
-    loadcols::Bool
 end
-TrailingIndexed(parent, trailing) = TrailingIndexed(parent, trailing, nothing, nothing, nothing, nothing, nothing, nothing, false)
-function TrailingIndexed(parent, trailing, particles, grid, window, binding::WeightColumnsBinding)
-    TrailingIndexed(parent, trailing, particles, grid, window, binding.names, binding.cols, gensym(:wvals), binding.load)
+function TrailingIndexed(parent, trailing, access::WeightAccess)
+    TrailingIndexed(parent, trailing, access.names, access.cols, gensym(:wvals))
 end
 
 struct TransferScope
@@ -104,20 +108,6 @@ function push_unique!(xs::Vector, x)
     xs
 end
 
-# `@G2P2G` fuses both loops into one pass, so the window is bound once and shared:
-# whichever half holds `load=true` emits the binding statement.
-struct SupportWindowBinding
-    window::Symbol
-    load::Bool
-end
-SupportWindowBinding() = SupportWindowBinding(gensym(:window), true)
-SupportWindowBinding(binding::SupportWindowBinding; load::Bool) = SupportWindowBinding(binding.window, load)
-
-function support_window_exprs(binding::SupportWindowBinding, weights, particles, p, grid)
-    binding.load || return ()
-    (:($(binding.window) = Tesserae.transfer_support_window($weights, $particles, $p, Tesserae.get_mesh($grid))),)
-end
-
 # ---- macro front end ----
 
 # The kernels are handed a grid narrowed to the referenced properties: every extra
@@ -158,6 +148,63 @@ function check_unique_sum_targets(macroname, equations)
         eq.lhs in seen && error("$macroname: duplicate `@∑` target `$(eq.lhs)`; combine the sums into one equation")
         push!(seen, eq.lhs)
     end
+end
+
+# ---- semantic stages shared by executable and reference lowerings ----
+
+Base.@kwdef struct TransferStages
+    g2p_sum::Vector{TransferEquation} = TransferEquation[]
+    p2g_sum::Vector{TransferEquation} = TransferEquation[]
+    g2p_nosum::Vector{TransferEquation} = TransferEquation[]
+    p2g_nosum::Vector{TransferEquation} = TransferEquation[]
+end
+
+function split_g2p2g_stages(program::TransferProgram, i, p)
+    equations_g2p_sum = TransferEquation[]
+    equations_p2g_sum = TransferEquation[]
+    equations_g2p_nosum = TransferEquation[]
+    equations_p2g_nosum = TransferEquation[]
+    precedence = 1
+    for eq in program.equations
+        if is_sum(eq)
+            @capture(eq.lhs, A_[index_]) || error("@G2P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
+            if index == p
+                precedence == 1 || error("@G2P2G: particle `@∑` equations must come before particle updates and grid-scattering equations")
+                push!(equations_g2p_sum, eq)
+            elseif index == i
+                precedence ≤ 3 || error("@G2P2G: grid `@∑` equations must come before grid-only equations")
+                push!(equations_p2g_sum, eq)
+                precedence = 3
+            else
+                error("@G2P2G: wrong index in LHS equation, $(eq.lhs)")
+            end
+        else
+            if precedence in (1, 2)
+                push!(equations_g2p_nosum, eq)
+                precedence = 2
+            elseif precedence in (3, 4)
+                push!(equations_p2g_nosum, eq)
+                precedence = 4
+            else
+                error("unreachable")
+            end
+        end
+    end
+    TransferStages(equations_g2p_sum, equations_p2g_sum, equations_g2p_nosum, equations_p2g_nosum)
+end
+
+function transfer_stages(kind::Symbol, program::TransferProgram, i, p, ip)
+    stages = if kind == :G2P2G
+        split_g2p2g_stages(program, i, p)
+    else
+        sums, nosums = split_sum_equations(program, "@$kind")
+        kind == :P2G ? TransferStages(; p2g_sum=sums, p2g_nosum=nosums) :
+                       TransferStages(; g2p_sum=sums, g2p_nosum=nosums)
+    end
+    check_nosum_refs("@$kind", stages.g2p_nosum, p, i, ip)
+    check_nosum_refs("@$kind", stages.p2g_nosum, i, p, ip)
+    check_unique_sum_targets("@$kind", stages.g2p_sum)
+    stages
 end
 
 # Keep the mesh so the result stays a grid, and at least one array component so an
@@ -279,10 +326,6 @@ function resolve_refs(expr, scope::TransferScope)
                 if scope.replacements === nothing
                     return :($(parent.parent).$x[$i, $(parent.trailing)])
                 end
-                # `push_unique!` emits each binding once, so the referenced
-                # properties share a single basis evaluation.
-                parent.loadcols && push_unique!(scope.replacements[parent.trailing],
-                             weight_columns_binding_expr(parent))
                 push_unique!(scope.replacements[i],
                              :($(parent.vals) = Tesserae.weight_node_values($(parent.parent), $(parent.cols), Val($(parent.names)), $i)))
                 return :($(parent.vals).$x)
@@ -297,9 +340,6 @@ function resolve_refs(expr, scope::TransferScope)
         ex
     end
 end
-
-weight_columns_binding_expr(ti::TrailingIndexed) =
-    :($(ti.cols) = Tesserae.weight_columns($(ti.parent), Val($(ti.names)), $(ti.particles), $(ti.trailing), Tesserae.get_mesh($(ti.grid)), $(ti.window)))
 
 function remove_indexing(expr)
     MacroTools.postwalk(expr) do ex

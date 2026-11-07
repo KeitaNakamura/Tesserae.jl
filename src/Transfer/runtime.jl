@@ -2,44 +2,68 @@
 #  Transfer runtime
 # -----------------------------------------------------------------------------
 
+struct StoredEvaluation end
+struct DeferredEvaluation{F}
+    filter::F
+end
+
+# A transfer carries resolved evaluation data, never the owner's mutable policy.
+# The original value arrays also describe custom properties and conversion types;
+# switching evaluation does not rebuild their storage or change their meaning.
+struct TransferWeights{B, V <: NamedTuple, I, O <: Order, E}
+    basis::B
+    vals::V
+    indices::I
+    order::O
+    evaluation::E
+end
+TransferWeights(weights::BasisWeightArray, evaluation) =
+    TransferWeights(basis(weights), getfield(weights, :vals), supportnodes_storage(weights), derivative_order(weights), evaluation)
+
+@inline basis(weights::TransferWeights) = weights.basis
+@inline derivative_order(weights::TransferWeights) = weights.order
+@inline supportnodes_storage(weights::TransferWeights) = weights.indices
+@inline deferred_filter(weights::TransferWeights{<:Any,<:Any,<:Any,<:Any,<:DeferredEvaluation}) = weights.evaluation.filter
+
+@inline function transfer_support_window(weights::TransferWeights, particles, p, mesh)
+    @_propagate_inbounds_meta
+    _transfer_support_window(weights.evaluation, weights, particles, p, mesh)
+end
+@inline _transfer_support_window(::StoredEvaluation, weights, particles, p, mesh) =
+    (@_propagate_inbounds_meta; supportnodes_storage(weights)[p])
+@inline _transfer_support_window(::DeferredEvaluation, weights, particles, p, mesh) =
+    (@_propagate_inbounds_meta; supportnodes(basis(weights), LazyRows(particles)[p], mesh))
+
 # `BasisWeightArray` is itself an `AbstractArray{<: BasisWeight}`, so its methods
 # must be the more specific ones.
 @inline function transfer_support_window(weights::BasisWeightArray, particles, p, mesh)
     @_propagate_inbounds_meta
-    _transfer_support_window(Val(storageless(weights)), weights, particles, p, mesh)
+    evaluation = storageless(weights) ? DeferredEvaluation(nothing) : StoredEvaluation()
+    _transfer_support_window(evaluation, weights, particles, p, mesh)
 end
 @inline function transfer_support_window(weights::AbstractArray{<: BasisWeight}, particles, p, mesh)
     @_propagate_inbounds_meta
     supportnodes(weights[p])
 end
-@inline function _transfer_support_window(::Val{false}, weights, particles, p, mesh)
-    @_propagate_inbounds_meta
-    supportnodes_storage(weights)[p]
-end
-# Deferred weights store nothing, not even which nodes they cover, so the window
-# is derived from the position the same way `update!` would have.
-@inline function _transfer_support_window(::Val{true}, weights, particles, p, mesh)
-    @_propagate_inbounds_meta
-    supportnodes(basis(weights), LazyRow(particles, p), mesh)
-end
 
-# The per-step choice of `update!(...; deferred=true)` is applied once per
-# transfer, on the host, before the launch: both arms are fully specialized, and
-# for weights that cannot defer the second never exists.
-@inline function select_weights(f::F, weights::W) where {F, W}
-    if can_defer(W)
-        isdeferred(weights) ? f(as_deferred(weights)) : f(weights)
+# Construction and updates validate deferral support. The host selects the
+# resolved mode once per transfer so both arms are fully specialized.
+@inline function select_weights(f::F, weights::BasisWeightArray) where {F}
+    if isdeferred(weights)
+        f(TransferWeights(weights, DeferredEvaluation(deferred_filter(weights))))
     else
-        f(weights)
+        f(TransferWeights(weights, StoredEvaluation()))
     end
 end
+@inline select_weights(f::F, weights::BasisWeightView) where {F} = select_weights(f, basis_weight_storage(weights))
+@inline select_weights(f::F, weights) where {F} = f(weights)
 
 # `p` may be a linear index into a multi-dimensional particle space (FEM weights
 # are quadrature point x cell), so the window storage supplies its shape.
-@inline function weight_prop_view(weights::BasisWeightArray, ::Val{name}, p) where {name}
+@inline function weight_prop_view(weights::Union{BasisWeightArray,TransferWeights}, ::Val{name}, p) where {name}
     @_propagate_inbounds_meta
     storage = supportnodes_storage(weights)
-    A = getproperty(weights, name)
+    A = getproperty(getfield(weights, :vals), name)
     view(A, nfill(:, Val(ndims(A) - ndims(storage)))..., particle_cartesian(storage, p))
 end
 @inline function weight_prop_view(weights::AbstractArray{<: BasisWeight}, ::Val{name}, p) where {name}
@@ -82,31 +106,24 @@ end
 # Derivative order of a deferred property, `nothing` when it is stored, `missing`
 # when absent. A plain function on types: a generated function may not call another.
 function deferred_order(W::Type, name::Symbol)
-    W <: BasisWeightArray || return nothing
+    W <: Union{BasisWeightArray,TransferWeights} || return nothing
     Vals = fieldtype(W, :vals)
     njets = _order_value(fieldtype(W, :order)) + 1
     pos = findfirst(==(name), fieldnames(Vals))
     pos === nothing && return missing
-    pos <= njets && fieldtype(Vals, pos) <: DeferredBasisValues ? pos - 1 : nothing
-end
-
-function split_weight_properties(W::Type, names)
-    stored = Symbol[]; deferred = Symbol[]; orders = Int[]
-    for n in names
-        k = deferred_order(W, n)
-        k === missing && return nothing
-        k === nothing ? push!(stored, n) : (push!(deferred, n); push!(orders, k))
-    end
-    Tuple(stored), Tuple(deferred), orders
+    deferred = W <: TransferWeights ? fieldtype(W, :evaluation) <: DeferredEvaluation :
+                                     fieldtype(Vals, pos) <: DeferredBasisValues
+    pos <= njets && deferred ? pos - 1 : nothing
 end
 
 @generated function weight_columns(weights, ::Val{names}, particles, p, mesh, window) where {names}
-    plan = split_weight_properties(weights, names)
-    plan === nothing && return :(error("no such weight property among ", $(QuoteNode(names))))
-    stored, _, orders = plan
+    orders = map(n -> deferred_order(weights, n), names)
+    any(ismissing, orders) && return :(error("no such weight property among ", $(QuoteNode(names))))
+    stored = Tuple(n for (n, k) in zip(names, orders) if k === nothing)
+    order = maximum(filter(!isnothing, orders); init=-1)
     views = [:(weight_prop_view(weights, Val($(QuoteNode(n))), p)) for n in stored]
-    deferred = isempty(orders) ? :nothing :
-        :(DeferredWeights{$(maximum(orders))}(basis(weights), deferred_particle_row(particles, p), mesh, window, deferred_filter(weights)))
+    deferred = order < 0 ? :nothing :
+        :(DeferredWeights{$order}(basis(weights), deferred_particle_row(particles, p), mesh, window, deferred_filter(weights)))
     quote
         @_propagate_inbounds_meta
         (stored = NamedTuple{$stored}(($(views...),)), deferred = $deferred)
@@ -114,14 +131,17 @@ end
 end
 
 @generated function weight_node_values(weights, cols, ::Val{names}, ip) where {names}
-    plan = split_weight_properties(weights, names)
-    plan === nothing && return :(error("no such weight property among ", $(QuoteNode(names))))
-    _, _, orders = plan
-    exprs = map(names) do n
-        k = deferred_order(weights, n)
-        k === nothing ? :(cols.stored.$n[ip]) : :(jet[$(k + 1)])
+    orders = map(n -> deferred_order(weights, n), names)
+    any(ismissing, orders) && return :(error("no such weight property among ", $(QuoteNode(names))))
+    exprs = map(names, orders) do n, k
+        if k === nothing
+            :(cols.stored.$n[ip])
+        else
+            T = eltype(fieldtype(fieldtype(weights, :vals), n))
+            :(convert($T, jet[$(k + 1)]))
+        end
     end
-    jetexpr = isempty(orders) ? :() : :(jet = deferred_jet(cols.deferred, ip))
+    jetexpr = all(isnothing, orders) ? :() : :(jet = deferred_jet(cols.deferred, ip))
     quote
         @_propagate_inbounds_meta
         $jetexpr
@@ -197,7 +217,7 @@ check_partition_for_transfer(macroname, ::CPUDevice, grid, particles, weights, :
 check_partition_for_transfer(macroname, ::GPUDevice, grid, particles, weights, ::Nothing) = nothing
 function check_partition_for_transfer(macroname, ::GPUDevice, grid, particles, weights, partition::Partition{<: GPUBlockStrategy})
     macroname == "@P2G" || error("$macroname: the block-scheduled GPU transfer only supports @P2G so far. Use partitionless $macroname on GPU.")
-    weights isa BasisWeightArray || error("$macroname: the block-scheduled GPU transfer requires weights from `generate_basis_weights`")
+    weights isa Union{BasisWeightArray,BasisWeightView} || error("$macroname: the block-scheduled GPU transfer requires weights from `generate_basis_weights`")
     check_partition_for_transfer(macroname, grid, particles, weights, strategy(partition))
 end
 function check_partition_for_transfer(macroname, ::GPUDevice, grid, particles, weights, partition)
@@ -231,3 +251,5 @@ end
 # already knows its basis.
 transfer_basis(weights::AbstractArray) = basis(first(weights))
 transfer_basis(weights::BasisWeightArray) = basis(weights)
+
+transfer_basis(weights::BasisWeightView) = basis(weights)

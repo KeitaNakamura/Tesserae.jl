@@ -1,86 +1,4 @@
-# -----------------------------------------------------------------------------
-#  Basis weights
-# -----------------------------------------------------------------------------
-
-# ---- basis ----
-
-"""
-    Basis
-
-Abstract type for basis functions used to compute [`BasisWeight`](@ref)s.
-"""
-abstract type Basis end
-
-"""
-    Kernel <: Basis
-
-Abstract subtype for compact-support kernels.
-"""
-abstract type Kernel <: Basis end
-
-"""
-    nodal_basis_jet(order, basis, pt, mesh, i)
-
-Return the value and spatial derivatives up to `order` of the `i`th basis
-function evaluated at `pt`.
-"""
-function nodal_basis_jet end
-
-"""
-    jet(order, f, x, args...)
-
-Return the value and derivatives up to `order` in `f`'s natural local or
-reference coordinate system.
-"""
-@inline function jet(::Order{k}, f, x, args...) where {k}
-    reverse(∂{k}(y -> value(f, y, args...), x, :all))
-end
-
-"""
-    axis_jet_args(kernel, pt, mesh, i)
-
-Extra arguments for the 1-D `jet` evaluation, as one tuple per Cartesian axis.
-Kernels whose 1-D value depends on the local coordinate alone need none.
-"""
-@inline axis_jet_args(::Kernel, pt, mesh::CartesianMesh{dim}, i) where {dim} = nfill((), Val(dim))
-
-# `@generated` is required because `Order(a-1)` must see `a` as a literal to
-# become a type parameter, which `ntuple(f, Val(N))` cannot supply.
-@generated function separable_nodal_basis_jet(order::Order{k}, kernel, pt, mesh::CartesianMesh{dim}, i) where {dim, k}
-    quote
-        @_inline_meta
-        x = getx(pt)
-        h⁻¹ = spacing_inv(mesh)
-        ξ = (x - mesh[i]) * h⁻¹
-        args = axis_jet_args(kernel, pt, mesh, i) # must precede the `@ntuple` whose loop variable shadows `i`
-        vals1d = @ntuple $dim d -> jet(order, kernel, ξ[d], args[d]...)
-        vals = @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
-        @ntuple $(k+1) i -> vals[i]*h⁻¹^(i-1)
-    end
-end
-
-#=
-Standard Cartesian basis extension:
-* Tesserae.support_width(basis)
-* Tesserae.supportnodes(basis, pt, mesh)
-* Tesserae.update_basis_values!(bw::BasisWeight, basis, pt, mesh)
-
-A basis whose support is not a fixed Cartesian block overrides
-`allocate_basis_values`, or defines `update_basis_weight!` for its own
-`BasisWeight` as `CPDI` does, updating `supportnodes(bw)` and
-`nodal_basis_values(bw, order)` with matching local indices. It then forfeits
-every feature needing a fixed support width: `Partition` block sizing in
-`@P2G`, and the sparsity radius used by
-`create_sparse_matrix`/`create_block_sparse_matrix`.
-=#
-
-# Reported here rather than as a bare `MethodError`, `support_width` also being
-# read outside `Basis/` by the block-size check and the sparsity radius.
-function support_width(basis::Basis)
-    error("$(nameof(typeof(basis))) does not define `Tesserae.support_width`. It sizes the default `BasisWeight` storage, and is also needed by `Partition` in `@P2G` and by `create_sparse_matrix`/`create_block_sparse_matrix`. Define `Tesserae.support_width` for it, or, if its support is not a fixed Cartesian block, override `Tesserae.allocate_basis_values` as `CPDI` does.")
-end
-
-initial_supportnodes(::Basis, ::CartesianMesh{dim}) where {dim} = EmptyCartesianIndices(Val(dim))
+# Basis-weight storage and updates
 
 function basis_property_type(::Type{T}, name) where {T}
     NamedTuple{(basis_value_name(Order(0), name),), Tuple{T}}
@@ -93,17 +11,6 @@ function allocate_static_basis_values(::Type{Prop}, basis::Basis, ::Val{dim}; kw
     A = MArray{Tuple{nfill(support_width(basis), Val(dim))...}}
     _allocate_basis_values(A, Prop, Val(dim); kwargs...)
 end
-function check_cell_basis_derivative(::Order{k}) where {k}
-    0 ≤ k ≤ 1 || throw(ArgumentError("FEM and IGA basis weights support derivative=Order(0) or Order(1) only, got Order($k)"))
-    nothing
-end
-
-function allocate_static_basis_values(::Type{Prop}, shape::Shape, ::Val{dim}; derivative::Order) where {Prop <: NamedTuple, dim}
-    check_cell_basis_derivative(derivative)
-    A = MArray{Tuple{nlocalnodes(shape)}}
-    _allocate_basis_values(A, Prop, Val(dim); derivative)
-end
-
 function _allocate_basis_values(::Type{A}, ::Type{Prop}, ::Val{dim}; derivative::Order) where {A, Prop <: NamedTuple, dim}
     map(v -> fill(v, A), basis_value_zeros(Prop, Val(dim), derivative))
 end
@@ -125,11 +32,6 @@ end
     end
 end
 
-# For code generators only, where `dim` and `k` are literals: `zero_basis_value`
-# below spells the type out instead, because routing it through a call loses inference.
-jet_value_type(::Order{1}, dim) = Vec{dim}
-jet_value_type(::Order{k}, dim) where {k} = Tensor{Tuple{@Symmetry{fill(dim, k)...}}}
-
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{0}) where {dim, T} = zero(T)
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{1}) where {dim, T} = zero(Vec{dim, T})
 zero_basis_value(::Type{Vec{dim, T}}, ::Order{k}) where {dim, T, k} = zero(Tensor{Tuple{@Symmetry{ntuple(i->dim, k)...}}, T})
@@ -139,28 +41,6 @@ for (k, nabla) in enumerate((:∇, :∇², :∇³, :∇⁴, :∇⁵, :∇⁶, :�
         basis_value_name(::Order{$k}, ::Val{name}) where {name} = Symbol($(QuoteNode(nabla)), name)
     end
 end
-
-@inline function prod_each_dimension(::Order{0}, vals::Vararg{Tuple, dim}) where {dim}
-    tuple_otimes(ntuple(d -> vals[d][1], Val(dim)))
-end
-@generated function prod_each_dimension(::Order{k}, vals::Vararg{Tuple, dim}) where {k, dim}
-    TT = jet_value_type(Order(k), dim)
-    v = Array{Expr}(undef, size(TT))
-    for I in CartesianIndices(v)
-        ex = Expr(:tuple)
-        for i in 1:dim
-            j = count(==(i), Tuple(I)) + 1
-            push!(ex.args, :(vals[$i][$j]))
-        end
-        v[I] = ex
-    end
-    quote
-        @_inline_meta
-        v = $(Expr(:tuple, v[Tensorial.independent_to_component_map(TT)]...))
-        map($TT, map(tuple_otimes, v)...)
-    end
-end
-@inline tuple_otimes(x::Tuple) = SArray(⊗(map(Vec, x)...))
 
 # ---- BasisWeight ----
 
@@ -242,9 +122,9 @@ derivatives of the requested `order`.
 This array may be larger than `supportnodes(weight)`. After an update, only
 entries corresponding to `eachindex(supportnodes(weight))` are valid.
 """
-@generated function nodal_basis_values(bw::BasisWeight{B, Vals, Indices, Order{n}}, ::Order{k}) where {B, Vals, Indices, n, k}
-    k ≤ n || return :(throw(ArgumentError("basis weight stores derivatives through Order($n), got Order($k)")))
-    :(getfield(bw, :vals)[$(k+1)])
+@inline function nodal_basis_values(bw::BasisWeight{B, Vals, Indices, Order{n}}, ::Order{k}) where {B, Vals, Indices, n, k}
+    k ≤ n || throw(ArgumentError("basis weight stores derivatives through Order($n), got Order($k)"))
+    getfield(bw, :vals)[k+1]
 end
 
 @inline scalartype(bw::BasisWeight) = eltype(nodal_basis_values(bw, Order(0)))
@@ -256,7 +136,6 @@ end
 
 Return the basis associated with a mesh or basis-weight storage.
 """
-@inline basis(mesh::FEMesh) = cellshape(mesh)
 @inline basis(bw::BasisWeight) = getfield(bw, :basis)
 
 """
@@ -316,28 +195,6 @@ end
 
 # ---- BasisWeightArray ----
 
-# A deferred `BasisWeightArray` keeps the shape and naming of a stored one --
-# property order still gives the derivative order, element types still infer --
-# while owning no memory. Reading one is a bug: the transfer lowering resolves
-# deferred properties by evaluating the basis instead.
-struct DeferredBasisValues{T, N} <: AbstractArray{T, N}
-    dims::Dims{N}
-end
-DeferredBasisValues{T}(dims::Dims{N}) where {T, N} = DeferredBasisValues{T, N}(dims)
-Base.size(A::DeferredBasisValues) = A.dims
-Base.IndexStyle(::Type{<: DeferredBasisValues}) = IndexLinear()
-Base.getindex(::DeferredBasisValues, ::Integer) =
-    error("this basis value is not stored: the weights were built with `deferred=true`, so it is evaluated inside the transfer instead")
-Base.similar(A::DeferredBasisValues{T}, ::Type{S}, dims::Dims) where {T, S} = DeferredBasisValues{S}(dims)
-
-isdeferred(::DeferredBasisValues) = true
-isdeferred(::AbstractArray) = false
-
-# Owning no memory, a placeholder reports no backend and lets the surrounding
-# arrays decide where the weights live.
-KernelAbstractions.get_backend(::DeferredBasisValues) = nothing
-Adapt.adapt_structure(to, A::DeferredBasisValues) = A
-
 """
     BasisWeightArray
 
@@ -359,64 +216,13 @@ function BasisWeightArray(basis::B, vals::Vals, indices::Indices, order::O, defe
     BasisWeightArray{B, Vals, Indices, ElType, N, O, F}(basis, vals, indices, order, deferring)
 end
 
-# ---- deferral ----
-
-# A type-level answer, so the branch in `select_weights` folds away entirely for
-# weights that cannot defer.
-can_defer(::Type{<: BasisWeightArray{B}}) where {B} = can_defer_basis(B)
-can_defer(::Type) = false
-
-deferring_flag(basis) = can_defer_basis(typeof(basis)) ? DeferralState() : nothing
-
-# Which of the two reasons applies: the basis cannot be evaluated in a transfer,
-# or the container has nowhere to record the choice.
-@noinline _refuse_deferral(weights::BasisWeightArray) = check_deferred_basis(basis(weights))
-@noinline _refuse_deferral(::AbstractArray{<: BasisWeight}) =
-    error("update!: `deferred=true` needs a `BasisWeightArray`; a plain array of `BasisWeight`s has nowhere to record the choice, so a transfer would go on reading stored values.")
-
-# The filter is what a basis correcting near boundaries needs and a transfer has
-# no other way to learn. It stays untyped here and is read only on the host, in
-# `select_weights`, which gives it a concrete type before anything reaches a kernel.
-mutable struct DeferralState
-    on::Bool
-    filter::Any
-end
-DeferralState() = DeferralState(false, nothing)
-
-# `update!` accepts any array of `BasisWeight`s; only `BasisWeightArray` has a
-# slot, and the rest must reach the deferrability error rather than a FieldError.
-@inline deferring_state(weights::BasisWeightArray) = getfield(weights, :deferring)
-@inline deferring_state(::AbstractArray{<: BasisWeight}) = nothing
-
-@inline _deferring(s::DeferralState) = s.on
-@inline _deferring(::Nothing) = false
-@inline _set_deferring!(s::DeferralState, on::Bool) = (s.on = on)
-@inline _set_deferring!(::Nothing, ::Bool) = false
-@inline _deferred_filter(s::DeferralState) = s.filter
-@inline _deferred_filter(::Nothing) = nothing
-@inline _deferred_filter(filter) = filter
-# `Trues` means "every node", which the deferred path spells as `nothing` so a
-# basis that ignores the filter carries nothing at all.
-@inline _record_filter!(s::DeferralState, filter) = (s.filter = filter isa Trues ? nothing : filter)
-@inline _record_filter!(::Nothing, filter) = nothing
-
-# Never allocated, as opposed to allocated but currently bypassed. Only `update!`
-# needs to tell those apart: it refills the second and has nothing to do for the first.
-@inline storageless(weights::BasisWeightArray) = any(isdeferred, values(getfield(weights, :vals)))
-@inline storageless(::AbstractArray{<: BasisWeight}) = false
-
-# Weights carrying no flag have nothing to switch: they always defer or never can,
-# and `update!` rejects `deferred=true` on the latter before it gets here.
-set_deferring!(weights::BasisWeightArray, on::Bool) = (_set_deferring!(deferring_state(weights), on); weights)
-set_deferring!(weights::AbstractArray{<: BasisWeight}, ::Bool) = weights
-
 # `deferred` travels as a `Val` so the value arrays keep concrete types: a plain
 # `Bool` widens the storage type to a union and degrades every downstream inference.
 function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims; derivative::Order=Order(1), deferred=Val(false)) where {Prop <: NamedTuple, dim}
     _generate_basis_weights(Prop, basis, mesh, dims, derivative, asdeferredval(deferred))
 end
 function _generate_basis_weights(::Type{Prop}, basis, mesh::AbstractMesh{dim}, dims::Dims, derivative::Order, deferred::Val{L}) where {Prop <: NamedTuple, dim, L}
-    L && check_deferred_basis(basis)
+    L && check_deferred_support(basis)
     template = allocate_basis_values(Prop, basis, Val(dim); derivative)
     njets = derivative_count(derivative)
     # Only the first `njets` properties are re-evaluated by a deferred array;
@@ -433,64 +239,7 @@ function _generate_basis_weights(::Type{T}, basis, mesh::AbstractMesh, dims::Dim
     _generate_basis_weights(basis_property_type(T, name), basis, mesh, dims, derivative, asdeferredval(deferred))
 end
 
-@inline asdeferredval(::Val{L}) where {L} = Val(L::Bool)
-@inline asdeferredval(deferred::Bool) = Val(deferred)
-
-@inline derivative_count(::Order{k}) where {k} = k + 1
-
-# A `Kernel` needs no per-particle state, its value at a node depending on nothing
-# but that node. Bases fitting their values over the whole support do the fitting
-# here rather than in `update!`.
-@inline deferred_particle_state(::Order, basis, pt, mesh, window, filter) = nothing
-@inline function deferred_node_jet(order::Order, basis, ::Nothing, pt, mesh, window, filter, ip)
-    @_propagate_inbounds_meta
-    nodal_basis_jet(order, basis, pt, mesh, window[ip])
-end
-
-# FEM and IGA shapes cannot be evaluated in a transfer: they also derive cell
-# geometry that the equations read back from storage. One answer per basis, so
-# none can be half-enabled.
-can_defer_basis(::Type{<: Kernel}) = true
-can_defer_basis(::Type) = false
-
-check_deferred_basis(basis) =
-    can_defer_basis(typeof(basis)) ? nothing :
-    error("basis values can only be deferred for a basis a transfer can evaluate on its own, which $(nameof(typeof(basis))) is not: it also derives cell geometry that the equations read back from storage.")
-
 _generate_supportnodes(basis, mesh::CartesianMesh, dims) = map(_ -> initial_supportnodes(basis, mesh), CartesianIndices(dims))
-
-# FEM/IGA: every quadrature point of a cell shares that cell's support.
-mutable struct CellSupportMatrix{T, V <: AbstractVector{T}} <: AbstractMatrix{T}
-    const dims::Dims{2}
-    cellsupports::V
-end
-
-function CellSupportMatrix(supports::V, nq::Int, ncells::Int) where {T, V <: AbstractVector{T}}
-    ncells == length(supports) || throw(DimensionMismatch("the second basis-weight dimension must equal the number of cells"))
-    CellSupportMatrix{T, V}((nq, ncells), supports)
-end
-
-Base.size(A::CellSupportMatrix) = A.dims
-Base.IndexStyle(::Type{<: CellSupportMatrix}) = IndexCartesian()
-cellsupports(A::CellSupportMatrix) = getfield(A, :cellsupports)
-@inline function Base.getindex(A::CellSupportMatrix, q::Int, cell::Int)
-    @boundscheck checkbounds(A, q, cell)
-    @inbounds cellsupports(A)[cell]
-end
-
-function set_cellsupports!(A::CellSupportMatrix{T, V}, supports::V) where {T, V}
-    length(supports) == size(A, 2) || throw(DimensionMismatch("the number of cells must match the second basis-weight dimension"))
-    setfield!(A, :cellsupports, supports)
-    A
-end
-
-_generate_supportnodes(::Shape, mesh::FEMesh, dims::Dims{2}) = CellSupportMatrix(cellsupports(mesh), dims...)
-_generate_supportnodes(::Shape, ::FEMesh, ::Dims) = throw(DimensionMismatch("FEM basis weights must have dimensions (quadrature points, cells)"))
-
-function _generate_cell_supportnodes(mesh, dims::Dims{2})
-    dims[2] == ncells(mesh) || throw(DimensionMismatch("the second basis-weight dimension must equal the number of cells"))
-    CellSupportMatrix(map(cell -> supportnodes(mesh, cell), cells(mesh)), dims...)
-end
 
 _todims(x::Tuple{Vararg{Int}}) = x
 _todims(x::Vararg{Int}) = x
@@ -522,17 +271,65 @@ function generate_basis_weights end
 generate_basis_weights(::Type{T}, basis::Basis, mesh::CartesianMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, basis, mesh, _todims(dims...); kwargs...)
 generate_basis_weights(basis::Basis, mesh::CartesianMesh, dims...; kwargs...) = _generate_basis_weights(Float64, basis, mesh, _todims(dims...); kwargs...)
 
-generate_basis_weights(::Type{T}, mesh::FEMesh, dims...; kwargs...) where {T} = _generate_basis_weights(T, basis(mesh), mesh, _todims(dims...); kwargs...)
-generate_basis_weights(mesh::FEMesh, dims...; kwargs...) = _generate_basis_weights(Float64, basis(mesh), mesh, _todims(dims...); kwargs...)
-
 Base.size(x::BasisWeightArray) = size(getfield(x, :indices))
 
-@inline function Base.view(x::BasisWeightArray, I...)
-    indices = view(getfield(x, :indices), I...)
-    vals = map(vals -> viewcol(vals, Val(ndims(x)), I...), getfield(x, :vals))
-    # The slot is shared, not copied: a view taken once outside the time loop
-    # then follows the parent's per-step `update!(...; deferred=true/false)`.
-    BasisWeightArray(getfield(x, :basis), vals, indices, derivative_order(x), getfield(x, :deferring))
+# Native views keep their parent's element type and row handles. The SoA
+# projection is prepared only when an update or transfer needs bulk storage.
+const BasisWeightView = Adapt.WrappedSubArray{<:BasisWeight,<:Any,<:BasisWeightArray}
+
+@inline function Base.view(x::Union{BasisWeightArray,BasisWeightView}, I...)
+    J = basis_weight_indices(x, I)
+    invoke(view, Tuple{AbstractArray,Vararg{Any}}, x, J...)
+end
+
+basis_weight_storage(x::BasisWeightArray) = x
+function basis_weight_storage(x::SubArray)
+    p = basis_weight_storage(parent(x))
+    I = parentindices(x)
+    # The native view has already checked these particle indices.
+    vals = map(a -> (@inbounds viewcol(a, Val(ndims(p)), I...)), getfield(p, :vals))
+    indices = @inbounds view(supportnodes_storage(p), I...)
+    BasisWeightArray(basis(p), vals, indices,
+                     derivative_order(p), deferring_state(p))
+end
+function basis_weight_storage(x::Base.ReshapedArray)
+    p = basis_weight_storage(parent(x))
+    vals = map(getfield(p, :vals)) do a
+        leading = ntuple(i -> size(a,i), Val(ndims(a)-ndims(p)))
+        reshape(a, (leading..., size(x)...))
+    end
+    BasisWeightArray(basis(p), vals, reshape(supportnodes_storage(p), size(x)),
+                     derivative_order(p), deferring_state(p))
+end
+
+basis_weight_parent(x::BasisWeightArray) = x
+basis_weight_parent(x::Union{SubArray,Base.ReshapedArray}) = basis_weight_parent(parent(x))
+Base.propertynames(x::BasisWeightView) = propertynames(basis_weight_parent(x))
+@inline function Base.getproperty(x::BasisWeightView, name::Symbol)
+    hasfield(typeof(x), name) && return getfield(x, name)
+    getproperty(basis_weight_storage(x), name)
+end
+@inline basis(x::BasisWeightView) = basis(basis_weight_parent(x))
+@inline derivative_order(x::BasisWeightView) = derivative_order(basis_weight_parent(x))
+@inline supportnodes_storage(x::BasisWeightView) = supportnodes_storage(basis_weight_storage(x))
+
+@inline function basis_weight_indices(x::Union{BasisWeightArray,BasisWeightView}, I)
+    @_propagate_inbounds_meta
+    # Validate mask axes before a backend turns masks into integer positions.
+    @boundscheck if any(i -> i isa AbstractArray{Bool}, I)
+        shapes = map(I) do i
+            if i isa AbstractArray{Bool}
+                axes(i) == map(Base.OneTo, size(i)) || throw(BoundsError(x, I))
+                # Only axes matter here. GPU index reducers can otherwise
+                # interpret Boolean values as the integer indices 0 and 1.
+                Trues(size(i))
+            else
+                i
+            end
+        end
+        checkbounds(x, shapes...)
+    end
+    Base.to_indices(supportnodes_storage(x), I)
 end
 
 Base.propertynames(x::BasisWeightArray) = propertynames(getfield(x, :vals))
@@ -544,9 +341,10 @@ end
 @inline derivative_order(x::BasisWeightArray) = getfield(x, :order)
 @inline supportnodes_storage(x::BasisWeightArray) = getfield(x, :indices)
 
-@inline function Base.getindex(x::BasisWeightArray{<: Any, <: Any, <: Any, <: Any, N}, I::Vararg{Integer, N}) where {N}
-    @boundscheck checkbounds(x, I...)
-    @inbounds _getindex(getfield(x, :basis), getfield(x, :vals), getfield(x, :indices), derivative_order(x), I...)
+@inline function Base.getindex(x::BasisWeightArray{B,Vals,Indices,ElType,N}, I::Vararg{Integer,N}) where {B,Vals,Indices,ElType,N}
+    J = map(Base.to_index, I)
+    @boundscheck checkbounds(x, J...)
+    @inbounds _getindex(basis(x), getfield(x, :vals), supportnodes_storage(x), derivative_order(x), J...)
 end
 @generated function _getindex(basis, vals::NamedTuple{names}, indices::AbstractArray{<: Any, N}, order::Order, I::Vararg{Integer, N}) where {names, N}
     exps = [:(viewcol(vals.$name, I...)) for name in names]
@@ -575,15 +373,6 @@ end
     @boundscheck checkbounds(A, colons..., I...)
     @inbounds view(A, colons..., I...)
 end
-# A placeholder must not become a `SubArray`: `deferred_order` looks for
-# `DeferredBasisValues` in the field type, so wrapping it would make a view of
-# deferred weights read storage that was never filled.
-@inline function viewcol(A::DeferredBasisValues{T}, ::Val{N}, I...) where {T, N}
-    colons = nfill(:, Val(ndims(A)-N))
-    @boundscheck checkbounds(A, colons..., I...)
-    DeferredBasisValues{T}(map(length, Base.index_shape(Base.to_indices(A, (colons..., I...))...)))
-end
-
 function _show_basis_weight_array(io::IO, weights::BasisWeightArray)
     print(io, Base.dims2string(size(weights)), " ", ndims(weights)==1 ? "BasisWeightVector" : "BasisWeightArray", ": \n")
     print(io, "  Basis: ", basis(weights), "\n")
@@ -658,39 +447,10 @@ end
     update_basis_values!(bw, b, pt, mesh, filter)
 end
 
-"""
-    Tesserae.isdeferred(weights)
-
-Whether transfers evaluate `weights`' basis values instead of reading stored
-ones. True both for weights built with `generate_basis_weights(...; deferred=true)`,
-which store nothing, and for stored weights switched over with
-`update!(..., deferred=true)`.
-"""
-isdeferred(weights::BasisWeightArray) = storageless(weights) || _deferring(deferring_state(weights))
-@inline deferred_filter(weights::BasisWeightArray) = _deferred_filter(deferring_state(weights))
-
-# A deferred twin sharing everything with `weights` and owning no storage, so
-# `select_weights` can build one per transfer for free. Internal: this is how
-# `update!(...; deferred=true)` reaches the type.
-function as_deferred(weights::BasisWeightArray, filter = deferred_filter(weights))
-    b = basis(weights)
-    order = derivative_order(weights)
-    njets = derivative_count(order)
-    storageless(weights) && return BasisWeightArray(b, getfield(weights, :vals), getfield(weights, :indices), order, filter)
-    stored = getfield(weights, :vals)
-    # Mirrors `_generate_basis_weights`: only the first `njets` properties are
-    # re-evaluated, the caller-owned storage after them being shared as-is.
-    vals = NamedTuple{keys(stored)}(ntuple(Val(length(stored))) do k
-        v = stored[k]
-        k <= njets ? DeferredBasisValues{eltype(v)}(size(v)) : v
-    end)
-    BasisWeightArray(b, vals, getfield(weights, :indices), order, filter)
-end
-
 # See the note on `@Const` and nested containers in src/Transfer/gpu.jl.
 @kernel function gpukernel_update_weight(weights, particles, mesh, filter)
     p = @index(Global)
-    update!(weights[p], LazyRow(particles, p), mesh, filter)
+    update!(weights[p], LazyRows(particles)[p], mesh, filter)
 end
 
 """
@@ -703,36 +463,43 @@ This is functionally equivalent to:
 
 ```julia
 for p in eachindex(particles)
-    update!(weights[p], LazyRow(particles, p), mesh)
+    update!(weights[p], LazyRows(particles)[p], mesh)
 end
 ```
 
-where [`LazyRow`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
+where [`LazyRows`](https://juliaarrays.github.io/StructArrays.jl/stable/#Lazy-row-iteration) is provided in [StructArrays.jl](https://github.com/JuliaArrays/StructArrays.jl).
 
 On weights built with `generate_basis_weights(...; deferred=true)` there is no storage
-to fill, so this is a no-op and a loop written for stored weights runs unchanged.
+to fill, but the arguments are still validated and the filter is recorded.
 On weights that do store their values, `deferred=true` skips the fill and tells
 transfers to evaluate instead of read, until a later `update!` without it refills
 them. It is the per-step form of the same choice, and it errors on a basis that
 cannot defer rather than silently doing nothing.
+
+A `BasisWeightArray` view inherits the parent's current evaluation mode and
+filter when they are omitted. It cannot change the mode. In stored mode an
+explicit filter applies only to the view's values, without changing the parent's
+filter. In deferred mode an explicit filter must be the same object as the
+parent's filter; change that filter by updating the parent weights instead.
 """
 function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray, mesh::AbstractMesh,
                  filter::AbstractArray{Bool}=Trues(size(mesh)); deferred::Bool=storageless(weights))
-    # Recorded before the early return below: weights that store nothing still
-    # need the filter, it being their transfers that do the correcting.
-    if deferred || storageless(weights)
-        _record_filter!(deferring_state(weights), filter)
+    _update_basis_weights!(weights, particles, mesh, filter, deferred)
+    state = deferring_state(weights)
+    if state !== nothing
+        state.on = deferred
+        state.filter = normalized_filter(filter)
     end
+    weights
+end
+
+# Shared validation and filling; only the owner's public update records policy.
+function _update_basis_weights!(weights, particles, mesh, filter, deferred::Bool)
     if storageless(weights)
         deferred || error("update!: these weights were built with `deferred=true` and have no storage for basis values, so they cannot be materialized. Build them without `deferred=true` to store the values.")
-        return weights
+    elseif deferred
+        check_deferred_support(weights)
     end
-
-    if deferred
-        can_defer(typeof(weights)) || _refuse_deferral(weights)
-        return set_deferring!(weights, true)
-    end
-    set_deferring!(weights, false)
 
     n = length(particles)
     @assert length(weights) ≥ n
@@ -745,13 +512,36 @@ function update!(weights::AbstractArray{<: BasisWeight}, particles::StructArray,
     @assert get_backend(particles) == get_backend(mesh) == backend
     @assert filter isa Trues || get_backend(filter) == backend
 
-    if backend isa CPU
-        @threaded for p in 1:n
-            @inbounds update!(weights[p], LazyRow(particles, p), mesh, filter)
+    # Validate every request before writing a partial fill.
+    if !deferred
+        if backend isa CPU
+            @threaded for p in 1:n
+                @inbounds update!(weights[p], LazyRows(particles)[p], mesh, filter)
+            end
+        elseif n != 0
+            kernel = gpukernel_update_weight(backend)
+            kernel(weights, particles, mesh, filter; ndrange=n)
         end
-    else
-        kernel = gpukernel_update_weight(backend)
-        kernel(weights, particles, mesh, filter; ndrange=n)
     end
     weights
+end
+
+# Native views retain the owner's policy; bulk operations use a typed projection.
+# Keep this wrapper small so a runtime-typed filter does not rebox the returned view.
+function update!(weights::BasisWeightView, particles::StructArray, mesh::AbstractMesh,
+                 filter::AbstractArray{Bool}=(@something deferred_filter(weights) Trues(size(mesh)));
+                 deferred::Bool=isdeferred(weights))
+    _update_basis_weights!(weights, particles, mesh, filter, deferred)
+    weights
+end
+function _update_basis_weights!(weights::BasisWeightView, particles, mesh, filter, deferred::Bool)
+    if deferring_state(weights) !== nothing
+        deferred == isdeferred(weights) ||
+            throw(ArgumentError("update!: a basis-weight view cannot change the evaluation mode; update the parent weights instead"))
+        if deferred && normalized_filter(filter) !== deferred_filter(weights)
+            throw(ArgumentError("update!: a deferred basis-weight view must use the parent's filter; omit the filter or pass the same filter object, and update the parent weights to change it"))
+        end
+    end
+    _update_basis_weights!(basis_weight_storage(weights), particles, mesh, filter, deferred)
+    nothing
 end

@@ -222,6 +222,52 @@
         @test rhs == Expr(:call, :*, hoisted_symbols[1], :wi, hoisted_symbols[2], :∇wi, hoisted_symbols[3])
     end
 
+    @testset "P2G tile body on CPU" begin
+        grid, particles, weights = transfer_fixture()
+        expected = deepcopy(grid)
+        fillzero!(expected.m); fillzero!(expected.mv); fillzero!(expected.f)
+        for p in eachindex(particles)
+            bw = weights[p]
+            nodes = supportnodes(bw, grid)
+            for ip in eachindex(nodes)
+                i = nodes[ip]
+                expected.m[i] += bw.w[ip] * particles.m[p] + sum(Tuple(i))
+                expected.mv[i] += bw.w[ip] * particles.m[p] * grid.v[i]
+                expected.f[i] -= particles.V[p] * particles.σ[p] * bw.∇w[ip]
+            end
+        end
+        program = Tesserae.parse_transfer_program(quote
+            m[i] = @∑ w[ip] * m[p] + sum(Tuple(i))
+            mv[i] += @∑ w[ip] * m[p] * v[i]
+            f[i] -= @∑ V[p] * σ[p] * ∇w[ip]
+        end)
+        access = Tesserae.WeightAccess(Tesserae.collect_transfer_refs(program.equations, :ip))
+        sums = Tesserae.resolve_p2g_sums((:grid,:i), (:particles,:p), (:weights,:ip), program.equations, access)
+        names, args, body = Tesserae.P2G_tile_sum_expr((:grid,:i), (:particles,:p), (:weights,:ip), sums)
+        tilebody = eval(Expr(:->, Expr(:tuple, args..., :grid, :particles, :weights, :p), body))
+        side = maximum(size(grid))
+        tilelen = side^ndims(grid)
+        origin = zero(CartesianIndex{ndims(grid)})
+        tile = zeros(tilelen * Tesserae.tile_total_comps(grid, Val(Tuple(names))))
+        for deferred in (false, true)
+            update!(weights, particles, Tesserae.get_mesh(grid); deferred)
+            fillzero!(tile)
+            Tesserae.select_weights(weights) do w
+                for p in eachindex(particles)
+                    tilebody(tile, origin, Val(side), Val(tilelen), grid, particles, w, p)
+                end
+            end
+            fillzero!(grid.m); fillzero!(grid.mv); fillzero!(grid.f)
+            for slot in 1:tilelen
+                node = Tesserae.tile_node(slot, origin, Val(side))
+                Tesserae.merge_tile_node!(grid, tile, Val(Tuple(names)), Val(tilelen), slot, node)
+            end
+            @test grid.m ≈ expected.m
+            @test grid.mv ≈ expected.mv
+            @test grid.f ≈ expected.f
+        end
+    end
+
     @testset "CPDI rejects SpGrid" begin
         grid, particles, weights = cpdi_spgrid_fixture()
 
@@ -1047,6 +1093,78 @@
         @test m_deferred ≈ m_stored
         @test s_deferred ≈ s_stored
         @test x_deferred ≈ x_stored
+    end
+
+    @testset "@G2P2G snapshots before particle-only updates" begin
+        mesh = CartesianMesh(1.0, (0,4))
+        function run_particle_update(deferred, weighted)
+            particles = generate_particles(@NamedTuple{x::Vec{1,Float64}, m::Float64}, mesh; alg=GridSampling())[3:3]
+            particles.m .= 1
+            grid = generate_grid(@NamedTuple{x::Vec{1,Float64}, m::Float64}, mesh)
+            weights = generate_basis_weights(BSpline(Linear()), mesh, length(particles); deferred)
+            update!(weights, particles, mesh)
+            if weighted
+                @G2P2G grid=>i particles=>p weights=>ip begin
+                    x[p] += Vec(1.0)
+                    m[i] = @∑ w[ip] * m[p]
+                end
+            else
+                @G2P2G grid=>i particles=>p weights=>ip begin
+                    x[p] += Vec(1.0)
+                    m[i] = @∑ m[p]
+                end
+            end
+            grid.m
+        end
+        @test run_particle_update(true, true) ≈ [0, 0.75, 0.25, 0, 0]
+        @test run_particle_update(true, false) ≈ [0, 1, 1, 0, 0]
+        @test run_particle_update(true, true) ≈ run_particle_update(false, true)
+        @test run_particle_update(true, false) ≈ run_particle_update(false, false)
+    end
+
+    @testset "deferred weights preserve declared types and device state" begin
+        mesh = CartesianMesh(1.0, (0,4))
+        particles = generate_particles(@NamedTuple{x::Vec{1,Float64}, m::Float32}, mesh; alg=GridSampling())
+        particles.m .= 1
+        function mass(weights)
+            grid = generate_grid(@NamedTuple{x::Vec{1,Float64}, m::Float32, g::Vec{1,Float32}}, mesh)
+            @P2G grid=>i particles=>p weights=>ip begin
+                m[i] = @∑ w[ip] * m[p]
+                g[i] = @∑ ∇w[ip] * m[p]
+            end
+            grid.m
+        end
+        for spline in (BSpline(Constant()), BSpline(Linear()), BSpline(Quadratic()))
+            stored = generate_basis_weights(Float32, spline, mesh, length(particles))
+            update!(stored, particles, mesh)
+            for weights in (generate_basis_weights(Float32, spline, mesh, length(particles); deferred=true),
+                            generate_basis_weights(Float32, spline, mesh, length(particles)))
+                update!(weights, particles, mesh; deferred=true)
+                @test mass(weights) ≈ mass(stored)
+                @test cpu(weights) === weights
+                @test mass(cpu(weights)) ≈ mass(stored)
+                @test Tesserae.isdeferred(cpu(weights))
+            end
+        end
+
+        particles = generate_particles(@NamedTuple{x::Vec{1,Float64}, m::Float32}, mesh; alg=GridSampling(spacing=1))
+        particles.m .= 1
+        constant = generate_basis_weights(Float32, BSpline(Constant()), mesh, length(particles); deferred=true)
+        @test mass(constant) == Float32[0, 1, 1, 1, 1]
+
+        mask = trues(size(mesh)); mask[1] = false
+        particles = generate_particles(@NamedTuple{x::Vec{1,Float64}, m::Float32}, mesh; alg=GridSampling())[2:2]
+        particles.m .= 1
+        b = KernelCorrection(BSpline(Quadratic()))
+        for deferred in (false, true)
+            weights = generate_basis_weights(Float32, b, mesh, 1; deferred)
+            update!(weights, particles, mesh, mask; deferred=true)
+            @test mass(weights)[1] == 0
+            @test mass(cpu(weights)) ≈ mass(weights)
+            copied = Tesserae.Adapt.adapt(Tesserae.CPUDevice(), weights)
+            @test mass(copied) ≈ mass(weights)
+            @test Tesserae.deferring_state(copied) !== Tesserae.deferring_state(weights)
+        end
     end
 
     # Every particle assigned to a block must have its entire support window

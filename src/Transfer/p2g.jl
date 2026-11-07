@@ -72,15 +72,21 @@ function P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_
 end
 
 function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, program::TransferProgram)
-    sum_equations, nosum_equations = split_sum_equations(program, "@P2G")
-    check_nosum_refs("@P2G", nosum_equations, i, p, ip)
+    stages = transfer_stages(:P2G, program, i, p, ip)
+    sum_equations, nosum_equations = stages.p2g_sum, stages.p2g_nosum
 
     code = quote
         Tesserae.check_transfer_arguments("@P2G", $grid, $particles, $weights, $partition)
     end
 
     if !isempty(sum_equations)
-        zeroed, body = P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
+        access = WeightAccess(collect_transfer_refs(sum_equations, ip))
+        sums = resolve_p2g_sums((grid,i), (particles,p), (weights,ip), sum_equations, access)
+        zeroed, body = P2G_sum_expr((grid,i), ip, sums)
+        body = quote
+            $(weight_access_exprs(access, weights, particles, p, grid)...)
+            $body
+        end
         if !DEBUG
             body = :(@inbounds $body)
         end
@@ -90,7 +96,7 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
         bodies = if partition === nothing
             particle_body
         else
-            tile_names, tile_args, tile_body = P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations)
+            tile_names, tile_args, tile_body = P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sums)
             if !DEBUG
                 tile_body = :(@inbounds $tile_body)
             end
@@ -130,43 +136,38 @@ function P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), pa
     esc(prettify(code; lines=true, alias=false))
 end
 
-# The two `@P2G` lowerings must resolve the same equations identically and differ
-# only in what they do with the resolved RHS, so they share the resolution here.
-function p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations::Vector, window,
-                       cols::Union{WeightColumnsBinding,Nothing})
-    cols = something(cols, WeightColumnsBinding(collect_transfer_refs(sum_equations, ip)))
-    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, particles, grid, window, cols)=>ip]; cache=true)
+# Resolve and hoist once; particle and tile bodies only choose where to scatter.
+function resolve_p2g_sums((grid,i), (particles,p), (weights,ip), sum_equations::Vector, access::WeightAccess)
+    scope = TransferScope([grid=>i, particles=>p, TrailingIndexed(weights, p, access)=>ip]; cache=true)
     equations = resolve_sum_equations(sum_equations, scope, "@P2G", i)
     particle_replacements = cached_replacements(scope, p)
     inner_replacements = cached_replacements(scope, i, ip)
-    (; scope, equations, particle_replacements, inner_replacements,
-       inner_symbols = p2g_cached_symbols(inner_replacements))
+    inner_symbols = p2g_cached_symbols(inner_replacements)
+    for k in eachindex(equations)
+        eq = equations[k]
+        rhs = eq.op == :(-=) ? :(-$(eq.rhs)) : eq.rhs
+        rhs = hoist_p2g_rhs!(particle_replacements, inner_symbols, rhs)
+        op = eq.op == :(-=) ? :(+=) : eq.op
+        equations[k] = TransferEquation(eq.kind, eq.lhs, rhs, op)
+    end
+    (; access, scope, equations, particle_replacements, inner_replacements)
 end
 
-function P2G_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector,
-                      binding::SupportWindowBinding=SupportWindowBinding(),
-                      cols::Union{WeightColumnsBinding,Nothing}=nothing)
+function P2G_sum_expr((grid,i), ip, sums)
     @gensym gridwriteindex
-    (; window) = binding
-
-    (; equations, particle_replacements, inner_replacements, inner_symbols) =
-        p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations, window, cols)
+    (; access, equations, particle_replacements, inner_replacements) = sums
+    (; window) = access
 
     fillzero_targets = Any[]
-    hoist_exprs = Any[]
     sum_exprs = Any[]
     for eq in equations
         (; lhs, rhs, op) = eq
         op == :(=)  && push_unique!(fillzero_targets, remove_indexing(lhs))
-        op == :(-=) && (rhs = :(-$rhs))
-        rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         push!(sum_exprs, p2g_sum_add_expr(lhs, gridwriteindex, rhs))
     end
 
     body = quote
-        $(support_window_exprs(binding, weights, particles, p, grid)...)
         $(particle_replacements...)
-        $(hoist_exprs...)
         for $ip in eachindex($window)
             $i = Tesserae.transfer_nodeindex($grid, $window, $ip)
             $gridwriteindex = Tesserae.p2g_write_index($grid, $i)
@@ -180,23 +181,17 @@ end
 
 # The tile lowering of the same equations: writes go through `tile_add!` at the
 # node's local slot, every read stays as in the particle-parallel body.
-function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector)
+function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sums)
     @gensym tile origin sideval tilelenval tileslot offsets
-    binding = SupportWindowBinding()
-    (; window) = binding
-
-    (; scope, equations, particle_replacements, inner_replacements, inner_symbols) =
-        p2g_sum_scope((grid,i), (particles,p), (weights,ip), sum_equations, window, nothing)
+    (; access, scope, equations, particle_replacements, inner_replacements) = sums
+    (; window) = access
 
     fieldnames = Symbol[]
-    hoist_exprs = Any[]
     sum_exprs = Any[]
     for eq in equations
-        (; lhs, rhs, op) = eq
+        (; lhs, rhs) = eq
         name = tile_field_name(lhs)
         name in fieldnames || push!(fieldnames, name)
-        op == :(-=) && (rhs = :(-$rhs))
-        rhs = hoist_p2g_rhs!(hoist_exprs, inner_symbols, rhs)
         slot = findfirst(==(name), fieldnames)
         push!(sum_exprs, :(Tesserae.tile_add!($tile, $tilelenval, $offsets[$slot], $tileslot, $rhs)))
     end
@@ -208,9 +203,8 @@ function P2G_tile_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations:
     names_val = :(Val($(Expr(:tuple, map(QuoteNode, fieldnames)...))))
     body = quote
         $offsets = Tesserae.tile_offsets($grid, $names_val)
-        $(support_window_exprs(binding, weights, particles, p, grid)...)
+        $(weight_access_exprs(access, weights, particles, p, grid)...)
         $(particle_replacements...)
-        $(hoist_exprs...)
         for $ip in eachindex($window)
             $(node_exprs...)
             $tileslot = Tesserae.tile_slot($window[$ip], $origin, $sideval)
@@ -296,7 +290,7 @@ function hoist_p2g_product_runs!(hoist_exprs::Vector, inner_symbols::Set{Symbol}
 end
 
 function append_p2g_hoisted_run!(newargs::Vector, hoist_exprs::Vector, args)
-    if length(args) > 1 && all(p2g_simple_factor, args) && any(p2g_has_symbol, args)
+    if length(args) > 1 && any(p2g_has_symbol, args)
         sym = gensym(:p2g_rhs)
         rhs = p2g_product_expr(Any[args...])
         push!(hoist_exprs, :($sym = $rhs))

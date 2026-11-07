@@ -204,6 +204,55 @@
         end)
     end
 
+    @testset "interpolations are captured once in runnable reference code" begin
+        programs = (
+            raw"""@P2G grid=>i particles=>p weights=>ip partition begin
+                m[i] = @∑ w[ip] * m[p] * $(capture()) * captured_1
+            end""",
+            raw"""@G2P grid=>i particles=>p weights=>ip begin
+                a[p] = @∑ w[ip] * v[i] * $(capture()) * captured_1
+            end""",
+            raw"""@G2P2G grid=>i particles=>p weights=>ip partition begin
+                v[p] = @∑ w[ip] * v[i] * $(capture())
+                m[i] = @∑ w[ip] * m[p] * $(capture()) * captured_1
+            end""",
+            raw"""@P2G_Matrix grid=>(i,j) particles=>p weights=>(ip,jp) partition begin
+                matrix[i,j] = @∑ w[ip] * w[jp] * $(capture()) * captured_1
+            end""",
+        )
+        names = (:grid, :particles, :weights, :partition, :matrix, :capture, :captured_1)
+        for text in programs, binding in (nothing, :grid, :particles, :weights, :partition)
+            # captured_1 is already used by the equations; captured_2 must
+            # also be reserved when it names a transfer argument.
+            rename(ex) = ex isa Symbol && ex === binding ? :captured_2 : ex
+            argnames = map(rename, names)
+            program = Meta.parse(text)
+            program = Tesserae.MacroTools.postwalk(rename, program)
+            explained = Tesserae.explain_macrocall(program)
+            actual = eval(:(($(argnames...),) -> $program))
+            reference = explained_function(explained, argnames)
+            displayed = displayed_function(explained, argnames)
+            expected = nothing
+            for run in (actual, reference, displayed)
+                grid, particles, weights = explain_setup()
+                partition = Partition(Tesserae.get_mesh(grid))
+                update!(partition, particles.x)
+                matrix = create_sparse_matrix(BSpline(Linear()), Tesserae.get_mesh(grid); ndofs=1)
+                calls = Ref(0)
+                capture() = Float64(calls[] += 1)
+                Base.invokelatest(run, grid, particles, weights, partition, matrix, capture, 2.0)
+                @test calls[] == (program.args[1] == Symbol("@G2P2G") ? 2 : 1)
+                if expected === nothing
+                    expected = grid, particles, matrix
+                else
+                    test_grid_equal(grid, expected[1])
+                    test_particles_equal(particles, expected[2])
+                    @test matrix ≈ expected[3]
+                end
+            end
+        end
+    end
+
     @testset "G2P" begin
         grid, particles, weights = explain_setup()
         particles_ref = deepcopy(particles)
@@ -260,9 +309,10 @@
         @test !occursin("#=", sprint(show, MIME("text/plain"), ex))
         shown_threaded = sprint(show, MIME("text/plain"), ex_threaded)
         @test occursin("Threads.@threads :dynamic for p in eachindex(particles)", shown_threaded)
-        @test occursin("\n        i = nodes[ip]", shown_threaded)
+        @test occursin("\n            i = nodes[ip]", shown_threaded)
         @test !occursin("\ni = nodes[ip]", shown_threaded)
-        @test occursin("particles.x[p] += particles.a[p] * scale", shown_threaded)
+        @test occursin("let captured_1 = scale", shown_threaded)
+        @test occursin("particles.x[p] += particles.a[p] * captured_1", shown_threaded)
     end
 
     @testset "G2P2G" begin

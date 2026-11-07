@@ -33,15 +33,39 @@ end
 @inline _value(::Order{0}, ::Polynomial{Quadratic}, x::Vec{3}) = Vec(one(eltype(x)), x[1], x[2], x[3], x[1]*x[2], x[2]*x[3], x[3]*x[1], x[1]^2, x[2]^2, x[3]^2)
 
 @inline _value(::Order{k}, ::Polynomial{MultiLinear}, x::Vec{1}) where {k} = _value(Order(k), Polynomial(Linear()), x)
-@inline _value(::Order{0}, ::Polynomial{MultiLinear}, x::Vec{2}) = Vec(one(eltype(x)), x[1], x[2], x[1]*x[2])
-@inline _value(::Order{1}, ::Polynomial{MultiLinear}, x::Vec{2, T}) where {T} = Mat{4, 2, T}(0,1,0,x[2],0,0,1,x[1])
-@inline _value(::Order{2}, ::Polynomial{MultiLinear}, x::Vec{2, T}) where {T} = Tensor{Tuple{4, @Symmetry{2, 2}}, T}(0,0,0,0,0,0,0,1,0,0,0,0)
-@inline _value(::Order{k}, ::Polynomial{MultiLinear}, x::Vec{2, T}) where {k, T} = zero(Tensor{Tuple{4, @Symmetry{nfill(2,Val(k))...}}, T})
-@inline _value(::Order{0}, ::Polynomial{MultiLinear}, x::Vec{3}) = Vec(one(eltype(x)), x[1], x[2], x[3], x[1]*x[2], x[2]*x[3], x[3]*x[1], x[1]*x[2]*x[3])
-@inline _value(::Order{1}, ::Polynomial{MultiLinear}, x::Vec{3, T}) where {T} = Mat{8, 3, T}(0,1,0,0,x[2],0,x[3],x[2]*x[3],0,0,1,0,x[1],x[3],0,x[1]*x[3],0,0,0,1,0,x[2],x[1],x[1]*x[2])
-@inline _value(::Order{2}, ::Polynomial{MultiLinear}, x::Vec{3, T}) where {T} = Tensor{Tuple{8, @Symmetry{3, 3}}, T}(0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,x[3],0,0,0,0,0,0,1,x[2],0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,x[1],0,0,0,0,0,0,0,0)
-@inline _value(::Order{3}, ::Polynomial{MultiLinear}, x::Vec{3, T}) where {T} = Tensor{Tuple{8, @Symmetry{3, 3, 3}}, T}(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
-@inline _value(::Order{k}, ::Polynomial{MultiLinear}, x::Vec{3, T}) where {k, T} = zero(Tensor{Tuple{8, @Symmetry{nfill(3,Val(k))...}}, T})
+# Each tuple lists the variables of a monomial, preserving multiplication order.
+multilinear_terms(::Val{2}) = ((), (1,), (2,), (1,2))
+multilinear_terms(::Val{3}) = ((), (1,), (2,), (3,), (1,2), (2,3), (3,1), (1,2,3))
+
+function monomial_derivative_expr(term, derivatives)
+    remaining = collect(term)
+    for d in derivatives
+        index = findfirst(==(d), remaining)
+        index === nothing && return 0
+        deleteat!(remaining, index)
+    end
+    factors = [:(x[$d]) for d in remaining]
+    isempty(factors) ? 1 : length(factors) == 1 ? only(factors) : Expr(:call, :*, factors...)
+end
+
+@inline _value(order::Order, ::Polynomial{MultiLinear}, x::Union{Vec{2},Vec{3}}) = multilinear_value(order, x)
+@generated function multilinear_value(::Order{k}, x::Vec{dim,T}) where {k, dim, T}
+    terms = multilinear_terms(Val(dim))
+    n = length(terms)
+    TT = k == 0 ? Vec{n} : k == 1 ? Mat{n,dim} : Tensor{Tuple{n,@Symmetry{ntuple(_ -> dim, k)...}}}
+    indices = CartesianIndices(size(TT))[Tensorial.independent_to_component_map(TT)]
+    entries = map(indices) do I
+        k == 0 && I[1] == 1 ? :(one(T)) : monomial_derivative_expr(terms[I[1]], Base.tail(Tuple(I)))
+    end
+    # Values use the promotion of their scalar terms, as Vec(one(T), x..., ...)
+    # did; derivative tensors retain the explicitly requested element type.
+    result_type = k == 0 ? TT : TT{T}
+    quote
+        @_inline_meta
+        $result_type($(entries...))
+    end
+end
+
 @inline _value(::Order{0}, ::Polynomial{MultiQuadratic}, x::Vec{1}) = Vec(one(eltype(x)), x[1], x[1]^2)
 @inline _value(::Order{0}, ::Polynomial{MultiQuadratic}, x::Vec{2}) = Vec(one(eltype(x)), x[1], x[2], x[1]*x[2], x[1]^2, x[2]^2, x[1]^2*x[2], x[1]*x[2]^2, x[1]^2*x[2]^2)
 @inline _value(::Order{0}, ::Polynomial{MultiQuadratic}, x::Vec{3}) = Vec(one(eltype(x)),

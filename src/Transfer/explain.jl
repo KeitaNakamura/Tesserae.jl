@@ -127,26 +127,41 @@ function explain_transfer_call(kind::Symbol, args; threaded=false, schedule=Quot
     kind in (:P2G, :G2P, :G2P2G, :P2G_Matrix) || error("@explain does not support `@$kind`")
     args, threading = explain_args(kind, args, kind == :G2P ? (4,) : (4, 5), threaded, schedule)
     a, b, c, partition, equations = kind == :G2P || length(args) == 4 ? (args[1], args[2], args[3], nothing, args[4]) : args
-    program = restored_program(equations)
-    kind == :P2G_Matrix && return explain_P2G_Matrix(unpair2(a), unpair(b), unpair2(c), partition, program, threading)
-
-    ctx = transfer_context(unpair(a), unpair(b), unpair(c), partition, threading)
-    explain_transfer_stages(ctx, transfer_stages(kind, program, ctx))
-end
-
-function restored_program(equations::Expr)
-    program = parse_transfer_program(equations)
-    restore(x) = restore_interpolations(x, program)
-    TransferProgram([TransferEquation(eq.kind, restore(eq.lhs), restore(eq.rhs), eq.op) for eq in program.equations],
-                    Pair{Symbol, Any}[])
-end
-
-function restore_interpolations(expr, program::TransferProgram)
-    isempty(program.interpolations) && return expr
-    replacements = Dict(program.interpolations)
-    MacroTools.postwalk(expr) do ex
-        ex isa Symbol && haskey(replacements, ex) ? replacements[ex] : ex
+    program = readable_program(equations, a, b, c, partition)
+    code = if kind == :P2G_Matrix
+        explain_P2G_Matrix(unpair2(a), unpair(b), unpair2(c), partition, program, threading)
+    else
+        ctx = transfer_context(unpair(a), unpair(b), unpair(c), partition, threading)
+        explain_transfer_stages(ctx, transfer_stages(kind, program, last(ctx.grid_i), last(ctx.particles_p), last(ctx.weights_ip)))
     end
+    interpolate_transfer_values(code, program)
+end
+
+function readable_program(equations::Expr, bindings...)
+    program = parse_transfer_program(equations)
+    isempty(program.interpolations) && return program
+    # Captures must not shadow transfer arguments, symbols in the user's block,
+    # or another capture's RHS. Bind them once outside every loop.
+    used = Set{Symbol}()
+    for expr in (equations, bindings...)
+        MacroTools.postwalk(expr) do ex
+            ex isa Symbol && push!(used, ex)
+            ex
+        end
+    end
+    replacements = Dict{Symbol,Symbol}()
+    captures = map(enumerate(program.interpolations)) do (i, (name, rhs))
+        readable = Symbol(:captured_, i)
+        while readable in used
+            i += 1
+            readable = Symbol(:captured_, i)
+        end
+        push!(used, readable)
+        replacements[name] = readable
+        readable => rhs
+    end
+    rename(expr) = MacroTools.postwalk(ex -> ex isa Symbol ? get(replacements, ex, ex) : ex, expr)
+    TransferProgram([TransferEquation(eq.kind, rename(eq.lhs), rename(eq.rhs), eq.op) for eq in program.equations], captures)
 end
 
 expr_block(stmts...) = Expr(:block, flatten_block_statements(stmts)...)
@@ -217,23 +232,6 @@ function explain_G2P_sum_body((grid,i), (particles,p), (weights,wp), (bw,ip), su
         push!(saves, assign_expr(eq.op, eq.lhs, tmp))
     end
     expr_block(inits, supportnode_loop((grid,i), (weights,wp), p, sums; bw), saves)
-end
-
-transfer_stages(; g2p_sum=(), p2g_sum=(), g2p_nosum=(), p2g_nosum=()) = (; g2p_sum, p2g_sum, g2p_nosum, p2g_nosum)
-
-function transfer_stages(kind::Symbol, program::TransferProgram, ctx)
-    (_, i), (_, p), (_, ip) = ctx.grid_i, ctx.particles_p, ctx.weights_ip
-    stages = if kind == :G2P2G
-        split_g2p2g_stages(program, i, p)
-    else
-        sums, nosums = split_sum_equations(program, "@$kind")
-        kind == :P2G ? transfer_stages(; p2g_sum=sums, p2g_nosum=nosums) :
-                       transfer_stages(; g2p_sum=sums, g2p_nosum=nosums)
-    end
-    check_nosum_refs("@$kind", stages.g2p_nosum, p, i, ip)
-    check_nosum_refs("@$kind", stages.p2g_nosum, i, p, ip)
-    check_unique_sum_targets("@$kind", stages.g2p_sum)
-    stages
 end
 
 transfer_particle_loop(ctx, body, stages) = !isempty(stages.p2g_sum) ?

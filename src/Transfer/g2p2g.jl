@@ -44,70 +44,23 @@ function G2P2G_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weight
     G2P2G_expr(schedule, unpair(grid_i), unpair(particles_p), unpair(weights_ip), partition, parse_transfer_program(equations))
 end
 
-struct G2P2GStages
-    g2p_sum::Vector{TransferEquation}
-    p2g_sum::Vector{TransferEquation}
-    g2p_nosum::Vector{TransferEquation}
-    p2g_nosum::Vector{TransferEquation}
-end
-
-function split_g2p2g_stages(program::TransferProgram, i, p)
-    equations_g2p_sum = TransferEquation[]
-    equations_p2g_sum = TransferEquation[]
-    equations_g2p_nosum = TransferEquation[]
-    equations_p2g_nosum = TransferEquation[]
-    precedence = 1
-    for eq in program.equations
-        if is_sum(eq)
-            @capture(eq.lhs, A_[index_]) || error("@G2P2G: invalid LHS in `@∑` equation: $(eq.lhs)")
-            if index == p
-                precedence == 1 || error("@G2P2G: particle `@∑` equations must come before particle updates and grid-scattering equations")
-                push!(equations_g2p_sum, eq)
-            elseif index == i
-                precedence ≤ 3 || error("@G2P2G: grid `@∑` equations must come before grid-only equations")
-                push!(equations_p2g_sum, eq)
-                precedence = 3
-            else
-                error("@G2P2G: wrong index in LHS equation, $(eq.lhs)")
-            end
-        else
-            if precedence in (1, 2)
-                push!(equations_g2p_nosum, eq)
-                precedence = 2
-            elseif precedence in (3, 4)
-                push!(equations_p2g_nosum, eq)
-                precedence = 4
-            else
-                error("unreachable")
-            end
-        end
-    end
-    G2P2GStages(equations_g2p_sum, equations_p2g_sum, equations_g2p_nosum, equations_p2g_nosum)
-end
-
 function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), partition, program::TransferProgram)
-    stages = split_g2p2g_stages(program, i, p)
-    check_nosum_refs("@G2P2G", stages.g2p_nosum, p, i, ip)
-    check_nosum_refs("@G2P2G", stages.p2g_nosum, i, p, ip)
-    check_unique_sum_targets("@G2P2G", stages.g2p_sum)
+    stages = transfer_stages(:G2P2G, program, i, p, ip)
 
     code = quote
         Tesserae.check_transfer_arguments("@G2P2G", $grid, $particles, $weights, $partition)
     end
     body = Expr(:block)
-    binding = SupportWindowBinding()
     # Both halves resolve against one set of per-particle weight columns. The P2G
     # half must not rebind them: it runs after the G2P half's non-`@∑` equations,
     # which is where an explicit step writes `x[p]`.
-    colsbinding = WeightColumnsBinding(union(
-        collect_transfer_refs(stages.g2p_sum, ip),
-        collect_transfer_refs(stages.p2g_sum, ip)))
-
-    g2p_has_weight_refs = !isempty(collect_transfer_refs(stages.g2p_sum, ip))
-    p2g_has_weight_refs = !isempty(collect_transfer_refs(stages.p2g_sum, ip))
+    names = union(collect_transfer_refs(stages.g2p_sum, ip), collect_transfer_refs(stages.p2g_sum, ip))
+    access = WeightAccess(names)
+    if !isempty(stages.g2p_sum) || !isempty(stages.p2g_sum)
+        append!(body.args, weight_access_exprs(access, weights, particles, p, grid))
+    end
     if !isempty(stages.g2p_sum) || !isempty(stages.g2p_nosum)
-        preload_cols = !isempty(stages.g2p_sum) && !g2p_has_weight_refs && p2g_has_weight_refs
-        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, binding, colsbinding; preload_cols)
+        expr = G2P_sum_expr((grid,i), (particles,p), (weights,ip), stages.g2p_sum, stages.g2p_nosum, access)
         body = quote
             $body
             $expr
@@ -116,13 +69,9 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
 
     zeroed = Expr(:tuple)
     if !isempty(stages.p2g_sum)
-        # `G2P_sum_expr` binds the window only when it has `@∑` equations, and
-        # then always holds the columns binding -- preloaded when its own
-        # equations reference no weight property -- so this half loads only when
-        # the G2P `@∑` half is absent.
-        p2g_binding = isempty(stages.g2p_sum) ? binding : SupportWindowBinding(binding; load=false)
-        p2g_cols = isempty(stages.g2p_sum) ? colsbinding : WeightColumnsBinding(colsbinding; load=false)
-        zeroed, expr = P2G_sum_expr((grid,i), (particles,p), (weights,ip), stages.p2g_sum, p2g_binding, p2g_cols)
+        # Particle-only updates also need the snapshot before they move `x[p]`.
+        sums = resolve_p2g_sums((grid,i), (particles,p), (weights,ip), stages.p2g_sum, access)
+        zeroed, expr = P2G_sum_expr((grid,i), ip, sums)
         body = quote
             $body
             $expr
@@ -132,7 +81,7 @@ function G2P2G_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), 
     if !DEBUG
         body = :(@inbounds $body)
     end
-    particle_equations = vcat(collect(stages.g2p_sum), collect(stages.g2p_nosum), collect(stages.p2g_sum))
+    particle_equations = vcat(stages.g2p_sum, stages.g2p_nosum, stages.p2g_sum)
     args = [:(($grid, $particles, $weights, $p) -> $body), :(Tesserae.get_device($grid)), :(Val($schedule)),
             narrowed_grid_expr(grid, particle_equations, i), particles, :w, partition, zeroed]
     bind = nothing

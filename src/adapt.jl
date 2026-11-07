@@ -104,22 +104,34 @@ KernelAbstractions.get_backend(points::QuadraturePoints) = get_backend(parent(po
 Adapt.adapt_structure(to, A::CellSupportMatrix) = CellSupportMatrix(adapt(to, cellsupports(A)), size(A)...)
 KernelAbstractions.get_backend(A::CellSupportMatrix) = get_backend(cellsupports(A))
 
-# The copy gets its own cleared flag: the choice is not carried across the move
-# because the values are not either. Any other `to` -- notably a kernel launch --
-# drops the flag, `select_weights` having already read it.
-function Adapt.adapt_structure(to::AbstractDevice, weights::BasisWeightArray)
-    b = basis(weights)
-    vals = map(a -> adapt(to, a), getfield(weights, :vals))
-    indices = adapt(to, getfield(weights, :indices))
-    BasisWeightArray(b, vals, indices, derivative_order(weights), deferring_flag(b))
-end
+# A CPU no-op must also preserve the shared state of existing views.
+cpu(weights::Union{BasisWeightArray,BasisWeightView}) = get_device(weights) isa CPUDevice ? weights : adapt(CPUDevice(), weights)
+
+Adapt.adapt_structure(to::AbstractDevice, weights::BasisWeightView) = adapt(to, basis_weight_storage(weights))
+KernelAbstractions.get_backend(weights::BasisWeightView) = get_backend(basis_weight_parent(weights))
+
 function Adapt.adapt_structure(to, weights::BasisWeightArray)
     b = basis(weights)
     vals = map(a -> adapt(to, a), getfield(weights, :vals))
     indices = adapt(to, getfield(weights, :indices))
-    # A `DeferralState` is host-side bookkeeping and does not survive; a filter
-    # in that slot is real data a deferred kernel reads, and travels with it.
     BasisWeightArray(b, vals, indices, derivative_order(weights), adapt(to, deferring_state(weights)))
+end
+
+Adapt.adapt_structure(to, evaluation::DeferredEvaluation) = DeferredEvaluation(adapt(to, evaluation.filter))
+function Adapt.adapt_structure(to, weights::TransferWeights)
+    TransferWeights(basis(weights), map(a -> adapt(to, a), weights.vals), adapt(to, weights.indices),
+                    derivative_order(weights), adapt(to, weights.evaluation))
+end
+
+# A device move copies the policy independently and moves its filter. Kernel
+# adaptation drops host bookkeeping after `select_weights` resolved that policy.
+Adapt.adapt_structure(to::AbstractDevice, state::DeferralState) =
+    DeferralState(state.on, adapt(to, state.filter))
+
+Adapt.adapt_structure(::GPUDevice{CastFloat32}, A::DeferredBasisValues{Float64}) =
+    DeferredBasisValues{Float32}(size(A))
+function Adapt.adapt_structure(::GPUDevice{CastFloat32}, A::DeferredBasisValues{Tensor{S,T,N,L}}) where {S,T<:AbstractFloat,N,L}
+    DeferredBasisValues{Tensor{S,Float32,N,L}}(size(A))
 end
 function KernelAbstractions.get_backend(weights::BasisWeightArray)
     # Deferred value arrays report `nothing`, so the stored arrays and the support
