@@ -70,6 +70,24 @@
         @test_throws ArgumentError generate_quadrature_rule(Tesserae.Tet, 8)
     end
 
+    @testset "tensor-product polynomial reproduction" begin
+        for shape in (Tesserae.Quad4(), Tesserae.Quad9(), Tesserae.Hex8(), Tesserae.Hex27()),
+            T in (Float32, Float64)
+            dim = Tesserae.get_dimension(shape)
+            nodes = Tesserae.localnodes(T, shape)
+            quadratic = Tesserae.get_order(shape) == Order(2)
+            field(x) = prod(x) + sum(x) + (quadratic ? sum(abs2, x) : zero(T))
+            samples = map(field, nodes)
+            for a in (-0.75, 0.0, 0.625)
+                x = Vec{dim,T}(d -> T(a / d))
+                N, dN = @inferred Tesserae.jet(Order(1), shape, x)
+                @test eltype(N) === T
+                @test sum(N .* samples) ≈ field(x) atol=32eps(T)
+                @test sum(dN .* samples) ≈ gradient(field, x) atol=32eps(T)
+            end
+        end
+    end
+
     @testset "shape quadrature" begin
         standard_rules = (
             (Tesserae.Line2(), 2), (Tesserae.Line3(), 3), (Tesserae.Line4(), 4),

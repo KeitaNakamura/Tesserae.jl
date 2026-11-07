@@ -32,6 +32,20 @@ nurbs_test_knot_vectors(patch::IGAPatch) = patch.knot_vectors
         @test (@inferred supportnodes(mesh, meshcells[end])) === Tesserae.SVector(22, 23, 24, 28, 29, 30, 34, 35, 36)
     end
 
+    @testset "unequal patch sizes" begin
+        knots = [0.0, 0.0, range(0.01, 0.99; length=78)..., 1.0, 1.0]
+        large = IGAPatch((Linear(), Linear()), (knots, knots), reshape(collect(1:6400), 80, 80))
+        small = IGAPatch((Linear(), Linear()), ([0.0,0.0,1.0,1.0], [0.0,0.0,1.0,1.0]), reshape(collect(1:4), 2, 2))
+        mixed_patches = [large; fill(small, 49)]
+        points = fill(Vec(0.0, 0.0), 6400)
+        mixed = IGAMesh(mixed_patches, points)
+        @test supportnodes(mixed) == collect(eachindex(points))
+        # Bound temporary storage by the total input size. Using the first
+        # patch size for every patch reserves over 2 MB for this small mesh.
+        bytes = @allocated IGAMesh(mixed_patches, points)
+        @test bytes < 16sizeof(Int) * sum(p -> length(p.controlpoint_ids), mixed_patches)
+    end
+
     @testset "Mesh conversion" begin
         # A single NURBS curve should become one IGA patch with identical
         # degree, knot vector, control points, and weights.
@@ -160,9 +174,46 @@ nurbs_test_knot_vectors(patch::IGAPatch) = patch.knot_vectors
         @test sum(cox_de_boor_derivatives(Quadratic(), knot_vector, span[1], x)) ≈ 0
 
         # Degree-zero B-splines have one active value and zero derivative.
-        N0, dN0 = @inferred Tesserae.cox_de_boor_values_and_derivatives(Constant(), [0.0, 1.0], 1, 0.5)
-        @test N0 == Tesserae.SVector(1.0)
-        @test dN0 == Tesserae.SVector(0.0)
+        for T in (Float32,Float64,BigFloat,Rational{Int}), u in (-1,0,1//2,1,2)
+            ξ0 = T(u)
+            N0, dN0 = @inferred Tesserae.cox_de_boor_values_and_derivatives(Constant(),T[0,1],1,ξ0)
+            @test N0 == Tesserae.SVector(T(0 <= u < 1))
+            @test N0 == Tesserae.cox_de_boor_values(Constant(),T[0,1],1,ξ0)
+            @test dN0 == Tesserae.SVector(zero(T))
+            @test eltype(N0) === eltype(dN0) === T
+        end
+
+        @testset "scalar arithmetic and storage types" begin
+            for (kv, u, T) in (
+                    (BigFloat[0,0,0,0.5,1,1,1], big"0.25", BigFloat),
+                    (Any[0.0,0.0,0.0,0.5,1.0,1.0,1.0], 0.25, Float64),
+                    (Real[0.0,0.0,0.0,0.5,1.0,1.0,1.0], 0.25, Float64),
+                    (Real[big"0",big"0",big"0",big"0.5",big"1",big"1",big"1"], 0.25, BigFloat),
+                    ([0//1,0//1,0//1,1//2,1//1,1//1,1//1], 1//4, Rational{Int}),
+                    ([0,0,0,2,4,4,4], 1, Float64),
+                    (Float32[0,0,0,0.5,1,1,1], 0.25, Float64),
+                )
+                values = Tesserae.cox_de_boor_values(Quadratic(), kv, 3, u)
+                N, dN = Tesserae.cox_de_boor_values_and_derivatives(Quadratic(), kv, 3, u)
+                @test values == N == Tesserae.SVector(1//4, 5//8, 1//8)
+                @test dN == Tesserae.SVector(-1.0, 0.5, 0.5) / (kv[4] - kv[3])
+                @test eltype(values) === eltype(N) === eltype(dN) === T
+            end
+            kv = [0.0,0.0,0.0,0.5,1.0,1.0,1.0]
+            derivative = gradient(u -> Vec(Tuple(Tesserae.cox_de_boor_values(Quadratic(), kv, 3, only(u)))), Vec(0.25))
+            @test derivative ≈ Mat{3,1}(-2.0, 1.0, 1.0)
+        end
+
+        @testset "invalid support indices" begin
+            # The triangular recurrence needs fewer end knots than the full
+            # requested support. Preserve the original BoundsError contract.
+            kv = collect(0.0:5.0)
+            for sp in (1, 2, 4, 5)
+                u = sp - 0.5
+                @test_throws BoundsError Tesserae.cox_de_boor_values(Quadratic(), kv, sp, u)
+                @test_throws BoundsError Tesserae.cox_de_boor_values_and_derivatives(Quadratic(), kv, sp, u)
+            end
+        end
 
         N, dN = @inferred Tesserae.cox_de_boor_values_and_derivatives(Quadratic(), knot_vector, span[1], x)
         @test N ≈ Tesserae.cox_de_boor_values(Quadratic(), knot_vector, span[1], x)
@@ -172,6 +223,29 @@ nurbs_test_knot_vectors(patch::IGAPatch) = patch.knot_vectors
         N3, dN3 = @inferred Tesserae.cox_de_boor_values_and_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
         @test N3 ≈ Tesserae.cox_de_boor_values(Cubic(), cubic_knot_vector, 5, 0.375)
         @test dN3 ≈ cox_de_boor_derivatives(Cubic(), cubic_knot_vector, 5, 0.375)
+
+        @testset "nonuniform spans and repeated knots" begin
+            for T in (Float32, Float64), p in 1:5
+                kv = T[zeros(p+1); 0.2; fill(0.5, p); 0.8; ones(p+1)]
+                axis = Tesserae.NURBS.BSplineAxis(p, kv)
+                degree = Tesserae.Degree(p)
+                for u in T[0, 0.1, 0.2, 0.49, 0.5, 0.7, 0.8, 0.9, 1]
+                    sp = Tesserae.NURBS.knot_span(axis, u)
+                    N, dN = @inferred Tesserae.cox_de_boor_values_and_derivatives(degree, kv, sp, u)
+                    reference = map(i -> Tesserae.cox_de_boor_value(degree, kv, i, u), (sp-p):sp)
+                    @test N ≈ reference
+                    @test dN ≈ cox_de_boor_derivatives(degree, kv, sp, u)
+                    @test eltype(N) === T
+                end
+                # The caller may request the neighboring span; preserve this
+                # scalar-recursion behavior as well as the usual active span.
+                sp = p+1
+                u = T(0.7)
+                N, dN = Tesserae.cox_de_boor_values_and_derivatives(degree, kv, sp, u)
+                @test N ≈ map(i -> Tesserae.cox_de_boor_value(degree, kv, i, u), (sp-p):sp)
+                @test dN ≈ cox_de_boor_derivatives(degree, kv, sp, u)
+            end
+        end
 
         # `cox_de_boor_values` evaluates the half-open span `knots[span] ≤ ξ <
         # knots[span+1]`, so it vanishes at the closed upper end of the domain.
@@ -319,8 +393,11 @@ nurbs_test_knot_vectors(patch::IGAPatch) = patch.knot_vectors
         reversed_patch = IGAPatch(nurbs_test_degrees(patch), map(copy, nurbs_test_knot_vectors(patch)), reverse(patch.controlpoint_ids))
         reversed_mesh = IGAMesh([reversed_patch], mesh.controlpoints)
         reversed_weights = generate_basis_weights(mesh, size(points))
+        existing_view, existing_row = view(reversed_weights,:,first(meshcells)), reversed_weights[1,first(meshcells)]
         @test update!(reversed_weights, points, reversed_mesh; geometry=mesh) === reversed_weights
         @test supportnodes(reversed_weights[1,first(meshcells)]) == supportnodes(reversed_mesh, first(cells(reversed_mesh)))
+        @test all(w -> supportnodes(w) == supportnodes(reversed_mesh,first(meshcells)),existing_view)
+        @test supportnodes(existing_row) == supportnodes(reversed_mesh,first(meshcells))
 
         mismatched_knots = map(copy, nurbs_test_knot_vectors(patch))
         mismatched_knots[1][4] = 0.2

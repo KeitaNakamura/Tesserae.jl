@@ -1,7 +1,7 @@
 module NURBS
 
 using Tensorial
-import ..Tesserae: dropat
+import ..Tesserae: dropat, bspline_span_values!, greville_abscissae
 
 include("utils.jl")
 include("basis.jl")

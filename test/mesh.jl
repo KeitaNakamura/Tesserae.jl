@@ -85,6 +85,14 @@ end
     @test Tesserae.cellshape(FEMesh(CartesianMesh(1, (0,2), (0,3)))) == Tesserae.Quad4()
     @test Tesserae.cellshape(FEMesh(CartesianMesh(1, (0,2), (0,3), (0,4)))) == Tesserae.Hex8()
 
+    @testset "merge retains repeated source cells" begin
+        dest = FEMesh(Tesserae.Line2(), [Vec(0.0), Vec(1.0)], [Tesserae.SVector(1, 2)])
+        src = FEMesh(Tesserae.Line2(), [Vec(1.0), Vec(2.0)], fill(Tesserae.SVector(1, 2), 2))
+        merge!(dest, src)
+        @test Tesserae.cellsupports(dest) == [Tesserae.SVector(1, 2), Tesserae.SVector(2, 3), Tesserae.SVector(2, 3)]
+        @test supportnodes(dest) == [1, 2, 3]
+    end
+
     @testset "generate_field_meshes" begin
         geometry = FEMesh(Tesserae.Quad9(), CartesianMesh(1, (0,2), (0,1)))
         # The unused first node makes compact field numbering observable.

@@ -24,19 +24,12 @@ function from_gmsh_shape(name::String)
     error("\"$name\" is not supported yet")
 end
 
-from_gmsh_connectivity(::Tesserae.Line2) = SVector(1, 2)
-from_gmsh_connectivity(::Tesserae.Line3) = SVector(1, 2, 3)
-from_gmsh_connectivity(::Tesserae.Line4) = SVector(1, 2, 3, 4)
-from_gmsh_connectivity(::Tesserae.Tri3) = SVector(1, 2, 3)
+const GmshIdentityConnectivity = Union{Tesserae.Line2, Tesserae.Line3, Tesserae.Line4,
+    Tesserae.Tri3, Tesserae.Tet4, Tesserae.Quad4, Tesserae.Quad8, Tesserae.Quad9,
+    Tesserae.Hex8, Tesserae.Hex20, Tesserae.Hex27}
+from_gmsh_connectivity(shape::GmshIdentityConnectivity) = SVector(ntuple(identity, Tesserae.nlocalnodes(shape)))
 from_gmsh_connectivity(::Tesserae.Tri6) = SVector(1, 2, 3, 4, 6, 5)
-from_gmsh_connectivity(::Tesserae.Tet4) = SVector(1, 2, 3, 4)
 from_gmsh_connectivity(::Tesserae.Tet10) = SVector(1, 2, 3, 4, 5, 7, 8, 6, 9, 10)
-from_gmsh_connectivity(::Tesserae.Quad4) = SVector(1, 2, 3, 4)
-from_gmsh_connectivity(::Tesserae.Quad8) = SVector(1, 2, 3, 4, 5, 6, 7, 8)
-from_gmsh_connectivity(::Tesserae.Quad9) = SVector(1, 2, 3, 4, 5, 6, 7, 8, 9)
-from_gmsh_connectivity(::Tesserae.Hex8) = SVector(1, 2, 3, 4, 5, 6, 7, 8)
-from_gmsh_connectivity(::Tesserae.Hex20) = SVector(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
-from_gmsh_connectivity(::Tesserae.Hex27) = SVector(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27)
 
 """
     read_gmsh_nodes()

@@ -82,11 +82,7 @@ function _check_controlpoint_weights(weights::AbstractVector, controlpoints)
 end
 
 function _collect_used_controlpoint_ids(patches::AbstractVector{<: IGAPatch})
-    nodes = Int[]
-    for patch in patches
-        append!(nodes, patch.controlpoint_ids)
-    end
-    unique!(sort!(nodes))
+    collect_supportnodes(patch.controlpoint_ids for patch in patches)
 end
 
 function IGAMesh(patches::Vector{IGAPatch{pdim, T, Degrees}}, controlpoints::Vector{Vec{dim, T}}, weights=nothing) where {dim, T, pdim, Degrees <: NTuple{pdim, Degree}}
@@ -182,13 +178,7 @@ function _open_knot_vector_from_axis(axis::AbstractVector{T}, degree::Degree) wh
     vcat(fill(first(axis), p+1), axis[2:end-1], fill(last(axis), p+1))
 end
 
-function _greville_abscissae(knot_vector::AbstractVector{T}, degree::Degree) where {T}
-    p = _degree(degree)
-    nbasis = length(knot_vector) - p - 1
-    map(1:nbasis) do i
-        sum(j -> knot_vector[i+j], 1:p) / p
-    end
-end
+_greville_abscissae(knot_vector::AbstractVector, degree::Degree) = greville_abscissae(knot_vector, _degree(degree))
 
 function _tensor_product_controlpoints(axes::NTuple{dim}) where {dim}
     controlpoint_ids = LinearIndices(map(length, axes))

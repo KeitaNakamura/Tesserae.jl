@@ -1,6 +1,7 @@
 include("shapes.jl")
 include("quadrature.jl")
 include("cartesian.jl")
+include("connectivity.jl")
 include("femesh.jl")
 include("igamesh.jl")
 include("iga_evaluation.jl")

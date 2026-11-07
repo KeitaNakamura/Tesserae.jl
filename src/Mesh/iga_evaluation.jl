@@ -77,9 +77,24 @@ For degree `p`, the returned `SVector{p+1}` is ordered by basis index
 `span-p:span`. Repeated knots are valid; zero-denominator recursive terms
 contribute zero.
 """
-@generated function cox_de_boor_values(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real) where {p}
-    vals = (:( cox_de_boor_value(degree, knot_vector, span - $p + $(a - 1), ξ) ) for a in 1:(p+1))
-    :(SVector{$(p+1)}($(vals...)))
+@inline function cox_de_boor_values(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real) where {p}
+    p == 0 && return SVector(cox_de_boor_value(degree, knot_vector, span, ξ))
+    @boundscheck checkbounds(knot_vector, (span-p):(span+p+1))
+    knot_vector[span] ≤ ξ < knot_vector[span+1] || return recursive_cox_de_boor_values(degree, knot_vector, span, ξ)
+    T = promote_type(eltype(knot_vector), typeof(ξ))
+    # Static mutable workspaces require isbits elements. Keep the scalar
+    # recursion for other arithmetic, including BigFloat and abstract storage.
+    T <: AbstractFloat && isbitstype(T) || return recursive_cox_de_boor_values(degree, knot_vector, span, ξ)
+    values = MVector{p+1,T}(undef)
+    left, right = MVector{p,T}(undef), MVector{p,T}(undef)
+    @inbounds bspline_span_values!(values, left, right, knot_vector, span, p, ξ)
+    SVector(values)
+end
+
+# Retain scalar recursion for queries outside the requested span, including the
+# half-open right endpoint; NURBS deliberately includes its clamped endpoint.
+@inline function recursive_cox_de_boor_values(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real) where {p}
+    SVector(ntuple(a -> cox_de_boor_value(degree, knot_vector, span-p+a-1, ξ), Val(p+1)))
 end
 
 """
@@ -93,49 +108,38 @@ The returned `(N, dN)` uses the same basis-index ordering as
 `N` and `dN`, avoiding the repeated recursive work of separate value and
 derivative calls.
 """
-@generated function cox_de_boor_values_and_derivatives(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real) where {p}
-    if p == 0
-        return quote
-            N = cox_de_boor_value(degree, knot_vector, span, ξ)
-            SVector{1}(N), SVector{1}(zero(ξ))
+@inline function cox_de_boor_values_and_derivatives(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real) where {p}
+    p == 0 && return (SVector(cox_de_boor_value(degree, knot_vector, span, ξ)), SVector(zero(ξ)))
+    @boundscheck checkbounds(knot_vector, (span-p):(span+p+1))
+    knot_vector[span] ≤ ξ < knot_vector[span+1] || return recursive_cox_de_boor_values_and_derivatives(degree, knot_vector, span, ξ)
+    T = promote_type(eltype(knot_vector), typeof(ξ))
+    T <: AbstractFloat && isbitstype(T) || return recursive_cox_de_boor_values_and_derivatives(degree, knot_vector, span, ξ)
+    values = MVector{p+1,T}(undef)
+    left, right, lower = MVector{p,T}(undef), MVector{p,T}(undef), MVector{p,T}(undef)
+    @inbounds bspline_span_values!(values, left, right, knot_vector, span, p, ξ, lower)
+    derivatives = ntuple(Val(p+1)) do a
+        @inbounds begin
+            l = a == 1 ? zero(T) : lower[a-1]
+            r = a == p+1 ? zero(T) : lower[a]
+            _cox_de_boor_term(p, knot_vector[span+a-1] - knot_vector[span-p+a-1], l) -
+                _cox_de_boor_term(p, knot_vector[span+a] - knot_vector[span-p+a], r)
         end
     end
+    SVector(values), SVector(derivatives)
+end
 
-    degree = :(Degree{$(p-1)}())
-    lower = map(a -> Symbol(:N, p-1, "_", a), 1:(p+2))
-    lower_values = map(1:(p+2)) do a
-        :($(lower[a]) = cox_de_boor_value($degree, knot_vector, span - $p + $(a - 1), ξ))
+@inline function recursive_cox_de_boor_values_and_derivatives(degree::Degree{p}, knot_vector::AbstractVector, span::Int, ξ::Real) where {p}
+    lower = ntuple(a -> cox_de_boor_value(Degree{p-1}(), knot_vector, span-p+a-1, ξ), Val(p+2))
+    jets = ntuple(Val(p+1)) do a
+        i = span-p+a-1
+        left = knot_vector[i+p] - knot_vector[i]
+        right = knot_vector[i+p+1] - knot_vector[i+1]
+        N = _cox_de_boor_term(ξ - knot_vector[i], left, lower[a]) +
+            _cox_de_boor_term(knot_vector[i+p+1] - ξ, right, lower[a+1])
+        dN = _cox_de_boor_term(p, left, lower[a]) - _cox_de_boor_term(p, right, lower[a+1])
+        N, dN
     end
-    values = map(1:(p+1)) do a
-        quote
-            _cox_de_boor_term(
-                ξ - knot_vector[span - $p + $(a - 1)],
-                knot_vector[span + $(a - 1)] - knot_vector[span - $p + $(a - 1)],
-                $(lower[a]),
-            ) + _cox_de_boor_term(
-                knot_vector[span + $a] - ξ,
-                knot_vector[span + $a] - knot_vector[span - $p + $a],
-                $(lower[a+1]),
-            )
-        end
-    end
-    derivatives = map(1:(p+1)) do a
-        quote
-            _cox_de_boor_term(
-                $p,
-                knot_vector[span + $(a - 1)] - knot_vector[span - $p + $(a - 1)],
-                $(lower[a]),
-            ) - _cox_de_boor_term(
-                $p,
-                knot_vector[span + $a] - knot_vector[span - $p + $a],
-                $(lower[a+1]),
-            )
-        end
-    end
-    quote
-        $(lower_values...)
-        SVector{$(p+1)}($(values...)), SVector{$(p+1)}($(derivatives...))
-    end
+    SVector(map(first, jets)), SVector(map(last, jets))
 end
 
 @inline function cox_de_boor_value(::Degree{0}, knot_vector::AbstractVector, i::Int, ξ::Real)
