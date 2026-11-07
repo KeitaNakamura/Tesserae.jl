@@ -13,6 +13,11 @@ include("grid.jl")
 include("particles.jl")
 
 include("basis.jl")
+include("basis_views.jl")
+include("deferred_weights.jl")
+test_deferred_weights(identity)
+include("basis_array_operations.jl")
+test_basis_array_contracts()
 include("shapes.jl")
 include("fem.jl")
 

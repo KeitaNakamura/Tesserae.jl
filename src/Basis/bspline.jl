@@ -25,14 +25,12 @@ Base.show(io::IO, spline::BSpline) = print(io, BSpline, "(", spline.degree, ")")
 end
 
 # Equivalent to supportnodes(x, (n + 1) / 2, mesh), with one floor per axis.
-@inline function supportnodes(::AbstractBSpline{Degree{n}}, pt, mesh::CartesianMesh{dim}) where {n, dim}
+@inline function supportnodes(spline::AbstractBSpline{Degree{n}}, pt, mesh::CartesianMesh{dim}) where {n, dim}
     x = getx(pt)
     ξ = Tuple(normalize(x, mesh))
     dims = size(mesh)
     isinside(ξ, dims) || return EmptyCartesianIndices(Val(dim))
-    T = eltype(x)
-    offset = T(n - 1) / T(2)
-    start = @. unsafe_trunc(Int, floor(ξ - offset)) + 1
+    start = Tuple(bspline_support_start(spline, ξ))
     stop = @. start + n
     imin = Tuple(@. max(start, 1))
     imax = Tuple(@. min(stop, dims))
@@ -40,6 +38,11 @@ end
 end
 
 @inline fract(x) = x - floor(x)
+
+@inline function bspline_support_start(::AbstractBSpline{Degree{n}}, ξ::NTuple{dim,T}) where {n,dim,T}
+    offset = T(n - 1) / T(2)
+    CartesianIndex(@. unsafe_trunc(Int, floor(ξ - offset)) + 1)
+end
 
 # `x` must be normalized by `h` throughout the fast paths below.
 function _bspline_local_coeffs(degree::Int)
@@ -65,12 +68,12 @@ function _derivative_coeffs(coeffs, order)
     end
 end
 
+_bspline_coefficient_expr(c) = denominator(c) == 1 ? :(T($(numerator(c)))) : :(T($(numerator(c))) / T($(denominator(c))))
+
 function _evalpoly_expr(coeffs)
     last_nonzero = findlast(!iszero, coeffs)
     last_nonzero === nothing && return :(zero(x))
-    typed_coeffs = map(coeffs[1:last_nonzero]) do c
-        denominator(c) == 1 ? :(T($(numerator(c)))) : :(T($(numerator(c))) / T($(denominator(c))))
-    end
+    typed_coeffs = map(_bspline_coefficient_expr, coeffs[1:last_nonzero])
     :(evalpoly(ξ, ($(typed_coeffs...),)))
 end
 
@@ -97,6 +100,57 @@ end
         ξ = $ξ_expr
         $values_expr
     end
+end
+
+# The nodewise and full-support paths use the same polynomial coefficients.
+# Each piece is left-closed and right-open, matching `supportnodes` even for
+# degree zero, whose two endpoints cannot be collapsed through `abs(x)`.
+@generated function jet(::Order{k}, spline::BSpline{Degree{n}}, x::Real) where {k,n}
+    0 ≤ n || error("B-spline degree must be non-negative")
+    coeffs = _bspline_local_coeffs(n)
+    radius = (n + 1) // 2
+    branches = map(reverse(eachindex(coeffs))) do node
+        lower = radius - node
+        upper = lower + 1
+        vals = Expr(:tuple, map(a -> _evalpoly_expr(_derivative_coeffs(coeffs[node], a)), 0:k)...)
+        quote
+            if x < $(_bspline_coefficient_expr(upper))
+                ξ = x - $(_bspline_coefficient_expr(lower))
+                return $vals
+            end
+        end
+    end
+    quote
+        @_inline_meta
+        T = typeof(x)
+        if $(_bspline_coefficient_expr(-radius)) ≤ x < $(_bspline_coefficient_expr(radius))
+            $(branches...)
+        end
+        nfill(zero(x), Val($(k + 1)))
+    end
+end
+
+@inline value(spline::BSpline, x::Real) = only(jet(Order(0), spline, x))
+
+# Cached per particle on the deferred path; each support node only selects its
+# axis entries and forms their tensor product, just as the stored path does.
+@inline function bspline_axis_jets(::Order{k}, spline::BSpline, pt, mesh::CartesianMesh{dim}) where {k,dim}
+    ξ = normalize(getx(pt), mesh)
+    h_inv = spacing_inv(mesh)
+    ntuple(Val(dim)) do d
+        vals = bspline_axis_values(Order(k), spline, ξ[d])
+        ntuple(a -> map(v -> v * h_inv^(a-1), vals[a]), Val(k+1))
+    end
+end
+
+@inline function deferred_particle_state(order::Order, spline::BSpline, pt, mesh::CartesianMesh, window, filter)
+    origin = bspline_support_start(spline, Tuple(normalize(getx(pt), mesh))) - oneunit(first(window))
+    (; axisjets=bspline_axis_jets(order, spline, pt, mesh), origin)
+end
+
+@inline function deferred_node_jet(order::Order, ::BSpline, state::NamedTuple, pt, mesh::CartesianMesh, window, filter, ip)
+    @_propagate_inbounds_meta
+    tensor_product_jet_at(order, state.axisjets, Tuple(window[ip] - state.origin))
 end
 
 @inline function update_basis_values!(bw::BasisWeight, spline::BSpline, pt, mesh::CartesianMesh)
@@ -167,37 +221,6 @@ end
         end
         bw
     end
-end
-
-@inline function value(::BSpline{Constant}, ξ::Real)
-    ξ = abs(ξ)
-    ξ < 0.5 ? one(ξ) : zero(ξ)
-end
-@inline function value(::BSpline{Linear}, ξ::Real)
-    ξ = abs(ξ)
-    ξ < 1 ? 1 - ξ : zero(ξ)
-end
-@inline function value(::BSpline{Quadratic}, ξ::Real)
-    ξ = abs(ξ)
-    ξ < 0.5 ? (3 - 4ξ^2) / 4 :
-    ξ < 1.5 ? (3 - 2ξ)^2 / 8 : zero(ξ)
-end
-@inline function value(::BSpline{Cubic}, ξ::Real)
-    ξ = abs(ξ)
-    ξ < 1 ? (3ξ^3 - 6ξ^2 + 4) / 6 :
-    ξ < 2 ? (2 - ξ)^3 / 6         : zero(ξ)
-end
-@inline function value(::BSpline{Quartic}, ξ::Real)
-    ξ = abs(ξ)
-    ξ < 0.5 ? (48ξ^4 - 120ξ^2 + 115) / 192              :
-    ξ < 1.5 ? -(16ξ^4 - 80ξ^3 + 120ξ^2 - 20ξ - 55) / 96 :
-    ξ < 2.5 ? (5 - 2ξ)^4 / 384                          : zero(ξ)
-end
-@inline function value(::BSpline{Quintic}, ξ::Real)
-    ξ = abs(ξ)
-    ξ < 1 ? ((3-ξ)^5 - 6*(2-ξ)^5 + 15*(1-ξ)^5) / 120 :
-    ξ < 2 ? ((3-ξ)^5 - 6*(2-ξ)^5) / 120              :
-    ξ < 3 ? ((3-ξ)^5) / 120                          : zero(ξ)
 end
 
 # Covers `SteffenBSpline` too; the two differ only in `axis_jet_args`.

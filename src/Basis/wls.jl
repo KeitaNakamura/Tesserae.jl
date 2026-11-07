@@ -21,17 +21,13 @@ support_width(wls::WLS) = support_width(wls.kernel)
 
 @inline update_basis_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh) =
     update_basis_values!(bw, wls, pt, mesh, Trues(size(mesh)))
+# The same type-level eligibility rule selects the stored and deferred shortcuts.
 @inline function update_basis_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
-    update_wls_values!(bw, wls, pt, mesh, filter)
-end
-
-# A whole B-spline support has a closed-form moment matrix, so the fit is skipped.
-@inline function update_basis_values!(bw::BasisWeight, wls::WLS{<: Union{BSpline{Quadratic}, BSpline{Cubic}}, <: Polynomial{Linear}}, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
     indices = supportnodes(bw)
-    if has_full_support(bw, indices, filter)
-        kernel = wls.kernel
+    kernel = wls.kernel
+    if has_closed_form_moments(kernel, wls.poly) && has_full_support(bw, indices, filter)
         @inbounds for ip in eachindex(indices)
-            nodal_basis_values(bw, Order(0))[ip] = only(nodal_basis_jet(Order(0), kernel, pt, mesh, indices[ip]))
+            nodal_basis_values(bw, Order(0))[ip] = wls_kernel_value(kernel, pt, mesh, indices[ip], nothing)
         end
         apply_wls_correction!(bw, wls, pt, mesh, full_support_moment_matrix_inv(kernel, mesh))
     else
@@ -48,38 +44,46 @@ end
     diagm([1; ones(Vec{dim,Int}) * (12//(n+1)) / spacing(mesh)^2])
 end
 
-@inline function update_wls_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
-    indices = supportnodes(bw)
-    kernel = wls.kernel
-    poly = wls.poly
-    xₚ = getx(pt)
+@inline wls_kernel_value(kernel, pt, mesh, i, ::Nothing) =
+    (@_propagate_inbounds_meta; only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)))
+@inline wls_kernel_value(kernel, pt, mesh, i, filter) =
+    (@_propagate_inbounds_meta; wls_kernel_value(kernel, pt, mesh, i, nothing) * filterpasses(filter, i))
 
-    M = fastsum(eachindex(indices)) do ip
+# The stored path caches each raw kernel value as it contributes to the moment
+# matrix; the deferred path supplies the same value without writing storage.
+@inline function wls_moment_matrix(weight_at::F, poly, xₚ, mesh, indices) where {F}
+    fastsum(eachindex(indices)) do ip
         @inbounds begin
             i = indices[ip]
             xᵢ = mesh[i]
-            w = nodal_basis_values(bw, Order(0))[ip] = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)) * filter[i]
+            w = @inline weight_at(ip, i)
             P = value(poly, xᵢ - xₚ)
             w * P ⊗ P
         end
     end
+end
 
+@inline function wls_corrected_jet(w, poly, displacement, M⁻¹, P₀__)
+    P = value(poly, displacement)
+    wq = w * (M⁻¹ * P)
+    map(P₀ -> wq ⊡ P₀, P₀__)
+end
+
+@inline function update_wls_values!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, filter::AbstractArray{Bool})
+    values = nodal_basis_values(bw, Order(0))
+    M = wls_moment_matrix(wls.poly, getx(pt), mesh, supportnodes(bw)) do ip, i
+        @inbounds values[ip] = wls_kernel_value(wls.kernel, pt, mesh, i, filter)
+    end
     apply_wls_correction!(bw, wls, pt, mesh, inv(M))
 end
 
 @inline function apply_wls_correction!(bw::BasisWeight, wls::WLS, pt, mesh::CartesianMesh, M⁻¹)
     indices = supportnodes(bw)
-    poly = wls.poly
     xₚ = getx(pt)
-
-    P₀__ = jet(derivative_order(bw), poly, zero(xₚ))
+    P₀__ = jet(derivative_order(bw), wls.poly, zero(xₚ))
     @inbounds for ip in eachindex(indices)
-        i = indices[ip]
-        xᵢ = mesh[i]
         w = nodal_basis_values(bw, Order(0))[ip]
-        P = value(poly, xᵢ - xₚ)
-        wq = w * (M⁻¹ * P)
-        set_values!(bw, ip, map(P₀->wq⊡P₀, P₀__))
+        set_values!(bw, ip, wls_corrected_jet(w, wls.poly, mesh[indices[ip]] - xₚ, M⁻¹, P₀__))
     end
 end
 
@@ -107,7 +111,7 @@ end
 
 Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")")
 
-# Matches the pairings `update_basis_values!` above shortcuts.
+# Eligible kernels and polynomials for the closed-form moment matrix.
 @inline has_closed_form_moments(::Any, ::Any) = false
 @inline has_closed_form_moments(::Union{BSpline{Quadratic}, BSpline{Cubic}}, ::Polynomial{Linear}) = true
 
@@ -125,13 +129,8 @@ Base.show(io::IO, wls::WLS) = print(io, WLS, "(", wls.kernel, ", ", wls.poly, ")
             all(size(window) .== support_width(kernel))
         return (false, full_support_moment_matrix_inv(kernel, mesh), P₀__)
     end
-    M = fastsum(eachindex(window)) do ip
-        @inbounds begin
-            i = window[ip]
-            w = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)) * filterpasses(filter, i)
-            P = value(poly, mesh[i] - xₚ)
-            w * P ⊗ P
-        end
+    M = wls_moment_matrix(poly, xₚ, mesh, window) do ip, i
+        wls_kernel_value(kernel, pt, mesh, i, filter)
     end
     (false, inv(M), P₀__)
 end
@@ -140,10 +139,8 @@ end
     @_propagate_inbounds_meta
     _, M⁻¹, P₀__ = state
     i = window[ip]
-    w = only(nodal_basis_jet(Order(0), kernel, pt, mesh, i)) * filterpasses(filter, i)
-    P = value(poly, mesh[i] - getx(pt))
-    wq = w * (M⁻¹ * P)
-    map(P₀ -> wq ⊡ P₀, P₀__)
+    w = wls_kernel_value(kernel, pt, mesh, i, filter)
+    wls_corrected_jet(w, poly, mesh[i] - getx(pt), M⁻¹, P₀__)
 end
 
 @inline deferred_particle_state(order::Order, wls::WLS, pt, mesh::CartesianMesh, window, filter) =
@@ -169,13 +166,3 @@ can_defer_basis(::Type{<: WLS}) = true
         scalarize_axis_values(order, bw_1d)
     end
 end
-
-@generated function wls_axis_jet_at(::Order{k}, axisjets::NTuple{dim, Any}, offsets::NTuple{dim, Int}) where {k, dim}
-    quote
-        @_inline_meta
-        vals1d = @ntuple $dim d -> (@ntuple $(k+1) a -> axisjets[d][a][offsets[d]])
-        @ntuple $(k+1) a -> only(prod_each_dimension(Order(a-1), vals1d...))
-    end
-end
-
-@inline node_offsets(window, ip) = (@_propagate_inbounds_meta; Tuple(window[ip] - first(window)) .+ 1)

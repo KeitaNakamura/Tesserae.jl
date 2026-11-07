@@ -56,6 +56,12 @@ struct ParticleAssembly{S} end
 ParticleAssembly() = ParticleAssembly{SerialScatter}()
 struct CellAssembly end
 
+# Resolve the buffer by dispatch before the entry loop, so the generated local
+# is always defined and its type follows the assembly mode.
+assembly_buffer(::ParticleAssembly, cache, row_dofs, row_nodes, col_dofs, col_nodes) = nothing
+@inline assembly_buffer(::CellAssembly, cache, row_dofs, row_nodes, col_dofs, col_nodes) =
+    local_matrix_buffer(cache, row_dofs, row_nodes, col_dofs, col_nodes)
+
 scatter_mode(::ParticleAssembly{S}) where {S} = S()
 scatter_mode(::BlockAssembly) = SerialScatter()
 
@@ -205,14 +211,15 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     shared_weights = grid_i == grid_j && weights_i == weights_j
     names_i = collect_transfer_refs(equations, ip)
     names_j = collect_transfer_refs(equations, jp)
-    # The side holding `load=true` emits the binding only when it resolves a
-    # weight ref, so the row side may hand the load to the column side when the
-    # equations reference weights through `jp` alone.
-    cols_i = WeightColumnsBinding(shared_weights ? union(names_i, names_j) : names_i)
-    cols_j = shared_weights ? WeightColumnsBinding(cols_i; load=isempty(names_i)) : WeightColumnsBinding(names_j)
+    access_i = WeightAccess(shared_weights ? union(names_i, names_j) : names_i; window=gridindices_i)
+    access_j = shared_weights ? WeightAccess(access_i.names; window=gridindices_j, cols=access_i.cols) :
+                                WeightAccess(names_j; window=gridindices_j)
+    column_bindings = shared_weights ? weight_columns_exprs(access_i, weights_i′, particles, p, grid_i′) :
+        (weight_columns_exprs(access_i, weights_i′, particles, p, grid_i′)...,
+         weight_columns_exprs(access_j, weights_j′, particles, p, grid_j′)...)
     scope = TransferScope([grid_i′=>i, grid_j′=>j, particles=>p,
-                           TrailingIndexed(weights_i′, p, particles, grid_i′, gridindices_i, cols_i)=>ip,
-                           TrailingIndexed(weights_j′, p, particles, grid_j′, gridindices_j, cols_j)=>jp]; cache=true)
+                           TrailingIndexed(weights_i′, p, access_i)=>ip,
+                           TrailingIndexed(weights_j′, p, access_j)=>jp]; cache=true)
     equations = map(equations) do eq
         TransferEquation(eq.kind, eq.lhs, resolve_refs(eq.rhs, scope), eq.op)
     end
@@ -248,18 +255,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
                $assembler = Tesserae.matrix_assembler($matrix, Tesserae.get_mesh($row_grid), Tesserae.get_mesh($col_grid), Tesserae.basis($row_weights), Tesserae.basis($col_weights))
                $matrix_cache = Tesserae.local_matrix_cache($matrix, $dof_table_i, $weights_i, $dof_table_j, $weights_j)
            end,
-           # The `else` is unreachable but must stay and must throw: without it
-           # `buffer` becomes a possibly-undefined local, which widens its type
-           # and puts an undef check in the assembly loop.
-           buffer_init = quote
-               if $matrix_assembly isa Tesserae.ParticleAssembly
-                   $buffer = nothing
-               elseif $matrix_assembly isa Tesserae.CellAssembly
-                   $buffer = Tesserae.local_matrix_buffer($matrix_cache, $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)
-               else
-                   error("unknown assembly mode: $($matrix_assembly)")
-               end
-           end,
+           buffer_init = :($buffer = Tesserae.assembly_buffer($matrix_assembly, $matrix_cache, $dof_table_i, $gridindices_i, $dof_table_j, $gridindices_j)),
            block_buffer_init = :($buffer = Tesserae.block_matrix_buffer($assembler, $matrix_assembly, $orientation)),
            assemble_first = assemble(:assemble_first!),
            assemble_add = assemble(:assemble_add!),
@@ -288,6 +284,7 @@ function P2G_Matrix_expr(schedule::QuoteNode, ((grid_i,grid_j),(i,j)), (particle
     end
 
     particle_init = quote
+        $(column_bindings...)
         $(particle_replacements...)
         $(hoist_exprs...)
     end

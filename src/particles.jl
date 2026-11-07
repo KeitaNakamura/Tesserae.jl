@@ -125,24 +125,13 @@ function generate_particles(mesh::CartesianMesh{dim, T}; alg::SamplingAlgorithm=
 end
 
 """
-    generate_particles(ParticleProp, mesh::FEMesh, rule::QuadratureRule)
+    generate_particles(ParticleProp, mesh::Union{FEMesh,IGAMesh}, rule::QuadratureRule)
 
 Generate one point-property record for each point of `rule` in every finite
-element cell. The result is a [`QuadraturePoints`](@ref) matrix whose rows are
+element cell or nonzero knot span. The result is a [`QuadraturePoints`](@ref) matrix whose rows are
 rule points and whose columns are cells.
 """
-function generate_particles(::Type{ParticleProp}, mesh::FEMesh, rule::QuadratureRule) where {ParticleProp}
-    QuadraturePoints(_generate_particles(ParticleProp, generate_points(rule, mesh)), rule)
-end
-
-"""
-    generate_particles(ParticleProp, mesh::IGAMesh, rule::QuadratureRule)
-
-Generate one point-property record for each point of `rule` in every nonzero
-knot span. The result is a [`QuadraturePoints`](@ref) matrix whose rows are rule
-points and whose columns are cells.
-"""
-function generate_particles(::Type{ParticleProp}, mesh::IGAMesh, rule::QuadratureRule) where {ParticleProp}
+function generate_particles(::Type{ParticleProp}, mesh::AbstractCellMesh, rule::QuadratureRule) where {ParticleProp}
     QuadraturePoints(_generate_particles(ParticleProp, generate_points(rule, mesh)), rule)
 end
 
@@ -188,16 +177,6 @@ Base.copy(points::QuadraturePoints) = QuadraturePoints(copy(parent(points)), qua
 cell_quadrature_indices(points, cell) = (CartesianIndex(q, cell) for q in axes(points, 1))
 StructArrays.components(points::QuadraturePoints) = StructArrays.components(parent(points))
 
-function _check_quadrature_rule(::QuadratureRule{F, qdim}, mesh::FEMesh) where {F, qdim}
-    F === _reference_cell_family(cellshape(mesh)) || throw(ArgumentError("quadrature rule and FEM mesh must use the same reference-cell family"))
-    qdim == get_dimension(cellshape(mesh)) || throw(DimensionMismatch("quadrature-rule and FEM reference dimensions must match"))
-end
-
-function _check_quadrature_rule(::QuadratureRule{F, qdim}, ::IGAMesh{dim, pdim}) where {F, qdim, dim, pdim}
-    F === _tensor_product_family(Val(pdim)) || throw(ArgumentError("quadrature rule and IGA mesh must use the same reference-cell family"))
-    qdim == pdim || throw(DimensionMismatch("quadrature-rule and IGA parametric dimensions must match"))
-end
-
 function generate_points(rule::QuadratureRule, mesh::AbstractCellMesh)
     _check_quadrature_rule(rule, mesh)
     qpts = rule.points
@@ -208,17 +187,4 @@ function generate_points(rule::QuadratureRule, mesh::AbstractCellMesh)
         end
     end
     points
-end
-
-function cell_point(mesh::FEMesh, cell, qpt)
-    indices = supportnodes(mesh, cell)
-    N = value(cellshape(mesh), qpt)
-    sum(N .* mesh[indices])
-end
-
-function cell_point(mesh::IGAMesh, cell, qpt)
-    patch = patches(mesh, cell.patch)
-    indices = supportnodes(mesh, cell)
-    R, _ = iga_span_basis(patch, cell.span, qpt, mesh.weights, indices)
-    sum(R .* mesh[indices])
 end

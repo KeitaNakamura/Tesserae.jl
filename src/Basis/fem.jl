@@ -1,3 +1,13 @@
+# FEM basis weights
+
+allocate_static_basis_values(::Type{Prop}, shape::Shape, dim::Val; derivative::Order) where {Prop <: NamedTuple} =
+    allocate_cell_basis_values(Prop, shape, dim; derivative)
+
+@inline basis(mesh::FEMesh) = cellshape(mesh)
+
+_generate_supportnodes(::Shape, mesh::FEMesh, dims::Dims{2}) = CellSupportMatrix(cellsupports(mesh), dims...)
+_generate_supportnodes(::Shape, ::FEMesh, ::Dims) = throw(DimensionMismatch("FEM basis weights must have dimensions (quadrature points, cells)"))
+
 @inline function jet(::Order{1}, shape::Shape, x::Vec)
     grads, vals = gradient(x -> Tensor(value(shape, x)), x, :all)
     SVector(Tuple(vals)), _reinterpret_to_vec(grads)
@@ -28,10 +38,10 @@ function update!(
     length(eltype(geometry)) == dim || throw(DimensionMismatch("field and geometry physical dimensions must match"))
     _reference_cell_family(basis(weights)) === _reference_cell_family(cellshape(geometry)) || throw(ArgumentError("field and geometry must use the same reference-cell family"))
     ncells(fieldmesh) == ncells(geometry) || throw(DimensionMismatch("field and geometry must have the same number of cells"))
-    set_cellsupports!(getfield(weights, :indices), cellsupports(fieldmesh))
     is_domain = pdim == dim
     mode = is_domain ? Val(:domain) : Val(:boundary)
     rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
+    set_cellsupports!(getfield(weights, :indices), cellsupports(fieldmesh))
 
     field_shape = cellshape(fieldmesh)
     geometry_shape = cellshape(geometry)
@@ -48,104 +58,3 @@ function update!(
     end
     weights
 end
-
-"""
-    update!(weights::BasisWeightArray{<:IGABasis}, points::QuadraturePoints, fieldmesh::IGAMesh; geometry=fieldmesh, measure=nothing, normal=nothing)
-
-Evaluate the basis of `fieldmesh` using `geometry` for the physical mapping.
-The meshes may have different degrees and control-point numbering, but must
-have corresponding patches with the same nonzero knot-span intervals. `measure`
-and `normal` have the same roles as in the FEM method.
-"""
-function update!(
-        weights::BasisWeightArray{B}, points::QuadraturePoints,
-        fieldmesh::IGAMesh{dim, pdim, T, Degrees};
-        geometry::IGAMesh{dim, pdim}=fieldmesh,
-        measure::Union{Nothing, AbstractArray}=nothing,
-        normal::Union{Nothing, AbstractArray}=nothing,
-    ) where {dim, pdim, T, Degrees, B <: IGABasis{pdim, Degrees}}
-    is_domain = pdim == dim
-    mode = is_domain ? Val(:domain) : Val(:boundary)
-    rule = _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
-    fieldmesh === geometry && return _update_iga!(mode, weights, rule, fieldmesh, measure, normal)
-    check_matching_cell_partitions(fieldmesh, geometry)
-
-    field_supports = cellsupports(getfield(weights, :indices))
-    for (field_cell, geometry_cell) in zip(cells(fieldmesh), cells(geometry))
-        field_indices = supportnodes(fieldmesh, field_cell)
-        @inbounds field_supports[field_cell] = field_indices
-        geometry_indices = supportnodes(geometry, geometry_cell)
-        field_patch = patches(fieldmesh, field_cell.patch)
-        geometry_patch = patches(geometry, geometry_cell.patch)
-        x = geometry[geometry_indices]
-        for q in eachindex(rule.points, rule.weights)
-            N, dNdξ = iga_span_basis(field_patch, field_cell.span, rule.points[q], fieldmesh.weights, field_indices)
-            _, geometry_dNdξ = iga_span_basis(geometry_patch, geometry_cell.span, rule.points[q], geometry.weights, geometry_indices)
-            J = sum(x .⊗ geometry_dNdξ)
-            weight = span_weight(geometry_patch, geometry_cell.span, rule.weights[q])
-            _set_quadrature_data!(mode, weights[q,field_cell], measure, normal, q, geometry_cell, N, dNdξ, J, weight)
-        end
-    end
-    weights
-end
-
-function _update_iga!(mode, weights, rule, mesh, measure, normal)
-    field_supports = cellsupports(getfield(weights, :indices))
-    for cell in cells(mesh)
-        indices = supportnodes(mesh, cell)
-        @inbounds field_supports[cell] = indices
-        x = mesh[indices]
-        patch = patches(mesh, cell.patch)
-        for q in eachindex(rule.points, rule.weights)
-            N, dNdξ = iga_span_basis(patch, cell.span, rule.points[q], mesh.weights, indices)
-            J = sum(x .⊗ dNdξ)
-            weight = span_weight(patch, cell.span, rule.weights[q])
-            _set_quadrature_data!(mode, weights[q,cell], measure, normal, q, cell, N, dNdξ, J, weight)
-        end
-    end
-    weights
-end
-
-function _check_quadrature_inputs(is_domain, weights, points, geometry, measure, normal)
-    rule = quadrature_rule(points)
-    _check_quadrature_rule(rule, geometry)
-    size(weights) == size(points) || throw(DimensionMismatch("basis weights and quadrature points must have the same dimensions"))
-    size(points) == (length(rule.points), ncells(geometry)) || throw(DimensionMismatch("quadrature points must have dimensions (rule points, geometry cells)"))
-    isnothing(measure) || size(weights) == size(measure) || throw(DimensionMismatch("measure and basis weights must have the same dimensions"))
-    is_domain && !isnothing(normal) && throw(ArgumentError("normal is only valid for boundary integration"))
-    isnothing(normal) || size(weights) == size(normal) || throw(DimensionMismatch("normal and basis weights must have the same dimensions"))
-    if is_domain && !isempty(weights)
-        bw = first(weights)
-        derivative_order(bw) isa Order{0} && throw(ArgumentError("domain basis weights must store first derivatives"))
-        length(eltype(nodal_basis_values(bw, Order(1)))) == length(eltype(geometry)) || throw(DimensionMismatch("basis-gradient and geometry dimensions must match"))
-    end
-    rule
-end
-
-@inline function _set_quadrature_data!(::Val{:domain}, bw, measure, normal, q, cell, N, dNdξ, J, weight)
-    set_values!(bw, (N, dNdξ .⊡ Ref(inv(J))))
-    if measure !== nothing
-        measure[q,cell] = weight * sqrt(det(J'J))
-    end
-end
-
-@inline function _set_quadrature_data!(::Val{:boundary}, bw, measure, normal, q, cell, N, dNdξ, J, weight)
-    metric = J'J
-    if derivative_order(bw) isa Order{0}
-        set_values!(bw, (N,))
-    else
-        # Contracting with the left pseudoinverse gives the ambient tangential gradient.
-        set_values!(bw, (N, dNdξ .⊡ Ref(inv(metric) * J')))
-    end
-    if measure !== nothing
-        measure[q,cell] = weight * sqrt(det(metric))
-    end
-    if normal !== nothing
-        n = _get_normal(J)
-        normal[q,cell] = n / norm(n)
-    end
-end
-
-_get_normal(J::Mat{3,2}) = J[:,1] × J[:,2]
-_get_normal(J::Mat{2,1}) = Vec(J[2,1], -J[1,1])
-_get_normal(J::Mat{3,1}) = throw(ArgumentError("normal is not defined for a 3D line element"))

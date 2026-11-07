@@ -48,8 +48,8 @@ Build them by passing `deferred=true` to [`generate_basis_weights`](@ref):
 weights = generate_basis_weights(BSpline(Quadratic()), mesh, length(particles); deferred=true)
 ```
 
-`update!` on such weights has nothing to fill and does nothing, so a loop written
-for stored weights runs unchanged.
+`update!` on such weights has nothing to fill, but still validates its arguments
+and records the boundary filter. A loop written for stored weights runs unchanged.
 
 Stored weights can also be switched over for a single step, which is useful when
 the number of transfers per `update!` varies — as in an implicit solve, where a
@@ -64,6 +64,41 @@ update!(weights, particles, mesh)                  # fill the values and read th
 The keyword leaves the stored values in place and only stops transfers from
 reading them, so switching back costs a refill and nothing else. The transfers
 themselves are written the same way either way.
+
+Moving weights with `cpu`, `gpu`, or `gpu_preserve` keeps this choice and moves
+the boundary filter with them. A device move gives the result independent
+evaluation state; it does not reset the choice or change the source weights.
+
+### Updating views
+
+The evaluation mode belongs to the parent `BasisWeightArray`. Existing views,
+including nested views, follow the parent's later mode and filter changes.
+An `update!` on a view inherits both settings when omitted:
+
+```julia
+wv, pv = view(weights, subset), view(particles, subset)
+update!(weights, particles, mesh, mask; deferred=true)
+update!(wv, pv, mesh) # keeps deferring with the parent's mask
+update!(weights, particles, mesh, mask) # parent and views now use stored values
+update!(wv, pv, mesh) # refills only the view, using the parent's mask
+```
+
+A view cannot switch the evaluation mode, even if it covers the whole parent.
+An explicit `deferred` must match the parent's current mode. In stored mode,
+passing a different filter updates only the view's stored values and leaves the
+parent's filter setting unchanged. In deferred mode, omit the filter or pass the
+same filter object as the parent uses. A separate array with equal contents is
+rejected too: subsequent edits to either array could make the filters differ.
+These conflicting requests are rejected before any values or settings change.
+
+Moving a view to another device gives the result its own independent policy,
+which can be changed by updating that result. A CPU no-op `cpu(view)` returns
+the same view and keeps its relationship to the parent.
+
+Views refer to the same `BasisWeight` rows as the parent. An ordinary `copy`
+copies those row handles, so their value storage remains shared; use `deepcopy`
+for independent stored values. A copied array of rows does not carry the
+parent's evaluation policy. Use the owner or a view for deferred transfers.
 
 ### Which to use
 

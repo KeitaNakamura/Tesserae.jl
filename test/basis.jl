@@ -183,7 +183,7 @@ end
     weights.w .= reshape(collect(eachindex(weights.w)), size(weights.w))
 
     weights_view = @inferred view(weights, 2:3)
-    @test weights_view isa Tesserae.BasisWeightArray
+    @test weights_view isa SubArray
     @test size(weights_view) == (2,)
     @test Tesserae.basis(weights_view) === basis
     @test weights_view[1].w == weights[2].w
@@ -539,7 +539,7 @@ end # BasisWeight
 end
 
 @testset "B-spline fast computation" begin
-    # check by autodiff
+    # Compare full-support and nodewise evaluations through fifth derivatives.
     k = 5
     @testset "$spline" for spline in (BSpline(Linear()), BSpline(Quadratic()), BSpline(Cubic()), BSpline(Tesserae.Quartic()), BSpline(Tesserae.Quintic()))
         for dim in (1,2,3)
@@ -557,6 +557,45 @@ end
                 end
             end
         end
+    end
+end
+
+@testset "B-spline endpoint conventions" begin
+    # Independent truncated-power definition, with right-hand derivatives at knots.
+    function reference_bspline(degree, order, x::Rational)
+        order > degree && return zero(x)
+        sum(0:(degree+1)) do j
+            t = x + (degree+1)//2 - j
+            t < 0 ? zero(x) : (-1)^j * binomial(degree+1, j) * t^(degree-order)
+        end / factorial(degree-order)
+    end
+    for T in (Float32, Float64)
+        constant = BSpline(Constant())
+        @test Tesserae.value(constant, T(-0.5)) == one(T)
+        @test Tesserae.value(constant, T(0.5)) == zero(T)
+        for degree in 0:5
+            spline = BSpline(Tesserae.Degree(degree))
+            for x in (-7//2):(1//4):(7//2)
+                vals = Tesserae.jet(Order(5), spline, T(x))
+                for k in 0:5
+                    @test vals[k+1] ≈ T(reference_bspline(degree, k, x)) atol=20eps(T)
+                end
+            end
+            mesh = CartesianMesh(T, one(T), (T(0), T(10)))
+            bw = BasisWeight(T, spline, mesh; derivative=Order(2))
+            for x in (T(4), T(4.5), T(4.25))
+                update!(bw, Vec(x), mesh)
+                @test sum(bw.w) ≈ one(T)
+                @test sum(bw.∇w) ≈ zero(Vec{1,T}) atol=20eps(T)
+                for ip in eachindex(supportnodes(bw))
+                    vals = Tesserae.nodal_basis_jet(Order(2), spline, Vec(x), mesh, supportnodes(bw)[ip])
+                    for k in 0:2
+                        @test Tesserae.nodal_basis_values(bw, Order(k))[ip] ≈ vals[k+1] atol=20eps(T)
+                    end
+                end
+            end
+        end
+        @test Tesserae.jet(Order(2), BSpline(Quadratic()), T(0.25)) == (T(0.6875), T(-0.5), T(-2))
     end
 end
 
@@ -715,7 +754,7 @@ end
         poly = Polynomial(Linear())
         for dim in (1,2,3)
             check_polynomial(poly, Val(4), Float64, Val(dim))
-            check_polynomial(poly, Val(4), Float32, Val(dim); check_values=false)
+            check_polynomial(poly, Val(4), Float32, Val(dim))
         end
     end
 
@@ -723,7 +762,14 @@ end
         poly = Polynomial(MultiLinear())
         for dim in (1,2,3)
             check_polynomial(poly, Val(4), Float64, Val(dim))
-            check_polynomial(poly, Val(4), Float32, Val(dim); check_values=false)
+            check_polynomial(poly, Val(4), Float32, Val(dim))
+        end
+        for dim in (2, 3), (T, result_type) in ((Real, Float64), (Float32, Float32),
+                                                (Rational{Int32}, Rational{Int32}), (BigFloat, BigFloat))
+            x = Vec{dim,T}(d -> d / 8)
+            values = Tesserae.value(poly, x)
+            @test eltype(values) === result_type
+            @test first(values) == one(result_type)
         end
     end
 

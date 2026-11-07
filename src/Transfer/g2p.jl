@@ -78,16 +78,22 @@ function G2P_expr(schedule::QuoteNode, grid_i::Expr, particles_p::Expr, weights_
 end
 
 function G2P_expr(schedule::QuoteNode, (grid,i), (particles,p), (weights,ip), program::TransferProgram)
-    sum_equations, nosum_equations = split_sum_equations(program, "@G2P")
-    check_nosum_refs("@G2P", nosum_equations, p, i, ip)
-    check_unique_sum_targets("@G2P", sum_equations)
+    stages = transfer_stages(:G2P, program, i, p, ip)
+    sum_equations, nosum_equations = stages.g2p_sum, stages.g2p_nosum
 
     code = quote
         Tesserae.check_transfer_arguments("@G2P", $grid, $particles, $weights, nothing)
     end
 
     if !isempty(program.equations)
-        body = G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations, nosum_equations)
+        access = WeightAccess(collect_transfer_refs(sum_equations, ip))
+        body = G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations, nosum_equations, access)
+        if !isempty(sum_equations)
+            body = quote
+                $(weight_access_exprs(access, weights, particles, p, grid)...)
+                $body
+            end
+        end
         if !DEBUG
             body = :(@inbounds $body)
         end
@@ -109,19 +115,12 @@ function G2P(f, ::CPUDevice, ::Val{scheduler}, grid, particles, weights) where {
     end
 end
 
-function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector, binding::SupportWindowBinding=SupportWindowBinding(),
-                      cols::Union{WeightColumnsBinding,Nothing}=nothing; preload_cols::Bool=false)
-    (; window) = binding
+function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vector, nosum_equations::Vector, access::WeightAccess)
+    (; window) = access
 
     code = Expr(:block)
-    cols = something(cols, WeightColumnsBinding(collect_transfer_refs(sum_equations, ip)))
-    ti = TrailingIndexed(weights, p, particles, grid, window, cols)
+    ti = TrailingIndexed(weights, p, access)
     scope = TransferScope([grid=>i, particles=>p, ti=>ip]; cache=true)
-    # Deferred weights snapshot the particle row when the columns bind, so a
-    # binding this half holds for the P2G half must land here, before any
-    # particle equation moves `x[p]`.
-    preload_cols && push_unique!(scope.replacements[p], weight_columns_binding_expr(ti))
-
     if !isempty(sum_equations)
         sum_equations = resolve_sum_equations(sum_equations, scope, "@G2P", p)
         particle_replacements = cached_replacements(scope, p)
@@ -139,7 +138,6 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
         end
 
         code = quote
-            $(support_window_exprs(binding, weights, particles, p, grid)...)
             $(particle_replacements...)
             $(inits...)
             for $ip in eachindex($window)
@@ -149,6 +147,7 @@ function G2P_sum_expr((grid,i), (particles,p), (weights,ip), sum_equations::Vect
             end
             $(saves...)
         end
+
     end
 
     if !isempty(nosum_equations)
