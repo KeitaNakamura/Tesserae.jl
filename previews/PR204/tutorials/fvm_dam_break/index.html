@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="referrer" content="no-referrer"/><title>Finite-volume free-surface flow · Tesserae.jl</title><meta name="title" content="Finite-volume free-surface flow · Tesserae.jl"/><meta property="og:title" content="Finite-volume free-surface flow · Tesserae.jl"/><meta property="twitter:title" content="Finite-volume free-surface flow · Tesserae.jl"/><meta name="description" content="Documentation for Tesserae.jl."/><meta property="og:description" content="Documentation for Tesserae.jl."/><meta property="twitter:description" content="Documentation for Tesserae.jl."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="Tesserae.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Tesserae.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started/">Getting started</a></li><li><a class="tocitem" href="../collision/">Transfer schemes</a></li><li><a class="tocitem" href="../cpdi/">CPDI</a></li><li><a class="tocitem" href="../tlmpm_vortex/">Total Lagrangian MPM</a></li><li><input class="collapse-toggle" id="menuitem-2-5" type="checkbox"/><label class="tocitem" for="menuitem-2-5"><span class="docs-label">Implicit methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../implicit/">Implicit formulation</a></li><li><a class="tocitem" href="../implicit_jacobian_free/">Jacobian-free</a></li><li><a class="tocitem" href="../implicit_jacobian_based/">Jacobian-based</a></li></ul></li><li><a class="tocitem" href="../collapse/">Elasto-plastic large deformation</a></li><li><a class="tocitem" href="../dam_break/">Incompressible fluid flow</a></li><li class="is-active"><a class="tocitem" href>Finite-volume free-surface flow</a><ul class="internal"><li><a class="tocitem" href="#Main-function"><span>Main function</span></a></li><li><a class="tocitem" href="#Time-integration"><span>Time integration</span></a></li><li><a class="tocitem" href="#Local-reconstruction-and-boundary-conditions"><span>Local reconstruction and boundary conditions</span></a></li></ul></li><li><a class="tocitem" href="../fvm_two_phase_dam_break/">Finite-volume two-phase flow</a></li><li><a class="tocitem" href="../rigid_body_contact/">Frictional contact with rigid body</a></li><li><a class="tocitem" href="../taylor_impact/">Multi-threading simulation</a></li><li><input class="collapse-toggle" id="menuitem-2-12" type="checkbox"/><label class="tocitem" for="menuitem-2-12"><span class="docs-label">FEM</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../heat/">Heat problem using FEM</a></li></ul></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../manual/">Overview</a></li><li><input class="collapse-toggle" id="menuitem-3-2" type="checkbox"/><label class="tocitem" for="menuitem-3-2"><span class="docs-label">Core workflow</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../mesh/">Mesh</a></li><li><a class="tocitem" href="../../generation/">Grid and particle generation</a></li><li><a class="tocitem" href="../../basis/">Basis Functions</a></li><li><a class="tocitem" href="../../transfer/">Transfer between grid and particles</a></li><li><a class="tocitem" href="../../export/">Export</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-3-3" type="checkbox"/><label class="tocitem" for="menuitem-3-3"><span class="docs-label">Scaling simulations</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../parallel/">Parallel execution</a></li><li><a class="tocitem" href="../../gpu/">GPU computing</a></li><li><a class="tocitem" href="../../sparray/">SpArray</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-3-4" type="checkbox"/><label class="tocitem" for="menuitem-3-4"><span class="docs-label">Advanced methods</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../implicit_utils/">Utilities for implicit methods</a></li><li><a class="tocitem" href="../../stencil/">Staggered grids and stencil equations</a></li><li><a class="tocitem" href="../../vof/">Interface geometry and volume-of-fluid kernels</a></li><li><a class="tocitem" href="../../fem/">Finite element calculations</a></li><li><a class="tocitem" href="../../iga/">Isogeometric analysis calculations</a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Finite-volume free-surface flow</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Finite-volume free-surface flow</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/KeitaNakamura/Tesserae.jl/blob/main/docs/literate/tutorials/fvm_dam_break.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Finite-volume-free-surface-flow"><a class="docs-heading-anchor" href="#Finite-volume-free-surface-flow">Finite-volume free-surface flow</a><a id="Finite-volume-free-surface-flow-1"></a><a class="docs-heading-anchor-permalink" href="#Finite-volume-free-surface-flow" title="Permalink"></a></h1><p>This example solves a dam break on a two-dimensional Cartesian MAC grid. The 3.22 m by 5 m tank has impermeable, free-slip walls. The initial water column is 1.2 m wide and 0.6 m high. Only the liquid is solved, with atmospheric pressure at the free surface.</p><p>The VTK output is written to <code>output/fvm_dam_break</code>.</p><p class="math-container">\[\nabla\cdot\boldsymbol u=0,\qquad
+\partial_t\boldsymbol u+(\boldsymbol u\cdot\nabla)\boldsymbol u
+=-\nabla\pi+\rho^{-1}\nabla\cdot\boldsymbol\tau+\boldsymbol g,\qquad
+\boldsymbol\tau=\mu(\nabla\boldsymbol u+\nabla\boldsymbol u^\mathsf T).\]</p><p>The cell centers store the water fraction and kinematic pressure <span>$\pi=p/\rho$</span>. Each velocity component is stored on its normal faces.</p><h2 id="Main-function"><a class="docs-heading-anchor" href="#Main-function">Main function</a><a id="Main-function-1"></a><a class="docs-heading-anchor-permalink" href="#Main-function" title="Permalink"></a></h2><pre><code class="language-julia hljs">using Tesserae
+using Tesserae.Stencil
+using LinearAlgebra
+import Tesserae: PLIC, VOF
+
+function main()
+
+    # Simulation parameters
+    h = 0.02
+    t_stop = 7.0
+    width, height = 3.22, 5.0
+    water_width, water_height = 1.2, 0.6
+    gravity = Vec(0.0, -9.81)
+    maximum_step, cfl = 0.002, 0.25
+    fps = 30
+
+    # Material constants
+    ρ = 1000.0
+    μ = 1.01e-3
+
+    # Cell and face properties
+    CellProp = @NamedTuple begin
+        x      :: Vec{2, Float64}
+        c      :: Float64
+        wet    :: Bool
+        p      :: Float64
+        div    :: Float64 # Work array for the discrete divergence.
+        τxx    :: Float64
+        τyy    :: Float64
+    end
+    FaceProp = @NamedTuple begin
+        x     :: Vec{2, Float64}
+        v     :: Float64
+        δv    :: Float64
+        Fw    :: Float64
+        α     :: Float64
+        layer :: Int8
+    end
+
+    # Background grid and initial water fraction
+    mesh = CartesianMesh(h, (0, width), (0, height))
+    cells = generate_grid(Cell(), CellProp, mesh; halo=1)
+    faces = [generate_grid(Face(d), FaceProp, mesh; halo=2) for d in 1:2]
+    C = Region(cells)
+    cell_indices = CartesianIndices(size(C))
+    for I in cell_indices
+        cells.c[I] = clamp(water_width/h-(I[1]-1), 0, 1)*clamp(water_height/h-(I[2]-1), 0, 1)
+    end
+
+    e = unitoffsets(C)
+    ex, ey = e
+    face_regions = Region.(faces)
+    interior_faces = interior.(face_regions)
+    face_indices = [CartesianIndices(size(F)) for F in face_regions]
+    directions = (CartesianIndex(1, 0), CartesianIndex(0, 1))
+    geometry = Ref((cells.c, cells.wet))
+
+    # Fluxes at the sides of each staggered velocity control volume.
+    FluxProp = @NamedTuple{x::Vec{2, Float64}, F::Float64}
+    fluxes = [generate_grid(Face(i)+e[d]/2, FluxProp, mesh; halo=1) for i in 1:2, d in 1:2]
+    shear = generate_grid(Vertex(), @NamedTuple{x::Vec{2, Float64}, τ::Float64}, mesh)
+    V = Region(shear)
+
+    # Sparse pressure matrix
+    A = create_sparse_matrix(C, C, (0ex, -ex, ex, -ey, ey); ndofs=1)
+    Ix, Iy = interior_faces
+    Lx, Rx = Ix-ex/2, Ix+ex/2
+    Ly, Ry = Iy-ey/2, Iy+ey/2
+    ax, ay = faces[1].α, faces[2].α
+    u, v = faces[1].v, faces[2].v
+
+    # Output
+    outdir = mkpath(joinpath(&quot;output&quot;, &quot;fvm_dam_break&quot;))
+    pvdfile = joinpath(outdir, &quot;paraview&quot;)
+    closepvd(openpvd(pvdfile)) # Create file
+    savepoints = range(0.0, t_stop; length=max(1, round(Int, t_stop*fps))+1)
+    next_save = 2
+    acceleration = sum(abs, gravity)/h
+    viscous_step = ρ*h^2/(8μ)
+    time, step = 0.0, 0</code></pre><h2 id="Time-integration"><a class="docs-heading-anchor" href="#Time-integration">Time integration</a><a id="Time-integration-1"></a><a class="docs-heading-anchor-permalink" href="#Time-integration" title="Permalink"></a></h2><pre><code class="language-julia hljs">    while time &lt; t_stop
+        # Time step from advection, gravity and explicit viscosity.
+        rate = sum(maximum(abs, view(face.v, F))/h for (face, F) in zip(faces, face_regions))
+        dt = min(maximum_step, viscous_step, 2cfl/(rate+sqrt(rate^2+4acceleration*cfl)))
+        dt &gt; 1e-10 || error(&quot;time step collapsed at t=$time&quot;)
+        remaining = savepoints[next_save]-time
+        # Split the remainder if a full step would leave a tiny output step.
+        dt = 0 &lt; remaining-dt ≤ 1e-10 ? remaining/2 : min(remaining, dt)</code></pre><h3 id="Velocity-advection"><a class="docs-heading-anchor" href="#Velocity-advection">Velocity advection</a><a id="Velocity-advection-1"></a><a class="docs-heading-anchor-permalink" href="#Velocity-advection" title="Permalink"></a></h3><p>Reconstruct the transported velocity with the MC limiter at each momentum control-volume face. Evaluate both directions at time <span>$n$</span>. The gradient form is assembled as <span>$-D(\boldsymbol u u_i)+u_i\overline{D\boldsymbol u}$</span>, where <span>$D$</span> is the discrete divergence and the bar averages the two cells adjacent to the velocity node.</p><pre><code class="language-julia hljs">        @stencil cells.div[C] = (u[C+ex/2]-u[C-ex/2]+v[C+ey/2]-v[C-ey/2])/h
+        for (i, face) in enumerate(faces)
+            F, I, ei = face_regions[i], interior_faces[i], e[i]
+            fillzero!(face.δv)
+            for (d, transport) in enumerate(faces)
+                flux, ed = fluxes[i, d], e[d]
+                Q = Region(flux)
+                @stencil begin
+                    flux.F[Q] = mc_flux((transport.v[Q-ei/2]+transport.v[Q+ei/2])/2,
+                        face.v[Q-3ed/2], face.v[Q-ed/2], face.v[Q+ed/2], face.v[Q+3ed/2])
+                    face.δv[F] += (flux.F[F-ed/2]-flux.F[F+ed/2])/h
+                end
+            end
+            @stencil face.δv[I] += face.v[I]*(cells.div[I-ei/2]+cells.div[I+ei/2])/2
+        end
+        # Viscous stresses at cell centers and vertices.
+        @stencil begin
+            cells.τxx[C] = 2μ*(u[C+ex/2]-u[C-ex/2])/h
+            cells.τyy[C] = 2μ*(v[C+ey/2]-v[C-ey/2])/h
+            shear.τ[V] = μ*((u[V+ey/2]-u[V-ey/2])/h+(v[V+ex/2]-v[V-ex/2])/h)
+        end</code></pre><h3 id="Water-transport"><a class="docs-heading-anchor" href="#Water-transport">Water transport</a><a id="Water-transport-1"></a><a class="docs-heading-anchor-permalink" href="#Water-transport" title="Permalink"></a></h3><p>PLIC supplies the swept water fraction <span>$F^w$</span> at each face. The Weymouth–Yue update<sup class="footnote-reference"><a id="citeref-1" href="#footnote-1" class="footnote-ref">[1]</a><span class="footnote-preview" id="fn-1"></span></sup> adds the directional compression term <span>$H(\lambda_+-\lambda_-)$</span>, where <span>$H=\mathbf{1}_{c^n&gt;1/2}$</span> and <span>$\lambda=u_d^n\Delta t/h$</span>. The sweep order alternates. Store <span>$H$</span> in the wet mask and hold it fixed through both sweeps.</p><pre><code class="language-julia hljs">        @stencil cells.wet[C] = cells.c[C] &gt; 0.5
+        for sweep in 0:1
+            d = mod(step+sweep, 2)+1
+            face, ed, factor = faces[d], e[d], dt/h
+            F, I = face_regions[d], interior_faces[d]
+            L, R = boundaries(F, d)
+            indices, direction = face_indices[d], directions[d]
+            reflect_halos!(cells.c, cells, mesh)
+            @stencil face.Fw[I] = water_flux(factor*face.v[I], (cells.c,), indices[I], direction, d)
+            fillzero!(view(face.Fw, [L, R]))
+            @stencil cells.c[C] += face.Fw[C-ed/2]-face.Fw[C+ed/2]+
+                cells.wet[C]*(factor*face.v[C+ed/2]-factor*face.v[C-ed/2])
+        end</code></pre><h3 id="Predictor-and-pressure-projection"><a class="docs-heading-anchor" href="#Predictor-and-pressure-projection">Predictor and pressure projection</a><a id="Predictor-and-pressure-projection-1"></a><a class="docs-heading-anchor-permalink" href="#Predictor-and-pressure-projection" title="Permalink"></a></h3><p>Add advection, viscosity and gravity to obtain the provisional velocity. At a water–air face, use PLIC to find the water area in the two half-cells next to the face. Fit an interface to their combined water area and intersect it with the line joining the two pressure nodes. If the distance from the water node to the surface is <span>$\delta h$</span>, the pressure gradient toward air is <span>$(0-\pi_\mathrm{water})/(\delta h)$</span><sup class="footnote-reference"><a id="citeref-2" href="#footnote-2" class="footnote-ref">[2]</a><span class="footnote-preview" id="fn-2"></span></sup>.</p><p>The Poisson matrix and the velocity correction both use the face coefficient <span>$\alpha=1/\delta$</span>. Between two water pressure nodes use <span>$\alpha=1$</span>. Between two air nodes use <span>$\alpha=0$</span>.</p><pre><code class="language-julia hljs">        # Recompute the wet mask from the transported water fraction.
+        @stencil cells.wet[C] = cells.c[C] &gt; 0.5
+        reflect_halos!(cells.c, cells, mesh)
+        for (i, face) in enumerate(faces)
+            F, I, indices = face_regions[i], interior_faces[i], face_indices[i]
+            ei, et, τ = e[i], e[3-i], i == 1 ? cells.τxx : cells.τyy
+            fillzero!(face.α)
+            @stencil begin
+                face.α[I] = interface_weight(geometry, indices[I], i)
+                face.v[F] = ifelse(face.α[F] &gt; 0, face.v[F]+dt*(face.δv[F]+gravity[i]+
+                    ((τ[F+ei/2]-τ[F-ei/2])/h+(shear.τ[F+et/2]-shear.τ[F-et/2])/h)/ρ), 0)
+            end
+        end
+
+        # Use the same face coefficient in the Poisson matrix and velocity correction.
+        @stencil cells.div[C] = (u[C+ex/2]-u[C-ex/2]+v[C+ey/2]-v[C-ey/2])/h
+        free = DofMap(reshape(view(cells.wet, C), 1, size(C)...))
+        rhs = -Array(free(view(cells.div, C)))/dt
+        @stencil_assemble begin
+            A[C,C] = (ax[C-ex/2]+ax[C+ex/2]+ay[C-ey/2]+ay[C+ey/2])/h^2
+            A[Lx,Rx] = -ax[Ix]/h^2
+            A[Rx,Lx] = -ax[Ix]/h^2
+            A[Ly,Ry] = -ay[Iy]/h^2
+            A[Ry,Ly] = -ay[Iy]/h^2
+        end
+        fillzero!(cells.p)
+        if !all(iszero, rhs)
+            free(view(cells.p, C)) .= cholesky(Symmetric(extract(A, free))) \ rhs
+        end
+        for (d, face) in enumerate(faces)
+            I, ed = interior_faces[d], e[d]
+            @stencil face.v[I] -= dt*face.α[I]*(cells.p[I+ed/2]-cells.p[I-ed/2])/h
+            extend_velocity!(face, mesh, d)
+        end
+
+        time += dt
+        step += 1
+
+        # Write results
+        if time ≥ savepoints[next_save]-eps(t_stop)
+            time = savepoints[next_save]
+            openpvd(pvdfile; append=true) do pvd
+                openvtk(string(pvdfile, step), mesh) do vtk
+                    vtk[&quot;Water fraction&quot;] = cells.c[C]
+                    vtk[&quot;Pressure (Pa)&quot;] = ρ*cells.p[C]
+                    pvd[time] = vtk
+                end
+            end
+            next_save += 1
+        end
+    end
+end</code></pre><h2 id="Local-reconstruction-and-boundary-conditions"><a class="docs-heading-anchor" href="#Local-reconstruction-and-boundary-conditions">Local reconstruction and boundary conditions</a><a id="Local-reconstruction-and-boundary-conditions-1"></a><a class="docs-heading-anchor-permalink" href="#Local-reconstruction-and-boundary-conditions" title="Permalink"></a></h2><pre><code class="language-julia hljs">@inline minmod(a, b) = min(max(a, 0), max(b, 0)) + max(min(a, 0), min(b, 0))
+
+@inline function mc_flux(speed, far_left, left, right, far_right)
+    far, up, down = speed &gt; 0 ? (far_left, left, right) : (far_right, right, left)
+    a, b = up-far, down-up
+    slope = minmod((a+b)/2, minmod(2a, 2b))
+    speed*(up+slope/2)
+end
+
+@inline function water_flux(a, fraction, I, direction, axis)
+    iszero(a) &amp;&amp; return zero(a)
+    J = a &gt; 0 ? I-direction : I
+    VOF.flux(a, fraction, J, axis)
+end
+
+function reflect_halos!(field, grid, mesh, component=0)
+    for axis in 1:ndims(field), wall in boundaries(mesh, axis)
+        H = halos(grid, wall)
+        R = reflect(H, wall)
+        σ = axis == component ? -1 : 1
+        @stencil field[H] = σ*field[R]
+    end
+end</code></pre><p>Extend the velocity two layers into the air. Each layer averages the adjacent values in the preceding layer of the same face grid.</p><pre><code class="language-julia hljs">function extend_velocity!(face, mesh, d)
+    F = Region(face)
+    layers, u = face.layer, face.v
+    physical = CartesianIndices(size(F))
+    interior_indices = regionindices(u, interior(F, d))[d]
+    N = ndims(F)
+    offsets = ntuple(N) do axis
+        CartesianIndex(ntuple(i -&gt; Int(i == axis), N))
+    end
+
+    unfilled = Int8(-1)
+    @stencil layers[F] = ifelse(face.α[F] &gt; 0, Int8(0), unfilled)
+    for level in 1:2, I in physical
+        layers[I] == unfilled || continue
+        sum_velocity, count = 0.0, 0
+        for offset in offsets, J in (I-offset, I+offset)
+            J in physical || continue
+            layers[J] == level-1 || continue
+            sum_velocity += u[J]
+            count += 1
+        end
+        count == 0 &amp;&amp; continue
+        layers[I] = level
+        if I[d] in interior_indices
+            u[I] = sum_velocity/count
+        end
+    end
+    for wall in boundaries(F, d)
+        fillzero!(view(u, wall))
+    end
+    reflect_halos!(u, face, mesh, d)
+end
+
+@inline function interface_weight(fields, R, d)
+    c, wet = fields
+    ed = CartesianIndex(Int(d == 1), Int(d == 2))
+    L = R-ed
+    wet[L] == wet[R] &amp;&amp; return Float64(wet[L])
+    inv(staggered_distance(c, L, R, d, wet[L]))
+end
+
+function staggered_distance(c, L, R, d, wet_left)
+    axis = Vec(Float64(d == 1), Float64(d == 2))
+    lo, hi = Vec(-0.5, -0.5), Vec(0.5, 0.5)
+    lower_normal, upper_normal = VOF.myc_direction(c, L), VOF.myc_direction(c, R)
+    # Bound the fraction used for geometry, allowing for transport roundoff.
+    lower_offset = PLIC.plane_offset(lower_normal, clamp(c[L], 0, 1))
+    upper_offset = PLIC.plane_offset(upper_normal, clamp(c[R], 0, 1))
+    lower_water = PLIC.box_volume(lower_normal, lower_offset, lo+axis/2, hi)
+    upper_water = PLIC.box_volume(upper_normal, upper_offset, lo, hi-axis/2)
+    normal = wet_left ? upper_normal : lower_normal
+    if min(0.5-lower_water, 0.5-upper_water) &gt; 0.1
+        combined = lower_normal+upper_normal
+        normal = combined/sum(abs, combined)
+    end
+    # Use one cell width if the pressure line is nearly parallel to the interface.
+    abs(normal[d]) &gt; 1e-12 || return 1.0
+    offset = PLIC.plane_offset(normal, clamp(lower_water+upper_water, 0, 1))
+    # Keep the distance positive and within one cell width.
+    clamp(0.5+(wet_left ? 1 : -1)*offset/normal[d], 0.01, 1.0)
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.jcp.2009.12.018">Weymouth and Yue (2010), conservative VOF transport</a>.</li><li class="footnote" id="footnote-2"><a class="tag is-link" href="#citeref-2">2</a><a href="https://arxiv.org/html/2012.11744#S3.SS7.SSS5">Aniszewski et al. (2021), PARIS free-surface treatment, §3.7.5</a>.</li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dam_break/">« Incompressible fluid flow</a><a class="docs-footer-nextpage" href="../fvm_two_phase_dam_break/">Finite-volume two-phase flow »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Thursday 19 November 2026 07:59">Thursday 19 November 2026</span>. Using Julia version 1.13.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
