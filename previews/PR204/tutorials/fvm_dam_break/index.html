@@ -56,8 +56,6 @@ function main()
     ex, ey = e
     face_regions = Region.(faces)
     interior_faces = interior.(face_regions)
-    face_indices = [CartesianIndices(size(F)) for F in face_regions]
-    directions = (CartesianIndex(1, 0), CartesianIndex(0, 1))
     geometry = Ref((cells.c, cells.wet))
 
     shear = generate_grid(Vertex(), @NamedTuple{x::Vec{2, Float64}, τ::Float64}, mesh)
@@ -108,22 +106,23 @@ function main()
             d = mod(step+sweep, 2)+1
             face, ed, factor = faces[d], e[d], dt/h
             F, I = face_regions[d], interior_faces[d]
-            L, R = boundaries(F, d)
-            indices, direction = face_indices[d], directions[d]
+            L, R = I-ed/2, I+ed/2
+            left_wall, right_wall = boundaries(F, d)
             reflect_halos!(cells.c, cells, mesh)
-            @stencil face.Fw[I] = water_flux(factor*face.v[I], (cells.c,), indices[I], direction, d)
-            fillzero!(view(face.Fw, [L, R]))
+            @stencil face.Fw[I] = VOF.flux(factor*face.v[I], (cells.c,),
+                ifelse(face.v[I] &gt; 0, cell_indices[L], cell_indices[R]), d)
+            fillzero!(view(face.Fw, [left_wall, right_wall]))
             @stencil cells.c[C] += face.Fw[C-ed/2]-face.Fw[C+ed/2]+
                 cells.wet[C]*(factor*face.v[C+ed/2]-factor*face.v[C-ed/2])
         end</code></pre><h3 id="Predictor-and-pressure-projection"><a class="docs-heading-anchor" href="#Predictor-and-pressure-projection">Predictor and pressure projection</a><a id="Predictor-and-pressure-projection-1"></a><a class="docs-heading-anchor-permalink" href="#Predictor-and-pressure-projection" title="Permalink"></a></h3><p>Add advection, viscosity and gravity to obtain the provisional velocity. At a water–air face, use PLIC to find the water area in the two half-cells next to the face. Fit an interface to their combined water area and intersect it with the line joining the two pressure nodes. If the distance from the water node to the surface is <span>$\delta h$</span>, the pressure gradient toward air is <span>$(0-\pi_\mathrm{water})/(\delta h)$</span><sup class="footnote-reference"><a id="citeref-2" href="#footnote-2" class="footnote-ref">[2]</a><span class="footnote-preview" id="fn-2"></span></sup>.</p><p>The Poisson matrix and the velocity correction both use the face coefficient <span>$\alpha=1/\delta$</span>. Between two water pressure nodes use <span>$\alpha=1$</span>. Between two air nodes use <span>$\alpha=0$</span>.</p><pre><code class="language-julia hljs">        # Recompute the wet mask from the transported water fraction.
         @stencil cells.wet[C] = cells.c[C] &gt; 0.5
         reflect_halos!(cells.c, cells, mesh)
         for (i, face) in enumerate(faces)
-            F, I, indices = face_regions[i], interior_faces[i], face_indices[i]
+            F, I = face_regions[i], interior_faces[i]
             ei, et, τ = e[i], e[3-i], i == 1 ? cells.τxx : cells.τyy
             fillzero!(face.α)
             @stencil begin
-                face.α[I] = interface_weight(geometry, indices[I], i)
+                face.α[I] = interface_weight(geometry, cell_indices[I-ei/2], cell_indices[I+ei/2], i)
                 face.v[F] = ifelse(face.α[F] &gt; 0, face.v[F]+dt*(face.δv[F]+gravity[i]+
                     ((τ[F+ei/2]-τ[F-ei/2])/h+(shear.τ[F+et/2]-shear.τ[F-et/2])/h)/ρ), 0)
             end
@@ -172,12 +171,6 @@ end</code></pre><h2 id="Local-reconstruction-and-boundary-conditions"><a class="
     speed*(up+slope/2)
 end
 
-@inline function water_flux(a, fraction, I, direction, axis)
-    iszero(a) &amp;&amp; return zero(a)
-    J = a &gt; 0 ? I-direction : I
-    VOF.flux(a, fraction, J, axis)
-end
-
 function reflect_halos!(field, grid, mesh, component=0)
     for axis in 1:ndims(field), wall in boundaries(mesh, axis)
         H = halos(grid, wall)
@@ -218,10 +211,8 @@ end</code></pre><p>Extend the velocity two layers into the air. Each layer avera
     reflect_halos!(u, face, mesh, d)
 end
 
-@inline function interface_weight(fields, R, d)
+@inline function interface_weight(fields, L, R, d)
     c, wet = fields
-    ed = CartesianIndex(d == 1, d == 2)
-    L = R-ed
     wet[L] == wet[R] &amp;&amp; return Float64(wet[L])
     inv(staggered_distance(c, L, R, d, wet[L]))
 end
@@ -245,4 +236,4 @@ function staggered_distance(c, L, R, d, wet_left)
     offset = PLIC.plane_offset(normal, clamp(lower_water+upper_water, 0, 1))
     # Keep the distance positive and within one cell width.
     clamp(0.5+(wet_left ? 1 : -1)*offset/normal[d], 0.01, 1.0)
-end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.jcp.2009.12.018">Weymouth and Yue (2010), conservative VOF transport</a>.</li><li class="footnote" id="footnote-2"><a class="tag is-link" href="#citeref-2">2</a><a href="https://arxiv.org/html/2012.11744#S3.SS7.SSS5">Aniszewski et al. (2021), PARIS free-surface treatment, §3.7.5</a>.</li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dam_break/">« Incompressible fluid flow</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Friday 20 November 2026 03:31">Friday 20 November 2026</span>. Using Julia version 1.13.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p><section class="footnotes is-size-7"><ul><li class="footnote" id="footnote-1"><a class="tag is-link" href="#citeref-1">1</a><a href="https://doi.org/10.1016/j.jcp.2009.12.018">Weymouth and Yue (2010), conservative VOF transport</a>.</li><li class="footnote" id="footnote-2"><a class="tag is-link" href="#citeref-2">2</a><a href="https://arxiv.org/html/2012.11744#S3.SS7.SSS5">Aniszewski et al. (2021), PARIS free-surface treatment, §3.7.5</a>.</li></ul></section></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../dam_break/">« Incompressible fluid flow</a><a class="docs-footer-nextpage" href="../rigid_body_contact/">Frictional contact with rigid body »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Friday 20 November 2026 04:12">Friday 20 November 2026</span>. Using Julia version 1.13.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
