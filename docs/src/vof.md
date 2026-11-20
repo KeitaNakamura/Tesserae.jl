@@ -1,7 +1,8 @@
 # Interface geometry and volume-of-fluid kernels
 
 `Tesserae.PLIC` and `Tesserae.VOF` provide local calculations for two- and
-three-dimensional Cartesian cells.
+three-dimensional Cartesian cells. The [free-surface tutorial](tutorials/fvm_dam_break.md)
+uses them to transport water on a MAC grid.
 The modules allocate no field arrays and prescribe no boundary conditions,
 time step, material data or pressure solver.
 
@@ -71,11 +72,12 @@ selects the donor and writes the face-flux difference in the conservation law.
 Pass the donor fraction, normal and offset for a precomputed plane, or pass
 the fraction field and donor index to reconstruct that cell with MYC.
 The geometric kernel supports ``|\lambda|\leq1``; a complete transport scheme
-can impose a stricter CFL bound.
+can impose a stricter CFL bound. The dam-break tutorial uses 0.25.
 
 ```@docs
 Tesserae.VOF.flux
 ```
 
 The scalar kernels can be used in native broadcast and `@stencil` expressions
-on CPU and GPU arrays.
+on CPU and GPU arrays. This does not select a GPU pressure solver for the
+complete tutorial.

@@ -6,7 +6,8 @@ All notable changes to Tesserae.jl will be documented in this file.
 
 ### Added
 
-- Added PLIC interface geometry, and geometric VOF fluxes.
+- Added PLIC interface geometry, geometric VOF fluxes and a one-phase
+  finite-volume dam-break tutorial.
 - `reorder_particles!` and `Tesserae.block_ordered_particle_contiguity` now
   work on GPU partitions, reordering through the partition's block-sorted
   permutation on the device.

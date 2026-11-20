@@ -30,6 +30,7 @@ makedocs(;
             ],
             "tutorials/collapse.md",
             "Incompressible fluid flow" => "tutorials/dam_break.md",
+            "Finite-volume free-surface flow" => "tutorials/fvm_dam_break.md",
             "tutorials/rigid_body_contact.md",
             "tutorials/taylor_impact.md",
             "FEM" => [
