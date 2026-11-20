@@ -2,8 +2,6 @@ module PLIC
 
 using ..Tesserae: Vec
 
-export plane_fraction, plane_offset, box_volume
-
 # Analytic plane/box geometry for PLIC, following Scardovelli and Zaleski,
 # J. Comput. Phys. 164 (2000), 228-237, doi:10.1006/jcph.2000.6567.
 # Degenerate orientations are covered by the lower-dimensional branches;

@@ -2,7 +2,6 @@ module VOF
 
 using ..Tesserae: Vec
 import ..PLIC
-export myc_normal, myc_direction, flux
 
 # Mixed Youngs-Centered reconstruction: Aulisa et al., JCP 225 (2007),
 # 2301-2319, doi:10.1016/j.jcp.2007.03.015; Baraldi et al., Computers &
