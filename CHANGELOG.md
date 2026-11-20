@@ -66,8 +66,6 @@ All notable changes to Tesserae.jl will be documented in this file.
 - Showing an empty `BasisWeightArray` threw `BoundsError`.
 - `copyto!` into an `SpArray` from a broadcast with mismatched axes now throws
   `DimensionMismatch` instead of `UndefVarError`.
-- The Stencil `Gradient` Face-to-Cell `stencil!` threw `UndefVarError` before
-  doing any work.
 
 ### Changed
 
@@ -89,10 +87,10 @@ All notable changes to Tesserae.jl will be documented in this file.
   `@assert` failures, and CPU partitioned transfers now check that
   `update!(partition, particles.x)` ran with the current particle array, as the
   GPU block-scheduled path already did.
-- The Stencil module no longer exports `padded`, `ArithmeticMean`, and
-  `HarmonicMean`; none of them was functional. `stencil!` now requires the
-  `SVector` coefficients that `stencil_coeffs` produces, matching what the
-  implementation always required.
+- Replaced the experimental Stencil array wrapper, differential operators,
+  and halo helpers with placement-aware `Region`s and half-cell offsets.
+  `@stencil` selects the common valid range for each update equation and
+  delegates computation to standard Julia broadcasting over plain arrays.
 
 ## v0.7.5
 
