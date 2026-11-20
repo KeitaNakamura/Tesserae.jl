@@ -53,6 +53,7 @@ makedocs(;
             "Advanced methods" => [
                 "implicit_utils.md"
                 "stencil.md"
+                "vof.md"
                 "fem.md"
                 "iga.md"
             ]

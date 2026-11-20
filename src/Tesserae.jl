@@ -151,5 +151,7 @@ include("adapt.jl")
 include("deprecated.jl")
 
 include("Stencil/Stencil.jl")
+include("PLIC.jl")
+include("VOF.jl")
 
 end # module Tesserae

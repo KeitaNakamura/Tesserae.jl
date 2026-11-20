@@ -43,3 +43,4 @@ The same transfer and assembly tools can also be used for finite-element and iso
 
 For Cartesian finite-volume calculations, [Staggered grids and stencil equations](stencil.md)
 covers field placement, boundary selections, and sparse assembly.
+[Interface geometry and VOF](vof.md) describes the local reconstruction and flux calculations.

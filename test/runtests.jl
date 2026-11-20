@@ -23,6 +23,7 @@ include("nurbs.jl")
 include("iga.jl")
 include("explain.jl")
 include("stencil.jl")
+include("vof.jl")
 
 include("deprecated.jl")
 
