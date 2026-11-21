@@ -98,9 +98,10 @@ end
 @testset "Grid coordinates preserve nonbinary spacing and property structs" begin
     for T in (Float32, Float64)
         mesh = CartesianMesh(T, 0.1, (-0.3, 0.7), (1.1, 1.6))
-        Prop = @NamedTuple{X::Vec{2, T}, p::T}
+        Prop = @NamedTuple{X::Vec{2, T}, p::T, history::NTuple{2, T}}
         for location in (Cell(), Face(1), Face(2), Vertex())
             grid = generate_grid(location, Prop, mesh;halo=1)
+            @test all(==((zero(T), zero(T))), grid.history)
             R = Region(grid)
             expected = collect(coordinates(R, (spacing(mesh), spacing(mesh));origin=map(first, mesh.axes)))
             @test maximum(norm.(grid.X[R].-Vec.(expected))) ≤ 16eps(T)*maximum(abs, map(last, mesh.axes))

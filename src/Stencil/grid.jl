@@ -131,6 +131,8 @@ Base.@constprop :aggressive function generate_grid(::Type{Array}, location::Loca
     points = CartesianMesh(coordinate_axes, h, spacing_inv(mesh);block_size_log2=Val(block_size_log2(mesh)))
     dims = map(length, ax)
     coordinates = StaggeredMesh(field_storage(points, ax, halo), region)
-    arrays = map(T -> field_storage(zeros(T, dims), ax, halo), Base.tail(fieldtypes(GridProp)))
+    arrays = map(Base.tail(fieldtypes(GridProp))) do T
+        field_storage(fillzero!(Array{T}(undef, dims)), ax, halo)
+    end
     StructArray{GridProp}((coordinates, arrays...))
 end

@@ -126,8 +126,9 @@ end
 
 # Specialize numerical execution after resolving the native array and view types.
 @noinline function assemble_entries!(backend, values, slots, expression, op, nr, nc)
-    # Snapshot aliased inputs before any entry is written.
-    expression = Broadcast.preprocess(values, expression)
+    # Slots can reorder writes even when the input is the values array itself.
+    destination = @inbounds view(values, slots)
+    expression = Broadcast.preprocess(destination, expression)
     assemble_entries_kernel!(backend)(values, slots, expression, op, nr, nc; ndrange=map(length, axes(expression)))
 end
 

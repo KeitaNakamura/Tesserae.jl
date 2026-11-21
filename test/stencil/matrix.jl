@@ -83,6 +83,11 @@ end
 @testset "Local matrix assembly snapshots aliased inputs" begin
     C = Region(Cell(), (4,))
     reversed = reflect(C, AxisPlane(C.frame, 1, 2//1))
+    diagonal = spdiagm(0 => [1., 2., 3., 4.])
+    values = nonzeros(diagonal)
+    @stencil_assemble diagonal[reversed, reversed] = values[C]
+    @test diag(diagonal) == [4, 3, 2, 1]
+
     block(x) = Mat{2, 2}((x, 2x, 3x, 4x))
     for op in (identity, +, -)
         A = reshape(collect(1.0:64.0), 8, 8)
