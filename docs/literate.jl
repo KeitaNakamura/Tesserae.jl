@@ -7,6 +7,7 @@ const TUTORIALS = ["collision.jl",
                    "implicit_jacobian_based.jl",
                    "collapse.jl",
                    "dam_break.jl",
+                   "fvm_dam_break.jl",
                    "rigid_body_contact.jl",
                    "taylor_impact.jl",
                    "heat.jl"]

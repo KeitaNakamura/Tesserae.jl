@@ -40,3 +40,8 @@ Larger simulations keep the same objects while changing execution or storage.
 [SpArray](sparray.md) stores grid fields sparsely on Cartesian meshes.
 Implicit formulations use a different update structure; [Utilities for implicit methods](implicit_utils.md) provides the degree-of-freedom maps, sparse matrices, matrix assembly tools, and nonlinear solvers used by those methods.
 The same transfer and assembly tools can also be used for finite-element and isogeometric calculations; see [Finite element calculations](fem.md) and [Isogeometric analysis calculations](iga.md).
+
+For Cartesian finite-volume calculations, [Staggered grids and stencil equations](stencil.md)
+covers field placement, boundary selections, and sparse assembly.
+[Interface geometry and VOF](vof.md) describes the local reconstruction and flux calculations
+used in the finite-volume dam-break tutorial.

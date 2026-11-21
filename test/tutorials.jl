@@ -67,3 +67,10 @@ module TestHeat
         include(joinpath(@__DIR__, "../docs/literate/tutorials/heat.jl"))
     end
 end
+
+module TestFVMDamBreak
+    const RUN_TESTS = true
+    cd(tempdir()) do
+        include(joinpath(@__DIR__, "../docs/literate/tutorials/fvm_dam_break.jl"))
+    end
+end
